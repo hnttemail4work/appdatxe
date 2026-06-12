@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VinaRoute - Premium Car & Limousine Booking</title>
+    
+    <!-- Google Fonts of Premium Quality -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS (CDN for standalone production distribution) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                            900: '#0c4a6e',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
+        
+        /* Hero background styling with overlay */
+        .hero-banner {
+            background: linear-gradient(135deg, rgba(12, 74, 110, 0.9) 0%, rgba(2, 132, 199, 0.8) 100%), 
+                        url('https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?q=80&w=2070&auto=format&fit=crop') center/cover no-repeat;
+        }
+
+        /* Premium Radio Card active states */
+        input[type="radio"]:checked + .vehicle-card {
+            border-color: #0284c7;
+            background-color: #f0f9ff;
+            box-shadow: 0 10px 15px -3px rgba(2, 132, 199, 0.1), 0 4px 6px -4px rgba(2, 132, 199, 0.1);
+            transform: translateY(-2px);
+        }
+        
+        input[type="radio"]:checked + .vehicle-card .check-indicator {
+            border-color: #0284c7;
+            background-color: #0284c7;
+        }
+
+        input[type="radio"]:checked + .vehicle-card .icon-panel {
+            color: #0284c7;
+            background-color: #e0f2fe;
+            border-color: #bae6fd;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 flex flex-col min-h-screen">
+
+    <!-- 1. HEADER / NAVBAR -->
+    <header class="fixed w-full top-0 z-50 bg-white/95 backdrop-blur-md shadow-sm border-b border-slate-100 transition-all duration-300" id="headerNav">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-20">
+                
+                <!-- Logo -->
+                <div class="flex items-center gap-2 cursor-pointer" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">
+                    <div class="bg-brand-600 text-white p-2 rounded-xl shadow-md shadow-brand-500/20">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" stroke-dasharray="100" stroke-dashoffset="0" />
+                        </svg>
+                    </div>
+                    <span class="font-bold text-2xl text-slate-900 tracking-tight">Vina<span class="text-brand-600">Route</span></span>
+                </div>
+
+                <!-- Navigation Links -->
+                <nav class="hidden md:flex items-center space-x-8">
+                    <a href="#" class="text-brand-600 font-semibold py-2 border-b-2 border-brand-600">Book a Car</a>
+                    <a href="#popular-routes" class="text-slate-500 hover:text-brand-600 font-medium py-2 transition-colors">Promotions</a>
+                    <a href="#" onclick="openMyTrips()" class="text-slate-500 hover:text-brand-600 font-medium py-2 transition-colors">My Trips</a>
+                    <a href="#why-choose-us" class="text-slate-500 hover:text-brand-600 font-medium py-2 transition-colors">Support 24/7</a>
+                </nav>
+
+                <!-- Auth Buttons -->
+                <div class="hidden md:flex items-center space-x-4">
+                    <button onclick="toggleAuthModal('login')" class="text-slate-600 hover:text-brand-600 font-semibold transition-colors cursor-pointer px-3 py-2">Log In</button>
+                    <button onclick="toggleAuthModal('register')" class="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-md shadow-brand-600/15 transition-all hover:shadow-brand-600/25 hover:-translate-y-0.5 cursor-pointer">Register</button>
+                </div>
+
+                <!-- Mobile Navigation Toggle -->
+                <div class="md:hidden flex items-center">
+                    <button onclick="toggleMobileMenu()" class="text-slate-500 hover:text-slate-800 focus:outline-none p-2 rounded-lg hover:bg-slate-100 transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mobile Drawer -->
+        <div id="mobileMenu" class="hidden md:hidden bg-white border-t border-slate-100 py-4 px-4 space-y-3 transition-transform duration-300">
+            <a href="#" class="block px-3 py-2 rounded-lg text-brand-600 font-semibold bg-brand-50/50">Book a Car</a>
+            <a href="#popular-routes" onclick="toggleMobileMenu()" class="block px-3 py-2 rounded-lg text-slate-600 hover:text-brand-600 font-medium">Promotions</a>
+            <a href="#" onclick="toggleMobileMenu(); openMyTrips()" class="block px-3 py-2 rounded-lg text-slate-600 hover:text-brand-600 font-medium">My Trips</a>
+            <a href="#why-choose-us" onclick="toggleMobileMenu()" class="block px-3 py-2 rounded-lg text-slate-600 hover:text-brand-600 font-medium">Support 24/7</a>
+            <div class="pt-4 border-t border-slate-100 flex flex-col gap-2">
+                <button onclick="toggleMobileMenu(); toggleAuthModal('login')" class="w-full text-center py-2.5 font-bold text-slate-700 hover:bg-slate-50 rounded-lg transition-colors">Log In</button>
+                <button onclick="toggleMobileMenu(); toggleAuthModal('register')" class="w-full text-center py-2.5 bg-brand-600 text-white font-bold rounded-lg transition-colors">Register</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 2. HERO SEARCH SECTION -->
+    <section class="mt-20 relative pt-16 pb-32 lg:pt-24 lg:pb-36 hero-banner overflow-hidden flex-shrink-0">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
+            <h1 class="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold text-white tracking-tight drop-shadow-md mb-4 uppercase">
+                Premium Journeys Across Vietnam
+            </h1>
+            <p class="text-base sm:text-lg md:text-xl text-brand-50/90 max-w-2xl mx-auto font-medium mb-8 drop-shadow-sm">
+                Experience comfortable, safe, and professional intercity transfers. Book VIP Limousines & Private Cars in seconds.
+            </p>
+        </div>
+
+        <!-- Dynamic Booking & Search Card Container -->
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 relative z-20 -mb-40 lg:-mb-52">
+            <div class="bg-white rounded-2xl shadow-xl p-6 lg:p-8 border border-slate-100 relative">
+                
+                <form id="searchForm" onsubmit="handleRouteSearch(event)" class="space-y-6">
+                    <!-- Top Selectors Row -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 relative">
+                        
+                        <!-- Swap Locations (Desktop absolute button) -->
+                        <button type="button" onclick="swapLocations()" class="absolute hidden lg:flex items-center justify-center top-[1.85rem] left-[25%] -translate-x-1/2 z-10 w-8 h-8 rounded-full bg-white border border-slate-200 shadow-md text-brand-600 hover:text-brand-700 hover:bg-brand-50 transition-all hover:scale-115">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>
+                        </button>
+
+                        <!-- Departure Dropdown -->
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Departure</label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
+                                    <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25s-7.5-4.108-7.5-11.25a7.5 7.5 0 1 1 15 0Z" /></svg>
+                                </span>
+                                <select id="departure" required class="block w-full pl-10 pr-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl font-bold text-slate-800 focus:outline-none focus:border-brand-500 transition-colors appearance-none cursor-pointer">
+                                    <option value="HCM" selected>TP.HCM</option>
+                                    <option value="Vung Tau">Vung Tau</option>
+                                    <option value="Da Lat">Da Lat</option>
+                                    <option value="Mui Ne">Mui Ne</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Destination Dropdown -->
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Destination</label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
+                                    <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25s-7.5-4.108-7.5-11.25a7.5 7.5 0 1 1 15 0Z" /></svg>
+                                </span>
+                                <select id="destination" required class="block w-full pl-10 pr-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl font-bold text-slate-800 focus:outline-none focus:border-brand-500 transition-colors appearance-none cursor-pointer">
+                                    <option value="HCM">TP.HCM</option>
+                                    <option value="Vung Tau">Vung Tau</option>
+                                    <option value="Da Lat" selected>Da Lat</option>
+                                    <option value="Mui Ne">Mui Ne</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Departure Datepicker -->
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Date</label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
+                                    <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5m-9-6h.008v.008H12v-.008ZM12 15h.008v.008H12V15Zm0 2.25h.008v.008H12v-.008ZM9.75 15h.008v.008H9.75V15Zm0 2.25h.008v.008H9.75v-.008ZM7.5 15h.008v.008H7.5V15Zm0 2.25h.008v.008H7.5v-.008Zm6.75-4.5h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V15Zm0 2.25h.008v.008h-.008v-.008Zm2.25-4.5h.008v.008H16.5v-.008Zm0 2.25h.008v.008H16.5V15Z" /></svg>
+                                </span>
+                                <input type="date" id="depDate" required class="block w-full pl-10 pr-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl font-bold text-slate-800 focus:outline-none focus:border-brand-500 transition-colors cursor-pointer text-sm">
+                            </div>
+                        </div>
+
+                        <!-- Departure Time Dropdown -->
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Time Slot</label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
+                                    <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+                                </span>
+                                <select id="depTime" required class="block w-full pl-10 pr-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl font-bold text-slate-800 focus:outline-none focus:border-brand-500 transition-colors appearance-none cursor-pointer">
+                                    <option value="05:00">05:00 AM</option>
+                                    <option value="08:00" selected>08:00 AM</option>
+                                    <option value="11:00">11:00 AM</option>
+                                    <option value="14:00">14:00 PM</option>
+                                    <option value="17:00">17:00 PM</option>
+                                    <option value="20:00">20:00 PM</option>
+                                </select>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Vehicle Type Option Grid -->
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Vehicle Class Selection</label>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            
+                            <!-- VIP Limousine Card -->
+                            <label class="block relative cursor-pointer group">
+                                <input type="radio" name="vehicle_class" value="limousine" class="sr-only" checked onchange="handleClassChange()">
+                                <div class="vehicle-card flex flex-col p-4 border-2 border-slate-200 rounded-2xl bg-white hover:border-slate-300 transition-all duration-200 h-full">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <div class="icon-panel p-2 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 transition-colors">
+                                            <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.75a1.125 1.125 0 0 1-1.125-1.125V15m1.5 3.75c0-1.125.67-2.16 1.706-2.577L10.5 13.5m0-1.125c1.125 0 2.25-.9 2.25-2.25S11.625 7.875 10.5 7.875M10.5 12.375c-1.125 0-2.25-.9-2.25-2.25S9.375 7.875 10.5 7.875M9 10.5c0-1.125.67-2.16 1.706-2.577L15 4.5" /></svg>
+                                        </div>
+                                        <div class="check-indicator w-5 h-5 rounded-full border-2 border-slate-300 flex items-center justify-center p-0.5 transition-all">
+                                            <div class="w-full h-full rounded-full bg-white scale-0 transition-transform"></div>
+                                        </div>
+                                    </div>
+                                    <h3 class="font-bold text-slate-800 text-base leading-tight">VIP Limousine</h3>
+                                    <p class="text-xs text-slate-500 mt-1 font-medium">9 Premium Massage Seats</p>
+                                    <p class="text-xs font-bold text-brand-600 mt-2">from 250.000 VND</p>
+                                </div>
+                            </label>
+
+                            <!-- Private Sedan Card -->
+                            <label class="block relative cursor-pointer group">
+                                <input type="radio" name="vehicle_class" value="sedan" class="sr-only" onchange="handleClassChange()">
+                                <div class="vehicle-card flex flex-col p-4 border-2 border-slate-200 rounded-2xl bg-white hover:border-slate-300 transition-all duration-200 h-full">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <div class="icon-panel p-2 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 transition-colors">
+                                            <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3Z" /></svg>
+                                        </div>
+                                        <div class="check-indicator w-5 h-5 rounded-full border-2 border-slate-300 flex items-center justify-center p-0.5 transition-all">
+                                            <div class="w-full h-full rounded-full bg-white scale-0 transition-transform"></div>
+                                        </div>
+                                    </div>
+                                    <h3 class="font-bold text-slate-800 text-base leading-tight">Private Sedan</h3>
+                                    <p class="text-xs text-slate-500 mt-1 font-medium">4 Seats &bull; Fast and Executive</p>
+                                    <p class="text-xs font-bold text-brand-600 mt-2">from 500.000 VND</p>
+                                </div>
+                            </label>
+
+                            <!-- Family SUV Card -->
+                            <label class="block relative cursor-pointer group">
+                                <input type="radio" name="vehicle_class" value="suv" class="sr-only" onchange="handleClassChange()">
+                                <div class="vehicle-card flex flex-col p-4 border-2 border-slate-200 rounded-2xl bg-white hover:border-slate-300 transition-all duration-200 h-full">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <div class="icon-panel p-2 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 transition-colors">
+                                            <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.97 5.97 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" /></svg>
+                                        </div>
+                                        <div class="check-indicator w-5 h-5 rounded-full border-2 border-slate-300 flex items-center justify-center p-0.5 transition-all">
+                                            <div class="w-full h-full rounded-full bg-white scale-0 transition-transform"></div>
+                                        </div>
+                                    </div>
+                                    <h3 class="font-bold text-slate-800 text-base leading-tight">Family SUV</h3>
+                                    <p class="text-xs text-slate-500 mt-1 font-medium">7 Seats &bull; Safe and Spacious</p>
+                                    <p class="text-xs font-bold text-brand-600 mt-2">from 350.000 VND</p>
+                                </div>
+                            </label>
+
+                        </div>
+                    </div>
+
+                    <!-- Search Button -->
+                    <button type="submit" class="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-lg font-bold shadow-lg shadow-brand-500/20 hover:shadow-brand-500/35 transition-all hover:-translate-y-0.5 flex justify-center items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.637 10.637z" /></svg>
+                        Find Available Vehicles
+                    </button>
+                </form>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- 3. SEARCH RESULTS & SEAT BOOKING COMPONENT (DYNAMIC PANEL) -->
+    <section id="searchResultsSection" class="hidden max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-56 pb-12">
+        <div class="bg-white rounded-3xl shadow-xl border border-slate-100 p-6 md:p-8">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-5 mb-6">
+                <div>
+                    <h2 class="text-2xl font-extrabold text-slate-900 leading-tight">Available Departures</h2>
+                    <p id="searchInfoSummary" class="text-sm font-semibold text-brand-600 uppercase tracking-wider mt-1"></p>
+                </div>
+                <!-- Close Button -->
+                <button onclick="closeSearchResults()" class="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-xl transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+
+            <!-- Main Schedule Grid -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                
+                <!-- Departures List (Left side) -->
+                <div class="lg:col-span-7 space-y-4">
+                    <h3 class="text-sm font-bold text-slate-500 uppercase tracking-widest mb-2">Select a Schedule</h3>
+                    <div id="departuresListContainer" class="space-y-4">
+                        <!-- Dynamic items will be generated here -->
+                    </div>
+                </div>
+
+                <!-- Seat Grid & Calculation Board (Right side) -->
+                <div id="seatMapContainer" class="lg:col-span-5 border-t lg:border-t-0 lg:border-l border-slate-100 pt-8 lg:pt-0 lg:pl-8 flex flex-col hidden">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-bold text-slate-800">Seat Grid Layout</h3>
+                        
+                        <!-- Mini Legend -->
+                        <div class="flex items-center gap-3 text-xs font-semibold text-slate-500">
+                            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-slate-100 border border-slate-300 inline-block"></span> Avail</span>
+                            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-brand-600 inline-block"></span> Mine</span>
+                            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-slate-200 inline-block opacity-60"></span> Sold</span>
+                        </div>
+                    </div>
+
+                    <!-- Inner Vehicle Viewport -->
+                    <div class="flex-grow flex items-center justify-center bg-slate-50 rounded-2xl p-6 border border-slate-100 min-h-[320px]">
+                        <div class="w-64 border-4 border-slate-200 rounded-[2.5rem] bg-white p-4 shadow-sm flex flex-col items-center">
+                            
+                            <!-- Windshield / Driver Section -->
+                            <div class="w-full flex justify-between items-center border-b border-slate-100 pb-3 mb-4">
+                                <span class="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest">Front Windshield</span>
+                                <div class="p-1 px-2 rounded bg-slate-100 text-slate-500 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Driver
+                                </div>
+                            </div>
+
+                            <!-- Interactive Grid -->
+                            <div id="carSeatGrid" class="flex flex-wrap w-full gap-y-3 justify-center">
+                                <!-- Elements generated dynamically by script -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Selected Indicator & Deposit Checkout Trigger -->
+                    <div class="mt-6 pt-5 border-t border-slate-100 space-y-4">
+                        <div class="flex justify-between items-end">
+                            <div>
+                                <span class="block text-xs font-bold text-slate-400 uppercase tracking-widest">Seats Selected</span>
+                                <span id="pickedSeatsValue" class="text-lg font-extrabold text-slate-900">-</span>
+                            </div>
+                            <div class="text-right">
+                                <span class="block text-xs font-bold text-slate-400 uppercase tracking-widest">Total Price</span>
+                                <span id="paymentTotalAmount" class="text-xl font-extrabold text-brand-600">0 ₫</span>
+                            </div>
+                        </div>
+
+                        <button onclick="triggerDepositCheckout()" class="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl transition-all shadow-md flex justify-center items-center gap-2 text-sm uppercase tracking-wide">
+                            Proceed to Deposit Payment
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" /></svg>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- 4. POPULAR ROUTES SECTION -->
+    <section id="popular-routes" class="py-20 bg-slate-50 mt-40 lg:mt-52">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-12">
+                <div>
+                    <h2 class="text-3xl font-extrabold text-slate-950 tracking-tight">Popular Routes</h2>
+                    <p class="text-sm sm:text-base text-slate-500 font-medium mt-1">High-demand connections serviced daily with premium configurations.</p>
+                </div>
+                <div class="w-fit">
+                    <span class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Bookings Open for Summer
+                    </span>
+                </div>
+            </div>
+
+            <!-- Route Cards Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                
+                <!-- Route 1 -->
+                <div class="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-lg border border-slate-100 flex flex-col group transition-all duration-300 hover:-translate-y-1">
+                    <div class="h-48 relative overflow-hidden bg-slate-100">
+                        <img src="https://images.unsplash.com/photo-1583417319070-4a69db38a482?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80" alt="Vung Tau Beach" class="w-full h-full object-cover group-hover:scale-105 transition-all duration-500">
+                        <div class="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
+                        <span class="absolute top-4 left-4 text-[10px] font-bold bg-white/95 text-slate-900 px-2.5 py-1 rounded-full uppercase tracking-wider shadow-sm">Fast Coastal Road</span>
+                        <div class="absolute bottom-4 left-4 text-white">
+                            <h4 class="font-bold text-lg">TP.HCM &harr; Vung Tau</h4>
+                        </div>
+                    </div>
+                    <div class="p-5 flex-grow flex flex-col justify-between">
+                        <div class="mb-4">
+                            <p class="text-xs text-slate-500 font-medium leading-relaxed">Departs every 30 minutes. Pickup & drop-off at your location inside downtown districts.</p>
+                            <div class="flex items-center gap-4 mt-3">
+                                <span class="text-xs font-semibold text-slate-600 flex items-center gap-1">
+                                    <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> 2 Hours
+                                </span>
+                                <span class="text-xs font-semibold text-slate-600 flex items-center gap-1">
+                                    <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 111.063 1.06l-.042.022a.75.75 0 01-1.062-1.062zM16.5 12a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" /></svg> VIP Massage
+                                </span>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between pt-4 border-t border-slate-50">
+                            <div>
+                                <span class="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">Prices From</span>
+                                <span class="text-base font-extrabold text-brand-600">160.000 VND</span>
+                            </div>
+                            <button onclick="prepopulateAndScroll('HCM', 'Vung Tau')" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-xs transition-colors">Book Now</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Route 2 -->
+                <div class="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-lg border border-slate-100 flex flex-col group transition-all duration-300 hover:-translate-y-1">
+                    <div class="h-48 relative overflow-hidden bg-slate-100">
+                        <img src="https://images.unsplash.com/photo-1518509562904-e7ef99cdcc86?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80" alt="Da Lat Pines" class="w-full h-full object-cover group-hover:scale-105 transition-all duration-500">
+                        <div class="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
+                        <span class="absolute top-4 left-4 text-[10px] font-bold bg-white/95 text-slate-900 px-2.5 py-1 rounded-full uppercase tracking-wider shadow-sm">Overnight Sleeper VIP</span>
+                        <div class="absolute bottom-4 left-4 text-white">
+                            <h4 class="font-bold text-lg">TP.HCM &harr; Da Lat</h4>
+                        </div>
+                    </div>
+                    <div class="p-5 flex-grow flex flex-col justify-between">
+                        <div class="mb-4">
+                            <p class="text-xs text-slate-500 font-medium leading-relaxed">Relaxing mountain route in cloud mist. Luxury cabins and personal TVs equipped.</p>
+                            <div class="flex items-center gap-4 mt-3">
+                                <span class="text-xs font-semibold text-slate-600 flex items-center gap-1">
+                                    <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> 6 Hours
+                                </span>
+                                <span class="text-xs font-semibold text-slate-600 flex items-center gap-1">
+                                    <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 111.063 1.06l-.042.022a.75.75 0 01-1.062-1.062zM16.5 12a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" /></svg> Individual LCD
+                                </span>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between pt-4 border-t border-slate-50">
+                            <div>
+                                <span class="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">Prices From</span>
+                                <span class="text-base font-extrabold text-brand-600">350.000 VND</span>
+                            </div>
+                            <button onclick="prepopulateAndScroll('HCM', 'Da Lat')" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-xs transition-colors">Book Now</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Route 3 -->
+                <div class="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-lg border border-slate-100 flex flex-col group transition-all duration-300 hover:-translate-y-1">
+                    <div class="h-48 relative overflow-hidden bg-slate-100">
+                        <img src="https://images.unsplash.com/photo-1615410940733-1463ee0eeef0?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80" alt="Mui Ne Dunes" class="w-full h-full object-cover group-hover:scale-105 transition-all duration-500">
+                        <div class="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
+                        <span class="absolute top-4 left-4 text-[10px] font-bold bg-white/95 text-slate-900 px-2.5 py-1 rounded-full uppercase tracking-wider shadow-sm">Beautiful Highway</span>
+                        <div class="absolute bottom-4 left-4 text-white">
+                            <h4 class="font-bold text-lg">TP.HCM &harr; Mui Ne</h4>
+                        </div>
+                    </div>
+                    <div class="p-5 flex-grow flex flex-col justify-between">
+                        <div class="mb-4">
+                            <p class="text-xs text-slate-500 font-medium leading-relaxed">Travel directly on dynamic expressways. Enjoy scenic coastal paths in Comfort class cars.</p>
+                            <div class="flex items-center gap-4 mt-3">
+                                <span class="text-xs font-semibold text-slate-600 flex items-center gap-1">
+                                    <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> 3 Hours
+                                </span>
+                                <span class="text-xs font-semibold text-slate-600 flex items-center gap-1">
+                                    <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 111.063 1.06l-.042.022a.75.75 0 01-1.062-1.062zM16.5 12a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" /></svg> Type 3 USB Ports
+                                </span>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between pt-4 border-t border-slate-50">
+                            <div>
+                                <span class="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">Prices From</span>
+                                <span class="text-base font-extrabold text-brand-600">250.000 VND</span>
+                            </div>
+                            <button onclick="prepopulateAndScroll('HCM', 'Mui Ne')" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-xs transition-colors">Book Now</button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- 5. VALUE PROPOSITION SECTION -->
+    <section id="why-choose-us" class="py-24 bg-white border-t border-b border-slate-100">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-2xl mx-auto mb-16">
+                <span class="text-xs font-bold text-brand-600 uppercase tracking-widest bg-brand-50 px-3 py-1.5 rounded-full">Top Service Quality</span>
+                <h2 class="text-3xl font-extrabold text-slate-900 tracking-tight mt-3">The VinaRoute Advantage</h2>
+                <p class="text-slate-500 font-medium text-sm sm:text-base mt-2">Every departure is monitored closely from our operational headquarters to fulfill the highest standards of safety and punctuality.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                
+                <!-- Factor 1 -->
+                <div class="flex flex-col items-center text-center p-6 bg-slate-50/50 rounded-2xl border border-slate-100">
+                    <div class="w-14 h-14 rounded-2xl bg-brand-50 border border-brand-100/55 flex items-center justify-center text-brand-600 mb-5 shadow-sm">
+                        <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+                    </div>
+                    <h3 class="font-extrabold text-slate-900 text-lg">Transparent Pricing</h3>
+                    <p class="text-xs text-slate-500 mt-2 font-medium leading-relaxed">No unexpected holiday surcharges. What is displayed during checkout is precisely what is invoiced.</p>
+                </div>
+
+                <!-- Factor 2 -->
+                <div class="flex flex-col items-center text-center p-6 bg-slate-50/50 rounded-2xl border border-slate-100">
+                    <div class="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 mb-5 shadow-sm">
+                        <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14.25 9.75 16.5 12l-2.25 2.25m-4.5 0L7.5 12l2.25-2.25M6 20.25h12A2.25 2.25 0 0 0 20.25 18V6A2.25 2.25 0 0 0 18 3.75H6A2.25 2.25 0 0 0 3.75 6v12A2.25 2.25 0 0 0 6 20.25Z" /></svg>
+                    </div>
+                    <h3 class="font-extrabold text-slate-900 text-lg">Professional Fleet</h3>
+                    <p class="text-xs text-slate-500 mt-2 font-medium leading-relaxed">All luxury cars and VIP limousine grids must pass stringent pre-route test guidelines before departure.</p>
+                </div>
+
+                <!-- Factor 3 -->
+                <div class="flex flex-col items-center text-center p-6 bg-slate-50/50 rounded-2xl border border-slate-100">
+                    <div class="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 mb-5 shadow-sm">
+                        <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.182 15.182a4.5 4.5 0 01-6.364 0M21 12a9 9 0 11-18 0 9 9 0 0118 0Z" /></svg>
+                    </div>
+                    <h3 class="font-extrabold text-slate-900 text-lg">Tested Drivers</h3>
+                    <p class="text-xs text-slate-500 mt-2 font-medium leading-relaxed font-sans">Every driver undergoes periodic medical screen tests alongside regular safety-record surveillance reviews.</p>
+                </div>
+
+                <!-- Factor 4 -->
+                <div class="flex flex-col items-center text-center p-6 bg-slate-50/50 rounded-2xl border border-slate-100">
+                    <div class="w-14 h-14 rounded-2xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600 mb-5 shadow-sm">
+                        <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14.25 6.087c0-.355.186-.676.401-.959.249-.326.57-.514.907-.514h1.185V1h-2.37v2.37h.122c-.676 0-1.282.376-1.637.957-.34.557-.456 1.157-.456 1.76v.382H7.957V1h-2.37v5.087h.122c-.675 0-1.281.376-1.637.957-.34.557-.456 1.157-.456 1.76v1.393c0 2.222 1.34 3.994 3.018 4.3v4.473h1.37v-4.473A4.321 4.321 0 0 0 11 11.23V8.835a4.321 4.321 0 0 0-3.043-4.13" /></svg>
+                    </div>
+                    <h3 class="font-extrabold text-slate-900 text-lg">Support 24/7</h3>
+                    <p class="text-xs text-slate-500 mt-2 font-medium leading-relaxed">Our multi-lingual hotlines are dedicated around-the-clock to manage route modifications gracefully.</p>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- 6. FOOTER -->
+    <footer class="mt-auto bg-slate-900 text-slate-400 pt-16 pb-8 border-t border-slate-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 lg:gap-8 mb-12">
+                
+                <!-- Brand Columns -->
+                <div class="lg:col-span-1">
+                    <div class="flex items-center gap-2 mb-4">
+                        <div class="text-white bg-brand-600 p-2 rounded-xl">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                        </div>
+                        <span class="font-bold text-2xl text-white tracking-tight">VinaRoute</span>
+                    </div>
+                    <p class="text-sm font-medium mb-6">Vietnam's premium intercity car booking hub, elevating comfort standards on hot routes daily.</p>
+                    <div class="flex gap-3">
+                        <a href="#" class="w-10 h-10 rounded-full bg-slate-800 hover:bg-brand-600 text-white flex items-center justify-center transition-colors">
+                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M24 4.557c-.883.392-1.832.656-2.828.775 1.017-.609 1.798-1.574 2.165-2.724-.951.564-2.005.974-3.127 1.195-.897-.957-2.178-1.555-3.594-1.555-3.179 0-5.515 2.966-4.797 6.045-4.091-.205-7.719-2.165-10.148-5.144-1.29 2.213-.669 5.108 1.523 6.574-.806-.026-1.566-.247-2.229-.616-.054 2.281 1.581 4.415 3.949 4.89-.693.188-1.452.232-2.224.084.626 1.956 2.444 3.379 4.6 3.419-2.07 1.623-4.678 2.348-7.29 2.04 2.179 1.397 4.768 2.212 7.548 2.212 9.142 0 14.307-7.721 13.995-14.646.962-.695 1.797-1.562 2.457-2.549z"/></svg>
+                        </a>
+                        <a href="#" class="w-10 h-10 rounded-full bg-slate-800 hover:bg-brand-600 text-white flex items-center justify-center transition-colors">
+                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4z"/></svg>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Navigation List -->
+                <div>
+                    <h4 class="text-white font-bold text-sm uppercase tracking-wider mb-4">Operations</h4>
+                    <ul class="space-y-2.5 text-sm">
+                        <li><a href="#" onclick="prepopulateAndScroll('HCM', 'Da Lat')" class="hover:text-white transition-colors">TP.HCM - Da Lat</a></li>
+                        <li><a href="#" onclick="prepopulateAndScroll('HCM', 'Vung Tau')" class="hover:text-white transition-colors">TP.HCM - Vung Tau</a></li>
+                        <li><a href="#" onclick="prepopulateAndScroll('HCM', 'Mui Ne')" class="hover:text-white transition-colors">TP.HCM - Mui Ne</a></li>
+                        <li><a href="#" class="hover:text-white transition-colors">Vung Tau - Da Lat</a></li>
+                    </ul>
+                </div>
+
+                <!-- Corporate Info -->
+                <div>
+                    <h4 class="text-white font-bold text-sm uppercase tracking-wider mb-4">Corporate Office</h4>
+                    <p class="text-xs text-slate-400 leading-relaxed font-sans font-medium mb-3">
+                        VinaRoute Solutions JSC<br>
+                        220 Nguyen Huu Canh, Ward 22, Binh Thanh District, Ho Chi Minh City, Vietnam.
+                    </p>
+                    <p class="text-xs text-slate-400 font-sans">
+                        Business Reg No: 0317589622
+                    </p>
+                </div>
+
+                <!-- Policies Info -->
+                <div>
+                    <h4 class="text-white font-bold text-sm uppercase tracking-wider mb-4">Support Hub</h4>
+                    <ul class="space-y-2.5 text-sm">
+                        <li><a href="#" class="hover:text-white transition-colors">Standard Cancellation Rules</a></li>
+                        <li><a href="#" class="hover:text-white transition-colors">Privacy Policy</a></li>
+                        <li><a href="#" class="hover:text-white transition-colors">Partner with Us</a></li>
+                        <li><a href="#" class="hover:text-white transition-colors">Contact Operational Team</a></li>
+                    </ul>
+                </div>
+
+            </div>
+            
+            <div class="pt-8 mt-8 border-t border-slate-800 text-xs text-center font-medium font-sans">
+                &copy; <span id="footerYear">2026</span> VinaRoute platform is a licensed Transport Agent. All rights reserved.
+            </div>
+        </div>
+    </footer>
+
+    <!-- 7. MODALS (AUTH OR PAYMENT DEPOSITS) -->
+
+    <!-- Auth Modal (Sign In / Sign Up) -->
+    <div id="authModal" class="hidden relative z-50">
+        <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"></div>
+        <div class="fixed inset-0 z-10 w-screen overflow-y-auto">
+            <div class="flex min-h-full items-center justify-center p-4 text-center">
+                <div class="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-md border border-slate-100">
+                    
+                    <div class="absolute right-4 top-4">
+                        <button onclick="toggleAuthModal()" class="text-slate-400 hover:text-slate-600 focus:outline-none p-1.5 hover:bg-slate-50 rounded-xl transition-all">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
+
+                    <div class="p-6 sm:p-8">
+                        <!-- Modal Headers Tab Selection -->
+                        <div class="flex border-b border-slate-100 mb-6">
+                            <button id="tabLoginBtn" onclick="chooseAuthMode('login')" class="flex-1 text-center pb-3 text-lg font-bold border-b-2 transition-all">Log In</button>
+                            <button id="tabRegisterBtn" onclick="chooseAuthMode('register')" class="flex-1 text-center pb-3 text-lg font-bold border-b-2 transition-all">Register</button>
+                        </div>
+
+                        <!-- Login Form -->
+                        <form id="formLogin" onsubmit="submitAuthForm(event, 'login')" class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Phone Number</label>
+                                <input type="tel" required placeholder="e.g., 0901234567" class="w-full px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 font-bold text-slate-800">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Password</label>
+                                <input type="password" required placeholder="••••••••" class="w-full px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 font-bold text-slate-800">
+                            </div>
+                            <button type="submit" class="w-full py-3.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl transition-colors shadow-md">Sign In</button>
+                        </form>
+
+                        <!-- Register Form -->
+                        <form id="formRegister" onsubmit="submitAuthForm(event, 'register')" class="space-y-4 hidden">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Full Name</label>
+                                <input type="text" required placeholder="Nguyen Van A" class="w-full px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 font-bold text-slate-800">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Mobile Phone</label>
+                                <input type="tel" required placeholder="e.g., 0901234567" class="w-full px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 font-bold text-slate-800">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Select Password</label>
+                                <input type="password" required placeholder="Choose Password" class="w-full px-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-brand-500 font-bold text-slate-800">
+                            </div>
+                            <div class="flex items-start gap-2.5 pt-2">
+                                <input id="policyConsent" type="checkbox" required class="mt-1 w-4 h-4 text-brand-600 border-slate-300 rounded focus:ring-brand-500">
+                                <label for="policyConsent" class="text-xs text-slate-500 leading-normal font-medium">I accept the standard transport policies of VinaRoute network.</label>
+                            </div>
+                            <button type="submit" class="w-full py-3.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl transition-colors shadow-md">Sign Up Securely</button>
+                        </form>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Deposit Checkout Modal -->
+    <div id="depositModal" class="hidden relative z-50">
+        <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"></div>
+        <div class="fixed inset-0 z-10 w-screen overflow-y-auto">
+            <div class="flex min-h-full items-center justify-center p-4 text-center">
+                <div class="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-md border border-slate-100">
+                    
+                    <div class="absolute right-4 top-4">
+                        <button onclick="toggleDepositModal()" class="text-slate-400 hover:text-slate-600 focus:outline-none p-1.5 hover:bg-slate-50 rounded-xl transition-all">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
+
+                    <div class="p-6 sm:p-8">
+                        <div class="flex flex-col items-center text-center">
+                            <div class="w-12 h-12 rounded-full bg-brand-50 border-4 border-white flex items-center justify-center text-brand-600 shadow-md mb-3">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12.75 3.03v.568c0 .334.148.65.405.864l4.038 3.332a.75.75 0 0 1-1.018 1.1l-4.172-3.44a1.5 1.5 0 0 0-1.996 0l-4.172 3.44a.75.75 0 1 1-1.018-1.1l4.038-3.332a1.5 1.5 0 0 0 .405-.864V3.03c0-.655-.531-1.205-1.186-1.205H4.156A1.156 1.156 0 0 0 3 2.981V19.5c0 .828.672 1.5 1.5 1.5h15c.828 0 1.5-.672 1.5-1.5V2.98c0-.62-.486-1.156-1.106-1.156h-2.138c-.655 0-1.186.55-1.186 1.205Z" /></svg>
+                            </div>
+                            <h3 class="text-xl font-extrabold text-slate-900 leading-tight">Deposit Required</h3>
+                            <p class="text-xs text-slate-500 font-medium mt-1">Pay a 50% deposit via QR Transfer to lock chosen seats securely.</p>
+                        </div>
+
+                        <!-- Ticket Summary -->
+                        <div class="mt-6 p-4 bg-slate-50 rounded-xl space-y-1.5 text-sm font-medium text-slate-600">
+                            <div class="flex justify-between"><span>Journey:</span> <span id="depSummaryLabel" class="text-slate-900 font-bold">HCM - Vung Tau</span></div>
+                            <div class="flex justify-between"><span>Date/Time:</span> <span id="timeSummaryLabel" class="text-slate-900 font-bold">15-Oct-2024 at 08:00 AM</span></div>
+                            <div class="flex justify-between"><span>Seats:</span> <span id="seatsSummaryLabel" class="text-slate-900 font-bold">A2, A3</span></div>
+                            <div class="flex justify-between"><span>Total Class Price:</span> <span id="totalSummaryLabel" class="text-slate-900 font-bold">500,000 VND</span></div>
+                            <div class="flex justify-between pt-3 mt-3 border-t border-slate-200 text-brand-700 font-bold text-base">
+                                <span>Deposit 50%:</span> <span id="depositSummaryValue">250.000 ₫</span>
+                            </div>
+                        </div>
+
+                        <!-- Scan QR Code Panel -->
+                        <div class="mt-6 flex flex-col items-center bg-brand-50/50 p-4 rounded-xl border border-brand-100">
+                            <p class="text-xs font-bold text-brand-700 mb-3 tracking-widest uppercase flex items-center gap-1">
+                                <span class="w-2 h-2 rounded-full bg-brand-500 animate-ping"></span> Live QR Scan MoMo/VNPay
+                            </p>
+                            <!-- Mock QR SVG -->
+                            <div class="p-2.5 bg-white rounded-xl shadow-sm border border-slate-200">
+                                <svg class="w-32 h-32 text-slate-900" fill="currentColor" viewBox="0 0 24 24"><path d="M3 3h8v8H3V3zm2 2v4h4V5H5zm8-2h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm13-2h3v2h-3v-2zm-3 0h2v2h-2v-2zm3 3h3v2h-3v-2zm-3 0h2v4h-2v-4zm3 3h3v2h-3v-2z"></path></svg>
+                            </div>
+                            <p class="text-xs text-slate-500 font-medium text-center mt-3 leading-normal">
+                                Transfer Remark: <span class="font-mono bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded border border-amber-200 font-bold inline-block mt-1">VR-DEPOSIT-BK</span>
+                            </p>
+                        </div>
+
+                        <!-- Confirm Transfer Button -->
+                        <button onclick="commitBookingConfirm()" class="w-full mt-6 py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl shadow-md transition-all uppercase text-xs tracking-wider">
+                            I have fully completed transacting
+                        </button>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- My Trips / History Sidebar Modal -->
+    <div id="tripsModal" class="hidden relative z-50">
+        <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"></div>
+        <div class="fixed inset-0 z-10 w-screen overflow-y-auto">
+            <div class="flex min-h-full items-center justify-center p-4">
+                <div class="w-full max-w-3xl transform overflow-hidden rounded-2xl bg-white p-6 shadow-2xl transition-all border border-slate-100">
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
+                        <h3 class="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-brand-600" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.75a1.125 1.125 0 0 1-1.125-1.125V15m1.5 3.75c0-1.125.67-2.16 1.706-2.577L10.5 13.5" /></svg>
+                            My Trip History
+                        </h3>
+                        <button onclick="closeMyTrips()" class="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-50 transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
+
+                    <!-- History Table -->
+                    <div class="overflow-x-auto min-h-[180px]">
+                        <table class="min-w-full divide-y divide-slate-200">
+                            <thead>
+                                <tr class="bg-slate-50">
+                                    <th scope="col" class="px-5 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Booking ID</th>
+                                    <th scope="col" class="px-5 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Route</th>
+                                    <th scope="col" class="px-5 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Date/Time</th>
+                                    <th scope="col" class="px-5 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Seats</th>
+                                    <th scope="col" class="px-5 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tripsTableBody" class="bg-white divide-y divide-slate-100 text-sm">
+                                <tr class="hover:bg-slate-50 transition-colors">
+                                    <td class="px-5 py-4 font-bold text-slate-900">#VR-8821</td>
+                                    <td class="px-5 py-4 font-bold text-slate-800">HCM &rarr; Vung Tau</td>
+                                    <td class="px-5 py-4 text-slate-550 font-medium">12-Jun-2026 | 08:00 AM</td>
+                                    <td class="px-5 py-4 text-slate-600">A1, A2</td>
+                                    <td class="px-5 py-4"><span class="px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">Completed</span></td>
+                                </tr>
+                                <tr class="hover:bg-slate-50 transition-colors">
+                                    <td class="px-5 py-4 font-bold text-slate-900">#VR-7740</td>
+                                    <td class="px-5 py-4 font-bold text-slate-800">Da Lat &rarr; HCM</td>
+                                    <td class="px-5 py-4 text-slate-550 font-medium">18-Jun-2026 | 14:00 PM</td>
+                                    <td class="px-5 py-4 text-slate-600">R2</td>
+                                    <td class="px-5 py-4"><span class="px-2.5 py-1 text-xs font-bold rounded-lg bg-sky-50 text-sky-800 border border-sky-200">Confirmed (Deposit Paid)</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- BUSINESS LOGIC SCRIPTS -->
+    <script>
+        // Set dynamic date picker minimum to today dynamically
+        let todayVal = new Date().toISOString().split('T')[0];
+        document.getElementById('depDate').value = todayVal;
+        document.getElementById('depDate').min = todayVal;
+        document.getElementById('footerYear').textContent = new Date().getFullYear();
+
+        // Mobile menu toggle helper
+        function toggleMobileMenu() {
+            const menu = document.getElementById('mobileMenu');
+            menu.classList.toggle('hidden');
+        }
+
+        // Action: Swaps Departure and Destination values
+        function swapLocations() {
+            const depSelect = document.getElementById('departure');
+            const destSelect = document.getElementById('destination');
+            const temp = depSelect.value;
+            depSelect.value = destSelect.value;
+            destSelect.value = temp;
+        }
+
+        // Intercept Search Form Submission
+        let computedPricePerSeat = 250000;
+        let selectedRouteSeats = [];
+        let chosenRouteLabel = '';
+        let chosenDateLabel = '';
+        let chosenTimeLabel = '';
+
+        function handleClassChange() {
+            // Recompute pricing parameters for real-time responsiveness
+            const vClass = document.querySelector('input[name="vehicle_class"]:checked').value;
+            if(vClass === 'limousine') computedPricePerSeat = 250000;
+            else if(vClass === 'sedan') computedPricePerSeat = 500000;
+            else computedPricePerSeat = 350000;
+            
+            // Clean active seat map elements if any
+            selectedRouteSeats = [];
+            updateSummaryView();
+            generateDynamicSeatGrid();
+        }
+
+        function handleRouteSearch(e) {
+            e.preventDefault();
+            
+            const dep = document.getElementById('departure').value;
+            const dest = document.getElementById('destination').value;
+            const date = document.getElementById('depDate').value;
+            const timeSlot = document.getElementById('depTime').value;
+            const vClass = document.querySelector('input[name="vehicle_class"]:checked').value;
+
+            if (dep === dest) {
+                alert('We apologize, but Departure and Destination points cannot be identical. Please adjust your itinerary.');
+                return;
+            }
+
+            // Lock pricing configuration
+            handleClassChange();
+
+            // Populate text parameters
+            chosenRouteLabel = `${dep} ➔ ${dest}`;
+            chosenDateLabel = date;
+            chosenTimeLabel = timeSlot;
+
+            const summaryEl = document.getElementById('searchInfoSummary');
+            summaryEl.textContent = `${chosenRouteLabel} | Date: ${date} | Preferred: ${timeSlot}`;
+
+            // Create custom mock schedules matching departure constraints
+            const mockContainer = document.getElementById('departuresListContainer');
+            mockContainer.innerHTML = '';
+
+            const slots = [
+                { id: 1, time: '08:15', driver: 'Tran Thanh S.', seatsRemaining: 4, type: 'VIP Premium' },
+                { id: 2, time: '11:30', driver: 'Nguyen Phuong K.', seatsRemaining: 6, type: 'Direct Express' },
+                { id: 3, time: '15:45', driver: 'Le Van L.', seatsRemaining: 5, type: 'Eco Standard' }
+            ];
+
+            slots.forEach(slot => {
+                const item = document.createElement('div');
+                item.className = "flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 border border-slate-150 rounded-xl bg-slate-50 hover:bg-slate-100/50 hover:border-slate-350 transition-colors cursor-pointer";
+                item.onclick = () => selectScheduleSlot(slot);
+                item.innerHTML = `
+                    <div>
+                        <span class="inline-block text-[10px] font-bold bg-slate-200 text-slate-800 uppercase tracking-widest px-2 py-0.5 rounded-md mb-2">${slot.type}</span>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xl font-extrabold text-slate-900">${slot.time}</span>
+                            <span class="text-sm text-slate-400">➔</span>
+                            <span class="text-sm font-semibold text-slate-650">Expected Duration: 2-3h</span>
+                        </div>
+                        <div class="text-xs font-semibold text-slate-500 mt-1">Operational Driver: ${slot.driver}</div>
+                    </div>
+                    <div class="sm:text-right mt-3 sm:mt-0 flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto">
+                        <span class="text-xs font-bold text-gray-500 block">${slot.seatsRemaining} Empty Seats</span>
+                        <button class="px-4 py-2 mt-1.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg text-xs transition-colors shadow">Select Schedule</button>
+                    </div>
+                `;
+                mockContainer.appendChild(item);
+            });
+
+            // Reveal the Search results viewport
+            const section = document.getElementById('searchResultsSection');
+            section.classList.remove('hidden');
+            section.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function closeSearchResults() {
+            document.getElementById('searchResultsSection').classList.add('hidden');
+        }
+
+        function selectScheduleSlot(slot) {
+            // Mark selected slot to focus seat layout on the right
+            const seatMap = document.getElementById('seatMapContainer');
+            seatMap.classList.remove('hidden');
+            generateDynamicSeatGrid();
+        }
+
+        // Dynamics Seat Grid Layout Generation Function
+        function generateDynamicSeatGrid() {
+            const grid = document.getElementById('carSeatGrid');
+            grid.innerHTML = '';
+
+            const vClass = document.querySelector('input[name="vehicle_class"]:checked').value;
+            let list = [];
+
+            if(vClass === 'limousine') {
+                list = [
+                    { id: 'A1', booked: true }, { id: 'A2', booked: false },
+                    { id: 'B1', booked: false }, { id: 'B2', booked: false },
+                    { id: 'C1', booked: true }, { id: 'C2', booked: false },
+                    { id: 'D1', booked: false }, { id: 'D2', booked: false }, { id: 'D3', booked: false }
+                ];
+            } else if(vClass === 'sedan') {
+                list = [
+                    { id: 'VIP', booked: false, positionClass: 'ml-auto mb-4' },
+                    { id: 'S1', booked: false }, { id: 'S2', booked: true }, { id: 'S3', booked: false }
+                ];
+            } else { // SUV Class layout configuration
+                list = [
+                    { id: 'F1', booked: false, positionClass: 'ml-auto mb-4' },
+                    { id: 'M1', booked: false }, { id: 'M2', booked: false }, { id: 'M3', booked: true },
+                    { id: 'B1', booked: false }, { id: 'B2', booked: false }, { id: 'B3', booked: false }
+                ];
+            }
+
+            list.forEach(seat => {
+                const btn = document.createElement('button');
+                btn.type = "button";
+                btn.className = `w-11 h-12 rounded-lg font-bold text-xs flex items-center justify-center border transition-all duration-150 outline-none select-none my-1 mx-1 `;
+                
+                if (seat.booked) {
+                    btn.className += 'bg-slate-200 border-slate-300 text-slate-400 opacity-60 cursor-not-allowed';
+                } else {
+                    btn.className += 'bg-slate-50 text-slate-800 border-slate-200 hover:border-brand-500 hover:bg-slate-100 cursor-pointer';
+                    btn.onclick = () => toggleSelectSeatElement(seat.id, btn);
+                }
+
+                if (seat.positionClass) {
+                    btn.className += ' ' + seat.positionClass;
+                }
+
+                btn.textContent = seat.id;
+                grid.appendChild(btn);
+            });
+        }
+
+        function toggleSelectSeatElement(id, btnElement) {
+            const index = selectedRouteSeats.indexOf(id);
+            if (index > -1) {
+                // Deselect active
+                selectedRouteSeats.splice(index, 1);
+                btnElement.classList.replace('bg-brand-600', 'bg-slate-50');
+                btnElement.classList.replace('text-white', 'text-slate-800');
+                btnElement.classList.replace('border-brand-600', 'border-slate-200');
+            } else {
+                // Select active
+                selectedRouteSeats.push(id);
+                btnElement.classList.replace('bg-slate-50', 'bg-brand-600');
+                btnElement.classList.replace('text-slate-800', 'text-white');
+                btnElement.classList.replace('border-slate-200', 'border-brand-600');
+            }
+            updateSummaryView();
+        }
+
+        function updateSummaryView() {
+            const listEl = document.getElementById('pickedSeatsValue');
+            const totalEl = document.getElementById('paymentTotalAmount');
+
+            listEl.textContent = selectedRouteSeats.length > 0 ? selectedRouteSeats.join(', ') : '-';
+            const cost = selectedRouteSeats.length * computedPricePerSeat;
+            totalEl.textContent = new Intl.NumberFormat('vi-VN').format(cost) + ' ₫';
+        }
+
+        // Interactive Promo Actions
+        function prepopulateAndScroll(depValue, destValue) {
+            document.getElementById('departure').value = depValue;
+            document.getElementById('destination').value = destValue;
+            
+            // Trigger focus effects
+            const formControl = document.getElementById('searchForm');
+            formControl.scrollIntoView({ behavior: 'smooth' });
+            
+            formControl.classList.add('ring-4', 'ring-brand-500/20');
+            setTimeout(() => { formControl.classList.remove('ring-4', 'ring-brand-500/20'); }, 1500);
+        }
+
+        // Modal Action: Authentication Triggers
+        function toggleAuthModal(modeArg) {
+            const modal = document.getElementById('authModal');
+            modal.classList.toggle('hidden');
+            if (modeArg) chooseAuthMode(modeArg);
+        }
+
+        function chooseAuthMode(mode) {
+            const formL = document.getElementById('formLogin');
+            const formR = document.getElementById('formRegister');
+            const tabL = document.getElementById('tabLoginBtn');
+            const tabR = document.getElementById('tabRegisterBtn');
+
+            if(mode === 'login') {
+                formL.classList.remove('hidden');
+                formR.classList.add('hidden');
+                tabL.className = "flex-1 text-center pb-3 text-lg font-bold border-b-2 border-brand-600 text-brand-600";
+                tabR.className = "flex-1 text-center pb-3 text-lg font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600";
+            } else {
+                formL.classList.add('hidden');
+                formR.classList.remove('hidden');
+                tabL.className = "flex-1 text-center pb-3 text-lg font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600";
+                tabR.className = "flex-1 text-center pb-3 text-lg font-bold border-b-2 border-brand-600 text-brand-600";
+            }
+        }
+
+        function submitAuthForm(e, type) {
+            e.preventDefault();
+            alert(`Succesfully parsed authorization!\nStatus: Authenticated`);
+            toggleAuthModal();
+        }
+
+        // Modal Action: Deposit Payment Triggers
+        function toggleDepositModal() {
+            document.getElementById('depositModal').classList.toggle('hidden');
+        }
+
+        function triggerDepositCheckout() {
+            if(selectedRouteSeats.length === 0) {
+                alert('Please pick at least 1 seat before registering deposit credentials.');
+                return;
+            }
+
+            const total = selectedRouteSeats.length * computedPricePerSeat;
+            const deposit = total / 2;
+
+            document.getElementById('depSummaryLabel').textContent = chosenRouteLabel;
+            document.getElementById('timeSummaryLabel').textContent = `${chosenDateLabel} at ${chosenTimeLabel}`;
+            document.getElementById('seatsSummaryLabel').textContent = selectedRouteSeats.join(', ');
+            document.getElementById('totalSummaryLabel').textContent = new Intl.NumberFormat('vi-VN').format(total) + ' ₫';
+            document.getElementById('depositSummaryValue').textContent = new Intl.NumberFormat('vi-VN').format(deposit) + ' ₫';
+
+            toggleDepositModal();
+        }
+
+        function commitBookingConfirm() {
+            alert('Your payment deposit was verified successfully by our operational bank hooks. Your intercity VinaRoute ticket is officially reserved and locked!');
+            toggleDepositModal();
+            closeSearchResults();
+
+            // Insert new dynamic item to My Trips history to display high detail craftsmanship
+            const table = document.getElementById('tripsTableBody');
+            const newRow = document.createElement('tr');
+            newRow.className = "hover:bg-slate-50 transition-colors border-l-4 border-emerald-500 bg-emerald-50/10";
+            newRow.innerHTML = `
+                <td class="px-5 py-4 font-bold text-slate-900">#VR-New</td>
+                <td class="px-5 py-4 font-bold text-slate-800">${chosenRouteLabel}</td>
+                <td class="px-5 py-4 text-slate-550 font-medium">${chosenDateLabel} | ${chosenTimeLabel}</td>
+                <td class="px-5 py-4 text-slate-600">${selectedRouteSeats.join(', ')}</td>
+                <td class="px-5 py-4"><span class="px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-100 text-emerald-850 border border-emerald-300">Paid Deposit (Verified)</span></td>
+            `;
+            // Insert at top of history list
+            table.insertBefore(newRow, table.firstChild);
+
+            openMyTrips();
+        }
+
+        // Modal Action: My Trips Log triggers
+        function openMyTrips() {
+            document.getElementById('tripsModal').classList.remove('hidden');
+        }
+
+        function closeMyTrips() {
+            document.getElementById('tripsModal').classList.add('hidden');
+        }
+    </script>
+</body>
+</html>

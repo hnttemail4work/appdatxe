@@ -1,0 +1,6 @@
+{
+  "name": "VinaRoute Booking",
+  "description": "Long-distance car booking platform with visual seat selection.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
