@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard - VinaRoute</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .admin-layout { display: grid; grid-template-columns: 250px 1fr; gap: 0; min-height: 100vh; background: var(--bg); }
+    .admin-sidebar { background: linear-gradient(135deg, #0f766e 0%, #115e59 100%); color: white; padding: 1.5rem 0; height: 100vh; position: sticky; top: 0; overflow-y: auto; }
+    .admin-sidebar .brand { display: flex; align-items: center; gap: 0.8rem; padding: 1.2rem 1.5rem; font-size: 1.1rem; font-weight: 700; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .sidebar-menu { list-style: none; padding: 0; margin: 0; }
+    .sidebar-item { padding: 0.9rem 1.5rem; cursor: pointer; transition: all 0.2s ease; border-left: 3px solid transparent; }
+    .sidebar-item:hover { background: rgba(255,255,255,0.1); border-left-color: #06b6d4; }
+    .sidebar-item.active { background: rgba(255,255,255,0.15); border-left-color: #fbbf24; color: #fbbf24; font-weight: 600; }
+    .admin-content { padding: 2rem; }
+    .content-section { display: none; }
+    .content-section.active { display: block; }
+    .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+    .admin-header h2 { margin: 0; color: var(--text); }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+    .stat-card { background: white; border: 1px solid rgba(226,232,240,0.9); border-radius: 1.2rem; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .stat-label { font-size: 0.9rem; color: var(--muted); font-weight: 500; margin-bottom: 0.5rem; }
+    .stat-value { font-size: 2rem; font-weight: 700; color: var(--primary); }
+    .stat-change { font-size: 0.8rem; color: #22c55e; margin-top: 0.5rem; }
+    .table-container { background: white; border-radius: 1.2rem; border: 1px solid rgba(226,232,240,0.9); overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; }
+    thead { background: rgba(226,232,240,0.5); }
+    th { padding: 1rem; text-align: left; font-weight: 600; color: var(--text); }
+    td { padding: 1rem; border-top: 1px solid rgba(226,232,240,0.9); }
+    tbody tr:hover { background: rgba(15,118,110,0.03); }
+    .badge { display: inline-block; padding: 0.4rem 0.8rem; border-radius: 0.6rem; font-size: 0.8rem; font-weight: 600; }
+    .badge-success { background: rgba(34,197,94,0.12); color: #16a34a; }
+    .badge-warning { background: rgba(249,115,22,0.12); color: #d97706; }
+    .badge-danger { background: rgba(239,68,68,0.12); color: #dc2626; }
+    .action-btn { background: none; border: none; color: var(--primary); cursor: pointer; font-weight: 600; padding: 0.4rem 0.8rem; }
+    .action-btn:hover { text-decoration: underline; }
+    @media (max-width: 1024px) {
+      .admin-layout { grid-template-columns: 1fr; }
+      .admin-sidebar { height: auto; position: relative; }
+      .sidebar-menu { display: flex; overflow-x: auto; }
+      .sidebar-item { border-left: none; border-bottom: 3px solid transparent; }
+      .sidebar-item:hover, .sidebar-item.active { border-bottom-color: #fbbf24; border-left: none; }
+    }
+  </style>
+</head>
+<body>
+<div class="admin-layout">
+  <!-- Sidebar Navigation -->
+  <aside class="admin-sidebar">
+    <div class="brand">
+      <span>🔑</span>
+      <span>VinaRoute Admin</span>
+    </div>
+    <ul class="sidebar-menu">
+      <li class="sidebar-item active" onclick="showSection('dashboard')">📊 Dashboard</li>
+      <li class="sidebar-item" onclick="showSection('merchants')">🏢 Quản lý cửa hàng</li>
+      <li class="sidebar-item" onclick="showSection('orders')">📦 Quản lý đơn hàng</li>
+      <li class="sidebar-item" onclick="showSection('commission')">💰 Cài đặt hoa hồng</li>
+      <li class="sidebar-item" onclick="showSection('analytics')">📈 Phân tích</li>
+      <li class="sidebar-item" onclick="handleAdminLogout()" style="margin-top: 2rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1rem;">🚪 Đăng xuất</li>
+    </ul>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="admin-content">
+    <!-- Dashboard Section -->
+    <section id="dashboard" class="content-section active">
+      <div class="admin-header">
+        <div>
+          <h2>Dashboard</h2>
+          <p class="text-muted">Tổng quan hệ thống VinaRoute</p>
+        </div>
+        <span id="adminGreeting" style="color: var(--primary); font-weight: 600;"></span>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Doanh thu hôm nay</div>
+          <div class="stat-value">45.2M ₫</div>
+          <div class="stat-change">↑ 12% so với hôm qua</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Đơn đặt vé</div>
+          <div class="stat-value">324</div>
+          <div class="stat-change">↑ 8 đơn so với hôm qua</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Nhà vận hành hoạt động</div>
+          <div class="stat-value">28</div>
+          <div class="stat-change">3 yêu cầu chợi chưa xử lý</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Hoa hồng tích lũy</div>
+          <div class="stat-value">8.7M ₫</div>
+          <div class="stat-change">Tháng này</div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top: 2rem;">
+        <h3>Đơn hàng gần đây</h3>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Mã đơn</th>
+                <th>Khách hàng</th>
+                <th>Tuyến đường</th>
+                <th>Ngày</th>
+                <th>Giá</th>
+                <th>Trạng thái</th>
+                <th>Hành động</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>#BK001</td>
+                <td>Nguyễn Văn A</td>
+                <td>TP.HCM → Vũng Tàu</td>
+                <td>12/06/2026</td>
+                <td>480,000 ₫</td>
+                <td><span class="badge badge-success">Đã thanh toán</span></td>
+                <td><button class="action-btn">Chi tiết</button></td>
+              </tr>
+              <tr>
+                <td>#BK002</td>
+                <td>Trần Thị B</td>
+                <td>TP.HCM → Đà Lạt</td>
+                <td>12/06/2026</td>
+                <td>800,000 ₫</td>
+                <td><span class="badge badge-warning">Chờ thanh toán</span></td>
+                <td><button class="action-btn">Chi tiết</button></td>
+              </tr>
+              <tr>
+                <td>#BK003</td>
+                <td>Lê Hoàng C</td>
+                <td>Hà Nội → Sầm Sơn</td>
+                <td>11/06/2026</td>
+                <td>350,000 ₫</td>
+                <td><span class="badge badge-success">Hoàn tất</span></td>
+                <td><button class="action-btn">Chi tiết</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Merchants Section -->
+    <section id="merchants" class="content-section">
+      <div class="admin-header">
+        <h2>Quản lý nhà vận hành</h2>
+        <button class="btn btn-primary">+ Thêm nhà vận hành</button>
+      </div>
+
+      <div class="panel">
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Tên công ty</th>
+                <th>Email</th>
+                <th>Số điện thoại</th>
+                <th>Tuyến</th>
+                <th>Doanh thu</th>
+                <th>Trạng thái</th>
+                <th>Hành động</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>VinaExpress</td>
+                <td>contact@vinaexpress.vn</td>
+                <td>0901 234 567</td>
+                <td>5 tuyến</td>
+                <td>125.3M ₫</td>
+                <td><span class="badge badge-success">Hoạt động</span></td>
+                <td><button class="action-btn">Xem</button></td>
+              </tr>
+              <tr>
+                <td>Luxury Bus Co.</td>
+                <td>info@luxurybus.vn</td>
+                <td>0912 345 678</td>
+                <td>3 tuyến</td>
+                <td>87.9M ₫</td>
+                <td><span class="badge badge-success">Hoạt động</span></td>
+                <td><button class="action-btn">Xem</button></td>
+              </tr>
+              <tr>
+                <td>TransViet Company</td>
+                <td>admin@transviet.vn</td>
+                <td>0923 456 789</td>
+                <td>2 tuyến</td>
+                <td>45.2M ₫</td>
+                <td><span class="badge badge-warning">Chờ duyệt</span></td>
+                <td><button class="action-btn">Duyệt</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Orders Section -->
+    <section id="orders" class="content-section">
+      <div class="admin-header">
+        <h2>Quản lý đơn hàng</h2>
+        <button class="btn btn-secondary">Xuất báo cáo</button>
+      </div>
+
+      <div class="panel">
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Mã đơn</th>
+                <th>Khách hàng</th>
+                <th>Nhà vận hành</th>
+                <th>Tuyến</th>
+                <th>Doanh thu</th>
+                <th>Hoa hồng</th>
+                <th>Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>#BK001</td>
+                <td>Nguyễn Văn A</td>
+                <td>VinaExpress</td>
+                <td>TP.HCM → Vũng Tàu</td>
+                <td>480,000 ₫</td>
+                <td>48,000 ₫</td>
+                <td><span class="badge badge-success">Hoàn tất</span></td>
+              </tr>
+              <tr>
+                <td>#BK002</td>
+                <td>Trần Thị B</td>
+                <td>Luxury Bus Co.</td>
+                <td>TP.HCM → Đà Lạt</td>
+                <td>800,000 ₫</td>
+                <td>80,000 ₫</td>
+                <td><span class="badge badge-warning">Chờ thanh toán</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Commission Section -->
+    <section id="commission" class="content-section">
+      <div class="admin-header">
+        <h2>Cài đặt hoa hồng</h2>
+      </div>
+
+      <div class="panel" style="max-width: 600px;">
+        <h3>Hoa hồng mặc định (Tất cả nhà vận hành)</h3>
+        <form id="commissionForm">
+          <div class="form-group">
+            <label for="commissionRate">Tỷ lệ hoa hồng (%)</label>
+            <input id="commissionRate" type="number" min="0" max="100" step="0.1" value="10" required>
+            <small class="text-muted">Ví dụ: 10% = lấy 10% từ mỗi đơn</small>
+          </div>
+          <div class="form-group">
+            <label for="minCommission">Hoa hồng tối thiểu (₫)</label>
+            <input id="minCommission" type="number" min="0" value="50000" required>
+            <small class="text-muted">Hoa hồng tối thiểu cho mỗi đơn</small>
+          </div>
+          <div class="form-group">
+            <label for="maxCommission">Hoa hồng tối đa (₫)</label>
+            <input id="maxCommission" type="number" min="0" value="500000" required>
+            <small class="text-muted">Giới hạn hoa hồng tối đa</small>
+          </div>
+          <button type="submit" class="btn btn-primary">Lưu cài đặt</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- Analytics Section -->
+    <section id="analytics" class="content-section">
+      <div class="admin-header">
+        <h2>Phân tích & Báo cáo</h2>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+        <div class="panel">
+          <h3>Top 5 tuyến đường</h3>
+          <ul style="list-style: none; padding: 0;">
+            <li style="padding: 0.8rem 0; border-bottom: 1px solid rgba(226,232,240,0.5);">1. TP.HCM → Vũng Tàu (234 đơn)</li>
+            <li style="padding: 0.8rem 0; border-bottom: 1px solid rgba(226,232,240,0.5);">2. TP.HCM → Đà Lạt (187 đơn)</li>
+            <li style="padding: 0.8rem 0; border-bottom: 1px solid rgba(226,232,240,0.5);">3. Hà Nội → Sầm Sơn (156 đơn)</li>
+            <li style="padding: 0.8rem 0; border-bottom: 1px solid rgba(226,232,240,0.5);">4. Hà Nội → Hạ Long (143 đơn)</li>
+            <li style="padding: 0.8rem 0;">5. TP.HCM → Tây Ninh (98 đơn)</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>Phương thức thanh toán</h3>
+          <ul style="list-style: none; padding: 0;">
+            <li style="padding: 0.8rem 0;"><strong>COD:</strong> 45% (450 đơn)</li>
+            <li style="padding: 0.8rem 0;"><strong>ZaloPay:</strong> 35% (350 đơn)</li>
+            <li style="padding: 0.8rem 0;"><strong>Momo:</strong> 15% (150 đơn)</li>
+            <li style="padding: 0.8rem 0;"><strong>Chuyển khoản:</strong> 5% (50 đơn)</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="js/auth.js"></script>
+<script>
+  function showSection(sectionId) {
+    document.querySelectorAll('.content-section').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+    document.getElementById(sectionId).classList.add('active');
+    event.target.classList.add('active');
+  }
+
+  function handleAdminLogout() {
+    localStorage.removeItem('adminSession');
+    localStorage.removeItem('userSession');
+    window.location.href = 'index.html';
+  }
+
+  function loadAdminDashboard() {
+    const adminSession = JSON.parse(localStorage.getItem('adminSession') || '{}');
+    if (!adminSession.email) {
+      // Redirect to login if not authenticated
+      // For now, we'll allow viewing for demo purposes
+      document.getElementById('adminGreeting').textContent = 'Demo Admin';
+      return;
+    }
+    document.getElementById('adminGreeting').textContent = `${adminSession.email}`;
+  }
+
+  document.getElementById('commissionForm')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const rate = document.getElementById('commissionRate').value;
+    const min = document.getElementById('minCommission').value;
+    const max = document.getElementById('maxCommission').value;
+    
+    localStorage.setItem('commissionSettings', JSON.stringify({ rate, min, max }));
+    alert('✅ Cài đặt hoa hồng đã được lưu!');
+  });
+
+  loadAdminDashboard();
+</script>
+</body>
+</html>

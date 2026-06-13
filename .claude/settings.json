@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s http://127.0.0.1:8001/csrf-token)",
+      "Bash(curl -s -c /tmp/jar.txt -b /tmp/jar.txt http://127.0.0.1:8001/login -o /tmp/loginpage.html)",
+      "Read(//tmp/**)",
+      "Bash(awk '{print $7}')",
+      "Bash(cd \"/c/Working/appdatxe/server\" && cat .env | grep -E \"SESSION|APP_KEY|APP_URL|DB_\" | grep -v PASSWORD)",
+      "Read(//c/c/Working/appdatxe/server/**)",
+      "Bash(grep -v \"^$\")"
+    ]
+  }
+}

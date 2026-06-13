@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Operator Dashboard - VinaRoute</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .operator-layout { display: grid; grid-template-columns: 240px 1fr; gap: 0; min-height: 100vh; background: var(--bg); }
+    .operator-sidebar { background: linear-gradient(135deg, #0369a1 0%, #0284c7 100%); color: white; padding: 1.5rem 0; height: 100vh; position: sticky; top: 0; overflow-y: auto; }
+    .operator-sidebar .brand { display: flex; align-items: center; gap: 0.8rem; padding: 1.2rem 1.5rem; font-size: 1.1rem; font-weight: 700; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .sidebar-menu { list-style: none; padding: 0; margin: 0; }
+    .sidebar-item { padding: 0.9rem 1.5rem; cursor: pointer; transition: all 0.2s ease; border-left: 3px solid transparent; }
+    .sidebar-item:hover { background: rgba(255,255,255,0.1); border-left-color: #ec4899; }
+    .sidebar-item.active { background: rgba(255,255,255,0.15); border-left-color: #fbbf24; color: #fbbf24; font-weight: 600; }
+    .operator-content { padding: 2rem; }
+    .content-section { display: none; }
+    .content-section.active { display: block; }
+    .operator-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+    .operator-header h2 { margin: 0; color: var(--text); }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+    .stat-card { background: white; border: 1px solid rgba(226,232,240,0.9); border-radius: 1.2rem; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .stat-label { font-size: 0.9rem; color: var(--muted); font-weight: 500; margin-bottom: 0.5rem; }
+    .stat-value { font-size: 1.8rem; font-weight: 700; color: #0284c7; }
+    .stat-change { font-size: 0.8rem; color: #22c55e; margin-top: 0.5rem; }
+    .table-container { background: white; border-radius: 1.2rem; border: 1px solid rgba(226,232,240,0.9); overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; }
+    thead { background: rgba(226,232,240,0.5); }
+    th { padding: 1rem; text-align: left; font-weight: 600; color: var(--text); }
+    td { padding: 1rem; border-top: 1px solid rgba(226,232,240,0.9); }
+    tbody tr:hover { background: rgba(2,132,199,0.03); }
+    .badge { display: inline-block; padding: 0.4rem 0.8rem; border-radius: 0.6rem; font-size: 0.8rem; font-weight: 600; }
+    .badge-success { background: rgba(34,197,94,0.12); color: #16a34a; }
+    .badge-warning { background: rgba(249,115,22,0.12); color: #d97706; }
+    .badge-info { background: rgba(2,132,199,0.12); color: #0284c7; }
+    .action-btn { background: none; border: none; color: #0284c7; cursor: pointer; font-weight: 600; padding: 0.4rem 0.8rem; margin-right: 0.5rem; }
+    .action-btn:hover { text-decoration: underline; }
+    .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
+    .modal.active { display: flex; }
+    .modal-content { background: white; border-radius: 1.2rem; padding: 2rem; max-width: 500px; width: 90%; }
+    .modal-header { font-size: 1.3rem; font-weight: 700; margin-bottom: 1.5rem; }
+    .modal-footer { display: flex; gap: 1rem; margin-top: 1.5rem; justify-content: flex-end; }
+    @media (max-width: 1024px) {
+      .operator-layout { grid-template-columns: 1fr; }
+      .operator-sidebar { height: auto; position: relative; }
+      .sidebar-menu { display: flex; overflow-x: auto; flex-wrap: wrap; }
+      .sidebar-item { border-left: none; border-bottom: 3px solid transparent; }
+      .sidebar-item:hover, .sidebar-item.active { border-bottom-color: #fbbf24; border-left: none; }
+    }
+  </style>
+</head>
+<body>
+<div class="operator-layout">
+  <!-- Sidebar Navigation -->
+  <aside class="operator-sidebar">
+    <div class="brand">
+      <span>🚌</span>
+      <span>Operator Panel</span>
+    </div>
+    <ul class="sidebar-menu">
+      <li class="sidebar-item active" onclick="showSection('dashboard')">📊 Dashboard</li>
+      <li class="sidebar-item" onclick="showSection('vehicles')">🚐 Quản lý xe</li>
+      <li class="sidebar-item" onclick="showSection('schedules')">📅 Lịch trình</li>
+      <li class="sidebar-item" onclick="showSection('bookings')">📋 Đơn đặt vé</li>
+      <li class="sidebar-item" onclick="showSection('earnings')">💵 Thu nhập</li>
+      <li class="sidebar-item" onclick="showSection('profile')">👤 Hồ sơ công ty</li>
+      <li class="sidebar-item" onclick="handleOperatorLogout()" style="margin-top: 2rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1rem;">🚪 Đăng xuất</li>
+    </ul>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="operator-content">
+    <!-- Dashboard Section -->
+    <section id="dashboard" class="content-section active">
+      <div class="operator-header">
+        <div>
+          <h2>Dashboard</h2>
+          <p class="text-muted">Quản lý hoạt động vận hành</p>
+        </div>
+        <span id="operatorGreeting" style="color: #0284c7; font-weight: 600;"></span>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Xe hoạt động</div>
+          <div class="stat-value">5</div>
+          <div class="stat-change">Có sẵn: 3 chiếc</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Đơn hôm nay</div>
+          <div class="stat-value">12</div>
+          <div class="stat-change">6 chờ xác nhận</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Doanh thu tháng này</div>
+          <div class="stat-value">145.8M ₫</div>
+          <div class="stat-change">↑ 18% so với tháng trước</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Tỷ lệ hoàn tất</div>
+          <div class="stat-value">98.5%</div>
+          <div class="stat-change">Đánh giá: ⭐ 4.8/5</div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top: 2rem;">
+        <h3>Chuyến ngày hôm nay</h3>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Mã chuyến</th>
+                <th>Tuyến đường</th>
+                <th>Giờ khởi hành</th>
+                <th>Ghế đặt</th>
+                <th>Doanh thu</th>
+                <th>Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>#SC001</td>
+                <td>TP.HCM → Vũng Tàu</td>
+                <td>08:00</td>
+                <td>38/40</td>
+                <td>9.1M ₫</td>
+                <td><span class="badge badge-success">Chạy xong</span></td>
+              </tr>
+              <tr>
+                <td>#SC002</td>
+                <td>TP.HCM → Đà Lạt</td>
+                <td>14:00</td>
+                <td>32/40</td>
+                <td>7.7M ₫</td>
+                <td><span class="badge badge-info">Đang chạy</span></td>
+              </tr>
+              <tr>
+                <td>#SC003</td>
+                <td>TP.HCM → Vũng Tàu</td>
+                <td>18:00</td>
+                <td>28/40</td>
+                <td>6.7M ₫</td>
+                <td><span class="badge badge-warning">Sắp khởi hành</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Vehicles Section -->
+    <section id="vehicles" class="content-section">
+      <div class="operator-header">
+        <h2>Quản lý xe</h2>
+        <button class="btn btn-primary" onclick="openAddVehicleModal()">+ Thêm xe</button>
+      </div>
+
+      <div class="panel">
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Biển số</th>
+                <th>Loại xe</th>
+                <th>Ghế</th>
+                <th>Năm sản xuất</th>
+                <th>Trạng thái</th>
+                <th>Hành động</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>71A-123.45</td>
+                <td>Limousine VIP</td>
+                <td>40 ghế</td>
+                <td>2022</td>
+                <td><span class="badge badge-success">Hoạt động</span></td>
+                <td><button class="action-btn">Sửa</button><button class="action-btn">Xóa</button></td>
+              </tr>
+              <tr>
+                <td>71A-234.56</td>
+                <td>Giường nằm cao cấp</td>
+                <td>30 ghế</td>
+                <td>2023</td>
+                <td><span class="badge badge-success">Hoạt động</span></td>
+                <td><button class="action-btn">Sửa</button><button class="action-btn">Xóa</button></td>
+              </tr>
+              <tr>
+                <td>71A-345.67</td>
+                <td>Limousine VIP</td>
+                <td>40 ghế</td>
+                <td>2021</td>
+                <td><span class="badge badge-warning">Bảo trì</span></td>
+                <td><button class="action-btn">Sửa</button><button class="action-btn">Xóa</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Schedules Section -->
+    <section id="schedules" class="content-section">
+      <div class="operator-header">
+        <h2>Lịch trình chuyến xe</h2>
+        <button class="btn btn-primary" onclick="openAddScheduleModal()">+ Tạo lịch trình</button>
+      </div>
+
+      <div class="panel">
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Tuyến</th>
+                <th>Xe</th>
+                <th>Giờ khởi hành</th>
+                <th>Thứ</th>
+                <th>Giá vé</th>
+                <th>Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>TP.HCM → Vũng Tàu</td>
+                <td>71A-123.45</td>
+                <td>08:00</td>
+                <td>Mỗi ngày</td>
+                <td>240,000 ₫</td>
+                <td><span class="badge badge-success">Hoạt động</span></td>
+              </tr>
+              <tr>
+                <td>TP.HCM → Đà Lạt</td>
+                <td>71A-234.56</td>
+                <td>14:00, 20:00</td>
+                <td>Mỗi ngày</td>
+                <td>400,000 ₫</td>
+                <td><span class="badge badge-success">Hoạt động</span></td>
+              </tr>
+              <tr>
+                <td>Hà Nội → Sầm Sơn</td>
+                <td>71A-345.67</td>
+                <td>06:00</td>
+                <td>Thứ 2-6</td>
+                <td>180,000 ₫</td>
+                <td><span class="badge badge-warning">Tạm dừng</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Bookings Section -->
+    <section id="bookings" class="content-section">
+      <div class="operator-header">
+        <h2>Đơn đặt vé</h2>
+      </div>
+
+      <div class="panel">
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Mã đơn</th>
+                <th>Khách hàng</th>
+                <th>Tuyến</th>
+                <th>Ngày</th>
+                <th>Ghế</th>
+                <th>Trạng thái</th>
+                <th>Hành động</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>#BK001</td>
+                <td>Nguyễn Văn A</td>
+                <td>TP.HCM → Vũng Tàu</td>
+                <td>12/06/2026</td>
+                <td>2 ghế</td>
+                <td><span class="badge badge-warning">Chờ xác nhận</span></td>
+                <td><button class="action-btn">Chấp nhận</button><button class="action-btn">Từ chối</button></td>
+              </tr>
+              <tr>
+                <td>#BK002</td>
+                <td>Trần Thị B</td>
+                <td>TP.HCM → Đà Lạt</td>
+                <td>12/06/2026</td>
+                <td>1 ghế</td>
+                <td><span class="badge badge-success">Đã xác nhận</span></td>
+                <td><button class="action-btn">Chi tiết</button></td>
+              </tr>
+              <tr>
+                <td>#BK003</td>
+                <td>Lê Hoàng C</td>
+                <td>Hà Nội → Sầm Sơn</td>
+                <td>13/06/2026</td>
+                <td>3 ghế</td>
+                <td><span class="badge badge-warning">Chờ xác nhận</span></td>
+                <td><button class="action-btn">Chấp nhận</button><button class="action-btn">Từ chối</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Earnings Section -->
+    <section id="earnings" class="content-section">
+      <div class="operator-header">
+        <h2>Thu nhập & Tài chính</h2>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Thu nhập tháng này</div>
+          <div class="stat-value">145.8M ₫</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Hoa hồng đã trích</div>
+          <div class="stat-value">14.6M ₫</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Sẽ nhận</div>
+          <div class="stat-value">131.2M ₫</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Lịch sử thanh toán</h3>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Kỳ</th>
+                <th>Doanh thu</th>
+                <th>Hoa hồng</th>
+                <th>Thực nhận</th>
+                <th>Ngày thanh toán</th>
+                <th>Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Tháng 5/2026</td>
+                <td>142.5M ₫</td>
+                <td>14.2M ₫</td>
+                <td>128.3M ₫</td>
+                <td>05/06/2026</td>
+                <td><span class="badge badge-success">Đã thanh toán</span></td>
+              </tr>
+              <tr>
+                <td>Tháng 4/2026</td>
+                <td>138.9M ₫</td>
+                <td>13.9M ₫</td>
+                <td>125.0M ₫</td>
+                <td>04/05/2026</td>
+                <td><span class="badge badge-success">Đã thanh toán</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Profile Section -->
+    <section id="profile" class="content-section">
+      <div class="operator-header">
+        <h2>Hồ sơ công ty</h2>
+      </div>
+
+      <div class="panel" style="max-width: 600px;">
+        <form id="profileForm">
+          <div class="form-group">
+            <label for="companyName">Tên công ty</label>
+            <input id="companyName" type="text" value="VinaExpress Co." required>
+          </div>
+          <div class="form-group">
+            <label for="contactEmail">Email liên hệ</label>
+            <input id="contactEmail" type="email" value="contact@vinaexpress.vn" required>
+          </div>
+          <div class="form-group">
+            <label for="contactPhone">Số điện thoại</label>
+            <input id="contactPhone" type="text" value="0901 234 567" required>
+          </div>
+          <div class="form-group">
+            <label for="bankAccount">Tài khoản ngân hàng</label>
+            <input id="bankAccount" type="text" placeholder="123456789" required>
+          </div>
+          <div class="form-group">
+            <label for="bankName">Ngân hàng</label>
+            <input id="bankName" type="text" placeholder="Vietcombank, VietinBank, ..." required>
+          </div>
+          <button type="submit" class="btn btn-primary">Lưu thay đổi</button>
+        </form>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Add Vehicle Modal -->
+<div id="addVehicleModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">Thêm xe mới</div>
+    <form id="vehicleForm">
+      <div class="form-group">
+        <label for="licensePlate">Biển số xe</label>
+        <input id="licensePlate" type="text" placeholder="71A-123.45" required>
+      </div>
+      <div class="form-group">
+        <label for="vehicleType">Loại xe</label>
+        <select id="vehicleType" required>
+          <option value="">-- Chọn loại --</option>
+          <option value="limousine">Limousine VIP</option>
+          <option value="sleeping">Giường nằm cao cấp</option>
+          <option value="seat">Ghế VIP</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="seats">Số ghế</label>
+        <input id="seats" type="number" min="20" max="50" required>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeAddVehicleModal()">Hủy</button>
+        <button type="submit" class="btn btn-primary">Thêm xe</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Add Schedule Modal -->
+<div id="addScheduleModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">Tạo lịch trình mới</div>
+    <form id="scheduleForm">
+      <div class="form-group">
+        <label for="route">Tuyến đường</label>
+        <input id="route" type="text" placeholder="TP.HCM → Vũng Tàu" required>
+      </div>
+      <div class="form-group">
+        <label for="schedule-vehicle">Xe</label>
+        <select id="schedule-vehicle" required>
+          <option value="">-- Chọn xe --</option>
+          <option value="71A-123.45">71A-123.45 (Limousine)</option>
+          <option value="71A-234.56">71A-234.56 (Giường nằm)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="departureTime">Giờ khởi hành</label>
+        <input id="departureTime" type="time" required>
+      </div>
+      <div class="form-group">
+        <label for="ticketPrice">Giá vé</label>
+        <input id="ticketPrice" type="number" min="0" step="1000" placeholder="240000" required>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeAddScheduleModal()">Hủy</button>
+        <button type="submit" class="btn btn-primary">Tạo lịch trình</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="js/auth.js"></script>
+<script>
+  function showSection(sectionId) {
+    document.querySelectorAll('.content-section').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+    document.getElementById(sectionId).classList.add('active');
+    event.target.classList.add('active');
+  }
+
+  function handleOperatorLogout() {
+    localStorage.removeItem('operatorSession');
+    localStorage.removeItem('userSession');
+    window.location.href = 'index.html';
+  }
+
+  function loadOperatorDashboard() {
+    const operatorSession = JSON.parse(localStorage.getItem('operatorSession') || '{}');
+    if (!operatorSession.companyName) {
+      document.getElementById('operatorGreeting').textContent = 'Demo Operator';
+      return;
+    }
+    document.getElementById('operatorGreeting').textContent = operatorSession.companyName;
+  }
+
+  function openAddVehicleModal() {
+    document.getElementById('addVehicleModal').classList.add('active');
+  }
+
+  function closeAddVehicleModal() {
+    document.getElementById('addVehicleModal').classList.remove('active');
+  }
+
+  function openAddScheduleModal() {
+    document.getElementById('addScheduleModal').classList.add('active');
+  }
+
+  function closeAddScheduleModal() {
+    document.getElementById('addScheduleModal').classList.remove('active');
+  }
+
+  document.getElementById('vehicleForm')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    alert('✅ Xe được thêm thành công!');
+    closeAddVehicleModal();
+  });
+
+  document.getElementById('scheduleForm')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    alert('✅ Lịch trình được tạo thành công!');
+    closeAddScheduleModal();
+  });
+
+  document.getElementById('profileForm')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    alert('✅ Hồ sơ công ty được cập nhật!');
+  });
+
+  // Close modals when clicking outside
+  window.addEventListener('click', (e) => {
+    const vehicleModal = document.getElementById('addVehicleModal');
+    const scheduleModal = document.getElementById('addScheduleModal');
+    if (e.target === vehicleModal) vehicleModal.classList.remove('active');
+    if (e.target === scheduleModal) scheduleModal.classList.remove('active');
+  });
+
+  loadOperatorDashboard();
+</script>
+</body>
+</html>
