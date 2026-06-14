@@ -1,8 +1,51 @@
+# Root — repo appdatxe (Laravel nằm trong server/)
+
+# Env (không đẩy secret)
+.env
+.env.*
+!.env.example
+server/.env
+server/.env.*
+!server/.env.example
+
+# Node / build (AI Studio cũ, frontend phụ)
 node_modules/
 build/
 dist/
 coverage/
+assets/.aistudio/
+
+# Laravel server — dependencies & runtime
+server/vendor/
+server/node_modules/
+server/public/build/
+server/public/hot
+server/public/storage
+server/storage/app/*
+!server/storage/app/.gitkeep
+!server/storage/app/public/
+server/storage/app/public/*
+!server/storage/app/public/.gitkeep
+server/storage/framework/cache/*
+!server/storage/framework/cache/.gitkeep
+server/storage/framework/cache/data/*
+server/storage/framework/sessions/*
+!server/storage/framework/sessions/.gitkeep
+server/storage/framework/testing/*
+server/storage/framework/views/*
+!server/storage/framework/views/.gitkeep
+server/storage/logs/*
+!server/storage/logs/.gitkeep
+server/bootstrap/cache/*
+!server/bootstrap/cache/.gitkeep
+
+# IDE & OS
+.idea/
+.vscode/
 .DS_Store
+Thumbs.db
 *.log
-.env*
-!.env.example
+
+# PHPUnit
+server/.phpunit.result.cache
+server/.phpunit.cache
