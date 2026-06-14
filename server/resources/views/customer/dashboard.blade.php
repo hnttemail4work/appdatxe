@@ -102,6 +102,12 @@ $destinations = $routeOptions->pluck('destination')->unique()->sort()->values();
                 @if($s->isBookable())
                 <div class="collapse mt-3" id="book-{{ $s->id }}">
                     <hr class="my-2">
+                    @if($driverRequest?->isPending())
+                        <form method="POST" action="{{ route('customer.driverRequests.cancel', $driverRequest) }}" class="mb-2 text-end">
+                            @csrf
+                            <button class="btn btn-link btn-sm text-danger p-0">Hủy yêu cầu tài xế</button>
+                        </form>
+                    @endif
                     <form method="POST" action="{{ route('bookings.store') }}">
                         @csrf
                         <input type="hidden" name="schedule_id" value="{{ $s->id }}">
@@ -131,10 +137,6 @@ $destinations = $routeOptions->pluck('destination')->unique()->sort()->values();
                                 @if($driverRequest?->isPending())
                                     <div class="mt-1 driver-request-status" data-schedule-id="{{ $s->id }}">
                                         <span class="badge bg-warning text-dark">⏳ Đang chờ tài xế phản hồi...</span>
-                                        <form method="POST" action="{{ route('customer.driverRequests.cancel', $driverRequest) }}" class="d-inline">
-                                            @csrf
-                                            <button class="btn btn-link btn-sm text-danger p-0 ms-1">Hủy</button>
-                                        </form>
                                     </div>
                                 @elseif($driverRequest?->status === 'accepted')
                                     <div class="mt-1"><span class="badge bg-success">✓ Tài xế đã nhận chuyến</span></div>

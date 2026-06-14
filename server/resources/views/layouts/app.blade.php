@@ -108,9 +108,9 @@
                         </span>
                     </li>
                     <li class="nav-item ms-1">
-                        <form action="{{ route('logout') }}" method="POST" class="d-inline">
+                        <form action="{{ route('logout') }}" method="POST" class="d-inline" id="logout-form">
                             @csrf
-                            <button class="btn btn-sm btn-outline-primary">Đăng xuất</button>
+                            <button type="submit" class="btn btn-sm btn-outline-primary">Đăng xuất</button>
                         </form>
                     </li>
                 @else
@@ -148,6 +148,37 @@
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+(function () {
+    function syncCsrfToken(token) {
+        if (!token) return;
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        if (meta) meta.setAttribute('content', token);
+        document.querySelectorAll('input[name="_token"]').forEach(function (input) {
+            input.value = token;
+        });
+    }
+
+    fetch('/csrf-token', { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) { syncCsrfToken(data && data.token); })
+        .catch(function () {});
+
+    var logoutForm = document.getElementById('logout-form');
+    if (logoutForm) {
+        logoutForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            fetch('/csrf-token', { credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    syncCsrfToken(data.token);
+                    logoutForm.submit();
+                })
+                .catch(function () { logoutForm.submit(); });
+        });
+    }
+})();
+</script>
 @stack('scripts')
 </body>
 </html>

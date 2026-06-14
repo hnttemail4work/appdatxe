@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -13,12 +14,15 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        // Đảm bảo ảnh upload hiển thị được (storage/app/public → public/storage)
+        // URL khớp host đang truy cập (127.0.0.1 vs localhost) — tránh lỗi CSRF 419
+        if (! $this->app->runningInConsole() && request()->hasHeader('Host')) {
+            URL::forceRootUrl(request()->getSchemeAndHttpHost());
+        }
+
         if (! file_exists(public_path('storage')) && $this->app->environment('local')) {
             try {
                 \Illuminate\Support\Facades\Artisan::call('storage:link');
             } catch (\Throwable) {
-                // Bỏ qua nếu không tạo được symlink — chạy thủ công: php artisan storage:link
             }
         }
     }

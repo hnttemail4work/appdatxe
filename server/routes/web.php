@@ -24,7 +24,7 @@ Route::middleware('guest')->group(function () {
     Route::post('register',[AuthController::class, 'register']);
 });
 
-Route::post('logout', [AuthController::class, 'logout'])->middleware('auth')->name('logout');
+Route::post('logout', [AuthController::class, 'logout'])->name('logout');
 
 Route::middleware('auth')->get('dashboard', function () {
     return redirect(RoleDashboard::route(auth()->user()->role));
