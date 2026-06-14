@@ -28,7 +28,7 @@
                     <input type="number" name="commission_percentage"
                         value="{{ $commissionSetting['value'] ?? 10 }}"
                         min="0" max="100" step="0.1" class="form-control" required>
-                    <div class="form-text">Phần trăm VinaRoute thu trên mỗi giao dịch.</div>
+                    <div class="form-text">Phần trăm {{ config('app.name') }} thu trên mỗi giao dịch.</div>
                 </div>
                 <button class="btn btn-primary">Cập nhật</button>
             </form>
@@ -184,129 +184,52 @@
     {{-- Danh sách tài xế --}}
     <div class="col-12">
         <div class="card shadow-sm p-4">
-            <h5 class="card-title-bar mb-3">Danh sách tài xế ({{ $drivers->count() }})</h5>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="card-title-bar mb-0">Danh sách tài xế ({{ $drivers->count() }})</h5>
+                <a href="{{ route('operator.drivers') }}" class="btn btn-sm btn-outline-primary">Quản lý đầy đủ →</a>
+            </div>
             @if($drivers->isEmpty())
-                <p class="text-muted">Chưa có tài xế nào.</p>
+                <p class="text-muted mb-0">Chưa có tài xế nào.</p>
             @else
                 <div class="table-responsive">
-                    <table class="table table-borderless align-middle">
+                    <table class="table table-hover align-middle mb-0">
                         <thead class="table-light">
-                            <tr><th>Họ tên</th><th>Email</th><th>SĐT</th><th>Hạng</th><th>Kinh nghiệm</th><th>Quản lý bởi</th><th>Trạng thái</th><th>Thao tác</th></tr>
+                            <tr>
+                                <th>Họ tên</th>
+                                <th>Email</th>
+                                <th>SĐT</th>
+                                <th>Hạng</th>
+                                <th>Kinh nghiệm</th>
+                                <th>Quản lý bởi</th>
+                                <th>Trạng thái</th>
+                                <th></th>
+                            </tr>
                         </thead>
                         <tbody>
-                            @foreach($drivers as $d)
-                                <tr class="border-bottom">
+                            @foreach($drivers->take(10) as $d)
+                                <tr>
                                     <td><strong>{{ $d->user->name }}</strong></td>
                                     <td class="text-muted small">{{ $d->user->email }}</td>
-                                    <td class="text-muted small">{{ $d->user->phone ?? '—' }}</td>
+                                    <td class="small">{{ $d->user->phone ?? '—' }}</td>
                                     <td><span class="badge bg-primary">Hạng {{ $d->license_class }}</span></td>
                                     <td>{{ $d->experience_years }} năm</td>
-                                    <td>{{ $d->operator?->name ?? '—' }}</td>
+                                    <td class="small">{{ $d->operator?->name ?? '—' }}</td>
                                     <td>
-                                        <form method="POST" action="{{ route('admin.users.status', $d->user) }}"
-                                              class="d-flex gap-1 align-items-center">
-                                            @csrf @method('PATCH')
-                                            <select name="status" class="form-select form-select-sm" style="width:120px">
-                                                @foreach(['active','inactive','suspended'] as $st)
-                                                    <option value="{{ $st }}" {{ $d->user->status === $st ? 'selected' : '' }}>
-                                                        {{ match($st){ 'active'=>'Hoạt động','inactive'=>'Không HĐ','suspended'=>'Tạm ngưng' } }}
-                                                    </option>
-                                                @endforeach
-                                            </select>
-                                            <button class="btn btn-sm btn-outline-primary">Lưu</button>
-                                        </form>
+                                        <span class="badge bg-{{ match($d->status) { 'active'=>'primary','suspended'=>'danger',default=>'secondary' } }}">
+                                            {{ match($d->status) { 'active'=>'Hoạt động','suspended'=>'Tạm ngưng',default=>'Không HĐ' } }}
+                                        </span>
                                     </td>
                                     <td>
-                                        <button class="btn btn-sm btn-outline-secondary"
-                                                data-bs-toggle="collapse"
-                                                data-bs-target="#edit-drv-{{ $d->id }}">Sửa</button>
-                                    </td>
-                                </tr>
-                                <tr class="collapse" id="edit-drv-{{ $d->id }}">
-                                    <td colspan="8" class="bg-light">
-                                        <div class="p-2">
-                                            {{-- Edit user info --}}
-                                            <small class="fw-semibold text-muted d-block mb-1">Thông tin tài khoản</small>
-                                            <form method="POST" action="{{ route('admin.users.update', $d->user) }}"
-                                                  class="row g-2 mb-3">
-                                                @csrf @method('PATCH')
-                                                <div class="col-md-3">
-                                                    <label class="form-label mb-0 small">Họ tên</label>
-                                                    <input type="text" name="name" value="{{ $d->user->name }}" class="form-control form-control-sm" required>
-                                                </div>
-                                                <div class="col-md-3">
-                                                    <label class="form-label mb-0 small">Email</label>
-                                                    <input type="email" name="email" value="{{ $d->user->email }}" class="form-control form-control-sm" required>
-                                                </div>
-                                                <div class="col-md-2">
-                                                    <label class="form-label mb-0 small">Điện thoại</label>
-                                                    <input type="tel" name="phone" value="{{ $d->user->phone }}" class="form-control form-control-sm">
-                                                </div>
-                                                <div class="col-md-2">
-                                                    <label class="form-label mb-0 small">CCCD/CMND</label>
-                                                    <input type="text" name="id_number" value="{{ $d->user->id_number }}" class="form-control form-control-sm">
-                                                </div>
-                                                <div class="col-md-2">
-                                                    <label class="form-label mb-0 small">Mật khẩu mới</label>
-                                                    <input type="password" name="password" class="form-control form-control-sm" placeholder="(để trống = không đổi)">
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <label class="form-label mb-0 small">Địa chỉ</label>
-                                                    <input type="text" name="address" value="{{ $d->user->address }}" class="form-control form-control-sm">
-                                                </div>
-                                                <div class="col-md-2 d-flex align-items-end">
-                                                    <button class="btn btn-sm btn-primary w-100">Lưu tài khoản</button>
-                                                </div>
-                                            </form>
-                                            {{-- Edit driver profile --}}
-                                            <small class="fw-semibold text-muted d-block mb-1">Hồ sơ tài xế</small>
-                                            <form method="POST" action="{{ route('admin.drivers.update', $d) }}"
-                                                  class="row g-2">
-                                                @csrf @method('PATCH')
-                                                <div class="col-md-2">
-                                                    <label class="form-label mb-0 small">Số bằng lái</label>
-                                                    <input type="text" name="license_number" value="{{ $d->license_number }}" class="form-control form-control-sm">
-                                                </div>
-                                                <div class="col-md-1">
-                                                    <label class="form-label mb-0 small">Hạng</label>
-                                                    <select name="license_class" class="form-select form-select-sm">
-                                                        @foreach(['B1','B2','C','D','E','F'] as $cls)
-                                                            <option value="{{ $cls }}" {{ $d->license_class === $cls ? 'selected':'' }}>{{ $cls }}</option>
-                                                        @endforeach
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-2">
-                                                    <label class="form-label mb-0 small">Hết hạn bằng</label>
-                                                    <input type="date" name="license_expiry" value="{{ $d->license_expiry->format('Y-m-d') }}" class="form-control form-control-sm">
-                                                </div>
-                                                <div class="col-md-1">
-                                                    <label class="form-label mb-0 small">Năm KN</label>
-                                                    <input type="number" name="experience_years" value="{{ $d->experience_years }}" min="0" max="50" class="form-control form-control-sm">
-                                                </div>
-                                                <div class="col-md-2">
-                                                    <label class="form-label mb-0 small">Quản lý bởi</label>
-                                                    <select name="operator_id" class="form-select form-select-sm">
-                                                        <option value="">— Không có —</option>
-                                                        @foreach($operators as $op)
-                                                            <option value="{{ $op->id }}" {{ $d->operator_id == $op->id ? 'selected':'' }}>{{ $op->name }}</option>
-                                                        @endforeach
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-2">
-                                                    <label class="form-label mb-0 small">Ghi chú</label>
-                                                    <input type="text" name="notes" value="{{ $d->notes }}" class="form-control form-control-sm">
-                                                </div>
-                                                <div class="col-md-2 d-flex align-items-end">
-                                                    <button class="btn btn-sm btn-primary w-100">Lưu hồ sơ</button>
-                                                </div>
-                                            </form>
-                                        </div>
+                                        <a href="{{ route('operator.drivers.edit', $d) }}" class="btn btn-sm btn-outline-secondary">Sửa</a>
                                     </td>
                                 </tr>
                             @endforeach
                         </tbody>
                     </table>
                 </div>
+                @if($drivers->count() > 10)
+                    <p class="text-muted small mt-2 mb-0">Hiển thị 10/{{ $drivers->count() }} tài xế. <a href="{{ route('operator.drivers') }}">Xem tất cả</a></p>
+                @endif
             @endif
         </div>
     </div>

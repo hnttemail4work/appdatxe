@@ -6,40 +6,71 @@ use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\DriverProfile;
 use App\Models\Schedule;
+use App\Models\ScheduleTemplate;
 use App\Models\TripRoute;
 use App\Models\Vehicle;
+use App\Services\BookingWorkflowService;
+use App\Services\ScheduleLifecycleService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 
 class OperatorController extends Controller
 {
+    public function __construct(
+        private readonly BookingWorkflowService $workflow,
+        private readonly ScheduleLifecycleService $scheduleLifecycle,
+    ) {
+    }
+
     public function dashboard(Request $request)
     {
+        $this->scheduleLifecycle->sync();
+
         $user = Auth::user();
 
         $vehicles = Vehicle::query()
-            ->where('operator_id', $user->id)
+            ->when($user->role !== 'admin', fn ($q) => $q->where('operator_id', $user->id))
             ->with('schedules.route')
             ->get();
 
         $drivers = DriverProfile::query()
-            ->where('operator_id', $user->id)
+            ->when($user->role !== 'admin', fn ($q) => $q->where('operator_id', $user->id))
             ->where('status', 'active')
             ->with('user')
             ->get();
 
         $routes = TripRoute::query()->where('is_active', true)->get();
 
-        $passengers = Booking::query()
-            ->with(['customer', 'schedule.route', 'schedule.vehicle'])
-            ->whereHas('schedule.vehicle', function ($q) use ($user): void {
-                $q->where('operator_id', $user->id);
+        $todayTrips = Schedule::query()
+            ->with(['route', 'vehicle', 'driver', 'template'])
+            ->withCount([
+                'seatReservations as active_reservations_count' => function ($q): void {
+                    $q->whereIn('status', ['held', 'booked'])
+                        ->where(fn ($n) => $n->whereNull('expires_at')->orWhere('expires_at', '>', now()));
+                },
+            ])
+            ->whereHas('vehicle', function ($q) use ($user): void {
+                if ($user->role !== 'admin') {
+                    $q->where('operator_id', $user->id);
+                }
             })
+            ->whereDate('service_date', today())
+            ->orderBy('departure_time')
+            ->get();
+
+        $passengers = Booking::query()
+            ->with(['customer', 'schedule.route', 'schedule.vehicle', 'paymentTransactions'])
+            ->whereHas('schedule.vehicle', function ($q) use ($user): void {
+                if ($user->role !== 'admin') {
+                    $q->where('operator_id', $user->id);
+                }
+            })
+            ->whereNotIn('booking_status', ['cancelled', 'rejected'])
             ->latest()
             ->get();
 
-        return view('operator.dashboard', compact('vehicles', 'drivers', 'routes', 'passengers'));
+        return view('operator.dashboard', compact('vehicles', 'drivers', 'routes', 'passengers', 'todayTrips'));
     }
 
     public function storeVehicle(Request $request)
@@ -62,24 +93,51 @@ class OperatorController extends Controller
             'route_id'       => ['required', 'exists:routes,id'],
             'vehicle_id'     => ['required', 'exists:vehicles,id'],
             'driver_id'      => ['nullable', 'exists:users,id'],
-            'driver_name'    => ['required', 'string', 'max:255'],
-            'departure_time' => ['required', 'date'],
-            'status'         => ['required', 'string', 'in:draft,scheduled,running,completed,cancelled'],
+            'driver_name'    => ['nullable', 'string', 'max:255'],
+            'departure_time' => ['required', 'date_format:H:i'],
         ]);
 
-        $vehicle = Vehicle::query()->where('operator_id', Auth::id())->findOrFail($validated['vehicle_id']);
+        $operatorId = Auth::user()->role === 'admin' ? null : Auth::id();
+        $vehicleQuery = Vehicle::query()->where('id', $validated['vehicle_id']);
+        if ($operatorId) {
+            $vehicleQuery->where('operator_id', $operatorId);
+        }
+        $vehicle = $vehicleQuery->firstOrFail();
 
-        Schedule::query()->create([
+        $driverName = $validated['driver_name'] ?? null;
+        if (! $driverName && ! empty($validated['driver_id'])) {
+            $driverName = \App\Models\User::query()->whereKey($validated['driver_id'])->value('name');
+        }
+
+        ScheduleTemplate::query()->create([
             'route_id'       => $validated['route_id'],
             'vehicle_id'     => $vehicle->id,
             'driver_id'      => $validated['driver_id'] ?? null,
-            'driver_name'    => $validated['driver_name'],
-            'departure_time' => $validated['departure_time'],
-            'available_seats' => $vehicle->capacity,
-            'status'         => $validated['status'],
+            'driver_name'    => $driverName ?: 'Chưa phân công',
+            'departure_time' => $validated['departure_time'] . ':00',
+            'status'         => 'active',
         ]);
 
-        return redirect()->route('operator.dashboard')->with('success', 'Lịch trình mới đã được tạo.');
+        $this->scheduleLifecycle->sync();
+
+        return redirect()->route('operator.dashboard')
+            ->with('success', 'Đã tạo chuyến chạy hằng ngày lúc ' . $validated['departure_time'] . '.');
+    }
+
+    public function confirmPayment(Request $request, Booking $booking)
+    {
+        if (! $this->isBookingForOperator($booking)) {
+            abort(403);
+        }
+
+        try {
+            $this->workflow->confirmPayment($booking, Auth::id(), 'manual');
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['booking' => $e->getMessage()]);
+        }
+
+        return redirect()->route('operator.dashboard')
+            ->with('success', 'Đã xác nhận thanh toán. Bạn có thể duyệt chuyến cho tài xế.');
     }
 
     public function acceptBooking(Request $request, Booking $booking)
@@ -88,17 +146,14 @@ class OperatorController extends Controller
             abort(403);
         }
 
-        if ($booking->payment_status !== 'paid') {
-            return back()->withErrors(['booking' => 'Booking cần phải thanh toán trước khi xác nhận.']);
+        try {
+            $this->workflow->acceptBooking($booking, Auth::id());
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['booking' => $e->getMessage()]);
         }
 
-        DB::transaction(function () use ($booking) {
-            $booking->update(['booking_status' => 'confirmed', 'trip_status' => 'confirmed']);
-            $booking->seatReservations()->update(['status' => 'booked', 'expires_at' => null]);
-            $this->syncScheduleAvailability($booking->schedule()->with(['vehicle', 'seatReservations'])->first());
-        });
-
-        return redirect()->route('operator.dashboard')->with('success', 'Booking đã được chấp nhận.');
+        return redirect()->route('operator.dashboard')
+            ->with('success', 'Đã duyệt chuyến. Tài xế có thể xem thông tin hành khách.');
     }
 
     public function rejectBooking(Request $request, Booking $booking)
@@ -107,38 +162,21 @@ class OperatorController extends Controller
             abort(403);
         }
 
-        DB::transaction(function () use ($booking) {
-            $booking->update(['booking_status' => 'rejected', 'trip_status' => 'cancelled']);
-            $booking->seatReservations()->update(['status' => 'released', 'expires_at' => now()]);
-            $this->syncScheduleAvailability($booking->schedule()->with(['vehicle', 'seatReservations'])->first());
-        });
+        try {
+            $this->workflow->rejectBooking($booking, Auth::id());
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['booking' => $e->getMessage()]);
+        }
 
         return redirect()->route('operator.dashboard')->with('success', 'Booking đã bị từ chối.');
     }
 
     private function isBookingForOperator(Booking $booking): bool
     {
-        return $booking->schedule?->vehicle?->operator_id === Auth::id();
-    }
-
-    private function syncScheduleAvailability(Schedule $schedule): void
-    {
-        if (! $schedule) {
-            return;
+        if (Auth::user()->role === 'admin') {
+            return true;
         }
 
-        $schedule->loadMissing(['vehicle', 'seatReservations']);
-
-        $activeReservations = $schedule->seatReservations
-            ->filter(function ($reservation): bool {
-                if (! in_array($reservation->status, ['held', 'booked'], true)) {
-                    return false;
-                }
-
-                return ! $reservation->expires_at || $reservation->expires_at->isFuture();
-            })
-            ->count();
-
-        $schedule->forceFill(['available_seats' => max((int) $schedule->vehicle->capacity - $activeReservations, 0)])->save();
+        return $booking->schedule?->vehicle?->operator_id === Auth::id();
     }
 }

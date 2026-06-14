@@ -4,71 +4,61 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
-use App\Models\BookingAudit;
-use App\Models\DriverProfile;
+use App\Models\DriverTripRequest;
 use App\Models\Schedule;
-use App\Models\SeatReservation;
+use App\Services\BookingWorkflowService;
+use App\Services\DriverTripRequestService;
+use App\Services\TripListingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
+use InvalidArgumentException;
 
 class CustomerController extends Controller
 {
+    public function __construct(
+        private readonly BookingWorkflowService $workflow,
+        private readonly TripListingService $tripListing,
+        private readonly DriverTripRequestService $driverRequests,
+    ) {
+    }
+
     public function dashboard(Request $request)
     {
-        $schedules = collect();
-        $searchPerformed = false;
-
-        if ($request->filled(['departure', 'destination', 'date'])) {
-            $searchPerformed = true;
-            $validated = $request->validate([
-                'departure'    => ['required', 'string', 'max:255'],
-                'destination'  => ['required', 'string', 'max:255'],
-                'date'         => ['required', 'date'],
-                'vehicle_type' => ['nullable', 'string', 'in:limousine,sedan,suv'],
-            ]);
-
-            $schedules = Schedule::query()
-                ->with(['route', 'vehicle', 'driver.driverProfile'])
-                ->withCount([
-                    'seatReservations as active_reservations_count' => function ($q): void {
-                        $q->whereIn('status', ['held', 'booked'])
-                            ->where(function ($n): void {
-                                $n->whereNull('expires_at')->orWhere('expires_at', '>', now());
-                            });
-                    },
-                ])
-                ->whereIn('status', ['scheduled', 'running'])
-                ->whereHas('route', function ($q) use ($validated): void {
-                    $q->where('departure', $validated['departure'])
-                      ->where('destination', $validated['destination']);
-                })
-                ->whereDate('departure_time', $validated['date'])
-                ->when($validated['vehicle_type'] ?? null, function ($q, $type): void {
-                    $q->whereHas('vehicle', fn ($v) => $v->where('type', $type));
-                })
-                ->orderBy('departure_time')
-                ->get()
-                ->map(function (Schedule $s): Schedule {
-                    $s->available_seats = max((int) $s->vehicle->capacity - (int) $s->active_reservations_count, 0);
-                    return $s;
-                });
-        }
+        $filters = $this->tripListing->filtersFromRequest($request);
+        $schedules = $this->tripListing->query($filters);
 
         $bookings = Auth::user()
             ->bookings()
-            ->with(['schedule.route', 'schedule.vehicle'])
+            ->with(['schedule.route', 'schedule.vehicle', 'paymentTransactions'])
             ->latest()
             ->get();
 
-        $availableDrivers = DriverProfile::query()
-            ->where('status', 'active')
-            ->where('availability_status', 'available')
-            ->with(['user', 'operator'])
-            ->get();
+        $pendingDriverRequests = DriverTripRequest::query()
+            ->where('customer_id', Auth::id())
+            ->whereIn('status', ['pending', 'accepted'])
+            ->where(fn ($q) => $q->where('status', 'accepted')->orWhere(fn ($p) => $p
+                ->where('status', 'pending')
+                ->where(fn ($e) => $e->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ))
+            ->with(['driver', 'driverProfile'])
+            ->get()
+            ->keyBy('schedule_id');
 
-        return view('customer.dashboard', compact('schedules', 'bookings', 'searchPerformed', 'availableDrivers'));
+        $routeOptions = Schedule::query()
+            ->with('route')
+            ->whereIn('status', ['scheduled', 'running'])
+            ->where('departure_time', '>=', now()->startOfDay())
+            ->get()
+            ->pluck('route')
+            ->unique('id');
+
+        return view('customer.dashboard', compact(
+            'schedules',
+            'bookings',
+            'filters',
+            'pendingDriverRequests',
+            'routeOptions',
+        ));
     }
 
     public function store(Request $request)
@@ -79,6 +69,7 @@ class CustomerController extends Controller
             'pickup_address'  => ['nullable', 'string', 'max:255'],
             'dropoff_address' => ['nullable', 'string', 'max:255'],
             'notes'           => ['nullable', 'string'],
+            'driver_code'     => ['nullable', 'string', 'max:20'],
         ]);
 
         $seatNumbers = collect(explode(',', $validated['seat_numbers']))
@@ -92,79 +83,75 @@ class CustomerController extends Controller
             return back()->withErrors(['seat_numbers' => 'Vui lòng nhập ít nhất một số ghế'])->withInput();
         }
 
-        $booking = DB::transaction(function () use ($validated, $seatNumbers) {
-            $schedule = Schedule::query()
-                ->with(['route', 'vehicle', 'seatReservations'])
-                ->lockForUpdate()
-                ->findOrFail($validated['schedule_id']);
+        $schedule = Schedule::query()->with(['route', 'vehicle'])->findOrFail($validated['schedule_id']);
 
-            $this->assertSeatsAvailable($schedule, $seatNumbers);
+        $booking = $this->workflow->createBooking(
+            $schedule,
+            Auth::id(),
+            $seatNumbers,
+            $validated['pickup_address'] ?? null,
+            $validated['dropoff_address'] ?? null,
+            $validated['notes'] ?? null,
+        );
 
-            $totalPrice  = round((float) $schedule->route->base_price * count($seatNumbers), 2);
-            $holdExpires = now()->addMinutes(15);
+        $driverCode = trim((string) ($validated['driver_code'] ?? ''));
+        $flash = 'Đặt vé thành công! Mã vé: ' . $booking->ticket_code . '. ';
 
-            $booking = Booking::query()->create([
-                'customer_id'     => Auth::id(),
-                'schedule_id'     => $schedule->id,
-                'seat_numbers'    => $seatNumbers,
-                'ticket_code'     => 'TCK-' . Str::upper(Str::random(10)),
-                'booking_reference' => 'BK-' . now()->format('YmdHis') . '-' . Str::upper(Str::random(6)),
-                'total_price'     => $totalPrice,
-                'payment_status'  => 'unpaid',
-                'trip_status'     => 'confirmed',
-                'booking_status'  => 'pending',
-                'pickup_address'  => $validated['pickup_address'] ?? null,
-                'dropoff_address' => $validated['dropoff_address'] ?? null,
-                'notes'           => $validated['notes'] ?? null,
-                'hold_expires_at' => $holdExpires,
-            ]);
-
-            foreach ($seatNumbers as $seat) {
-                SeatReservation::query()->create([
-                    'schedule_id'       => $schedule->id,
-                    'booking_id'        => $booking->id,
-                    'customer_id'       => Auth::id(),
-                    'seat_number'       => $seat,
-                    'reservation_token' => (string) Str::uuid(),
-                    'status'            => 'held',
-                    'expires_at'        => $holdExpires,
-                ]);
+        if ($driverCode !== '') {
+            try {
+                $this->driverRequests->requestDriver($schedule->fresh(), Auth::id(), $driverCode);
+                $flash .= 'Đã gửi yêu cầu tới tài xế — chờ phản hồi.';
+            } catch (InvalidArgumentException $e) {
+                $flash .= 'Vé đã tạo nhưng không gửi được yêu cầu tài xế: ' . $e->getMessage();
             }
+        } else {
+            $flash .= 'Quản lý sẽ tự phân bổ tài xế cho chuyến.';
+        }
 
-            $this->syncSeats($schedule);
-            $this->audit($booking, Auth::id(), 'booking_created', null, $booking->toArray());
-
-            return $booking;
-        });
-
-        return redirect()->route('customer.dashboard')
-            ->with('success', 'Đặt vé thành công! Mã vé: ' . $booking->ticket_code);
+        return redirect()->route('customer.dashboard')->with('success', $flash);
     }
 
-    public function markPaid(Request $request, Booking $booking)
+    public function cancelDriverRequest(Request $request, DriverTripRequest $driverTripRequest)
+    {
+        try {
+            $this->driverRequests->cancelByCustomer($driverTripRequest, Auth::id());
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['driver_request' => $e->getMessage()]);
+        }
+
+        return back()->with('success', 'Đã hủy yêu cầu mời tài xế.');
+    }
+
+    public function claimPayment(Request $request, Booking $booking)
     {
         if ($booking->customer_id !== Auth::id()) {
             abort(403);
         }
 
-        if ($booking->booking_status === 'cancelled') {
-            return back()->withErrors(['booking' => 'Vé đã bị hủy.']);
+        try {
+            $this->workflow->customerClaimPayment($booking, Auth::id());
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['booking' => $e->getMessage()]);
         }
 
-        DB::transaction(function () use ($booking) {
-            $booking->update([
-                'payment_status' => 'paid',
-                'booking_status' => 'confirmed',
-                'confirmed_at'   => now(),
-            ]);
+        return redirect()->route('customer.dashboard')
+            ->with('success', 'Đã gửi yêu cầu xác nhận thanh toán. Quản lý/admin sẽ kiểm tra và xác nhận.');
+    }
 
-            $booking->seatReservations()->update(['status' => 'booked', 'expires_at' => null]);
-            $this->syncSeats($booking->schedule()->with(['vehicle', 'seatReservations'])->first());
-            $this->audit($booking, Auth::id(), 'payment_marked_paid', null, $booking->fresh()->toArray());
-        });
+    public function confirmTripComplete(Request $request, Booking $booking)
+    {
+        if ($booking->customer_id !== Auth::id()) {
+            abort(403);
+        }
+
+        try {
+            $this->workflow->customerConfirmTripComplete($booking, Auth::id());
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['booking' => $e->getMessage()]);
+        }
 
         return redirect()->route('customer.dashboard')
-            ->with('success', 'Đã xác nhận thanh toán. Vé của bạn đã được xác nhận.');
+            ->with('success', 'Đã xác nhận hoàn chuyến. Cảm ơn bạn đã sử dụng dịch vụ!');
     }
 
     public function cancel(Request $request, Booking $booking)
@@ -173,67 +160,12 @@ class CustomerController extends Controller
             abort(403);
         }
 
-        if (in_array($booking->booking_status, ['cancelled', 'rejected'])) {
-            return back()->withErrors(['booking' => 'Vé này đã hủy rồi.']);
+        try {
+            $this->workflow->cancelByCustomer($booking, Auth::id());
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['booking' => $e->getMessage()]);
         }
-
-        DB::transaction(function () use ($booking) {
-            $before = $booking->toArray();
-
-            $booking->update([
-                'booking_status' => 'cancelled',
-                'trip_status'    => 'cancelled',
-                'payment_status' => $booking->payment_status === 'paid' ? 'refunded' : 'unpaid',
-                'cancelled_at'   => now(),
-            ]);
-
-            $booking->seatReservations()->update(['status' => 'released', 'expires_at' => now()]);
-            $this->syncSeats($booking->schedule()->with(['vehicle', 'seatReservations'])->first());
-            $this->audit($booking, Auth::id(), 'booking_cancelled', $before, $booking->fresh()->toArray());
-        });
 
         return redirect()->route('customer.dashboard')->with('success', 'Đã hủy vé thành công.');
-    }
-
-    private function assertSeatsAvailable(Schedule $schedule, array $seats): void
-    {
-        $capacity = (int) $schedule->vehicle->capacity;
-        foreach ($seats as $s) {
-            if (! is_numeric($s) || (int) $s < 1 || (int) $s > $capacity) {
-                abort(422, 'Số ghế không hợp lệ: ' . $s);
-            }
-        }
-
-        $taken = SeatReservation::query()
-            ->where('schedule_id', $schedule->id)
-            ->whereIn('seat_number', $seats)
-            ->whereIn('status', ['held', 'booked'])
-            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
-            ->exists();
-
-        if ($taken) {
-            abort(422, 'Một hoặc nhiều ghế đã được đặt trước.');
-        }
-    }
-
-    private function syncSeats(Schedule $schedule): void
-    {
-        $schedule->loadMissing(['vehicle', 'seatReservations']);
-        $active = $schedule->seatReservations
-            ->filter(fn ($r) => in_array($r->status, ['held', 'booked'], true)
-                && (! $r->expires_at || $r->expires_at->isFuture()))
-            ->count();
-        $schedule->forceFill(['available_seats' => max((int) $schedule->vehicle->capacity - $active, 0)])->save();
-    }
-
-    private function audit(Booking $booking, ?int $actor, string $action, ?array $before, ?array $after): void
-    {
-        BookingAudit::query()->create([
-            'booking_id'   => $booking->id,
-            'actor_id'     => $actor,
-            'action'       => $action,
-            'before_state' => $before,
-            'after_state'  => $after,
-        ]);
     }
 }

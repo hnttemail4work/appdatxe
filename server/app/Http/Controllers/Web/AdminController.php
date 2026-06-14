@@ -8,13 +8,18 @@ use App\Models\DriverProfile;
 use App\Models\MerchantProfile;
 use App\Models\PlatformSetting;
 use App\Models\User;
+use App\Services\BookingWorkflowService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use InvalidArgumentException;
 
 class AdminController extends Controller
 {
+    public function __construct(private readonly BookingWorkflowService $workflow)
+    {
+    }
     public function dashboard()
     {
         $merchants = MerchantProfile::query()->with('user')->get();
@@ -83,6 +88,10 @@ class AdminController extends Controller
 
         $user->update($validated);
 
+        if ($user->role === 'driver' && $validated['status'] === 'active') {
+            $user->driverProfile?->update(['status' => 'active']);
+        }
+
         return redirect()->back()->with('success', 'Đã cập nhật trạng thái tài khoản.');
     }
 
@@ -117,7 +126,7 @@ class AdminController extends Controller
     public function bookings()
     {
         $bookings = Booking::query()
-            ->with(['customer', 'schedule.route', 'schedule.vehicle'])
+            ->with(['customer', 'schedule.route', 'schedule.vehicle', 'schedule.driver', 'paymentTransactions'])
             ->latest()->paginate(30);
 
         $stats = [
@@ -126,9 +135,43 @@ class AdminController extends Controller
             'unpaid'    => Booking::query()->where('payment_status', 'unpaid')->count(),
             'revenue'   => Booking::query()->where('payment_status', 'paid')->sum('total_price'),
             'cancelled' => Booking::query()->where('booking_status', 'cancelled')->count(),
+            'pending'   => Booking::query()->where('booking_status', 'pending')->count(),
         ];
 
         return view('admin.bookings', compact('bookings', 'stats'));
+    }
+
+    public function confirmPayment(Request $request, Booking $booking)
+    {
+        try {
+            $this->workflow->confirmPayment($booking, Auth::id(), 'manual');
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['booking' => $e->getMessage()]);
+        }
+
+        return back()->with('success', 'Đã xác nhận thanh toán.');
+    }
+
+    public function acceptBooking(Request $request, Booking $booking)
+    {
+        try {
+            $this->workflow->acceptBooking($booking, Auth::id());
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['booking' => $e->getMessage()]);
+        }
+
+        return back()->with('success', 'Đã duyệt chuyến. Tài xế được thông báo qua hệ thống.');
+    }
+
+    public function rejectBooking(Request $request, Booking $booking)
+    {
+        try {
+            $this->workflow->rejectBooking($booking, Auth::id());
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['booking' => $e->getMessage()]);
+        }
+
+        return back()->with('success', 'Đã từ chối booking.');
     }
 
     /** Admin: manage a single driver's profile */
@@ -142,6 +185,8 @@ class AdminController extends Controller
             'status'           => ['nullable', Rule::in(['active','inactive','suspended'])],
             'availability_status' => ['nullable', Rule::in(['available','on_trip','off_duty'])],
             'notes'            => ['nullable', 'string'],
+            'bank_name'        => ['nullable', 'string', 'max:100'],
+            'bank_account'     => ['nullable', 'string', 'max:50'],
             'operator_id'      => ['nullable', 'exists:users,id'],
         ]);
 

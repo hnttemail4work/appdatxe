@@ -3,35 +3,96 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Models\Booking;
 use App\Models\DriverProfile;
+use App\Models\DriverTripRequest;
 use App\Models\Schedule;
 use App\Models\User;
+use App\Services\BookingWorkflowService;
+use App\Services\DriverPhotoService;
+use App\Services\DriverTripRequestService;
+use App\Services\ScheduleLifecycleService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use InvalidArgumentException;
 
 class DriverController extends Controller
 {
-    /** Driver's own dashboard — sees their profile + upcoming schedules */
+    public function __construct(
+        private readonly DriverPhotoService $photoService,
+        private readonly BookingWorkflowService $workflow,
+        private readonly ScheduleLifecycleService $scheduleLifecycle,
+        private readonly DriverTripRequestService $driverRequests,
+    ) {
+    }
+
     public function myDashboard()
     {
+        $this->scheduleLifecycle->sync();
+        $this->driverRequests->expireStale();
+
         $user    = Auth::user();
         $profile = DriverProfile::query()->where('user_id', $user->id)->with('operator')->first();
 
+        $pendingRequests = DriverTripRequest::query()
+            ->where('driver_id', $user->id)
+            ->where('status', 'pending')
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->with(['schedule.route', 'schedule.vehicle', 'customer'])
+            ->latest()
+            ->get();
+
         $schedules = Schedule::query()
-            ->with(['route', 'vehicle'])
+            ->with([
+                'route',
+                'vehicle',
+                'bookings' => function ($q): void {
+                    $q->where('booking_status', 'confirmed')
+                        ->with('customer')
+                        ->latest();
+                },
+            ])
             ->where('driver_id', $user->id)
             ->where('departure_time', '>=', now()->subHours(2))
             ->orderBy('departure_time')
             ->get();
 
-        return view('driver.dashboard', compact('user', 'profile', 'schedules'));
+        return view('driver.dashboard', compact('user', 'profile', 'schedules', 'pendingRequests'));
     }
 
-    /** Driver updates their own availability status */
+    public function acceptTripRequest(Request $request, DriverTripRequest $driverTripRequest)
+    {
+        try {
+            $this->driverRequests->accept($driverTripRequest, Auth::id());
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['driver_request' => $e->getMessage()]);
+        }
+
+        return redirect()->route('driver.dashboard')->with('success', 'Đã nhận chuyến. Thông tin đã đồng bộ tới khách và quản lý.');
+    }
+
+    public function rejectTripRequest(Request $request, DriverTripRequest $driverTripRequest)
+    {
+        try {
+            $this->driverRequests->reject($driverTripRequest, Auth::id());
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['driver_request' => $e->getMessage()]);
+        }
+
+        return redirect()->route('driver.dashboard')->with('success', 'Đã từ chối yêu cầu nhận chuyến.');
+    }
+
+    public function myProfile()
+    {
+        $user    = Auth::user();
+        $profile = DriverProfile::query()->where('user_id', $user->id)->with('operator')->first();
+
+        return view('driver.profile', compact('user', 'profile'));
+    }
+
     public function updateAvailability(Request $request)
     {
         $validated = $request->validate([
@@ -44,10 +105,72 @@ class DriverController extends Controller
         return redirect()->route('driver.dashboard')->with('success', 'Đã cập nhật trạng thái hoạt động.');
     }
 
-    /** Operator: list all drivers under this operator (admin sees all) */
+    public function updateMyProfile(Request $request)
+    {
+        $user = Auth::user();
+        $profile = DriverProfile::query()->where('user_id', $user->id)->firstOrFail();
+
+        $validated = $request->validate([
+            'phone'              => ['required', 'string', 'max:30'],
+            'address'            => ['nullable', 'string', 'max:255'],
+            'id_number'          => ['nullable', 'string', 'max:20'],
+            'license_number'     => ['nullable', 'string', 'max:50', Rule::unique('driver_profiles', 'license_number')->ignore($profile->id)],
+            'license_class'      => ['nullable', Rule::in(['B1', 'B2', 'C', 'D', 'E', 'F'])],
+            'license_expiry'     => ['nullable', 'date'],
+            'experience_years'    => ['nullable', 'integer', 'min:0', 'max:50'],
+            'notes'              => ['nullable', 'string'],
+            'bank_name'          => ['nullable', 'string', 'max:100'],
+            'bank_account'       => ['nullable', 'string', 'max:50'],
+        ]);
+
+        $user->update([
+            'phone'     => $validated['phone'],
+            'address'   => $validated['address'] ?? null,
+            'id_number' => $validated['id_number'] ?? null,
+        ]);
+
+        $profile->update([
+            'license_number'   => $validated['license_number'] ?? $profile->license_number,
+            'license_class'    => $validated['license_class'] ?? $profile->license_class,
+            'license_expiry'   => $validated['license_expiry'] ?? $profile->license_expiry,
+            'experience_years' => $validated['experience_years'] ?? $profile->experience_years ?? 0,
+            'notes'            => $validated['notes'] ?? null,
+            'bank_name'        => $validated['bank_name'] ?? null,
+            'bank_account'     => $validated['bank_account'] ?? null,
+        ]);
+
+        return redirect()->route('driver.profile')->with('success', 'Đã cập nhật hồ sơ tài xế.');
+    }
+
+    public function uploadMyPhotos(Request $request)
+    {
+        $profile = DriverProfile::query()->where('user_id', Auth::id())->firstOrFail();
+
+        try {
+            $this->photoService->syncPhotos($profile, $request);
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['photos' => $e->getMessage()])->withInput();
+        }
+
+        return redirect()->route('driver.profile')->with('success', 'Đã upload ảnh hồ sơ thành công.');
+    }
+
+    /** Tài xế báo hoàn thành chuyến — chờ khách xác nhận. */
+    public function completeTrip(Request $request, Booking $booking)
+    {
+        try {
+            $this->workflow->driverCompleteTrip($booking, Auth::id());
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['booking' => $e->getMessage()]);
+        }
+
+        return redirect()->route('driver.dashboard')
+            ->with('success', 'Đã báo hoàn thành chuyến. Chờ khách hàng xác nhận.');
+    }
+
     public function index()
     {
-        $query = DriverProfile::query()->with('user')->latest();
+        $query = DriverProfile::query()->with(['user', 'operator'])->latest();
 
         if (Auth::user()->role !== 'admin') {
             $query->where('operator_id', Auth::id());
@@ -55,7 +178,14 @@ class DriverController extends Controller
 
         $drivers = $query->get();
 
-        return view('operator.drivers', compact('drivers'));
+        return view('operator.drivers.index', compact('drivers'));
+    }
+
+    public function create()
+    {
+        $operators = $this->operatorsForForm();
+
+        return view('operator.drivers.create', compact('operators'));
     }
 
     public function store(Request $request)
@@ -67,14 +197,23 @@ class DriverController extends Controller
             'password'         => ['required', 'string', 'min:8'],
             'address'          => ['nullable', 'string', 'max:255'],
             'id_number'        => ['nullable', 'string', 'max:20'],
-            'license_number'   => ['required', 'string', 'max:50', 'unique:driver_profiles,license_number'],
-            'license_class'    => ['required', Rule::in(['B1', 'B2', 'C', 'D', 'E', 'F'])],
-            'license_expiry'   => ['required', 'date', 'after:today'],
-            'experience_years' => ['required', 'integer', 'min:0', 'max:50'],
-            'notes'            => ['nullable', 'string'],
+            'license_number'   => ['nullable', 'string', 'max:50', 'unique:driver_profiles,license_number'],
+            'license_class'    => ['nullable', Rule::in(['B1', 'B2', 'C', 'D', 'E', 'F'])],
+            'license_expiry'   => ['nullable', 'date'],
+            'experience_years'   => ['nullable', 'integer', 'min:0', 'max:50'],
+            'notes'              => ['nullable', 'string'],
+            'bank_name'          => ['nullable', 'string', 'max:100'],
+            'bank_account'       => ['nullable', 'string', 'max:50'],
+            'operator_id'      => [Rule::requiredIf(Auth::user()->role === 'admin'), 'nullable', 'exists:users,id'],
         ]);
 
-        DB::transaction(function () use ($validated) {
+        $operatorId = Auth::user()->role === 'admin'
+            ? (int) $validated['operator_id']
+            : Auth::id();
+
+        $profile = null;
+
+        DB::transaction(function () use ($validated, $operatorId, &$profile): void {
             $user = User::query()->create([
                 'name'      => $validated['name'],
                 'email'     => $validated['email'],
@@ -86,121 +225,140 @@ class DriverController extends Controller
                 'status'    => 'active',
             ]);
 
-            DriverProfile::query()->create([
-                'user_id'          => $user->id,
-                'operator_id'      => Auth::id(),
-                'license_number'   => $validated['license_number'],
-                'license_class'    => $validated['license_class'],
-                'license_expiry'   => $validated['license_expiry'],
-                'experience_years' => $validated['experience_years'],
-                'status'           => 'active',
-                'notes'            => $validated['notes'] ?? null,
+            $profile = DriverProfile::query()->create([
+                'user_id'             => $user->id,
+                'operator_id'         => $operatorId,
+                'license_number'      => $validated['license_number'] ?? 'Chưa cập nhật',
+                'license_class'       => $validated['license_class'] ?? 'B2',
+                'license_expiry'      => $validated['license_expiry'] ?? now()->addYear(),
+                'experience_years'    => $validated['experience_years'] ?? 0,
+                'status'              => 'active',
+                'availability_status' => 'off_duty',
+                'notes'               => $validated['notes'] ?? null,
+                'bank_name'           => $validated['bank_name'] ?? null,
+                'bank_account'        => $validated['bank_account'] ?? null,
             ]);
         });
 
-        return redirect()->route('operator.drivers')->with('success', 'Đã thêm tài xế thành công.');
+        return redirect()
+            ->route('operator.drivers.edit', $profile)
+            ->with('success', 'Đã tạo tài khoản tài xế. Tài xế có thể đăng nhập và tự bổ sung hồ sơ.');
+    }
+
+    public function edit(DriverProfile $driverProfile)
+    {
+        if (! $this->canManageDriver($driverProfile)) {
+            abort(403);
+        }
+
+        $driverProfile->load(['user', 'operator']);
+        $operators = $this->operatorsForForm();
+
+        return view('operator.drivers.edit', [
+            'driver'    => $driverProfile,
+            'operators' => $operators,
+        ]);
     }
 
     public function update(Request $request, DriverProfile $driverProfile)
     {
-        if (Auth::user()->role !== 'admin' && $driverProfile->operator_id !== Auth::id()) {
+        if (! $this->canManageDriver($driverProfile)) {
             abort(403);
         }
 
         $profileValidated = $request->validate([
             'status'              => ['nullable', Rule::in(['active', 'inactive', 'suspended'])],
             'availability_status' => ['nullable', Rule::in(['available', 'on_trip', 'off_duty'])],
-            'license_number'      => ['nullable', 'string', 'max:50'],
+            'license_number'      => ['nullable', 'string', 'max:50', Rule::unique('driver_profiles', 'license_number')->ignore($driverProfile->id)],
             'license_class'       => ['nullable', Rule::in(['B1', 'B2', 'C', 'D', 'E', 'F'])],
             'license_expiry'      => ['nullable', 'date'],
             'experience_years'    => ['nullable', 'integer', 'min:0', 'max:50'],
             'notes'               => ['nullable', 'string'],
+            'bank_name'           => ['nullable', 'string', 'max:100'],
+            'bank_account'        => ['nullable', 'string', 'max:50'],
+            'operator_id'         => ['nullable', 'exists:users,id'],
         ]);
 
-        // Also update user fields if present
         $userValidated = $request->validate([
-            'name'     => ['nullable', 'string', 'max:255'],
-            'phone'    => ['nullable', 'string', 'max:30'],
-            'address'  => ['nullable', 'string', 'max:255'],
-            'id_number'=> ['nullable', 'string', 'max:20'],
+            'name'      => ['nullable', 'string', 'max:255'],
+            'email'     => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')->ignore($driverProfile->user_id)],
+            'phone'     => ['nullable', 'string', 'max:30'],
+            'address'   => ['nullable', 'string', 'max:255'],
+            'id_number' => ['nullable', 'string', 'max:20'],
+            'password'  => ['nullable', 'string', 'min:8'],
         ]);
 
-        $profileData = array_filter($profileValidated, fn($v) => $v !== null && $v !== '');
+        $profileData = array_filter($profileValidated, fn ($v) => $v !== null && $v !== '');
         if ($profileData) {
+            if (Auth::user()->role !== 'admin') {
+                unset($profileData['operator_id']);
+            }
             $driverProfile->update($profileData);
         }
 
-        $userData = array_filter($userValidated, fn($v) => $v !== null);
+        $userData = array_filter($userValidated, fn ($v) => $v !== null && $v !== '');
+        if (isset($userData['password'])) {
+            $userData['password'] = Hash::make($userData['password']);
+        } else {
+            unset($userData['password']);
+        }
         if ($userData) {
             $driverProfile->user->update($userData);
         }
 
-        return redirect()->route('operator.drivers')->with('success', 'Đã cập nhật thông tin tài xế.');
+        return redirect()
+            ->route('operator.drivers.edit', $driverProfile)
+            ->with('success', 'Đã cập nhật thông tin tài xế.');
     }
 
     public function destroy(DriverProfile $driverProfile)
     {
-        if (Auth::user()->role !== 'admin' && $driverProfile->operator_id !== Auth::id()) {
+        if (! $this->canManageDriver($driverProfile)) {
             abort(403);
         }
 
         $driverProfile->update(['status' => 'inactive']);
+        $driverProfile->user->update(['status' => 'inactive']);
 
         return redirect()->route('operator.drivers')->with('success', 'Đã vô hiệu hoá tài xế.');
     }
 
-    /** Operator: upload photos for a driver */
     public function uploadPhotos(Request $request, DriverProfile $driverProfile)
     {
-        if (Auth::user()->role !== 'admin' && $driverProfile->operator_id !== Auth::id()) {
+        if (! $this->canManageDriver($driverProfile)) {
             abort(403);
         }
 
-        $request->validate([
-            'photo_portrait'      => ['nullable', 'image', 'max:2048'],
-            'photo_id_card'       => ['nullable', 'image', 'max:2048'],
-            'photo_id_card_back'  => ['nullable', 'image', 'max:2048'],
-            'photo_vehicles.*'    => ['nullable', 'image', 'max:2048'],
-            'delete_vehicle_idx'  => ['nullable', 'integer'],
-        ]);
-
-        $updates = [];
-        $dir = 'drivers/' . $driverProfile->id;
-
-        foreach (['photo_portrait', 'photo_id_card', 'photo_id_card_back'] as $field) {
-            if ($request->hasFile($field)) {
-                if ($driverProfile->{$field}) {
-                    Storage::disk('public')->delete($driverProfile->{$field});
-                }
-                $updates[$field] = $request->file($field)->store($dir, 'public');
-            }
+        try {
+            $this->photoService->syncPhotos($driverProfile, $request);
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['photos' => $e->getMessage()])->withInput();
         }
 
-        // Handle vehicle photos array — append new ones, optionally delete one
-        $existing = $driverProfile->photo_vehicles ?? [];
+        return redirect()
+            ->route('operator.drivers.edit', $driverProfile)
+            ->with('success', 'Đã cập nhật ảnh tài xế.');
+    }
 
-        if ($request->filled('delete_vehicle_idx')) {
-            $idx = (int) $request->input('delete_vehicle_idx');
-            if (isset($existing[$idx])) {
-                Storage::disk('public')->delete($existing[$idx]);
-                array_splice($existing, $idx, 1);
-            }
+    private function operatorsForForm()
+    {
+        if (Auth::user()->role !== 'admin') {
+            return collect();
         }
 
-        if ($request->hasFile('photo_vehicles')) {
-            foreach ($request->file('photo_vehicles') as $file) {
-                $existing[] = $file->store($dir, 'public');
-            }
+        return User::query()
+            ->where('role', 'operator')
+            ->where('status', 'active')
+            ->orderBy('name')
+            ->get();
+    }
+
+    private function canManageDriver(DriverProfile $driverProfile): bool
+    {
+        if (Auth::user()->role === 'admin') {
+            return true;
         }
 
-        if ($request->hasFile('photo_vehicles') || $request->filled('delete_vehicle_idx')) {
-            $updates['photo_vehicles'] = array_values($existing);
-        }
-
-        if ($updates) {
-            $driverProfile->update($updates);
-        }
-
-        return redirect()->route('operator.drivers')->with('success', 'Đã cập nhật ảnh tài xế.');
+        return Auth::user()->role === 'operator' && $driverProfile->operator_id === Auth::id();
     }
 }

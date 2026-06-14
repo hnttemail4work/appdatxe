@@ -5,7 +5,8 @@ namespace Database\Seeders;
 use App\Models\DriverProfile;
 use App\Models\MerchantProfile;
 use App\Models\PlatformSetting;
-use App\Models\Schedule;
+use App\Models\ScheduleTemplate;
+use App\Services\ScheduleLifecycleService;
 use App\Models\TripRoute;
 use App\Models\User;
 use App\Models\Vehicle;
@@ -52,7 +53,7 @@ class DatabaseSeeder extends Seeder
         MerchantProfile::query()->firstOrCreate(
             ['user_id' => $operator->id],
             [
-                'company_name' => 'AppDatXe Transport',
+                'company_name' => 'Tam Long Limo',
                 'tax_code'     => '0123456789',
                 'kyc_status'   => 'approved',
                 'approved_by'  => $admin->id,
@@ -148,38 +149,36 @@ class DatabaseSeeder extends Seeder
             ],
         );
 
-        // Schedules — dùng route model thực từ DB
-        $routes = TripRoute::all()->keyBy(fn($r) => $r->departure . '|' . $r->destination);
+        // Chuyến chạy hằng ngày (template)
+        $routes = TripRoute::all()->keyBy(fn ($r) => $r->departure . '|' . $r->destination);
 
-        $scheduleSeed = [
+        $templateSeed = [
             ['dep' => 'TP.HCM', 'dst' => 'Vũng Tàu', 'hours' => [7, 13, 18], 'vehicle' => $vehicle,  'driver' => $driverProfile],
             ['dep' => 'TP.HCM', 'dst' => 'Đà Lạt',   'hours' => [20],        'vehicle' => $vehicle,  'driver' => $driverProfile],
             ['dep' => 'TP.HCM', 'dst' => 'Mũi Né',   'hours' => [8, 15],     'vehicle' => $vehicle2, 'driver' => $driverProfile2],
         ];
 
-        foreach (range(0, 4) as $daysAhead) {
-            foreach ($scheduleSeed as $seed) {
-                $route = $routes->get($seed['dep'] . '|' . $seed['dst']);
-                if (! $route) {
-                    continue;
-                }
-                foreach ($seed['hours'] as $hour) {
-                    $dt = now()->addDays($daysAhead)->setTime($hour, 0, 0);
-                    Schedule::query()->firstOrCreate(
-                        [
-                            'route_id'      => $route->id,
-                            'vehicle_id'    => $seed['vehicle']->id,
-                            'departure_time' => $dt,
-                        ],
-                        [
-                            'driver_id'       => $seed['driver']->user_id,
-                            'driver_name'     => User::find($seed['driver']->user_id)?->name ?? '',
-                            'available_seats' => $seed['vehicle']->capacity,
-                            'status'          => 'scheduled',
-                        ],
-                    );
-                }
+        foreach ($templateSeed as $seed) {
+            $route = $routes->get($seed['dep'] . '|' . $seed['dst']);
+            if (! $route) {
+                continue;
+            }
+            foreach ($seed['hours'] as $hour) {
+                ScheduleTemplate::query()->firstOrCreate(
+                    [
+                        'route_id'       => $route->id,
+                        'vehicle_id'     => $seed['vehicle']->id,
+                        'departure_time' => sprintf('%02d:00:00', $hour),
+                    ],
+                    [
+                        'driver_id'    => $seed['driver']->user_id,
+                        'driver_name'  => User::find($seed['driver']->user_id)?->name ?? 'Chưa phân công',
+                        'status'       => 'active',
+                    ],
+                );
             }
         }
+
+        app(ScheduleLifecycleService::class)->sync();
     }
 }

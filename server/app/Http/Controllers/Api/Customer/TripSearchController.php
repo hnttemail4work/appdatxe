@@ -4,14 +4,21 @@ namespace App\Http\Controllers\Api\Customer;
 
 use App\Http\Controllers\Controller;
 use App\Models\Schedule;
+use App\Services\ScheduleLifecycleService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 class TripSearchController extends Controller
 {
+    public function __construct(private readonly ScheduleLifecycleService $scheduleLifecycle)
+    {
+    }
+
     public function index(Request $request): JsonResponse
     {
+        $this->scheduleLifecycle->sync();
+
         $validated = $request->validate([
             'departure' => ['nullable', 'string', 'max:255'],
             'destination' => ['nullable', 'string', 'max:255'],
@@ -68,7 +75,10 @@ class TripSearchController extends Controller
                     'license_plate' => $schedule->vehicle->license_plate,
                     'driver_name' => $schedule->driver_name,
                     'departure_time' => $schedule->departure_time?->toIso8601String(),
-                    'available_seats' => max((int) $schedule->vehicle->capacity - (int) $schedule->active_reservations_count, 0),
+                    'booked_seats' => $schedule->bookedSeatsCount(),
+                    'capacity' => $schedule->capacity(),
+                    'seats_label' => $schedule->seatsLabel(),
+                    'available_seats' => max($schedule->capacity() - $schedule->bookedSeatsCount(), 0),
                     'status' => $schedule->status,
                 ];
             })->values(),

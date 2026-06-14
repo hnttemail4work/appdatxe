@@ -4,21 +4,22 @@ namespace App\Http\Controllers\Api\Customer;
 
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
-use App\Models\BookingAudit;
 use App\Models\Schedule;
-use App\Models\SeatReservation;
+use App\Services\BookingWorkflowService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
+use InvalidArgumentException;
 
 class BookingController extends Controller
 {
+    public function __construct(private readonly BookingWorkflowService $workflow)
+    {
+    }
+
     public function index(Request $request): JsonResponse
     {
         $bookings = Booking::query()
-            ->with(['schedule.route', 'schedule.vehicle', 'seatReservations'])
+            ->with(['schedule.route', 'schedule.vehicle', 'seatReservations', 'paymentTransactions'])
             ->where('customer_id', $request->user()->id)
             ->latest()
             ->get();
@@ -41,6 +42,7 @@ class BookingController extends Controller
                 'destination' => $booking->schedule?->route?->destination,
                 'departure_time' => $departureTime?->toIso8601String(),
                 'payment_status' => $booking->payment_status,
+                'payment_claim_pending' => $booking->hasPendingPaymentClaim(),
                 'trip_status' => $booking->trip_status,
                 'booking_status' => $booking->booking_status,
                 'is_upcoming' => $isUpcoming,
@@ -69,192 +71,144 @@ class BookingController extends Controller
         ]);
 
         $seatNumbers = collect($validated['seat_numbers'])->map(fn ($s): string => trim((string) $s))->unique()->values()->all();
+        $schedule = Schedule::query()->with(['route', 'vehicle'])->findOrFail($validated['schedule_id']);
 
-        $booking = DB::transaction(function () use ($validated, $seatNumbers, $request): Booking {
-            $schedule = Schedule::query()->with(['route', 'vehicle', 'seatReservations'])->lockForUpdate()->findOrFail($validated['schedule_id']);
-            $this->assertSeatsAreAvailable($schedule, $seatNumbers);
+        $booking = $this->workflow->createBooking(
+            $schedule,
+            $request->user()->id,
+            $seatNumbers,
+            $validated['pickup_address'] ?? null,
+            $validated['dropoff_address'] ?? null,
+            $validated['notes'] ?? null,
+        );
 
-            $totalPrice = round((float) $schedule->route->base_price * count($seatNumbers), 2);
-            $holdExpiresAt = now()->addMinutes(15);
-
-            $booking = Booking::query()->create([
-                'customer_id' => $request->user()->id,
-                'schedule_id' => $schedule->id,
-                'seat_numbers' => $seatNumbers,
-                'ticket_code' => 'TCK-' . Str::upper(Str::random(10)),
-                'booking_reference' => 'BK-' . now()->format('YmdHis') . '-' . Str::upper(Str::random(6)),
-                'total_price' => $totalPrice,
-                'payment_status' => 'unpaid',
-                'trip_status' => 'confirmed',
-                'booking_status' => 'pending',
-                'pickup_address' => $validated['pickup_address'] ?? null,
-                'dropoff_address' => $validated['dropoff_address'] ?? null,
-                'notes' => $validated['notes'] ?? null,
-                'hold_expires_at' => $holdExpiresAt,
-            ]);
-
-            foreach ($seatNumbers as $seatNumber) {
-                SeatReservation::query()->create([
-                    'schedule_id' => $schedule->id,
-                    'booking_id' => $booking->id,
-                    'customer_id' => $request->user()->id,
-                    'seat_number' => $seatNumber,
-                    'reservation_token' => (string) Str::uuid(),
-                    'status' => 'held',
-                    'expires_at' => $holdExpiresAt,
-                ]);
-            }
-
-            $this->syncScheduleAvailability($schedule);
-            $this->recordAudit($booking, $request->user()->id, 'booking_created', null, $booking->toArray());
-
-            return $booking->load(['schedule.route', 'schedule.vehicle', 'seatReservations']);
-        });
-
-        return response()->json(['message' => 'Booking created successfully.', 'data' => $booking], 201);
+        return response()->json([
+            'message' => 'Booking created successfully.',
+            'data' => $booking->load(['schedule.route', 'schedule.vehicle', 'seatReservations']),
+        ], 201);
     }
 
-    public function show(Booking $booking): JsonResponse
+    public function show(Request $request, Booking $booking): JsonResponse
     {
-        $booking->load(['customer', 'schedule.route', 'schedule.vehicle', 'seatReservations', 'audits.actor']);
+        if ($booking->customer_id !== $request->user()->id) {
+            abort(403);
+        }
+
+        $booking->load(['customer', 'schedule.route', 'schedule.vehicle', 'seatReservations', 'audits.actor', 'paymentTransactions']);
 
         return response()->json(['data' => $booking]);
     }
 
     public function update(Request $request, Booking $booking): JsonResponse
     {
+        if ($booking->customer_id !== $request->user()->id) {
+            abort(403);
+        }
+
         $validated = $request->validate([
             'pickup_address' => ['nullable', 'string', 'max:255'],
             'dropoff_address' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string'],
-            'booking_status' => ['nullable', Rule::in(['pending', 'confirmed', 'rejected', 'cancelled'])],
         ]);
 
         $beforeState = $booking->toArray();
         $booking->fill($validated)->save();
-        $this->recordAudit($booking, $request->user()->id, 'booking_updated', $beforeState, $booking->fresh()->toArray());
 
         return response()->json(['message' => 'Booking updated successfully.', 'data' => $booking->fresh()]);
     }
 
     public function destroy(Request $request, Booking $booking): JsonResponse
     {
-        $beforeState = $booking->toArray();
+        if ($booking->customer_id !== $request->user()->id) {
+            abort(403);
+        }
 
-        DB::transaction(function () use ($booking, $request, $beforeState): void {
-            $booking->update([
-                'booking_status' => 'cancelled',
-                'trip_status' => 'cancelled',
-                'payment_status' => 'refunded',
-                'cancelled_at' => now(),
-            ]);
-
-            $booking->seatReservations()->update(['status' => 'released', 'expires_at' => now()]);
-            $this->recordAudit($booking, $request->user()->id, 'booking_cancelled', $beforeState, $booking->fresh()->toArray());
-            $this->syncScheduleAvailability($booking->schedule()->with(['vehicle', 'seatReservations'])->first());
-        });
+        try {
+            $this->workflow->cancelByCustomer($booking, $request->user()->id);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
 
         return response()->json(['message' => 'Booking cancelled successfully.']);
     }
 
-    public function confirmPayment(Request $request, Booking $booking): JsonResponse
+    public function claimPayment(Request $request, Booking $booking): JsonResponse
     {
-        $beforeState = $booking->toArray();
+        if ($booking->customer_id !== $request->user()->id) {
+            abort(403);
+        }
 
-        DB::transaction(function () use ($booking, $request, $beforeState): void {
-            $booking->update([
-                'payment_status' => 'paid',
-                'booking_status' => 'confirmed',
-                'trip_status' => 'confirmed',
-                'confirmed_at' => now(),
-            ]);
-
-            $booking->seatReservations()->update(['status' => 'booked', 'expires_at' => null]);
-            $this->syncScheduleAvailability($booking->schedule()->with(['vehicle', 'seatReservations'])->first());
-            $this->recordAudit($booking, $request->user()->id, 'payment_confirmed', $beforeState, $booking->fresh()->toArray());
-        });
+        try {
+            $this->workflow->customerClaimPayment($booking, $request->user()->id);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
 
         return response()->json([
-            'message' => 'Payment confirmed successfully.',
-            'data' => $booking->fresh(['schedule.route', 'schedule.vehicle', 'seatReservations']),
+            'message' => 'Payment claim submitted. Waiting for operator/admin confirmation.',
+            'data' => $booking->fresh(['schedule.route', 'schedule.vehicle', 'seatReservations', 'paymentTransactions']),
         ]);
+    }
+
+    public function confirmTripComplete(Request $request, Booking $booking): JsonResponse
+    {
+        if ($booking->customer_id !== $request->user()->id) {
+            abort(403);
+        }
+
+        try {
+            $this->workflow->customerConfirmTripComplete($booking, $request->user()->id);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'message' => 'Trip completion confirmed.',
+            'data' => $booking->fresh(),
+        ]);
+    }
+
+    public function operatorConfirmPayment(Request $request, Booking $booking): JsonResponse
+    {
+        try {
+            $this->workflow->confirmPayment($booking, $request->user()->id, 'manual');
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['message' => 'Payment confirmed successfully.', 'data' => $booking->fresh()]);
     }
 
     public function accept(Request $request, Booking $booking): JsonResponse
     {
-        if ($booking->payment_status !== 'paid') {
-            return response()->json(['message' => 'Payment must be confirmed before accepting booking.'], 422);
+        try {
+            $this->workflow->acceptBooking($booking, $request->user()->id);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
         }
-
-        $beforeState = $booking->toArray();
-        $booking->update(['booking_status' => 'confirmed', 'trip_status' => 'confirmed', 'confirmed_at' => now()]);
-        $booking->seatReservations()->update(['status' => 'booked', 'expires_at' => null]);
-        $this->syncScheduleAvailability($booking->schedule()->with(['vehicle', 'seatReservations'])->first());
-        $this->recordAudit($booking, $request->user()->id, 'booking_accepted', $beforeState, $booking->fresh()->toArray());
 
         return response()->json(['message' => 'Booking accepted successfully.', 'data' => $booking->fresh()]);
     }
 
     public function reject(Request $request, Booking $booking): JsonResponse
     {
-        $beforeState = $booking->toArray();
-        $booking->update(['booking_status' => 'rejected', 'trip_status' => 'cancelled', 'cancelled_at' => now()]);
-        $booking->seatReservations()->update(['status' => 'released', 'expires_at' => now()]);
-        $this->syncScheduleAvailability($booking->schedule()->with(['vehicle', 'seatReservations'])->first());
-        $this->recordAudit($booking, $request->user()->id, 'booking_rejected', $beforeState, $booking->fresh()->toArray());
+        try {
+            $this->workflow->rejectBooking($booking, $request->user()->id);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
 
         return response()->json(['message' => 'Booking rejected successfully.', 'data' => $booking->fresh()]);
     }
 
-    private function assertSeatsAreAvailable(Schedule $schedule, array $seatNumbers): void
+    public function driverCompleteTrip(Request $request, Booking $booking): JsonResponse
     {
-        $capacity = (int) $schedule->vehicle->capacity;
-
-        foreach ($seatNumbers as $seatNumber) {
-            if (! is_numeric($seatNumber) || (int) $seatNumber < 1 || (int) $seatNumber > $capacity) {
-                abort(422, 'Seat number ' . $seatNumber . ' is invalid for this vehicle.');
-            }
+        try {
+            $this->workflow->driverCompleteTrip($booking, $request->user()->id);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
         }
 
-        $exists = SeatReservation::query()
-            ->where('schedule_id', $schedule->id)
-            ->whereIn('seat_number', $seatNumbers)
-            ->whereIn('status', ['held', 'booked'])
-            ->where(function ($query): void {
-                $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
-            })
-            ->exists();
-
-        if ($exists) {
-            abort(422, 'One or more requested seats are no longer available.');
-        }
-    }
-
-    private function syncScheduleAvailability(Schedule $schedule): void
-    {
-        $schedule->loadMissing(['vehicle', 'seatReservations']);
-
-        $activeReservations = $schedule->seatReservations
-            ->filter(function ($reservation): bool {
-                if (! in_array($reservation->status, ['held', 'booked'], true)) {
-                    return false;
-                }
-
-                return ! $reservation->expires_at || $reservation->expires_at->isFuture();
-            })
-            ->count();
-
-        $schedule->forceFill(['available_seats' => max((int) $schedule->vehicle->capacity - $activeReservations, 0)])->save();
-    }
-
-    private function recordAudit(Booking $booking, ?int $actorId, string $action, ?array $beforeState, ?array $afterState): void
-    {
-        BookingAudit::query()->create([
-            'booking_id' => $booking->id,
-            'actor_id' => $actorId,
-            'action' => $action,
-            'before_state' => $beforeState,
-            'after_state' => $afterState,
-        ]);
+        return response()->json(['message' => 'Trip marked complete. Waiting for customer confirmation.', 'data' => $booking->fresh()]);
     }
 }

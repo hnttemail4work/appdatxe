@@ -1,7 +1,9 @@
 <?php
 
 return [
-    'name' => env('APP_NAME', 'Booking Platform'),
+    'name' => env('APP_NAME', 'Tam Long Limo'),
+    'contact_phone' => env('APP_CONTACT_PHONE', '098.195.28.56'),
+    'contact_email' => env('APP_CONTACT_EMAIL', 'tamlongtrans8888@gmail.com'),
     'env' => env('APP_ENV', 'production'),
     'debug' => (bool) env('APP_DEBUG', false),
     'url' => env('APP_URL', 'http://localhost:8000'),

@@ -5,7 +5,10 @@
     <div class="col-md-5">
         <div class="card shadow-sm p-4">
             <h2 class="mb-1">Đăng nhập</h2>
-            <p class="text-muted mb-4">Chưa có tài khoản? <a href="{{ route('register') }}">Đăng ký miễn phí</a></p>
+            <p class="text-muted mb-4">Chưa có tài khoản?
+                <a href="{{ route('register', ['mode' => 'customer']) }}">Đăng ký khách hàng</a> ·
+                <a href="{{ route('register', ['mode' => 'driver']) }}">Đăng ký tài xế</a>
+            </p>
 
             <form method="POST" action="{{ route('login') }}">
                 @csrf

@@ -1,4 +1,4 @@
-# 📱 VinaRoute Frontend Client - Cấu Trúc Trang
+# 📱 Tam Long Limo Frontend Client - Cấu Trúc Trang
 
 ## 🎯 Trang Chính (Static Pages)
 
@@ -7,7 +7,7 @@
 - Form tìm kiếm chuyến (Điểm đi → Điểm đến → Ngày → Giờ)
 - Hiển thị kết quả chuyến tìm được
 - Danh sách "Tuyến được ưa chuộng"
-- Lợi ích dịch vụ VinaRoute
+- Lợi ích dịch vụ Tam Long Limo
 - **Tính năng**: Người dùng đã login thấy nút "Xác nhận & Lưu booking", chưa login thấy nút "Đăng nhập để đặt vé"
 
 ### 2️⃣ **login.html** - Đăng Nhập

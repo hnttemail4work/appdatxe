@@ -3,18 +3,15 @@
 @section('content')
 <div class="row g-4">
 
-    {{-- Cột trái: thông tin + trạng thái --}}
+    {{-- Cột trái: tóm tắt + trạng thái --}}
     <div class="col-lg-4">
 
-        {{-- Thông tin cá nhân --}}
         <div class="card shadow-sm p-4 mb-4">
             <div class="d-flex gap-3 align-items-start mb-3">
-                {{-- Avatar chân dung --}}
                 <div class="flex-shrink-0">
                     @if($profile?->photo_portrait)
                         <img src="{{ $profile->photoUrl('photo_portrait') }}" alt="Chân dung"
-                             class="rounded-circle object-fit-cover border"
-                             style="width:60px;height:60px;">
+                             class="rounded-circle object-fit-cover border" style="width:60px;height:60px;">
                     @else
                         <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center border"
                              style="width:60px;height:60px;font-size:1.4rem;font-weight:700;">
@@ -33,121 +30,39 @@
                 </div>
             </div>
 
-            <h6 class="card-title-bar mb-3">Thông tin cá nhân</h6>
-            <div class="d-flex flex-column gap-2">
-                <div class="d-flex justify-content-between">
-                    <span class="text-muted small">Email</span>
-                    <span class="small">{{ $user->email }}</span>
-                </div>
-                <div class="d-flex justify-content-between">
-                    <span class="text-muted small">Điện thoại</span>
-                    <span class="small">{{ $user->phone ?? '—' }}</span>
-                </div>
-                @if($user->address)
-                <div class="d-flex justify-content-between">
-                    <span class="text-muted small">Địa chỉ</span>
-                    <span class="small text-end">{{ $user->address }}</span>
-                </div>
-                @endif
-                @if($user->id_number)
-                <div class="d-flex justify-content-between">
-                    <span class="text-muted small">CCCD/CMND</span>
-                    <code class="small">{{ $user->id_number }}</code>
-                </div>
-                @endif
-            </div>
-
             @if($profile)
-            <hr class="my-3">
-            <h6 class="text-muted mb-2 small fw-semibold">BẰNG LÁI XE</h6>
-            <div class="d-flex flex-column gap-2">
+            <div class="d-flex flex-column gap-2 small mb-3">
+                @if($profile->driver_code)
                 <div class="d-flex justify-content-between">
-                    <span class="text-muted small">Số bằng</span>
-                    <code class="small">{{ $profile->license_number }}</code>
+                    <span class="text-muted">Mã tài xế</span>
+                    <code class="fw-bold">{{ $profile->driver_code }}</code>
+                </div>
+                @endif
+                <div class="d-flex justify-content-between">
+                    <span class="text-muted">Điện thoại</span>
+                    <span>{{ $user->phone ?? '—' }}</span>
                 </div>
                 <div class="d-flex justify-content-between">
-                    <span class="text-muted small">Hạng bằng</span>
+                    <span class="text-muted">Hạng bằng</span>
                     <span class="badge bg-primary">Hạng {{ $profile->license_class }}</span>
-                </div>
-                <div class="d-flex justify-content-between align-items-center">
-                    <span class="text-muted small">Hết hạn</span>
-                    <span class="small">
-                        {{ $profile->license_expiry->format('d/m/Y') }}
-                        @if($profile->license_expiry->isPast())
-                            <span class="badge bg-danger ms-1">Hết hạn</span>
-                        @elseif($profile->license_expiry->diffInDays(now()) < 60)
-                            <span class="badge bg-warning text-dark ms-1">Sắp HH</span>
-                        @endif
-                    </span>
-                </div>
-                <div class="d-flex justify-content-between">
-                    <span class="text-muted small">Kinh nghiệm</span>
-                    <span class="small">{{ $profile->experience_years }} năm</span>
                 </div>
                 @if($profile->operator)
                 <div class="d-flex justify-content-between">
-                    <span class="text-muted small">Quản lý bởi</span>
-                    <span class="small fw-semibold">{{ $profile->operator->name }}</span>
-                </div>
-                @endif
-                @if($profile->notes)
-                <div>
-                    <span class="text-muted small d-block">Ghi chú</span>
-                    <div class="small text-muted">{{ $profile->notes }}</div>
+                    <span class="text-muted">Quản lý</span>
+                    <span>{{ $profile->operator->name }}</span>
                 </div>
                 @endif
             </div>
-
-            {{-- Ảnh hồ sơ --}}
-            <hr class="my-3">
-            <h6 class="text-muted mb-2 small fw-semibold">HỒ SƠ & GIẤY TỜ</h6>
-
-            {{-- CCCD 2 mặt --}}
-            <div class="mb-2">
-                <div class="small text-muted mb-1">Căn cước công dân</div>
-                <div class="d-flex gap-2">
-                    @foreach(['photo_id_card' => 'Mặt trước', 'photo_id_card_back' => 'Mặt sau'] as $col => $lbl)
-                        @if($profile->{$col})
-                            <div>
-                                <a href="{{ $profile->photoUrl($col) }}" target="_blank">
-                                    <img src="{{ $profile->photoUrl($col) }}" alt="{{ $lbl }}"
-                                         class="rounded border object-fit-cover" style="width:88px;height:56px;"
-                                         title="{{ $lbl }}">
-                                </a>
-                                <div class="text-muted" style="font-size:.65rem;text-align:center;">{{ $lbl }}</div>
-                            </div>
-                        @else
-                            <div class="rounded border bg-light d-flex flex-column align-items-center justify-content-center text-muted"
-                                 style="width:88px;height:56px;font-size:.65rem;">{{ $lbl }}</div>
-                        @endif
-                    @endforeach
-                </div>
-            </div>
-
-            {{-- Ảnh xe --}}
-            @php $vehicleUrls = $profile->vehiclePhotoUrls(); @endphp
-            @if(count($vehicleUrls))
-            <div>
-                <div class="small text-muted mb-1">Ảnh xe ({{ count($vehicleUrls) }})</div>
-                <div class="d-flex gap-2 flex-wrap">
-                    @foreach($vehicleUrls as $i => $url)
-                        <a href="{{ $url }}" target="_blank">
-                            <img src="{{ $url }}" alt="Xe {{ $i+1 }}"
-                                 class="rounded border object-fit-cover" style="width:72px;height:48px;">
-                        </a>
-                    @endforeach
-                </div>
-            </div>
-            @endif
-
+            <a href="{{ route('driver.profile') }}" class="btn btn-outline-primary btn-sm w-100">
+                Cập nhật hồ sơ & ảnh →
+            </a>
             @else
-            <div class="alert alert-warning mt-3 mb-0 py-2 small">
-                Chưa có hồ sơ tài xế. Liên hệ quản lý để được cập nhật.
+            <div class="alert alert-warning py-2 small mb-0">
+                Chưa có hồ sơ tài xế. Liên hệ quản lý.
             </div>
             @endif
         </div>
 
-        {{-- Trạng thái hoạt động --}}
         @if($profile)
         <div class="card shadow-sm p-4">
             <h5 class="card-title-bar mb-3">Trạng thái hoạt động</h5>
@@ -182,8 +97,40 @@
         @endif
     </div>
 
-    {{-- Cột phải: lịch chạy --}}
+    {{-- Cột phải: yêu cầu + lịch chạy --}}
     <div class="col-lg-8">
+        <div class="card shadow-sm p-4 mb-4" id="pending-requests-panel">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4 class="card-title-bar mb-0">Yêu cầu nhận chuyến</h4>
+                <small class="text-muted" id="driver-sync-indicator">Đang cập nhật...</small>
+            </div>
+            @if($pendingRequests->isEmpty())
+                <p class="text-muted mb-0" id="no-pending-msg">Không có yêu cầu mới.</p>
+            @else
+                <div class="d-flex flex-column gap-3" id="pending-requests-list">
+                    @foreach($pendingRequests as $req)
+                    <div class="border border-warning rounded-3 p-3 bg-warning-subtle">
+                        <div class="d-flex justify-content-between flex-wrap gap-2">
+                            <div>
+                                <strong>{{ $req->schedule->route->departure }} → {{ $req->schedule->route->destination }}</strong><br>
+                                <span class="text-muted small">{{ $req->schedule->departure_time->format('H:i · d/m/Y') }}</span><br>
+                                <span class="small">Khách: <strong>{{ $req->customer->name }}</strong> · {{ $req->customer->phone ?? '—' }}</span>
+                            </div>
+                            <div class="d-flex gap-2 align-items-center">
+                                <form method="POST" action="{{ route('driver.tripRequests.accept', $req) }}">@csrf
+                                    <button class="btn btn-success btn-sm">Nhận chuyến</button>
+                                </form>
+                                <form method="POST" action="{{ route('driver.tripRequests.reject', $req) }}">@csrf
+                                    <button class="btn btn-outline-danger btn-sm">Từ chối</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    @endforeach
+                </div>
+            @endif
+        </div>
+
         <div class="card shadow-sm p-4">
             <h4 class="card-title-bar mb-3">Lịch chạy của tôi</h4>
             @if($schedules->isEmpty())
@@ -208,8 +155,8 @@
                             </div>
                             <div class="col-md-3">
                                 <span class="text-muted small d-block">Đã đặt</span>
-                                <strong>{{ $s->vehicle->capacity - $s->available_seats }}</strong>
-                                <span class="text-muted">/ {{ $s->vehicle->capacity }} ghế</span>
+                                <strong>{{ $s->bookedSeatsCount() }}</strong>
+                                <span class="text-muted">/ {{ $s->capacity() }} ghế</span>
                             </div>
                             <div class="col-md-2 text-end">
                                 <span class="badge bg-{{ match($s->status) {
@@ -228,6 +175,47 @@
                                 </span>
                             </div>
                         </div>
+
+                        @if($s->bookings->isNotEmpty())
+                        <hr class="my-2">
+                        <div class="small">
+                            <span class="text-muted fw-semibold">Hành khách ({{ $s->bookings->count() }}):</span>
+                            <div class="d-flex flex-column gap-2 mt-2">
+                                @foreach($s->bookings as $booking)
+                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 rounded-2 px-3 py-2 border {{ $booking->isConfirmedForDriver() ? 'bg-success-subtle border-success' : 'bg-white' }}">
+                                    <div>
+                                        <strong>{{ $booking->customer->name }}</strong>
+                                        <span class="text-muted"> · {{ $booking->customer->phone ?? '—' }}</span><br>
+                                        <span class="text-muted">Ghế {{ implode(', ', (array) $booking->seat_numbers) }}</span>
+                                        @if($booking->pickup_address)
+                                            · <span class="text-muted">Đón: {{ $booking->pickup_address }}</span>
+                                        @endif
+                                        @if($booking->dropoff_address)
+                                            · <span class="text-muted">Trả: {{ $booking->dropoff_address }}</span>
+                                        @endif
+                                    </div>
+                                    <div class="text-end">
+                                        @include('partials.booking-status', ['booking' => $booking])
+                                        @if($booking->trip_status === 'confirmed')
+                                            <form method="POST" action="{{ route('driver.bookings.complete', $booking) }}" class="mt-1"
+                                                onsubmit="return confirm('Báo hoàn thành chuyến cho khách {{ $booking->customer->name }}?')">
+                                                @csrf
+                                                <button class="btn btn-sm btn-outline-success">Báo hoàn thành chuyến</button>
+                                            </form>
+                                        @elseif($booking->trip_status === 'awaiting_completion')
+                                            <span class="badge bg-info text-dark mt-1">Chờ khách xác nhận</span>
+                                        @elseif($booking->trip_status === 'completed')
+                                            <span class="badge bg-success mt-1">Đã hoàn tất</span>
+                                        @endif
+                                    </div>
+                                </div>
+                                @endforeach
+                            </div>
+                        </div>
+                        @else
+                        <hr class="my-2">
+                        <p class="text-muted small mb-0">Chưa có hành khách đặt vé cho chuyến này.</p>
+                        @endif
                     </div>
                     @endforeach
                 </div>
@@ -236,3 +224,37 @@
     </div>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+(function () {
+    var syncUrl = @json(route('driver.liveSync'));
+    function poll() {
+        fetch(syncUrl, { headers: { 'Accept': 'application/json' } })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                var el = document.getElementById('driver-sync-indicator');
+                if (el) el.textContent = 'Cập nhật: ' + new Date().toLocaleTimeString('vi-VN');
+                var list = document.getElementById('pending-requests-list');
+                var empty = document.getElementById('no-pending-msg');
+                if (!data.pending_requests.length) {
+                    if (list) list.innerHTML = '';
+                    if (empty) empty.style.display = 'block';
+                    return;
+                }
+                if (empty) empty.style.display = 'none';
+                if (!list) return;
+                list.innerHTML = data.pending_requests.map(function (req) {
+                    return '<div class="border border-warning rounded-3 p-3 bg-warning-subtle">' +
+                        '<strong>' + req.route + '</strong><br>' +
+                        '<span class="text-muted small">' + req.departure_time + '</span><br>' +
+                        '<span class="small">Khách: <strong>' + req.customer_name + '</strong></span>' +
+                        '<div class="mt-2"><span class="badge bg-warning text-dark">Chờ bạn phản hồi</span></div></div>';
+                }).join('');
+            }).catch(function () {});
+    }
+    poll();
+    setInterval(poll, 10000);
+})();
+</script>
+@endpush

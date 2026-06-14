@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VinaRoute</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>{{ config('app.name') }}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -25,7 +26,6 @@
         }
         .form-control::placeholder { color: #8898aa; }
         .card-title-bar { border-left: 4px solid #0d6efd; padding-left: .75rem; }
-        /* Active nav link */
         .nav-link.active-page {
             color: #0d6efd !important;
             font-weight: 600;
@@ -37,7 +37,7 @@
 <body>
 <nav class="navbar navbar-expand-lg bg-white border-bottom shadow-sm">
     <div class="container">
-        <a class="navbar-brand text-primary" href="{{ url('/') }}">VinaRoute</a>
+        <a class="navbar-brand text-primary" href="{{ url('/') }}">{{ config('app.name') }}</a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
             aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>
@@ -47,7 +47,6 @@
                 @auth
                     @php $role = auth()->user()->role; @endphp
 
-                    {{-- Customer --}}
                     @if($role === 'customer')
                         <li class="nav-item">
                             <a class="nav-link {{ request()->routeIs('customer.dashboard') ? 'active-page' : '' }}"
@@ -55,15 +54,17 @@
                         </li>
                     @endif
 
-                    {{-- Driver --}}
                     @if($role === 'driver')
                         <li class="nav-item">
                             <a class="nav-link {{ request()->routeIs('driver.dashboard') ? 'active-page' : '' }}"
-                               href="{{ route('driver.dashboard') }}">Lịch của tôi</a>
+                               href="{{ route('driver.dashboard') }}">Lịch chạy</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {{ request()->routeIs('driver.profile*') ? 'active-page' : '' }}"
+                               href="{{ route('driver.profile') }}">Hồ sơ tài xế</a>
                         </li>
                     @endif
 
-                    {{-- Operator --}}
                     @if($role === 'operator')
                         <li class="nav-item">
                             <a class="nav-link {{ request()->routeIs('operator.dashboard') ? 'active-page' : '' }}"
@@ -71,11 +72,17 @@
                         </li>
                         <li class="nav-item">
                             <a class="nav-link {{ request()->routeIs('operator.drivers*') ? 'active-page' : '' }}"
-                               href="{{ route('operator.drivers') }}">Quản lý tài xế</a>
+                               href="{{ route('operator.drivers') }}">Danh sách tài xế</a>
                         </li>
                     @endif
 
-                    {{-- Admin --}}
+                    @if($role === 'admin')
+                        <li class="nav-item">
+                            <a class="nav-link {{ request()->routeIs('operator.drivers*') ? 'active-page' : '' }}"
+                               href="{{ route('operator.drivers') }}">Danh sách tài xế</a>
+                        </li>
+                    @endif
+
                     @if($role === 'admin')
                         <li class="nav-item">
                             <a class="nav-link {{ request()->routeIs('admin.dashboard') ? 'active-page' : '' }}"
@@ -125,31 +132,18 @@
 <footer class="bg-dark text-secondary mt-5 py-4 border-top">
     <div class="container">
         <div class="row g-4">
-            <div class="col-md-4">
-                <h6 class="text-white fw-bold mb-2">VinaRoute</h6>
+            <div class="col-md-6">
+                <h6 class="text-white fw-bold mb-2">{{ config('app.name') }}</h6>
                 <p class="small mb-0">Nền tảng đặt vé xe khách liên tỉnh cao cấp.</p>
             </div>
-            <div class="col-md-4">
-                <h6 class="text-white fw-bold mb-2">Tài khoản</h6>
-                @guest
-                    <p class="small mb-1"><a href="{{ route('login') }}" class="text-secondary text-decoration-none">Đăng nhập</a></p>
-                    <p class="small mb-0"><a href="{{ route('register') }}" class="text-secondary text-decoration-none">Đăng ký</a></p>
-                @else
-                    <p class="small mb-1 text-white">{{ auth()->user()->name }}</p>
-                    <form action="{{ route('logout') }}" method="POST" class="d-inline">
-                        @csrf
-                        <button class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:.8rem;">Đăng xuất</button>
-                    </form>
-                @endguest
-            </div>
-            <div class="col-md-4">
+            <div class="col-md-6">
                 <h6 class="text-white fw-bold mb-2">Liên hệ</h6>
-                <p class="small mb-1">Hotline: 1900-881-99</p>
-                <p class="small mb-0">Email: support@vinaroute.vn</p>
+                <p class="small mb-1">Hotline: {{ config('app.contact_phone') }}</p>
+                <p class="small mb-0">Email: {{ config('app.contact_email') }}</p>
             </div>
         </div>
         <hr class="border-secondary mt-4">
-        <p class="small text-center mb-0">© 2026 VinaRoute. All rights reserved.</p>
+        <p class="small text-center mb-0">© {{ date('Y') }} {{ config('app.name') }}. All rights reserved.</p>
     </div>
 </footer>
 

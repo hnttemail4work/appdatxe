@@ -52,9 +52,9 @@
                             <th>Tài xế</th>
                             <th>Ghế</th>
                             <th>Tổng tiền</th>
-                            <th>Thanh toán</th>
-                            <th>Booking</th>
+                            <th>Thanh toán / Booking</th>
                             <th>Ngày đặt</th>
+                            <th>Thao tác</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -82,23 +82,9 @@
                             </td>
                             <td class="small">{{ implode(', ', (array) $b->seat_numbers) }}</td>
                             <td class="fw-semibold">{{ number_format($b->total_price, 0, ',', '.') }} đ</td>
-                            <td>
-                                <span class="badge bg-{{ match($b->payment_status) {
-                                    'paid'=>'primary','refunded'=>'secondary',default=>'warning text-dark'
-                                } }}">
-                                    {{ match($b->payment_status) { 'paid'=>'Đã TT','refunded'=>'Hoàn tiền',default=>'Chưa TT' } }}
-                                </span>
-                            </td>
-                            <td>
-                                <span class="badge bg-{{ match($b->booking_status) {
-                                    'confirmed'=>'primary','cancelled','rejected'=>'danger',default=>'warning text-dark'
-                                } }}">
-                                    {{ match($b->booking_status) {
-                                        'confirmed'=>'Xác nhận','cancelled'=>'Đã hủy','rejected'=>'Từ chối',default=>'Chờ'
-                                    } }}
-                                </span>
-                            </td>
+                            <td>@include('partials.booking-status', ['booking' => $b])</td>
                             <td class="text-muted small">{{ $b->created_at->format('d/m/Y H:i') }}</td>
+                            <td>@include('partials.booking-actions', ['booking' => $b, 'routePrefix' => 'admin'])</td>
                         </tr>
                         @endforeach
                     </tbody>

@@ -3,15 +3,18 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
-use App\Models\MerchantProfile;
-use App\Models\User;
+use App\Services\RegistrationService;
+use App\Support\RoleDashboard;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 
 class AuthController extends Controller
 {
+    public function __construct(private readonly RegistrationService $registration)
+    {
+    }
+
     public function showLogin()
     {
         return view('auth.login');
@@ -36,58 +39,60 @@ class AuthController extends Controller
         }
 
         $role = Auth::user()->role;
-        $redirect = match($role) {
-            'admin'    => route('admin.dashboard'),
-            'operator' => route('operator.dashboard'),
-            'driver'   => route('driver.dashboard'),
-            default    => route('customer.dashboard'),
-        };
+        $redirect = RoleDashboard::route($role);
 
-        return redirect()->intended($redirect);
+        $intended = $request->session()->pull('url.intended');
+        if ($intended && RoleDashboard::urlAllowedForRole($intended, $role)) {
+            return redirect($intended);
+        }
+
+        return redirect($redirect);
     }
 
-    public function showRegister()
+    public function showRegister(Request $request)
     {
-        return view('auth.register');
+        $mode = old('register_mode', $request->query('mode', 'customer'));
+
+        if (! in_array($mode, ['customer', 'driver'], true)) {
+            $mode = 'customer';
+        }
+
+        return view('auth.register', compact('mode'));
     }
 
     public function register(Request $request)
     {
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
-            'phone' => ['nullable', 'string', 'max:30'],
-            'role' => ['required', Rule::in(['customer', 'operator'])],
-            'company_name' => ['nullable', 'string', 'max:255'],
-            'tax_code' => ['nullable', 'string', 'max:255'],
-        ]);
+        $mode = $request->input('register_mode', 'customer');
 
-        $user = User::query()->create([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'password' => Hash::make($validated['password']),
-            'phone' => $validated['phone'] ?? null,
-            'role' => $validated['role'],
-            'status' => $validated['role'] === 'operator' ? 'inactive' : 'active',
-        ]);
-
-        if ($user->role === 'operator') {
-            MerchantProfile::query()->create([
-                'user_id' => $user->id,
-                'company_name' => $validated['company_name'] ?? $user->name,
-                'tax_code' => $validated['tax_code'] ?? null,
-                'kyc_status' => 'pending',
-            ]);
+        if (! in_array($mode, ['customer', 'driver'], true)) {
+            return back()->withErrors(['register_mode' => 'Loại đăng ký không hợp lệ.'])->withInput();
         }
+
+        $rules = match ($mode) {
+            'driver' => $this->registration->driverRules(),
+            default  => $this->registration->customerRules(),
+        };
+
+        $validated = $request->validate(array_merge($rules, [
+            'register_mode' => ['required', Rule::in(['customer', 'driver'])],
+        ]));
+
+        $user = $mode === 'driver'
+            ? $this->registration->registerDriver($validated)
+            : $this->registration->registerCustomer($validated);
 
         if ($user->status === 'active') {
             Auth::login($user);
-            $redirect = $user->role === 'customer' ? route('customer.dashboard') : route('operator.dashboard');
-            return redirect($redirect)->with('success', 'Đăng ký thành công.');
+
+            return redirect(RoleDashboard::route($user->role))
+                ->with('success', 'Đăng ký thành công. Chào mừng bạn đến với ' . config('app.name') . '!');
         }
 
-        return redirect()->route('login')->with('success', 'Đăng ký thành công. Tài khoản đang chờ duyệt.');
+        $message = $mode === 'driver'
+            ? 'Đăng ký tài xế thành công. Hồ sơ đang chờ quản lý/admin phê duyệt trước khi đăng nhập.'
+            : 'Đăng ký thành công.';
+
+        return redirect()->route('login')->with('success', $message);
     }
 
     public function logout(Request $request)

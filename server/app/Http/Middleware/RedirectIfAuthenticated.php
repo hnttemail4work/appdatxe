@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\RoleDashboard;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -15,14 +16,7 @@ class RedirectIfAuthenticated
 
         foreach ($guards as $guard) {
             if (Auth::guard($guard)->check()) {
-                $role = Auth::guard($guard)->user()->role;
-                $redirect = match ($role) {
-                    'admin'    => route('admin.dashboard'),
-                    'operator' => route('operator.dashboard'),
-                    'driver'   => route('driver.dashboard'),
-                    default    => route('customer.dashboard'),
-                };
-                return redirect($redirect);
+                return redirect(RoleDashboard::route(Auth::guard($guard)->user()->role));
             }
         }
 

@@ -1,4 +1,4 @@
-// Fetch and inject CSRF token into form
+// Inject CSRF token into forms that POST to Laravel
 async function ensureCsrf(form) {
   try {
     const response = await fetch('/csrf-token');
@@ -22,122 +22,34 @@ async function ensureCsrf(form) {
   }
 }
 
-// Initialize form handlers when page loads
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   const loginForm = document.getElementById('loginForm');
   const registerForm = document.getElementById('registerForm');
   const profileForm = document.getElementById('profileForm');
 
-  // Login form handler
-  if (loginForm) {
-    loginForm.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const tokenOk = await ensureCsrf(loginForm);
-      
+  // Login/register: inject CSRF then submit natively so Laravel handles redirect by role
+  for (const form of [loginForm, registerForm]) {
+    if (!form) {
+      continue;
+    }
+
+    await ensureCsrf(form);
+
+    form.addEventListener('submit', async (event) => {
+      const tokenOk = await ensureCsrf(form);
       if (!tokenOk) {
-        alert('⚠️ Lỗi bảo mật, vui lòng thử lại!');
-        return;
+        event.preventDefault();
+        alert('Lỗi bảo mật, vui lòng thử lại!');
       }
-
-      const email = document.getElementById('loginEmail').value;
-      const password = document.getElementById('loginPassword').value;
-      const name = email.split('@')[0];
-      
-      try {
-        const formData = new FormData(loginForm);
-        const response = await fetch('/login', {
-          method: 'POST',
-          body: formData
-        });
-
-        if (response.ok) {
-          const session = { name, email };
-          localStorage.setItem('userSession', JSON.stringify(session));
-          alert('✅ Đăng nhập thành công!');
-          window.location.href = 'dashboard.html';
-        } else {
-          alert('❌ Email hoặc mật khẩu không đúng!');
-        }
-      } catch (error) {
-        console.error('Login error:', error);
-        alert('❌ Lỗi đăng nhập, vui lòng thử lại!');
-      }
+      // Allow native form POST — server redirects to the correct dashboard
     });
   }
 
-  // Register form handler
-  if (registerForm) {
-    registerForm.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const tokenOk = await ensureCsrf(registerForm);
-      
-      if (!tokenOk) {
-        alert('⚠️ Lỗi bảo mật, vui lòng thử lại!');
-        return;
-      }
-
-      const name = document.getElementById('regName').value;
-      const email = document.getElementById('regEmail').value;
-      const password = document.getElementById('regPassword').value;
-      const password2 = document.getElementById('regPassword2').value;
-      const phone = document.getElementById('regPhone').value;
-
-      if (password !== password2) {
-        alert('❌ Mật khẩu không trùng khớp!');
-        return;
-      }
-
-      try {
-        const formData = new FormData(registerForm);
-        const response = await fetch('/register', {
-          method: 'POST',
-          body: formData
-        });
-
-        if (response.ok) {
-          const session = { name, email, phone };
-          localStorage.setItem('userSession', JSON.stringify(session));
-          alert('✅ Đăng ký thành công!');
-          window.location.href = 'dashboard.html';
-        } else {
-          alert('❌ Email đã tồn tại hoặc có lỗi!');
-        }
-      } catch (error) {
-        console.error('Register error:', error);
-        alert('❌ Lỗi đăng ký, vui lòng thử lại!');
-      }
-    });
-  }
-
-  // Profile form handler
   if (profileForm) {
     profileForm.addEventListener('submit', async (event) => {
       event.preventDefault();
-      const tokenOk = await ensureCsrf(profileForm);
-      
-      if (!tokenOk) {
-        alert('⚠️ Lỗi bảo mật, vui lòng thử lại!');
-        return;
-      }
-
-      const name = document.getElementById('profileName').value;
-      const email = document.getElementById('profileEmail').value;
-      const phone = document.getElementById('profilePhone').value;
-      
-      const session = {
-        name: name,
-        email: email,
-        phone: phone
-      };
-      
-      try {
-        // Save to localStorage for now (client-side)
-        localStorage.setItem('userSession', JSON.stringify(session));
-        alert('✅ Cập nhật thành công!');
-      } catch (error) {
-        console.error('Profile update error:', error);
-        alert('❌ Lỗi cập nhật, vui lòng thử lại!');
-      }
+      alert('Vui lòng cập nhật thông tin tại trang Dashboard Laravel (/customer/dashboard).');
+      window.location.href = '/dashboard';
     });
   }
 });

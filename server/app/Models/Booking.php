@@ -52,6 +52,18 @@ class Booking extends Model
         return $this->hasMany(PaymentTransaction::class);
     }
 
+    public function hasPendingPaymentClaim(): bool
+    {
+        return $this->paymentTransactions()->where('status', 'pending')->exists();
+    }
+
+    public function isConfirmedForDriver(): bool
+    {
+        return $this->booking_status === 'confirmed'
+            && $this->payment_status === 'paid'
+            && $this->trip_status === 'confirmed';
+    }
+
     public function seatReservations()
     {
         return $this->hasMany(SeatReservation::class);

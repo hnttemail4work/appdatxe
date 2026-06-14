@@ -12,7 +12,8 @@
             </p>
             @guest
                 <a href="{{ route('login') }}" class="btn btn-light text-primary fw-bold me-2">Bắt đầu đặt vé</a>
-                <a href="{{ route('register') }}" class="btn btn-outline-light">Đăng ký miễn phí</a>
+                <a href="{{ route('register', ['mode' => 'customer']) }}" class="btn btn-outline-light">Đăng ký khách hàng</a>
+                <a href="{{ route('register', ['mode' => 'driver']) }}" class="btn btn-outline-light ms-2">Đăng ký tài xế</a>
             @else
                 @php $role = auth()->user()->role; @endphp
                 @if($role === 'customer')
@@ -36,7 +37,7 @@
 {{-- Search card --}}
 <div class="card shadow-sm p-4 mb-5" style="margin-top: -40px; position:relative; z-index:10;">
     <h5 class="fw-bold mb-4">Tìm chuyến xe</h5>
-    <form action="{{ auth()->check() ? route('customer.dashboard') : route('login') }}" method="GET">
+    <form action="{{ auth()->check() ? route('trips.search') : route('login') }}" method="GET">
         <div class="row g-3 align-items-end">
             <div class="col-md-3">
                 <label class="form-label">Điểm đi</label>
@@ -88,16 +89,16 @@
                 <span class="badge bg-primary">{{ $price }}</span>
             </div>
             <p class="text-muted mb-3" style="font-size:.9rem;">{{ $desc }}</p>
-            <a href="{{ auth()->check() ? route('customer.dashboard') : route('login') }}"
+            <a href="{{ auth()->check() ? route('dashboard') : route('login') }}"
                class="btn btn-sm btn-outline-primary mt-auto">Đặt vé</a>
         </div>
     </div>
     @endforeach
 </div>
 
-{{-- Why VinaRoute --}}
+{{-- Why Tam Long Limo --}}
 <div class="row g-4 mb-5">
-    <div class="col-12"><h4 class="fw-bold">Tại sao chọn VinaRoute?</h4></div>
+    <div class="col-12"><h4 class="fw-bold">Tại sao chọn {{ config('app.name') }}?</h4></div>
     @foreach([
         ['🪑', 'Chọn ghế linh hoạt', 'Chọn đúng ghế bạn muốn, hệ thống giữ ghế 15 phút trong khi thanh toán.'],
         ['💳', 'Thanh toán đơn giản', 'Xác nhận đặt vé và thanh toán toàn bộ, nhận mã vé ngay lập tức.'],

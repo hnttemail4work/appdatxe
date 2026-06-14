@@ -32,7 +32,8 @@ Route::middleware(['auth:sanctum', 'role:customer'])->prefix('customer')->group(
     Route::patch('bookings/{booking}', [BookingController::class, 'update']);
     Route::delete('bookings/{booking}', [BookingController::class, 'destroy']);
     Route::get('bookings/{booking}/deposit-payload', [BookingController::class, 'depositPayload']);
-    Route::post('bookings/{booking}/confirm-payment', [BookingController::class, 'confirmPayment']);
+    Route::post('bookings/{booking}/claim-payment', [BookingController::class, 'claimPayment']);
+    Route::post('bookings/{booking}/confirm-complete', [BookingController::class, 'confirmTripComplete']);
 });
 
 Route::middleware(['auth:sanctum', 'role:operator,admin'])->prefix('operator')->group(function (): void {
@@ -41,8 +42,13 @@ Route::middleware(['auth:sanctum', 'role:operator,admin'])->prefix('operator')->
     Route::get('schedules/{schedule}/seat-grid', [ScheduleController::class, 'seatGrid']);
     Route::get('passengers', [PassengerController::class, 'index']);
 
+    Route::post('bookings/{booking}/confirm-payment', [BookingController::class, 'operatorConfirmPayment']);
     Route::post('bookings/{booking}/accept', [BookingController::class, 'accept']);
     Route::post('bookings/{booking}/reject', [BookingController::class, 'reject']);
+});
+
+Route::middleware(['auth:sanctum', 'role:driver'])->prefix('driver')->group(function (): void {
+    Route::post('bookings/{booking}/complete', [BookingController::class, 'driverCompleteTrip']);
 });
 
 Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(function (): void {
