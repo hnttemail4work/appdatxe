@@ -5,131 +5,163 @@ namespace App\Services;
 use App\Models\Schedule;
 use App\Models\ScheduleTemplate;
 use App\Models\SeatReservation;
+use App\Models\DriverTripRequest;
+use App\Services\DriverMissedTripService;
+use App\Support\TripCode;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
 
 class ScheduleLifecycleService
 {
-    public function __construct(private readonly DriverAssignmentService $driverAssignment)
-    {
-    }
-
-    /** Đồng bộ chuyến theo ngày: tạo instance, cập nhật trạng thái, dọn ghế hết hạn. */
+    /** Dọn ghế hết hạn và cập nhật chuyến đã có khách đặt. Không tạo lịch chạy hằng ngày. */
     public function sync(?Carbon $reference = null): void
     {
         $now = $reference ?? now();
-        $today = $now->copy()->startOfDay();
 
         $this->expireStaleHolds();
-        $this->ensureDailyInstances($today);
-        $this->ensureDailyInstances($today->copy()->addDay());
-        $this->completePastDays($today);
+        app(BookingWorkflowService::class)->expireStaleBookings();
+        $this->expireStaleDriverRequests();
+        $this->backfillExpectedArrivals();
+        $this->cancelEmptyStaleSchedules($now);
         $this->advanceStatuses($now);
-        $this->driverAssignment->autoAssignUnassigned();
     }
 
-    public function ensureDailyInstances(Carbon $date): void
+    /** Tạo hoặc tái sử dụng chuyến theo nhu cầu khi khách đặt vé. */
+    public function resolveScheduleForBooking(
+        ScheduleTemplate $template,
+        string $serviceDate,
+        ?string $preferredTime = null,
+    ): Schedule {
+        $template->loadMissing(['vehicle', 'route']);
+        $date = Carbon::parse($serviceDate)->startOfDay();
+
+        $departure = $preferredTime
+            ? Carbon::parse($serviceDate . ' ' . $preferredTime, config('app.timezone'))
+            : $template->departureAt($date);
+
+        if ($departure <= now()) {
+            abort(422, 'Thời gian khởi hành phải ở tương lai.');
+        }
+
+        $schedule = Schedule::query()
+            ->where('template_id', $template->id)
+            ->whereDate('service_date', $serviceDate)
+            ->where('departure_time', $departure)
+            ->where('status', 'scheduled')
+            ->where('departure_time', '>', now())
+            ->first();
+
+        if ($schedule) {
+            return $schedule;
+        }
+
+        return Schedule::query()->create([
+            'template_id'         => $template->id,
+            'route_id'            => $template->route_id,
+            'vehicle_id'          => $template->vehicle_id,
+            'driver_id'           => null,
+            'driver_name'         => 'Chờ phân bổ',
+            'departure_time'      => $departure,
+            'expected_arrival_at' => $template->expectedArrivalAt($date),
+            'seat_price'          => $template->seat_price,
+            'whole_car_price'     => $template->whole_car_price,
+            'service_date'        => $serviceDate,
+            'available_seats'     => $template->vehicle->capacity,
+            'status'              => 'scheduled',
+            'trip_code'           => TripCode::generate(),
+        ]);
+    }
+
+    private function backfillExpectedArrivals(): void
     {
-        $serviceDate = $date->toDateString();
-
-        ScheduleTemplate::query()
-            ->where('status', 'active')
-            ->with('vehicle')
-            ->each(function (ScheduleTemplate $template) use ($date, $serviceDate): void {
-                $vehicle = $template->vehicle;
-                if (! $vehicle) {
-                    return;
-                }
-
-                $timeStr = is_string($template->departure_time)
-                    ? substr($template->departure_time, 0, 8)
-                    : $template->departure_time->format('H:i:s');
-
-                $departureAt = Carbon::parse($serviceDate . ' ' . $timeStr, config('app.timezone'));
-
-                Schedule::query()->firstOrCreate(
-                    [
-                        'template_id'  => $template->id,
-                        'service_date' => $serviceDate,
-                    ],
-                    [
-                        'route_id'        => $template->route_id,
-                        'vehicle_id'      => $template->vehicle_id,
-                        'driver_id'       => $template->driver_id,
-                        'driver_name'     => $template->driver_name ?: 'Chưa phân công',
-                        'departure_time'  => $departureAt,
-                        'available_seats' => $vehicle->capacity,
-                        'status'          => 'scheduled',
-                    ]
-                );
+        Schedule::query()
+            ->whereNull('expected_arrival_at')
+            ->whereNotNull('departure_time')
+            ->with('template')
+            ->each(function (Schedule $schedule): void {
+                $schedule->update([
+                    'expected_arrival_at' => $schedule->expectedArrivalAt(),
+                ]);
             });
     }
 
+    /** Chỉ chuyến đã có khách xác nhận mới tự chuyển trạng thái chạy / hoàn tất. */
     public function advanceStatuses(Carbon $now): void
     {
         Schedule::query()
             ->with('template')
             ->whereIn('status', ['scheduled', 'running'])
-            ->where('departure_time', '<=', $now->copy()->addDay())
+            ->whereNotNull('driver_id')
+            ->whereHas('bookings', fn ($q) => $q->whereNotIn('booking_status', ['cancelled', 'rejected']))
             ->each(function (Schedule $schedule) use ($now): void {
-                if ($schedule->status === 'scheduled' && $schedule->departure_time <= $now) {
-                    $schedule->update(['status' => 'running']);
-                }
+                if ($now >= $schedule->completesAt()) {
+                    if ($schedule->status !== 'completed') {
+                        $schedule->update(['status' => 'completed']);
+                        app(BookingWorkflowService::class)->finalizeTripsAfterScheduleEnd($schedule);
+                    }
 
-                if ($schedule->fresh()->status !== 'running') {
                     return;
                 }
 
-                $durationMinutes = $schedule->template?->duration_minutes ?? 720;
-                $completeAt = $schedule->departure_time->copy()->addMinutes($durationMinutes);
-                $endOfServiceDay = $schedule->departure_time->copy()->endOfDay();
-                $deadline = $completeAt->lessThan($endOfServiceDay) ? $completeAt : $endOfServiceDay;
-
-                if ($now >= $deadline) {
-                    $schedule->update(['status' => 'completed']);
+                if ($schedule->status === 'scheduled' && $schedule->departure_time <= $now) {
+                    $schedule->update(['status' => 'running']);
                 }
             });
-
-        $this->syncLegacySchedules($now);
     }
 
-    public function completePastDays(Carbon $today): void
+    /** Hủy chuyến tạo theo nhu cầu nhưng không còn vé hợp lệ. */
+    private function cancelEmptyStaleSchedules(Carbon $now): void
     {
         Schedule::query()
-            ->whereNotNull('service_date')
-            ->where('service_date', '<', $today->toDateString())
-            ->whereIn('status', ['scheduled', 'running'])
-            ->update(['status' => 'completed']);
-    }
-
-    private function syncLegacySchedules(Carbon $now): void
-    {
-        Schedule::query()
-            ->whereNull('template_id')
             ->where('status', 'scheduled')
-            ->where('departure_time', '<=', $now)
-            ->update(['status' => 'running']);
-
-        Schedule::query()
-            ->whereNull('template_id')
-            ->where('status', 'running')
-            ->where('departure_time', '<', $now->copy()->subHours(12))
-            ->update(['status' => 'completed']);
+            ->whereDoesntHave('bookings', fn ($q) => $q->whereNotIn('booking_status', ['cancelled', 'rejected']))
+            ->where('departure_time', '<', $now)
+            ->update(['status' => 'cancelled']);
     }
 
     private function expireStaleHolds(): void
     {
+        $scheduleIds = SeatReservation::query()
+            ->where('status', 'held')
+            ->whereNotNull('expires_at')
+            ->where('expires_at', '<=', now())
+            ->pluck('schedule_id')
+            ->unique();
+
         SeatReservation::query()
             ->where('status', 'held')
             ->whereNotNull('expires_at')
             ->where('expires_at', '<=', now())
-            ->update(['status' => 'expired']);
+            ->delete();
 
-        Schedule::query()
-            ->whereHas('seatReservations', fn ($q) => $q->where('status', 'expired'))
-            ->each(function (Schedule $schedule): void {
-                app(BookingWorkflowService::class)->syncScheduleAvailability($schedule);
-            });
+        if ($scheduleIds->isNotEmpty()) {
+            Schedule::query()
+                ->whereIn('id', $scheduleIds)
+                ->with(['vehicle', 'seatReservations'])
+                ->each(function (Schedule $schedule): void {
+                    app(BookingWorkflowService::class)->syncScheduleAvailability($schedule);
+                });
+        }
+    }
+
+    private function expireStaleDriverRequests(): void
+    {
+        app(DriverMissedTripService::class)->processExpiredPendingRequests();
+    }
+
+    /** Xóa ghế đã hết hạn / đã nhả để có thể đặt lại cùng schedule + số ghế. */
+    public function purgeInactiveSeatReservations(Schedule $schedule, array $seatNumbers): void
+    {
+        if ($seatNumbers === []) {
+            return;
+        }
+
+        $normalized = array_map(fn ($seat): string => (string) $seat, $seatNumbers);
+
+        SeatReservation::query()
+            ->where('schedule_id', $schedule->id)
+            ->whereIn('seat_number', $normalized)
+            ->whereIn('status', ['expired', 'released'])
+            ->delete();
     }
 
     /** @return array<int, string> seat_number => status (held|booked) */

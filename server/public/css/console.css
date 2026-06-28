@@ -1,0 +1,457 @@
+/* Tam Long Limo — Operator / Admin Console UI */
+:root {
+    --tl-primary: #1e40af;
+    --tl-primary-light: #3b82f6;
+    --tl-accent: #0ea5e9;
+    --tl-surface: #f8fafc;
+    --tl-border: #e2e8f0;
+    --tl-text-muted: #64748b;
+    --tl-success: #059669;
+    --tl-warning: #d97706;
+    --tl-danger: #dc2626;
+}
+
+.console-page {
+    --bs-primary: var(--tl-primary);
+    --bs-primary-rgb: 30, 64, 175;
+}
+
+/* Page shell — tránh tràn ngang/dọc */
+.console-page {
+    margin: 0;
+    padding-bottom: 1rem;
+    max-width: 100%;
+    overflow-x: clip;
+}
+
+body:has(.console-page) {
+    background: linear-gradient(180deg, #eef2ff 0%, #f8fafc 40%, #f0f4ff 100%);
+    overflow-x: hidden;
+}
+
+/* Hero */
+.console-hero {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 45%, #2563eb 100%);
+    border-radius: 1.25rem;
+    color: #fff;
+    padding: 1.5rem 1.75rem;
+    margin-bottom: 1.5rem;
+    position: relative;
+    overflow: hidden;
+}
+.console-hero::before {
+    content: '';
+    position: absolute;
+    right: -3rem;
+    top: -3rem;
+    width: 14rem;
+    height: 14rem;
+    background: rgba(255, 255, 255, .06);
+    border-radius: 50%;
+}
+.console-hero::after {
+    content: '';
+    position: absolute;
+    right: 4rem;
+    bottom: -4rem;
+    width: 8rem;
+    height: 8rem;
+    background: rgba(14, 165, 233, .15);
+    border-radius: 50%;
+}
+.console-hero-inner {
+    position: relative;
+    z-index: 1;
+}
+.console-hero h1 {
+    font-size: 1.45rem;
+    font-weight: 800;
+    margin-bottom: .35rem;
+    letter-spacing: -.02em;
+}
+.console-hero p {
+    opacity: .88;
+    font-size: .9rem;
+    margin-bottom: 0;
+    max-width: 36rem;
+}
+.console-hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    align-items: center;
+}
+.console-hero-actions .btn {
+    font-weight: 600;
+    border-radius: .5rem;
+}
+.console-hero-actions .btn-light {
+    color: var(--tl-primary);
+}
+
+/* QR share modal — canvas không chặn click nút Copy */
+.share-qr-canvas img,
+.share-qr-canvas canvas {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    pointer-events: none;
+}
+.share-qr-modal .share-url-input {
+    font-size: .75rem;
+}
+.console-breadcrumb {
+    font-size: .75rem;
+    opacity: .75;
+    margin-bottom: .5rem;
+}
+.console-breadcrumb a {
+    color: rgba(255, 255, 255, .9);
+    text-decoration: none;
+}
+.console-breadcrumb a:hover {
+    text-decoration: underline;
+}
+
+/* Stat cards */
+.console-stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+@media (min-width: 768px) {
+    .console-stats { grid-template-columns: repeat(4, 1fr); }
+}
+.console-stat {
+    background: #fff;
+    border: 1px solid var(--tl-border);
+    border-radius: 1rem;
+    padding: 1.1rem 1.25rem;
+    display: flex;
+    align-items: flex-start;
+    gap: .85rem;
+    box-shadow: 0 2px 12px rgba(15, 23, 42, .04);
+    transition: box-shadow .2s, transform .2s;
+    min-width: 0;
+}
+.console-stat:hover {
+    box-shadow: 0 6px 20px rgba(15, 23, 42, .08);
+    transform: translateY(-1px);
+}
+.console-stat-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: .65rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.15rem;
+    flex-shrink: 0;
+}
+.console-stat-icon.primary { background: #eff6ff; }
+.console-stat-icon.success { background: #ecfdf5; }
+.console-stat-icon.warning { background: #fffbeb; }
+.console-stat-icon.info    { background: #f0f9ff; }
+.console-stat-icon.danger  { background: #fef2f2; }
+.console-stat-value {
+    font-size: 1.25rem;
+    font-weight: 800;
+    line-height: 1.2;
+    color: #0f172a;
+    word-break: break-word;
+}
+.console-stat > div:last-child {
+    min-width: 0;
+    flex: 1;
+}
+@media (max-width: 767px) {
+    .console-stat {
+        padding: .85rem 1rem;
+    }
+    .console-stat-value {
+        font-size: 1.05rem;
+    }
+}
+.console-stat-label {
+    font-size: .72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--tl-text-muted);
+    margin-top: .15rem;
+}
+
+/* Panels — KHÔNG height:100% mặc định (gây tràn khi xếp nhiều panel/cột) */
+.console-panel {
+    background: #fff;
+    border: 1px solid var(--tl-border);
+    border-radius: 1rem;
+    box-shadow: 0 4px 24px rgba(15, 23, 42, .05);
+    overflow: hidden;
+    max-width: 100%;
+}
+.console-panel.h-100,
+.console-panel.console-panel-stretch {
+    height: 100%;
+}
+.console-page .row > [class*="col-"] {
+    min-width: 0;
+}
+
+.console-page .row {
+    align-items: flex-start;
+}
+.console-panel-head {
+    padding: 1.15rem 1.35rem;
+    border-bottom: 1px solid var(--tl-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+.console-panel-head h2,
+.console-panel-head h3,
+.console-panel-head h4,
+.console-panel-head h5 {
+    font-size: 1rem;
+    font-weight: 700;
+    margin: 0;
+    color: #0f172a;
+}
+.console-panel-head .subtitle {
+    font-size: .82rem;
+    color: var(--tl-text-muted);
+    margin: .25rem 0 0;
+}
+.console-panel-head-accent {
+    border-left: 4px solid var(--tl-primary-light);
+    padding-left: .75rem;
+}
+.console-panel-body {
+    padding: 1.35rem;
+}
+.console-panel-body.flush {
+    padding: 0;
+}
+
+/* Forms in console */
+.console-form .form-label {
+    font-size: .72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--tl-text-muted);
+    margin-bottom: .35rem;
+}
+.console-form .form-control,
+.console-form .form-select {
+    border-radius: .5rem;
+    border-color: var(--tl-border);
+    min-height: 42px;
+    font-weight: 500;
+}
+.console-form .form-control:focus,
+.console-form .form-select:focus {
+    border-color: var(--tl-primary-light);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, .15);
+}
+
+/* Data tables */
+.console-table-wrap {
+    overflow-x: auto;
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
+}
+.console-table {
+    width: 100%;
+    min-width: 640px;
+    margin-bottom: 0;
+    font-size: .875rem;
+    table-layout: auto;
+}
+.console-table thead th {
+    background: var(--tl-surface);
+    font-size: .68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--tl-text-muted);
+    border-bottom: 1px solid var(--tl-border);
+    padding: .75rem 1rem;
+    white-space: nowrap;
+}
+.console-table tbody td {
+    padding: .85rem 1rem;
+    vertical-align: middle;
+    border-bottom: 1px solid #f1f5f9;
+}
+.console-table tbody tr:last-child td {
+    border-bottom: none;
+}
+.console-table tbody tr:hover {
+    background: #f8fafc;
+}
+.console-table .cell-primary {
+    font-weight: 600;
+    color: #0f172a;
+}
+.console-table .cell-muted {
+    font-size: .78rem;
+    color: var(--tl-text-muted);
+}
+
+/* List items (fleet, merchants) */
+.console-list-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: .85rem 0;
+    border-bottom: 1px solid #f1f5f9;
+    gap: .75rem;
+    flex-wrap: wrap;
+}
+.console-list-item:last-child {
+    border-bottom: none;
+}
+.console-list-item-title {
+    font-weight: 600;
+    color: #0f172a;
+}
+.console-list-item-meta {
+    font-size: .8rem;
+    color: var(--tl-text-muted);
+}
+
+/* Alert banners */
+.console-alert {
+    border-radius: .75rem;
+    padding: .85rem 1rem;
+    font-size: .875rem;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-wrap: wrap;
+}
+.console-alert.warning {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    color: #92400e;
+}
+.console-alert.info {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1e40af;
+}
+
+/* Empty state */
+.console-empty {
+    text-align: center;
+    padding: 2.5rem 1.5rem;
+    color: var(--tl-text-muted);
+}
+.console-empty-icon {
+    font-size: 2.25rem;
+    margin-bottom: .75rem;
+    opacity: .6;
+}
+.console-empty p {
+    margin-bottom: 1rem;
+    font-size: .9rem;
+}
+
+/* Workflow hint */
+.console-workflow {
+    background: var(--tl-surface);
+    border: 1px dashed var(--tl-border);
+    border-radius: .65rem;
+    padding: .75rem 1rem;
+    font-size: .78rem;
+    color: var(--tl-text-muted);
+    line-height: 1.5;
+}
+
+/* Sidebar summary (driver edit) */
+.console-sidebar-card {
+    background: #fff;
+    border: 1px solid var(--tl-border);
+    border-radius: 1rem;
+    padding: 1.25rem;
+    box-shadow: 0 2px 12px rgba(15, 23, 42, .04);
+}
+.console-sidebar-card dt {
+    font-size: .68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--tl-text-muted);
+}
+.console-sidebar-card dd {
+    margin-bottom: .75rem;
+    font-size: .875rem;
+}
+
+/* Highlight panel (pending drivers) */
+.console-panel.highlight-warning {
+    border-color: #fde68a;
+    box-shadow: 0 4px 24px rgba(217, 119, 6, .08);
+}
+.console-panel.highlight-warning .console-panel-head {
+    background: linear-gradient(90deg, #fffbeb 0%, #fff 100%);
+}
+
+/* Badges refinement inside console */
+.console-page .badge {
+    font-weight: 600;
+    letter-spacing: .01em;
+}
+
+/* Sync indicator */
+.console-sync {
+    font-size: .75rem;
+    color: var(--tl-text-muted);
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+}
+.console-sync-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--tl-success);
+    animation: console-pulse 2s infinite;
+}
+@keyframes console-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .4; }
+}
+
+/* Merchant / pending cards */
+.console-entity-card {
+    border: 1px solid var(--tl-border);
+    border-radius: .85rem;
+    padding: 1rem 1.15rem;
+    background: var(--tl-surface);
+    transition: border-color .2s;
+}
+.console-entity-card:hover {
+    border-color: #cbd5e1;
+}
+
+/* Collapse edit row */
+.console-edit-row {
+    background: var(--tl-surface) !important;
+}
+.console-edit-row td {
+    padding: 1rem !important;
+}
+
+.console-table td:last-child .d-flex.flex-column {
+    flex-direction: row !important;
+    flex-wrap: wrap;
+    gap: .35rem !important;
+}
+.console-table td:last-child .btn {
+    width: auto !important;
+}

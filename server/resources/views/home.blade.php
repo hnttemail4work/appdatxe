@@ -5,25 +5,22 @@
     <div class="row align-items-center">
         <div class="col-lg-6">
             <h1 class="mb-3" style="font-size:2.2rem; font-weight:800; line-height:1.2;">
-                Đặt vé xe limousine &amp; ghế VIP liên tỉnh dễ dàng
+                Đặt vé xe liên tỉnh
             </h1>
             <p class="mb-4" style="font-size:1.05rem; opacity:.9;">
-                Tìm chuyến, chọn ghế, đặt vé — xác nhận trong vài phút. Hệ thống quản lý toàn diện cho khách hàng, tài xế và quản trị viên.
+                Tìm chuyến, chọn ghế, đặt vé nhanh.
             </p>
             @guest
-                <a href="{{ route('login') }}" class="btn btn-light text-primary fw-bold me-2">Bắt đầu đặt vé</a>
-                <a href="{{ route('register', ['mode' => 'customer']) }}" class="btn btn-outline-light">Đăng ký khách hàng</a>
-                <a href="{{ route('register', ['mode' => 'driver']) }}" class="btn btn-outline-light ms-2">Đăng ký tài xế</a>
+                <a href="{{ route('booking.index') }}" class="btn btn-light text-primary fw-bold me-2">Đặt vé ngay</a>
+                <a href="{{ route('register') }}" class="btn btn-outline-light">Đăng ký tài xế</a>
             @else
                 @php $role = auth()->user()->role; @endphp
-                @if($role === 'customer')
-                    <a href="{{ route('customer.dashboard') }}" class="btn btn-light text-primary fw-bold">Đặt vé ngay</a>
-                @elseif($role === 'operator')
-                    <a href="{{ route('operator.dashboard') }}" class="btn btn-light text-primary fw-bold">Vào Dashboard</a>
-                @elseif($role === 'driver')
-                    <a href="{{ route('driver.dashboard') }}" class="btn btn-light text-primary fw-bold">Xem lịch của tôi</a>
-                @elseif($role === 'admin')
-                    <a href="{{ route('admin.dashboard') }}" class="btn btn-light text-primary fw-bold">Quản trị hệ thống</a>
+                @if(in_array($role, ['operator', 'admin', 'driver'], true))
+                    <a href="{{ route($role === 'driver' ? 'driver.dashboard' : ($role === 'admin' ? 'admin.dashboard' : 'operator.dashboard')) }}" class="btn btn-light text-primary fw-bold">
+                        {{ $role === 'admin' ? 'Quản trị' : ($role === 'driver' ? 'Xem lịch của tôi' : 'Vào tổng quan') }}
+                    </a>
+                @else
+                    <a href="{{ route('booking.index') }}" class="btn btn-light text-primary fw-bold">Đặt vé ngay</a>
                 @endif
             @endguest
         </div>
@@ -37,24 +34,20 @@
 {{-- Search card --}}
 <div class="card shadow-sm p-4 mb-5" style="margin-top: -40px; position:relative; z-index:10;">
     <h5 class="fw-bold mb-4">Tìm chuyến xe</h5>
-    <form action="{{ auth()->check() ? route('trips.search') : route('login') }}" method="GET">
+    <form action="{{ route('trips.search') }}" method="GET">
         <div class="row g-3 align-items-end">
             <div class="col-md-3">
                 <label class="form-label">Điểm đi</label>
                 <select name="departure" class="form-select">
-                    <option value="">-- Chọn điểm đi --</option>
-                    @foreach(['TP.HCM','Hà Nội','Đà Nẵng','Cần Thơ','Hải Phòng','Vũng Tàu','Đà Lạt','Nha Trang','Mũi Né','Huế','Quy Nhơn','Buôn Ma Thuột'] as $p)
-                        <option value="{{ $p }}">{{ $p }}</option>
-                    @endforeach
+                    <option value="">Tất cả</option>
+                    @include('partials.province-options', ['selected' => request('departure', '')])
                 </select>
             </div>
             <div class="col-md-3">
                 <label class="form-label">Điểm đến</label>
                 <select name="destination" class="form-select">
-                    <option value="">-- Chọn điểm đến --</option>
-                    @foreach(['TP.HCM','Hà Nội','Đà Nẵng','Cần Thơ','Hải Phòng','Vũng Tàu','Đà Lạt','Nha Trang','Mũi Né','Huế','Quy Nhơn','Buôn Ma Thuột'] as $p)
-                        <option value="{{ $p }}">{{ $p }}</option>
-                    @endforeach
+                    <option value="">Tất cả</option>
+                    @include('partials.province-options', ['selected' => request('destination', '')])
                 </select>
             </div>
             <div class="col-md-3">
@@ -67,8 +60,7 @@
         </div>
         @guest
             <p class="text-muted mt-2 mb-0" style="font-size:.85rem;">
-                Chưa có tài khoản? <a href="{{ route('register') }}">Đăng ký</a> để đặt vé.
-                Đã có? <a href="{{ route('login') }}">Đăng nhập</a>.
+                Không cần tài khoản — <a href="{{ route('booking.index') }}">đặt ngay</a>.
             </p>
         @endguest
     </form>
@@ -89,7 +81,7 @@
                 <span class="badge bg-primary">{{ $price }}</span>
             </div>
             <p class="text-muted mb-3" style="font-size:.9rem;">{{ $desc }}</p>
-            <a href="{{ auth()->check() ? route('dashboard') : route('login') }}"
+            <a href="{{ route('booking.index') }}"
                class="btn btn-sm btn-outline-primary mt-auto">Đặt vé</a>
         </div>
     </div>
@@ -100,9 +92,9 @@
 <div class="row g-4 mb-5">
     <div class="col-12"><h4 class="fw-bold">Tại sao chọn {{ config('app.name') }}?</h4></div>
     @foreach([
-        ['🪑', 'Chọn ghế linh hoạt', 'Chọn đúng ghế bạn muốn, hệ thống giữ ghế 15 phút trong khi thanh toán.'],
-        ['💳', 'Thanh toán đơn giản', 'Xác nhận đặt vé và thanh toán toàn bộ, nhận mã vé ngay lập tức.'],
-        ['🔔', 'Quản lý đơn dễ dàng', 'Xem, xác nhận hoặc hủy vé bất kỳ lúc nào qua tài khoản cá nhân.'],
+        ['🪑', 'Chọn ghế linh hoạt', 'Chọn ghế theo ý bạn.'],
+        ['💳', 'Thanh toán đơn giản', 'Nhận mã vé ngay sau khi đặt.'],
+        ['🔔', 'Quản lý đơn dễ dàng', 'Quản lý vé trong tài khoản.'],
     ] as [$icon, $title, $desc])
     <div class="col-md-4 text-center">
         <div class="p-4 bg-white rounded-4 border h-100 shadow-sm">

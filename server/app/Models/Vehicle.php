@@ -11,8 +11,14 @@ class Vehicle extends Model
         'license_plate',
         'type',
         'capacity',
+        'photo_path',
         'status',
     ];
+
+    public function photoUrl(): ?string
+    {
+        return \App\Services\VehiclePhotoService::publicUrl($this->photo_path);
+    }
 
     protected function casts(): array
     {

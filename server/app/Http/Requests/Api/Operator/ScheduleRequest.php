@@ -8,7 +8,7 @@ class ScheduleRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->role === 'operator' || $this->user()?->role === 'admin';
+        return $this->user()?->role === 'operator';
     }
 
     public function rules(): array

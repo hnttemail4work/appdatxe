@@ -4,6 +4,12 @@ return [
     'name' => env('APP_NAME', 'Tam Long Limo'),
     'contact_phone' => env('APP_CONTACT_PHONE', '098.195.28.56'),
     'contact_email' => env('APP_CONTACT_EMAIL', 'tamlongtrans8888@gmail.com'),
+    'platform_bank' => [
+        'bank_name'    => env('PLATFORM_BANK_NAME', 'Vietcombank'),
+        'bank_bin'     => env('PLATFORM_BANK_BIN', '970436'),
+        'account'      => env('PLATFORM_BANK_ACCOUNT', '0123456789'),
+        'account_name' => env('PLATFORM_BANK_ACCOUNT_NAME', 'TAM LONG LIMO'),
+    ],
     'env' => env('APP_ENV', 'production'),
     'debug' => (bool) env('APP_DEBUG', false),
     'url' => env('APP_URL', 'http://localhost:8000'),

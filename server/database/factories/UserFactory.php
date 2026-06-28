@@ -19,7 +19,7 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'password' => Hash::make('password'),
             'phone' => fake()->phoneNumber(),
-            'role' => 'customer',
+            'role' => 'driver',
             'status' => 'active',
             'remember_token' => Str::random(10),
         ];

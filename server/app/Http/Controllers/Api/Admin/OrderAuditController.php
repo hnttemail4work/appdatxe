@@ -17,15 +17,8 @@ class OrderAuditController extends Controller
         $endDate = $request->input('end_date');
 
         $query = Booking::with([
-            'customer' => function ($query) {
-                $query->select('id', 'name', 'email', 'phone');
-            },
             'schedule' => function ($query) {
-                $query->with(['route' => function ($q) {
-                    $q->select('id', 'departure_city', 'destination_city');
-                }, 'vehicle' => function ($q) {
-                    $q->select('id', 'license_plate', 'type');
-                }]);
+                $query->with(['route', 'vehicle']);
             },
         ]);
 
@@ -62,9 +55,6 @@ class OrderAuditController extends Controller
     public function show(Request $request, Booking $booking)
     {
         $booking->load([
-            'customer' => function ($query) {
-                $query->select('id', 'name', 'email', 'phone', 'role', 'status');
-            },
             'schedule' => function ($query) {
                 $query->with(['route', 'vehicle']);
             },
@@ -85,9 +75,9 @@ class OrderAuditController extends Controller
             'success' => true,
             'data' => [
                 'id' => $booking->id,
-                'ticket_code' => $booking->ticket_code,
+                'trip_code' => $booking->schedule?->shortTripCode(),
                 'booking_reference' => $booking->booking_reference,
-                'customer' => $booking->customer,
+                'contact_phone' => $booking->contact_phone,
                 'schedule' => $booking->schedule,
                 'seat_numbers' => json_decode($booking->seat_numbers, true),
                 'reserved_seats' => $booking->seatReservations,

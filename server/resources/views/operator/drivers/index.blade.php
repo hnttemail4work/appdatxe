@@ -1,119 +1,115 @@
-@extends('layouts.app')
+@extends('layouts.console')
 
-@section('content')
-<div class="row g-4">
-    <div class="col-12 d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div>
-            <h3 class="mb-0 card-title-bar">Quản lý tài xế</h3>
-            <p class="text-muted mb-0">Danh sách tài xế — bấm Sửa để chỉnh thông tin hoặc upload ảnh.</p>
+@section('console')
+@php
+$drivers = $drivers->sortBy(fn ($d) => $d->isPendingApproval() ? 0 : 1)->values();
+@endphp
+
+<div class="console-panel">
+    <div class="console-panel-body">
+        @include('partials.operator-nav-tabs', ['active' => 'drivers'])
+
+@if($drivers->isEmpty())
+        <div class="console-empty py-5">
+            <div class="console-empty-icon">👤</div>
+            <p class="mb-0">Chưa có tài xế.</p>
         </div>
-        <div class="d-flex gap-2">
-            <a href="{{ route('operator.drivers.create') }}" class="btn btn-primary btn-sm">+ Thêm tài xế</a>
-            <a href="{{ route(auth()->user()->role === 'admin' ? 'admin.dashboard' : 'operator.dashboard') }}"
-               class="btn btn-outline-secondary btn-sm">← Về Dashboard</a>
+@else
+        <div class="driver-mgmt-panel pt-3">
+    <div class="console-panel-head driver-mgmt-head px-0 pt-0">
+        <div class="console-panel-head-accent">
+            <h2>Danh sách</h2>
         </div>
     </div>
-
-    <div class="col-12">
-        <div class="card shadow-sm">
-            <div class="card-body p-0">
-                @if($drivers->isEmpty())
-                    <div class="p-4 text-center text-muted">
-                        <p class="mb-2">Chưa có tài xế nào.</p>
-                        <a href="{{ route('operator.drivers.create') }}" class="btn btn-sm btn-primary">Thêm tài xế đầu tiên</a>
-                    </div>
-                @else
-                    <div class="table-responsive">
-                        <table class="table table-hover align-middle mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th style="width:48px"></th>
-                                    <th>Họ tên</th>
-                                    <th>Mã TX</th>
-                                    <th>Liên hệ</th>
-                                    <th>Bằng lái</th>
-                                    <th>Kinh nghiệm</th>
-                                    @if(auth()->user()->role === 'admin')
-                                        <th>Quản lý</th>
+    <div class="console-panel-body flush">
+        <div class="console-table-wrap">
+            <table class="console-table driver-mgmt-table">
+                <thead>
+                    <tr>
+                        <th>Tài xế</th>
+                        <th>Số điện thoại</th>
+                        <th>Xe</th>
+                        <th>Trạng thái</th>
+                        <th class="text-end" style="width:11rem"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach($drivers as $d)
+                    <tr class="{{ $d->isPendingApproval() ? 'driver-row-pending' : '' }}">
+                        <td>
+                            <div class="driver-mgmt-name">
+                                @if($d->photo_portrait)
+                                    <img src="{{ $d->photoUrl('photo_portrait') }}" alt=""
+                                         class="driver-mgmt-avatar rounded-circle object-fit-cover border">
+                                @else
+                                    <div class="driver-mgmt-avatar driver-mgmt-avatar-fallback">
+                                        {{ mb_substr($d->user->name, 0, 1) }}
+                                    </div>
+                                @endif
+                                <div>
+                                    <div class="cell-primary">{{ $d->user->name }}</div>
+                                    @if($d->driver_code)
+                                        <div class="cell-muted small"><code>{{ $d->driver_code }}</code></div>
                                     @endif
-                                    <th>Trạng thái</th>
-                                    <th>Hồ sơ ảnh</th>
-                                    <th style="width:100px">Thao tác</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach($drivers as $d)
-                                @php
-                                    $vehicleCount = count($d->photo_vehicles ?? []);
-                                    $docCount = collect(['photo_portrait','photo_id_card','photo_id_card_back'])
-                                        ->filter(fn($c) => $d->{$c})->count();
-                                @endphp
-                                <tr>
-                                    <td>
-                                        @if($d->photo_portrait)
-                                            <img src="{{ $d->photoUrl('photo_portrait') }}" alt=""
-                                                 class="rounded-circle object-fit-cover border"
-                                                 style="width:36px;height:36px;">
-                                        @else
-                                            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center"
-                                                 style="width:36px;height:36px;font-size:.85rem;font-weight:700;">
-                                                {{ mb_substr($d->user->name, 0, 1) }}
-                                            </div>
-                                        @endif
-                                    </td>
-                                    <td>
-                                        <strong>{{ $d->user->name }}</strong>
-                                        @if($d->user->id_number)
-                                            <br><small class="text-muted">CCCD: {{ $d->user->id_number }}</small>
-                                        @endif
-                                    </td>
-                                    <td><code>{{ $d->driver_code ?? '—' }}</code></td>
-                                    <td class="small">
-                                        {{ $d->user->phone ?? '—' }}<br>
-                                        <span class="text-muted">{{ $d->user->email }}</span>
-                                    </td>
-                                    <td class="small">
-                                        Hạng <strong>{{ $d->license_class }}</strong><br>
-                                        HH: {{ $d->license_expiry->format('d/m/Y') }}
-                                        @if($d->license_expiry->isPast())
-                                            <span class="badge bg-danger">Hết hạn</span>
-                                        @elseif($d->license_expiry->diffInDays(now()) < 60)
-                                            <span class="badge bg-warning text-dark">Sắp HH</span>
-                                        @endif
-                                    </td>
-                                    <td>{{ $d->experience_years }} năm</td>
-                                    @if(auth()->user()->role === 'admin')
-                                        <td class="small">{{ $d->operator?->name ?? '—' }}</td>
-                                    @endif
-                                    <td>
-                                        <span class="badge bg-{{ match($d->status) { 'active'=>'primary','suspended'=>'danger',default=>'secondary' } }}">
-                                            {{ match($d->status) { 'active'=>'Hoạt động','suspended'=>'Tạm ngưng',default=>'Không HĐ' } }}
-                                        </span>
-                                        <br>
-                                        <span class="badge bg-{{ match($d->availability_status ?? 'off_duty') {
-                                            'available'=>'success','on_trip'=>'info',default=>'secondary'
-                                        } }} mt-1">
-                                            {{ match($d->availability_status ?? 'off_duty') {
-                                                'available'=>'Sẵn sàng','on_trip'=>'Đang chạy',default=>'Nghỉ'
-                                            } }}
-                                        </span>
-                                    </td>
-                                    <td class="small text-muted">
-                                        {{ $docCount }}/3 giấy tờ<br>
-                                        {{ $vehicleCount }} ảnh xe
-                                    </td>
-                                    <td>
-                                        <a href="{{ route('operator.drivers.edit', $d) }}"
-                                           class="btn btn-sm btn-outline-primary">Sửa</a>
-                                    </td>
-                                </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                @endif
-            </div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="cell-muted">{{ $d->user->phone ?? '—' }}</td>
+                        <td class="cell-muted">
+                            @if($d->vehicle_license_plate)
+                                <strong>{{ $d->vehicle_license_plate }}</strong>
+                                @if($d->vehicle_type)
+                                    <span class="text-muted"> · {{ ucfirst($d->vehicle_type) }}</span>
+                                @endif
+                            @else
+                                —
+                            @endif
+                        </td>
+                        <td>
+                            <span class="badge bg-{{ $d->displayStatusColor() }}">{{ $d->displayStatusLabel() }}</span>
+                            @if($d->missedTripStrikeLabel() && ! $d->isMissedTripLocked() && ! $d->isPendingApproval() && ! $d->isRejected())
+                                <div class="mt-1"><span class="badge bg-warning text-dark">{{ $d->missedTripStrikeLabel() }}</span></div>
+                            @endif
+                        </td>
+                        <td class="text-end">
+                            <div class="d-flex flex-wrap gap-1 justify-content-end">
+                                @if($d->driver_code)
+                                    @include('partials.share-booking-qr-button', [
+                                        'shareUrl' => \App\Support\BookingShareUrl::guest($d->driver_code),
+                                        'shareLabel' => 'QR đặt vé · ' . $d->user->name,
+                                        'modalId' => 'shareQrDriver-' . $d->id,
+                                        'iconOnly' => true,
+                                    ])
+                                @endif
+                                <a href="{{ route('operator.drivers.edit', $d) }}" class="btn btn-sm {{ $d->isPendingApproval() ? 'btn-primary' : 'btn-outline-primary' }}">
+                                    Xem hồ sơ
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    @endforeach
+                </tbody>
+            </table>
         </div>
+    </div>
+        </div>
+@endif
     </div>
 </div>
 @endsection
+
+@push('modals')
+    @foreach($drivers as $d)
+        @if($d->driver_code)
+            @include('partials.share-booking-qr-modal', [
+                'shareUrl' => \App\Support\BookingShareUrl::guest($d->driver_code),
+                'shareLabel' => 'QR đặt vé · ' . $d->user->name,
+                'modalId' => 'shareQrDriver-' . $d->id,
+            ])
+        @endif
+    @endforeach
+@endpush
+
+@push('styles')
+<link rel="stylesheet" href="{{ asset('css/driver-mgmt.css') }}">
+@endpush

@@ -6,10 +6,10 @@ use App\Models\DriverProfile;
 use App\Models\MerchantProfile;
 use App\Models\PlatformSetting;
 use App\Models\ScheduleTemplate;
-use App\Services\ScheduleLifecycleService;
 use App\Models\TripRoute;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Services\TripPricingService;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
@@ -17,10 +17,10 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        $admin = User::query()->firstOrCreate(
+        $admin = User::query()->updateOrCreate(
             ['email' => 'admin@appdatxe.test'],
             [
-                'name'     => 'Super Admin',
+                'name'     => 'Admin',
                 'password' => Hash::make('password'),
                 'phone'    => '0900000000',
                 'role'     => 'admin',
@@ -39,17 +39,6 @@ class DatabaseSeeder extends Seeder
             ],
         );
 
-        User::query()->firstOrCreate(
-            ['email' => 'customer@appdatxe.test'],
-            [
-                'name'     => 'Khách Hàng A',
-                'password' => Hash::make('password'),
-                'phone'    => '0900000002',
-                'role'     => 'customer',
-                'status'   => 'active',
-            ],
-        );
-
         MerchantProfile::query()->firstOrCreate(
             ['user_id' => $operator->id],
             [
@@ -61,21 +50,36 @@ class DatabaseSeeder extends Seeder
             ],
         );
 
-        PlatformSetting::setValue('commission_percentage', ['value' => 10], 'finance');
+        PlatformSetting::setValue('commission_percentage', ['value' => 2], 'finance');
+        PlatformSetting::setValue('app_commission_percentage', ['value' => 2], 'finance');
+        PlatformSetting::setValue('referral_commission_percentage', ['value' => 8], 'finance');
+        PlatformSetting::setValue('round_trip_discount_percentage', ['value' => 15], 'finance');
 
-        // Routes — tên tỉnh khớp chính xác với danh sách provinces trong view
+        PlatformSetting::setValue('platform_bank', [
+            'bank_name'    => 'Vietcombank',
+            'bank_bin'     => '970436',
+            'account'      => '0123456789',
+            'account_name' => 'TAM LONG LIMO',
+        ], 'finance');
+
+        // Routes — tên tỉnh khớp SouthernProvinces (TP.HCM & lân cận)
         $routeData = [
-            ['departure' => 'TP.HCM', 'destination' => 'Vũng Tàu', 'base_price' => 200000],
-            ['departure' => 'TP.HCM', 'destination' => 'Đà Lạt',   'base_price' => 350000],
-            ['departure' => 'TP.HCM', 'destination' => 'Mũi Né',   'base_price' => 280000],
-            ['departure' => 'TP.HCM', 'destination' => 'Đà Nẵng',  'base_price' => 450000],
-            ['departure' => 'Hà Nội', 'destination' => 'Đà Nẵng',  'base_price' => 380000],
+            ['departure' => 'TP.HCM', 'destination' => 'Vũng Tàu',   'base_price' => 200000, 'distance_km' => 95],
+            ['departure' => 'TP.HCM', 'destination' => 'Đà Lạt',     'base_price' => 350000, 'distance_km' => 310],
+            ['departure' => 'TP.HCM', 'destination' => 'Mũi Né',     'base_price' => 280000, 'distance_km' => 220],
+            ['departure' => 'TP.HCM', 'destination' => 'Cần Thơ',    'base_price' => 250000, 'distance_km' => 170],
+            ['departure' => 'TP.HCM', 'destination' => 'Mỹ Tho',     'base_price' => 180000, 'distance_km' => 70],
+            ['departure' => 'TP.HCM', 'destination' => 'Bình Dương', 'base_price' => 120000, 'distance_km' => 25],
         ];
 
         foreach ($routeData as $r) {
-            TripRoute::query()->firstOrCreate(
+            TripRoute::query()->updateOrCreate(
                 ['departure' => $r['departure'], 'destination' => $r['destination']],
-                ['base_price' => $r['base_price'], 'is_active' => true],
+                [
+                    'base_price'  => $r['base_price'],
+                    'distance_km' => $r['distance_km'],
+                    'is_active'   => true,
+                ],
             );
         }
 
@@ -95,6 +99,26 @@ class DatabaseSeeder extends Seeder
                 'operator_id' => $operator->id,
                 'type'        => 'sedan',
                 'capacity'    => 4,
+                'status'      => 'active',
+            ],
+        );
+
+        $vehicle7 = Vehicle::query()->firstOrCreate(
+            ['license_plate' => '51C-11111'],
+            [
+                'operator_id' => $operator->id,
+                'type'        => 'suv',
+                'capacity'    => 7,
+                'status'      => 'active',
+            ],
+        );
+
+        $vehicle16 = Vehicle::query()->firstOrCreate(
+            ['license_plate' => '51D-22222'],
+            [
+                'operator_id' => $operator->id,
+                'type'        => 'limousine',
+                'capacity'    => 16,
                 'status'      => 'active',
             ],
         );
@@ -120,65 +144,53 @@ class DatabaseSeeder extends Seeder
                 'license_expiry'      => now()->addYears(3)->toDateString(),
                 'experience_years'    => 8,
                 'status'              => 'active',
+                'approval_status'     => 'approved',
                 'availability_status' => 'available',
             ],
         );
 
-        // Tài xế 2
-        $driverUser2 = User::query()->firstOrCreate(
-            ['email' => 'driver2@appdatxe.test'],
-            [
-                'name'     => 'Trần Thị Lái',
-                'password' => Hash::make('password'),
-                'phone'    => '0900000004',
-                'role'     => 'driver',
-                'status'   => 'active',
+        // Chỉ 2 chuyến mẫu — quản lý tự tạo thêm trên dashboard
+        $routes = TripRoute::query()
+            ->whereIn('departure', ['TP.HCM'])
+            ->whereIn('destination', ['Vũng Tàu', 'Đà Lạt'])
+            ->get()
+            ->keyBy(fn ($r) => $r->departure . '|' . $r->destination);
+
+        $sampleTemplates = [
+            'TP.HCM|Vũng Tàu' => [
+                ['vehicle' => $vehicle7, 'time' => '07:00:00'],
             ],
-        );
-
-        $driverProfile2 = DriverProfile::query()->firstOrCreate(
-            ['user_id' => $driverUser2->id],
-            [
-                'operator_id'         => $operator->id,
-                'license_number'      => '98765432100',
-                'license_class'       => 'B2',
-                'license_expiry'      => now()->addYears(2)->toDateString(),
-                'experience_years'    => 5,
-                'status'              => 'active',
-                'availability_status' => 'available',
+            'TP.HCM|Đà Lạt' => [
+                ['vehicle' => $vehicle16, 'time' => '20:00:00'],
             ],
-        );
-
-        // Chuyến chạy hằng ngày (template)
-        $routes = TripRoute::all()->keyBy(fn ($r) => $r->departure . '|' . $r->destination);
-
-        $templateSeed = [
-            ['dep' => 'TP.HCM', 'dst' => 'Vũng Tàu', 'hours' => [7, 13, 18], 'vehicle' => $vehicle,  'driver' => $driverProfile],
-            ['dep' => 'TP.HCM', 'dst' => 'Đà Lạt',   'hours' => [20],        'vehicle' => $vehicle,  'driver' => $driverProfile],
-            ['dep' => 'TP.HCM', 'dst' => 'Mũi Né',   'hours' => [8, 15],     'vehicle' => $vehicle2, 'driver' => $driverProfile2],
         ];
 
-        foreach ($templateSeed as $seed) {
-            $route = $routes->get($seed['dep'] . '|' . $seed['dst']);
-            if (! $route) {
+        $pricing = app(TripPricingService::class);
+
+        foreach ($sampleTemplates as $routeKey => $entries) {
+            if (! $routes->has($routeKey)) {
                 continue;
             }
-            foreach ($seed['hours'] as $hour) {
-                ScheduleTemplate::query()->firstOrCreate(
+            foreach ($entries as $entry) {
+                $capacity = (int) $entry['vehicle']->capacity;
+                $wholeCar = $pricing->defaultWholeCarPrice($capacity);
+                $seatPrice = $pricing->sharedSeatFromWholeCar($wholeCar);
+
+                ScheduleTemplate::query()->updateOrCreate(
                     [
-                        'route_id'       => $route->id,
-                        'vehicle_id'     => $seed['vehicle']->id,
-                        'departure_time' => sprintf('%02d:00:00', $hour),
+                        'route_id'       => $routes[$routeKey]->id,
+                        'vehicle_id'     => $entry['vehicle']->id,
+                        'departure_time' => $entry['time'],
                     ],
                     [
-                        'driver_id'    => $seed['driver']->user_id,
-                        'driver_name'  => User::find($seed['driver']->user_id)?->name ?? 'Chưa phân công',
-                        'status'       => 'active',
+                        'driver_id'       => null,
+                        'driver_name'     => 'Chờ khách đặt',
+                        'whole_car_price' => $wholeCar,
+                        'seat_price'      => $seatPrice,
+                        'status'          => 'active',
                     ],
                 );
             }
         }
-
-        app(ScheduleLifecycleService::class)->sync();
     }
 }

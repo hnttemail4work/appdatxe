@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Controller;
 use App\Services\RegistrationService;
 use App\Support\RoleDashboard;
+use App\Support\WebAuth;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
+use InvalidArgumentException;
 
 class AuthController extends Controller
 {
@@ -23,22 +25,30 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         $validated = $request->validate([
-            'email' => ['required', 'email'],
+            'phone'    => ['required', 'string', 'max:30'],
             'password' => ['required', 'string'],
         ]);
 
-        if (! Auth::attempt($validated, $request->boolean('remember'))) {
-            return back()->withErrors(['email' => 'Email hoặc mật khẩu không đúng'])->withInput();
+        $user = WebAuth::attempt($validated['phone'], $validated['password']);
+
+        if (! $user) {
+            return back()
+                ->withErrors(['phone' => 'Số điện thoại hoặc mật khẩu không đúng'])
+                ->withInput();
         }
 
+        Auth::login($user, $request->boolean('remember'));
         $request->session()->regenerate();
 
-        if (Auth::user()->status !== 'active') {
+        if ($user->status !== 'active') {
             Auth::logout();
-            return back()->withErrors(['email' => 'Tài khoản của bạn chưa được kích hoạt hoặc đã bị tạm ngưng.'])->withInput();
+
+            return back()
+                ->withErrors(['phone' => 'Tài khoản của bạn chưa được kích hoạt hoặc đã bị tạm ngưng.'])
+                ->withInput();
         }
 
-        $role = Auth::user()->role;
+        $role = $user->role;
         $redirect = RoleDashboard::route($role);
 
         $intended = $request->session()->pull('url.intended');
@@ -51,35 +61,21 @@ class AuthController extends Controller
 
     public function showRegister(Request $request)
     {
-        $mode = old('register_mode', $request->query('mode', 'customer'));
-
-        if (! in_array($mode, ['customer', 'driver'], true)) {
-            $mode = 'customer';
-        }
-
-        return view('auth.register', compact('mode'));
+        return view('auth.register');
     }
 
     public function register(Request $request)
     {
-        $mode = $request->input('register_mode', 'customer');
+        $validated = $request->validate(array_merge(
+            $this->registration->driverRules(),
+            ['register_mode' => ['required', Rule::in(['driver'])]],
+        ));
 
-        if (! in_array($mode, ['customer', 'driver'], true)) {
-            return back()->withErrors(['register_mode' => 'Loại đăng ký không hợp lệ.'])->withInput();
+        try {
+            $user = $this->registration->registerDriver($validated, $request);
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['photos' => $e->getMessage()])->withInput();
         }
-
-        $rules = match ($mode) {
-            'driver' => $this->registration->driverRules(),
-            default  => $this->registration->customerRules(),
-        };
-
-        $validated = $request->validate(array_merge($rules, [
-            'register_mode' => ['required', Rule::in(['customer', 'driver'])],
-        ]));
-
-        $user = $mode === 'driver'
-            ? $this->registration->registerDriver($validated)
-            : $this->registration->registerCustomer($validated);
 
         if ($user->status === 'active') {
             Auth::login($user);
@@ -88,11 +84,8 @@ class AuthController extends Controller
                 ->with('success', 'Đăng ký thành công. Chào mừng bạn đến với ' . config('app.name') . '!');
         }
 
-        $message = $mode === 'driver'
-            ? 'Đăng ký tài xế thành công. Hồ sơ đang chờ quản lý/admin phê duyệt trước khi đăng nhập.'
-            : 'Đăng ký thành công.';
-
-        return redirect()->route('login')->with('success', $message);
+        return redirect()->route('login')
+            ->with('success', 'Đăng ký thành công. Hồ sơ cần duyệt trước khi đăng nhập trong vòng từ 3 đến 5 ngày làm việc.');
     }
 
     public function logout(Request $request)

@@ -7,8 +7,9 @@ use App\Services\RegistrationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
+use App\Support\AuthIdentifier;
 use Illuminate\Validation\Rule;
+use InvalidArgumentException;
 
 class AuthController extends Controller
 {
@@ -18,24 +19,16 @@ class AuthController extends Controller
 
     public function register(Request $request): JsonResponse
     {
-        $mode = $request->input('register_mode', 'customer');
+        $validated = $request->validate(array_merge(
+            $this->registration->driverRules(),
+            ['register_mode' => ['required', Rule::in(['driver'])]],
+        ));
 
-        if (! in_array($mode, ['customer', 'driver'], true)) {
-            return response()->json(['message' => 'Invalid register_mode. Use customer or driver.'], 422);
+        try {
+            $user = $this->registration->registerDriver($validated, $request);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
         }
-
-        $rules = match ($mode) {
-            'driver' => $this->registration->driverRules(),
-            default  => $this->registration->customerRules(),
-        };
-
-        $validated = $request->validate(array_merge($rules, [
-            'register_mode' => ['required', Rule::in(['customer', 'driver'])],
-        ]));
-
-        $user = $mode === 'driver'
-            ? $this->registration->registerDriver($validated)
-            : $this->registration->registerCustomer($validated);
 
         $token = $user->status === 'active' ? $user->createToken('api-token')->plainTextToken : null;
 
@@ -51,13 +44,13 @@ class AuthController extends Controller
     public function login(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'email' => ['required', 'email'],
+            'login'    => ['required', 'string', 'max:255'],
             'password' => ['required', 'string'],
         ]);
 
-        $user = \App\Models\User::query()->where('email', $validated['email'])->first();
+        $user = AuthIdentifier::findUserByLogin($validated['login']);
 
-        if (! $user || ! Hash::check($validated['password'], $user->password)) {
+        if (! $user || ! \Illuminate\Support\Facades\Hash::check($validated['password'], $user->password)) {
             return response()->json(['message' => 'Invalid credentials.'], 422);
         }
 
@@ -77,7 +70,7 @@ class AuthController extends Controller
     public function me(Request $request): JsonResponse
     {
         return response()->json([
-            'user' => $request->user()->load(['merchantProfile', 'driverProfile', 'vehicles', 'bookings']),
+            'user' => $request->user()->load(['merchantProfile', 'driverProfile', 'vehicles']),
         ]);
     }
 

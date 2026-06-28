@@ -9,7 +9,6 @@ use App\Models\DriverTripRequest;
 use App\Models\Schedule;
 use App\Services\DriverTripRequestService;
 use App\Services\ScheduleLifecycleService;
-use App\Services\TripListingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -17,58 +16,8 @@ class LiveSyncController extends Controller
 {
     public function __construct(
         private readonly ScheduleLifecycleService $scheduleLifecycle,
-        private readonly TripListingService $tripListing,
         private readonly DriverTripRequestService $driverRequests,
     ) {
-    }
-
-    public function customer(Request $request)
-    {
-        $this->driverRequests->expireStale();
-
-        $filters = $this->tripListing->filtersFromRequest($request);
-        $schedules = $this->tripListing->query($filters);
-
-        $pendingRequests = DriverTripRequest::query()
-            ->where('customer_id', Auth::id())
-            ->whereIn('status', ['pending', 'accepted', 'rejected', 'expired'])
-            ->where('updated_at', '>=', now()->subHours(24))
-            ->with(['driver', 'driverProfile', 'schedule.route'])
-            ->latest()
-            ->get()
-            ->keyBy('schedule_id');
-
-        $bookings = Auth::user()
-            ->bookings()
-            ->with(['schedule.route', 'schedule.vehicle'])
-            ->latest()
-            ->limit(20)
-            ->get()
-            ->map(fn (Booking $b) => [
-                'id'             => $b->id,
-                'ticket_code'    => $b->ticket_code,
-                'route'          => $b->schedule->route->departure . ' → ' . $b->schedule->route->destination,
-                'departure_time' => $b->schedule->departure_time->format('H:i · d/m/Y'),
-                'seats'          => implode(', ', (array) $b->seat_numbers),
-                'booking_status' => $b->booking_status,
-                'payment_status' => $b->payment_status,
-                'trip_status'    => $b->trip_status,
-                'total_price'    => number_format($b->total_price, 0, ',', '.'),
-                'has_pending_payment' => $b->hasPendingPaymentClaim(),
-            ]);
-
-        return response()->json([
-            'synced_at' => now()->toIso8601String(),
-            'trips'     => $schedules->map(fn (Schedule $s) => array_merge(
-                $this->tripListing->serializeSchedule($s),
-                [
-                    'driver_request' => $this->driverRequests->serializeRequest(
-                        $pendingRequests->get($s->id)
-                    ),
-                ]
-            ))->values(),
-            'bookings' => $bookings,
-        ]);
     }
 
     public function driver(Request $request)
@@ -83,25 +32,45 @@ class LiveSyncController extends Controller
             ->where('driver_id', $user->id)
             ->where('status', 'pending')
             ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
-            ->with(['schedule.route', 'schedule.vehicle', 'customer'])
+            ->with(['schedule.route', 'schedule.vehicle', 'schedule.bookings'])
             ->latest()
             ->get()
-            ->map(fn (DriverTripRequest $r) => [
-                'id'             => $r->id,
-                'customer_name'  => $r->customer->name,
-                'customer_phone' => $r->customer->phone,
-                'route'          => $r->schedule->route->departure . ' → ' . $r->schedule->route->destination,
-                'departure_time' => $r->schedule->departure_time->format('H:i · d/m/Y'),
-                'vehicle'        => ucfirst($r->schedule->vehicle->type) . ' · ' . $r->schedule->vehicle->license_plate,
-                'expires_at'     => $r->expires_at?->toIso8601String(),
-            ]);
+            ->map(function (DriverTripRequest $r) {
+                $booking = $r->relatedBooking();
+
+                return [
+                    'id'               => $r->id,
+                    'accept_url'       => route('driver.tripRequests.accept', $r),
+                    'reject_url'       => route('driver.tripRequests.reject', $r),
+                    'passenger_name'   => $booking?->passenger_name,
+                    'booking_mode'     => $booking?->bookingModeLabel(),
+                    'booking_mode_key' => $booking?->booking_mode ?? 'shared',
+                    'route'            => $r->schedule->route->departure . ' → ' . $r->schedule->route->destination,
+                    'departure_time'   => $r->schedule->departure_time->format('H:i · d/m/Y'),
+                    'expires_at'       => $r->expires_at?->toIso8601String(),
+                    'expires_in_label' => $r->acceptTimeRemainingLabel(),
+                    'pickup'           => $booking?->driverPickupDetailLabel(),
+                    'dropoff'          => $booking?->driverDropoffDetailLabel(),
+                    'notes'            => $booking?->notes,
+                    'trip_total'       => $booking
+                        ? number_format((float) $booking->total_price, 0, ',', '.')
+                        : null,
+                    'trip_code'        => $r->schedule->shortTripCode(),
+                    'meta_label'       => $r->schedule->tripMetaLabel(),
+                    'seats_label'      => $booking
+                        ? ($booking->booking_mode === 'whole_car' ? 'Cả xe' : ($booking->seatCount() > 0 ? $booking->seatCountLabel() : null))
+                        : null,
+                ];
+            });
 
         $schedules = Schedule::query()
-            ->with(['route', 'vehicle'])
-            ->withCount([
-                'bookings as confirmed_passengers_count' => fn ($q) => $q->where('booking_status', 'confirmed'),
+            ->with([
+                'route',
+                'vehicle',
+                'bookings' => fn ($q) => $q->whereNotIn('booking_status', ['cancelled', 'rejected'])->latest(),
             ])
             ->where('driver_id', $user->id)
+            ->whereHas('bookings', fn ($q) => $q->whereNotIn('booking_status', ['cancelled', 'rejected']))
             ->where('departure_time', '>=', now()->subHours(2))
             ->orderBy('departure_time')
             ->get()
@@ -110,16 +79,30 @@ class LiveSyncController extends Controller
                 'route'          => $s->route->departure . ' → ' . $s->route->destination,
                 'departure_time' => $s->departure_time->format('H:i · d/m/Y'),
                 'status'         => $s->status,
+                'display_status' => $s->displayStatus(),
                 'status_label'   => $s->statusLabel(),
                 'seats_label'    => $s->seatsLabel(),
-                'passengers'     => $s->confirmed_passengers_count,
+                'passengers'     => $s->bookings->count(),
+                'trip_total'     => number_format($s->tripRevenueTotal(), 0, ',', '.'),
+                'bookings'       => $s->bookings->map(fn (Booking $b) => [
+                    'passenger_name'   => $b->passenger_name,
+                    'booking_mode'     => $b->bookingModeLabel(),
+                    'booking_mode_key' => $b->booking_mode ?? 'shared',
+                    'pickup'           => $b->pickupLabel(),
+                    'dropoff'          => $b->dropoffLabel(),
+                    'notes'            => $b->notes,
+                    'seats_label'      => ($b->booking_mode ?? 'shared') === 'shared' ? $b->seatCountLabel() : null,
+                    'booking_status'   => $b->booking_status,
+                    'payment_status'   => $b->payment_status,
+                    'trip_status'      => $b->trip_status,
+                ])->values(),
             ]);
 
         return response()->json([
             'synced_at'         => now()->toIso8601String(),
             'driver_code'       => $profile?->driver_code,
             'availability'      => $profile?->availability_status ?? 'off_duty',
-            'availability_label'=> $profile?->availabilityLabel() ?? 'Nghỉ / Bận',
+            'availability_label'=> $profile?->displayStatusLabel() ?? 'Nghỉ',
             'pending_requests'  => $pendingIncoming,
             'schedules'         => $schedules,
         ]);
@@ -131,23 +114,14 @@ class LiveSyncController extends Controller
         $this->scheduleLifecycle->sync();
 
         $user = Auth::user();
-        $operatorId = $user->role === 'admin' ? null : $user->id;
-
-        app(\App\Services\DriverAssignmentService::class)->autoAssignUnassigned($operatorId);
 
         $todayTrips = Schedule::query()
             ->with(['route', 'driver'])
             ->withCount([
-                'seatReservations as active_reservations_count' => function ($q): void {
-                    $q->whereIn('status', ['held', 'booked'])
-                        ->where(fn ($n) => $n->whereNull('expires_at')->orWhere('expires_at', '>', now()));
-                },
+                'bookings as active_bookings_count' => fn ($q) => $q->whereNotIn('booking_status', ['cancelled', 'rejected']),
             ])
-            ->whereHas('vehicle', function ($q) use ($user): void {
-                if ($user->role !== 'admin') {
-                    $q->where('operator_id', $user->id);
-                }
-            })
+            ->whereHas('bookings', fn ($q) => $q->whereNotIn('booking_status', ['cancelled', 'rejected']))
+            ->whereHas('vehicle', fn ($q) => $q->where('operator_id', $user->id))
             ->whereDate('service_date', today())
             ->orderBy('departure_time')
             ->get()
@@ -159,26 +133,30 @@ class LiveSyncController extends Controller
                     ? ($s->driver?->name ?? $s->driver_name)
                     : 'Chờ phân bổ',
                 'seats_label'  => $s->seatsLabel(),
+                'bookings_count' => $s->active_bookings_count,
                 'status'       => $s->status,
+                'display_status' => $s->displayStatus(),
                 'status_label' => $s->statusLabel(),
+                'status_color' => match ($s->displayStatus()) {
+                    'running'   => 'primary',
+                    'completed' => 'success',
+                    'cancelled' => 'danger',
+                    default     => 'warning text-dark',
+                },
             ]);
 
         $pendingDriverRequests = DriverTripRequest::query()
             ->where('status', 'pending')
-            ->whereHas('schedule.vehicle', function ($q) use ($user): void {
-                if ($user->role !== 'admin') {
-                    $q->where('operator_id', $user->id);
-                }
-            })
-            ->with(['driver', 'customer', 'schedule.route'])
+            ->whereHas('schedule.vehicle', fn ($q) => $q->where('operator_id', $user->id))
+            ->with(['driver', 'schedule.route'])
             ->latest()
             ->limit(10)
             ->get()
             ->map(fn (DriverTripRequest $r) => [
-                'id'       => $r->id,
-                'route'    => $r->schedule->route->departure . ' → ' . $r->schedule->route->destination,
-                'driver'   => $r->driver->name,
-                'customer' => $r->customer->name,
+                'id'            => $r->id,
+                'route'         => $r->schedule->route->departure . ' → ' . $r->schedule->route->destination,
+                'driver'        => $r->driver->name,
+                'contact_phone' => $r->contact_phone,
             ]);
 
         return response()->json([

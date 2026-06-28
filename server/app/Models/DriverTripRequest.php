@@ -8,7 +8,7 @@ class DriverTripRequest extends Model
 {
     protected $fillable = [
         'schedule_id',
-        'customer_id',
+        'contact_phone',
         'driver_id',
         'status',
         'expires_at',
@@ -28,11 +28,6 @@ class DriverTripRequest extends Model
         return $this->belongsTo(Schedule::class);
     }
 
-    public function customer()
-    {
-        return $this->belongsTo(User::class, 'customer_id');
-    }
-
     public function driver()
     {
         return $this->belongsTo(User::class, 'driver_id');
@@ -43,10 +38,42 @@ class DriverTripRequest extends Model
         return $this->hasOne(DriverProfile::class, 'user_id', 'driver_id');
     }
 
+    public function contactPhone(): ?string
+    {
+        return $this->contact_phone;
+    }
+
     public function isPending(): bool
     {
         return $this->status === 'pending'
             && ($this->expires_at === null || $this->expires_at->isFuture());
+    }
+
+    public function acceptTimeRemainingLabel(): ?string
+    {
+        if (! $this->expires_at || ! $this->expires_at->isFuture()) {
+            return null;
+        }
+
+        $seconds = $this->expires_at->getTimestamp() - now()->getTimestamp();
+        if ($seconds <= 0) {
+            return null;
+        }
+
+        $minutes = max(1, (int) ceil($seconds / 60));
+
+        return $minutes . ' phút';
+    }
+
+    public function relatedBooking(): ?Booking
+    {
+        $this->loadMissing('schedule.bookings');
+
+        $active = $this->schedule->bookings
+            ->filter(fn (Booking $b): bool => ! in_array($b->booking_status, ['cancelled', 'rejected'], true));
+
+        return $active->first(fn (Booking $b): bool => $b->matchesContactPhone((string) $this->contact_phone))
+            ?? $active->sortByDesc('id')->first();
     }
 
     public function statusLabel(): string

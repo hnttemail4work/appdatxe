@@ -59,11 +59,6 @@ class User extends Authenticatable
         return $this->hasMany(Vehicle::class, 'operator_id');
     }
 
-    public function bookings()
-    {
-        return $this->hasMany(Booking::class, 'customer_id');
-    }
-
     public function merchantProfile()
     {
         return $this->hasOne(MerchantProfile::class, 'user_id');

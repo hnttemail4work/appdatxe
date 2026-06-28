@@ -31,6 +31,20 @@
                    data-max-bytes="{{ $maxMb * 1024 * 1024 }}">
             @error('photo_id_card_back')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
         </div>
+        <div class="col-md-4">
+            <label class="form-label mb-0" style="font-size:.75rem;">Bằng lái mặt trước</label>
+            <input type="file" name="photo_license_front" accept="image/jpeg,image/png,image/webp"
+                   class="form-control form-control-sm @error('photo_license_front') is-invalid @enderror"
+                   data-max-bytes="{{ $maxMb * 1024 * 1024 }}">
+            @error('photo_license_front')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
+        </div>
+        <div class="col-md-4">
+            <label class="form-label mb-0" style="font-size:.75rem;">Bằng lái mặt sau</label>
+            <input type="file" name="photo_license_back" accept="image/jpeg,image/png,image/webp"
+                   class="form-control form-control-sm @error('photo_license_back') is-invalid @enderror"
+                   data-max-bytes="{{ $maxMb * 1024 * 1024 }}">
+            @error('photo_license_back')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
+        </div>
         <div class="col-12">
             <label class="form-label mb-0" style="font-size:.75rem;">Thêm ảnh xe (có thể chọn nhiều)</label>
             <input type="file" name="photo_vehicles[]" accept="image/jpeg,image/png,image/webp" multiple
@@ -59,7 +73,9 @@
             }
         });
         if (oversize.length) {
-            alert('Ảnh vượt quá 2MB: ' + oversize.join(', ') + '\nVui lòng chọn ảnh nhỏ hơn.');
+            if (window.AppDialog) {
+                window.AppDialog.alert('Ảnh vượt quá 2MB: ' + oversize.join(', ') + '\nVui lòng chọn ảnh nhỏ hơn.');
+            }
             input.value = '';
         }
     });

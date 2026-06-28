@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 
 class ScheduleTemplate extends Model
@@ -12,6 +13,9 @@ class ScheduleTemplate extends Model
         'driver_id',
         'driver_name',
         'departure_time',
+        'expected_arrival_time',
+        'seat_price',
+        'whole_car_price',
         'duration_minutes',
         'status',
     ];
@@ -20,6 +24,8 @@ class ScheduleTemplate extends Model
     {
         return [
             'duration_minutes' => 'integer',
+            'seat_price'       => 'decimal:2',
+            'whole_car_price'  => 'decimal:2',
         ];
     }
 
@@ -41,5 +47,98 @@ class ScheduleTemplate extends Model
     public function schedules()
     {
         return $this->hasMany(Schedule::class, 'template_id');
+    }
+
+    public function departureAt(Carbon $serviceDate): Carbon
+    {
+        return $this->clockOnDate($serviceDate, $this->departure_time);
+    }
+
+    public function expectedArrivalAt(Carbon $serviceDate): Carbon
+    {
+        if ($this->expected_arrival_time) {
+            $departure = $this->departureAt($serviceDate);
+            $arrival = $this->clockOnDate($serviceDate, $this->expected_arrival_time);
+
+            if ($arrival <= $departure) {
+                $arrival->addDay();
+            }
+
+            return $arrival;
+        }
+
+        return $this->departureAt($serviceDate)->copy()->addMinutes((int) ($this->duration_minutes ?? 720));
+    }
+
+    public function seatPrice(): float
+    {
+        if ($this->seat_price !== null) {
+            return (float) $this->seat_price;
+        }
+
+        return (float) app(\App\Services\TripPricingService::class)
+            ->sharedSeatFromWholeCar((int) $this->wholeCarPriceAmount());
+    }
+
+    public function wholeCarPriceAmount(): float
+    {
+        if ($this->whole_car_price !== null) {
+            return (float) $this->whole_car_price;
+        }
+
+        return (float) app(\App\Services\TripPricingService::class)->wholeCarPrice($this);
+    }
+
+    public function capacity(): int
+    {
+        $this->loadMissing('vehicle');
+
+        return (int) ($this->vehicle?->capacity ?? 0);
+    }
+
+    public function referenceTimeLabel(): string
+    {
+        return $this->departureAt(now())->format('H:i');
+    }
+
+    /** Thông tin lịch chuyến theo ngày khách chọn. */
+    public function scheduleInfoForDate(Carbon|string $serviceDate): array
+    {
+        $date = $serviceDate instanceof Carbon
+            ? $serviceDate->copy()->startOfDay()
+            : Carbon::parse($serviceDate)->startOfDay();
+
+        $departure = $this->departureAt($date);
+        $arrival = $this->expectedArrivalAt($date);
+
+        $weekdays = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+        $weekdaysShort = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+
+        return [
+            'service_date'       => $date->toDateString(),
+            'weekday'            => $weekdays[(int) $date->dayOfWeek],
+            'weekday_short'      => $weekdaysShort[(int) $date->dayOfWeek],
+            'date_day'           => $date->format('d'),
+            'date_month'         => $date->format('m/Y'),
+            'date_short'         => $date->format('d/m/Y'),
+            'date_label'         => $weekdays[(int) $date->dayOfWeek] . ', ' . $date->format('d/m/Y'),
+            'departure_time'     => $departure->format('H:i'),
+            'arrival_time'       => $arrival->format('H:i'),
+            'arrival_date_short' => $arrival->format('d/m/Y'),
+            'same_day'           => $arrival->isSameDay($departure),
+            'time_range'         => $arrival->isSameDay($departure)
+                ? $departure->format('H:i') . ' → ' . $arrival->format('H:i')
+                : $departure->format('H:i') . ' · ' . $departure->format('d/m')
+                . ' → ' . $arrival->format('H:i') . ' · ' . $arrival->format('d/m/Y'),
+        ];
+    }
+
+    private function clockOnDate(Carbon $serviceDate, mixed $time): Carbon
+    {
+        $timeStr = is_string($time)
+            ? substr($time, 0, 8)
+            : Carbon::parse($time)->format('H:i:s');
+
+        return Carbon::parse($serviceDate->toDateString() . ' ' . $timeStr, config('app.timezone'));
     }
 }

@@ -12,14 +12,16 @@ class TripRoute extends Model
         'departure',
         'destination',
         'base_price',
+        'distance_km',
         'is_active',
     ];
 
     protected function casts(): array
     {
         return [
-            'base_price' => 'decimal:2',
-            'is_active' => 'boolean',
+            'base_price'  => 'decimal:2',
+            'distance_km' => 'integer',
+            'is_active'   => 'boolean',
         ];
     }
 

@@ -10,7 +10,7 @@ class RoleDashboard
             'admin'    => route('admin.dashboard'),
             'operator' => route('operator.dashboard'),
             'driver'   => route('driver.dashboard'),
-            default    => route('customer.dashboard'),
+            default    => route('booking.index'),
         };
     }
 
@@ -26,8 +26,7 @@ class RoleDashboard
             'admin'    => str_starts_with($path, '/admin'),
             'operator' => str_starts_with($path, '/operator'),
             'driver'   => str_starts_with($path, '/driver'),
-            'customer' => str_starts_with($path, '/customer'),
-            default    => false,
+            default    => str_starts_with($path, '/dat-xe'),
         };
     }
 }

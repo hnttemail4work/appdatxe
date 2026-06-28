@@ -17,17 +17,43 @@ class DriverPhotoService
 
     private const ALLOWED_MIMES = ['jpeg', 'jpg', 'png', 'webp'];
 
-    private const SINGLE_FIELDS = ['photo_portrait', 'photo_id_card', 'photo_id_card_back'];
+    private const SINGLE_FIELDS = [
+        'photo_portrait',
+        'photo_id_card',
+        'photo_id_card_back',
+        'photo_license_front',
+        'photo_license_back',
+    ];
 
-    public function syncPhotos(DriverProfile $profile, Request $request): bool
+    /** @return list<string> */
+    public static function identityPhotoFields(): array
     {
-        $this->assertUploadsValid($request);
+        return DriverProfile::IDENTITY_PHOTO_FIELDS;
+    }
+
+    public function syncPhotos(DriverProfile $profile, Request $request, bool $lockIdentityPhotos = false): bool
+    {
+        if ($lockIdentityPhotos) {
+            foreach (self::identityPhotoFields() as $field) {
+                if ($request->hasFile($field)) {
+                    throw new InvalidArgumentException(
+                        'Ảnh CCCD, bằng lái và chân dung đã được duyệt — không thể thay đổi. Liên hệ quản lý nếu cần cập nhật.'
+                    );
+                }
+            }
+        }
+
+        $this->assertUploadsValid($request, $lockIdentityPhotos);
 
         $updates = [];
         $dir = 'drivers/' . $profile->id;
         Storage::disk('public')->makeDirectory($dir);
 
         foreach (self::SINGLE_FIELDS as $field) {
+            if ($lockIdentityPhotos && in_array($field, self::identityPhotoFields(), true)) {
+                continue;
+            }
+
             $file = $request->file($field);
             if ($file instanceof UploadedFile) {
                 if ($profile->{$field}) {
@@ -60,7 +86,11 @@ class DriverPhotoService
         }
 
         if ($updates === []) {
-            throw new InvalidArgumentException('Vui lòng chọn ít nhất một ảnh để upload hoặc chọn ảnh cần xóa.');
+            $msg = $lockIdentityPhotos
+                ? 'Chỉ có thể thêm ảnh xe. Giấy tờ và chân dung đã khóa sau khi duyệt.'
+                : 'Vui lòng chọn ít nhất một ảnh để upload hoặc chọn ảnh cần xóa.';
+
+            throw new InvalidArgumentException($msg);
         }
 
         $profile->update($updates);
@@ -87,16 +117,22 @@ class DriverPhotoService
         ));
     }
 
-    private function assertUploadsValid(Request $request): void
+    private function assertUploadsValid(Request $request, bool $lockIdentityPhotos = false): void
     {
         $rules = [];
         $attributes = [
-            'photo_portrait'     => 'ảnh chân dung',
-            'photo_id_card'      => 'ảnh CCCD mặt trước',
-            'photo_id_card_back' => 'ảnh CCCD mặt sau',
+            'photo_portrait'       => 'ảnh chân dung',
+            'photo_id_card'        => 'ảnh CCCD mặt trước',
+            'photo_id_card_back'   => 'ảnh CCCD mặt sau',
+            'photo_license_front'  => 'ảnh bằng lái mặt trước',
+            'photo_license_back'   => 'ảnh bằng lái mặt sau',
         ];
 
         foreach (self::SINGLE_FIELDS as $field) {
+            if ($lockIdentityPhotos && in_array($field, self::identityPhotoFields(), true)) {
+                continue;
+            }
+
             if ($request->hasFile($field)) {
                 $file = $request->file($field);
                 $this->assertFileReceived($file, $field, $attributes[$field] ?? $field);
@@ -165,5 +201,22 @@ class DriverPhotoService
         }
 
         return Storage::disk('public')->url($path);
+    }
+
+    /** Lưu ảnh hồ sơ khi đăng ký tài xế (bắt buộc đủ ảnh). */
+    public function storeRegistrationPhotos(DriverProfile $profile, \Illuminate\Http\Request $request): void
+    {
+        $required = ['photo_portrait', 'photo_id_card', 'photo_id_card_back', 'photo_license_front'];
+        foreach ($required as $field) {
+            if (! $request->hasFile($field)) {
+                throw new InvalidArgumentException('Vui lòng upload đầy đủ ảnh hồ sơ và giấy tờ.');
+            }
+        }
+
+        if ($this->validVehicleFiles($request) === []) {
+            throw new InvalidArgumentException('Vui lòng upload ít nhất một ảnh xe.');
+        }
+
+        $this->syncPhotos($profile, $request);
     }
 }

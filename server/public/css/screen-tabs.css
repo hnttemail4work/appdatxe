@@ -1,0 +1,76 @@
+/* Tab navigation — dùng chung driver / operator / admin */
+.screen-tabs-wrap {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: .85rem;
+    padding: .75rem .75rem 0;
+    margin-bottom: 1rem;
+    box-shadow: 0 2px 12px rgba(15, 23, 42, .04);
+}
+.console-page .screen-tabs-wrap {
+    border-color: rgba(255, 255, 255, .12);
+    background: rgba(255, 255, 255, .98);
+}
+.console-panel .screen-tabs-wrap {
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    margin-bottom: 0;
+    background: transparent;
+}
+.screen-tabs {
+    border-bottom: 1px solid #e2e8f0;
+    gap: .25rem;
+    flex-wrap: wrap;
+    overflow: visible;
+}
+.screen-tabs .nav-link {
+    white-space: nowrap;
+    font-size: .8125rem;
+    font-weight: 600;
+    color: #64748b;
+    border: none;
+    border-bottom: 3px solid transparent;
+    border-radius: .5rem .5rem 0 0;
+    padding: .55rem .85rem;
+    margin-bottom: -1px;
+}
+.screen-tabs .nav-link:hover {
+    color: #1e40af;
+    background: #f8fafc;
+}
+.screen-tabs .nav-link.active {
+    color: #1e40af;
+    background: #eff6ff;
+    border-bottom-color: #2563eb;
+}
+.operator-nav-tabs .nav-link {
+    text-decoration: none;
+}
+.operator-nav-tabs .nav-link.active {
+    pointer-events: none;
+}
+.operator-nav-tabs + .screen-tabs-wrap {
+    margin-top: 1rem;
+    padding-top: .75rem;
+    border-top: 1px solid #e2e8f0;
+}
+.screen-tab-panels {
+    padding-top: .25rem;
+}
+.screen-tab-panels > .tab-pane {
+    padding: .25rem 0 .5rem;
+}
+.screen-tabs-panel-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: .85rem;
+    padding: 1rem;
+}
+.driver-page .screen-tabs-wrap {
+    background: #fff;
+}
+button.driver-stat-pill {
+    cursor: pointer;
+    font-family: inherit;
+}

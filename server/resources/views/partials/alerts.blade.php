@@ -1,13 +1,17 @@
-@if(session('success'))
-    <div class="alert alert-success">{{ session('success') }}</div>
+@if(session('success') && ! request()->routeIs('booking.index'))
+    <div class="alert alert-success app-flash mb-3" role="alert" data-auto-dismiss="10000">
+        {{ session('success') }}
+        @include('partials.flash-close')
+    </div>
 @endif
 
-@if($errors->any())
-    <div class="alert alert-danger">
+@if(isset($errors) && $errors->any() && ! request()->routeIs('booking.index'))
+    <div class="alert alert-danger app-flash mb-3" role="alert">
         <ul class="mb-0">
             @foreach($errors->all() as $error)
                 <li>{{ $error }}</li>
             @endforeach
         </ul>
+        @include('partials.flash-close')
     </div>
 @endif

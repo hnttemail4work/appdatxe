@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\DriverProfile;
 use App\Models\Schedule;
-use App\Models\ScheduleTemplate;
 
 class DriverAssignmentService
 {
@@ -46,8 +45,8 @@ class DriverAssignmentService
 
         return DriverProfile::query()
             ->with('user')
+            ->operational()
             ->where('operator_id', $operatorId)
-            ->where('status', 'active')
             ->where('availability_status', 'available')
             ->orderByDesc('experience_years')
             ->first();
@@ -61,15 +60,6 @@ class DriverAssignmentService
             'driver_id'   => $driver->user_id,
             'driver_name' => $driverName,
         ]);
-
-        if ($schedule->template_id) {
-            ScheduleTemplate::query()
-                ->whereKey($schedule->template_id)
-                ->update([
-                    'driver_id'   => $driver->user_id,
-                    'driver_name' => $driverName,
-                ]);
-        }
 
         if ($schedule->status === 'running') {
             $driver->update(['availability_status' => 'on_trip']);

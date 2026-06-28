@@ -1,0 +1,218 @@
+/* Quản lý tài xế — bảng & hồ sơ gọn */
+.driver-mgmt-head .subtitle {
+    font-size: .85rem;
+    color: var(--tl-text-muted);
+}
+
+.driver-mgmt-table .driver-mgmt-name {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    min-width: 0;
+}
+
+.driver-mgmt-avatar {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+}
+
+.driver-mgmt-avatar-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--tl-primary);
+    color: #fff;
+    font-size: .9rem;
+    font-weight: 700;
+}
+
+.driver-row-pending {
+    background: rgba(217, 119, 6, .06);
+}
+
+/* Hồ sơ tài xế — operator edit / duyệt */
+.driver-edit-panel > .console-panel-body {
+    padding-top: 0;
+}
+
+.driver-edit-panel .operator-nav-tabs {
+    margin: 0 -1.25rem;
+    padding: .75rem 1.25rem 0;
+    border-bottom: 1px solid var(--tl-border);
+}
+
+.operator-nav-tabs .nav-link.active-parent {
+    color: #1e40af;
+    background: #eff6ff;
+    border-bottom-color: #2563eb;
+}
+
+.driver-edit-back {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    margin-top: 1rem;
+    font-size: .8125rem;
+    font-weight: 600;
+    color: var(--tl-text-muted);
+    text-decoration: none;
+}
+
+.driver-edit-back:hover {
+    color: var(--tl-primary);
+}
+
+.driver-edit-header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem 1.5rem;
+    padding: 1.25rem 0;
+    border-bottom: 1px solid var(--tl-border);
+}
+
+.driver-edit-identity {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.driver-edit-avatar {
+    width: 56px;
+    height: 56px;
+    flex-shrink: 0;
+}
+
+.driver-edit-avatar-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--tl-primary);
+    color: #fff;
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.driver-edit-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin: 0 0 .35rem;
+    color: #0f172a;
+}
+
+.driver-edit-code {
+    font-size: .8rem;
+    color: var(--tl-text-muted);
+}
+
+.driver-edit-actions {
+    flex: 1 1 220px;
+    max-width: 100%;
+}
+
+@media (min-width: 768px) {
+    .driver-edit-actions {
+        text-align: right;
+    }
+    .driver-edit-actions .d-flex {
+        justify-content: flex-end;
+    }
+}
+
+.driver-edit-panel .screen-tabs-wrap {
+    padding-top: .75rem;
+}
+
+.driver-edit-panel .screen-tab-panels {
+    padding-top: 1rem;
+}
+
+/* Gallery giấy tờ — lưới gọn khi xem/duyệt */
+.driver-photo-gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 1rem;
+}
+
+.driver-photo-gallery-group {
+    background: #f8fafc;
+    border: 1px solid var(--tl-border);
+    border-radius: .75rem;
+    padding: .75rem;
+}
+
+.driver-photo-gallery-group .group-label {
+    font-size: .72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--tl-text-muted);
+    margin-bottom: .5rem;
+}
+
+.driver-photo-gallery-item {
+    text-align: center;
+}
+
+.driver-photo-gallery-item img,
+.driver-photo-gallery-item .photo-placeholder-box {
+    width: 100%;
+    border-radius: .5rem;
+    border: 1px solid var(--tl-border);
+    object-fit: cover;
+}
+
+.driver-photo-gallery-item .photo-placeholder-box {
+    aspect-ratio: 4/3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+    color: var(--tl-text-muted);
+    font-size: .72rem;
+}
+
+.driver-photo-gallery-item.portrait img,
+.driver-photo-gallery-item.portrait .photo-placeholder-box {
+    aspect-ratio: 5/6;
+    max-height: 160px;
+    object-fit: cover;
+}
+
+.driver-photo-gallery-item .item-label {
+    font-size: .68rem;
+    color: var(--tl-text-muted);
+    margin-top: .25rem;
+}
+
+@media (max-width: 767px) {
+    .driver-mgmt-table thead {
+        display: none;
+    }
+    .driver-mgmt-table tbody tr {
+        display: block;
+        padding: .85rem 1rem;
+        border-bottom: 1px solid var(--tl-border);
+    }
+    .driver-mgmt-table tbody td {
+        display: block;
+        border: 0;
+        padding: .2rem 0;
+    }
+    .driver-mgmt-table tbody td.text-end {
+        padding-top: .65rem;
+    }
+    .driver-mgmt-table tbody td.text-end .btn {
+        width: auto;
+    }
+    .driver-mgmt-table tbody td.text-end .d-flex {
+        justify-content: stretch !important;
+    }
+    .driver-mgmt-table tbody td.text-end .d-flex .btn {
+        flex: 1 1 auto;
+    }
+}

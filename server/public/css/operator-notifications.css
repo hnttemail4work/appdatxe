@@ -1,0 +1,115 @@
+.operator-notify-wrap {
+    position: relative;
+}
+
+.operator-notify-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    border: 1px solid #e2e8f0;
+    border-radius: 50%;
+    background: #fff;
+    color: #475569;
+    cursor: pointer;
+    transition: background .15s, border-color .15s, color .15s;
+}
+
+.operator-notify-btn:hover {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+    color: #1e40af;
+}
+
+.operator-notify-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 1.1rem;
+    height: 1.1rem;
+    padding: 0 .25rem;
+    border-radius: 999px;
+    background: #dc2626;
+    color: #fff;
+    font-size: .65rem;
+    font-weight: 700;
+    line-height: 1.1rem;
+    text-align: center;
+}
+
+.operator-notify-panel {
+    position: absolute;
+    top: calc(100% + .5rem);
+    right: 0;
+    z-index: 1050;
+    width: min(20rem, calc(100vw - 2rem));
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: .75rem;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, .12);
+    padding: .75rem;
+}
+
+.operator-notify-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    margin-bottom: .5rem;
+    padding-bottom: .5rem;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: .875rem;
+}
+
+.operator-notify-close {
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: #f1f5f9;
+    color: #64748b;
+    font-size: 1.15rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.operator-notify-close:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+.operator-notify-empty {
+    font-size: .8125rem;
+    color: #64748b;
+    padding: .25rem 0;
+}
+
+.operator-notify-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.operator-notify-list li + li {
+    margin-top: .35rem;
+}
+
+.operator-notify-list a {
+    display: block;
+    padding: .5rem .65rem;
+    border-radius: .5rem;
+    font-size: .8125rem;
+    font-weight: 500;
+    color: #1e293b;
+    text-decoration: none;
+    background: #f8fafc;
+}
+
+.operator-notify-list a:hover {
+    background: #eff6ff;
+    color: #1e40af;
+}

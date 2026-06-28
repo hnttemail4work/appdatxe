@@ -73,7 +73,7 @@ class ScheduleController extends Controller
             abort(403, 'Forbidden.');
         }
 
-        $schedule->load(['route', 'vehicle', 'seatReservations.booking.customer', 'bookings.customer']);
+        $schedule->load(['route', 'vehicle', 'seatReservations.booking', 'bookings']);
 
         return response()->json([
             'data' => [
@@ -133,7 +133,7 @@ class ScheduleController extends Controller
             abort(403, 'Forbidden.');
         }
 
-        $schedule->load(['vehicle', 'seatReservations.booking.customer']);
+        $schedule->load(['vehicle', 'seatReservations.booking']);
 
         return response()->json([
             'schedule_id' => $schedule->id,
@@ -153,7 +153,7 @@ class ScheduleController extends Controller
                 'seat_number' => (string) $seatNumber,
                 'status' => $reservation?->status ?? 'available',
                 'booking_reference' => $reservation?->booking?->booking_reference,
-                'customer_name' => $reservation?->booking?->customer?->name,
+                'contact_phone' => $reservation?->booking?->contact_phone,
                 'expires_at' => $reservation?->expires_at?->toIso8601String(),
             ];
         })->values()->all();

@@ -1,256 +1,204 @@
 @extends('layouts.app')
 
+@push('styles')
+<link rel="stylesheet" href="{{ asset('css/driver.css') }}?v={{ filemtime(public_path('css/driver.css')) }}">
+@endpush
+
 @section('content')
-<div class="row g-4">
+@php
+    $pendingCount = $pendingRequests->count();
+    $wallet = $driverWallet;
+    $tripSchedules = $tripSchedules ?? collect();
+    $tripActionCount = $tripActionCount ?? 0;
+    $revenueStats = $revenueStats ?? ['day' => 0, 'week' => 0];
 
-    {{-- Cột trái: tóm tắt + trạng thái --}}
-    <div class="col-lg-4">
+    $driverDefaultTab = request('tab');
+    if (! in_array($driverDefaultTab, ['requests', 'trips', 'deposit'], true)) {
+        $driverDefaultTab = 'requests';
+    }
+@endphp
 
-        <div class="card shadow-sm p-4 mb-4">
-            <div class="d-flex gap-3 align-items-start mb-3">
-                <div class="flex-shrink-0">
-                    @if($profile?->photo_portrait)
-                        <img src="{{ $profile->photoUrl('photo_portrait') }}" alt="Chân dung"
-                             class="rounded-circle object-fit-cover border" style="width:60px;height:60px;">
-                    @else
-                        <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center border"
-                             style="width:60px;height:60px;font-size:1.4rem;font-weight:700;">
-                            {{ mb_substr($user->name, 0, 1) }}
-                        </div>
-                    @endif
-                </div>
-                <div>
-                    <h5 class="mb-0 fw-bold">{{ $user->name }}</h5>
-                    <span class="badge bg-primary small">Tài xế</span>
-                    @if($profile)
-                        <span class="badge bg-{{ match($profile->status) { 'active'=>'success','suspended'=>'danger',default=>'secondary' } }} small ms-1">
-                            {{ match($profile->status) { 'active'=>'Hoạt động','suspended'=>'Tạm ngưng',default=>'Không HĐ' } }}
-                        </span>
-                    @endif
-                </div>
-            </div>
-
-            @if($profile)
-            <div class="d-flex flex-column gap-2 small mb-3">
-                @if($profile->driver_code)
-                <div class="d-flex justify-content-between">
-                    <span class="text-muted">Mã tài xế</span>
-                    <code class="fw-bold">{{ $profile->driver_code }}</code>
-                </div>
-                @endif
-                <div class="d-flex justify-content-between">
-                    <span class="text-muted">Điện thoại</span>
-                    <span>{{ $user->phone ?? '—' }}</span>
-                </div>
-                <div class="d-flex justify-content-between">
-                    <span class="text-muted">Hạng bằng</span>
-                    <span class="badge bg-primary">Hạng {{ $profile->license_class }}</span>
-                </div>
-                @if($profile->operator)
-                <div class="d-flex justify-content-between">
-                    <span class="text-muted">Quản lý</span>
-                    <span>{{ $profile->operator->name }}</span>
-                </div>
-                @endif
-            </div>
-            <a href="{{ route('driver.profile') }}" class="btn btn-outline-primary btn-sm w-100">
-                Cập nhật hồ sơ & ảnh →
-            </a>
-            @else
-            <div class="alert alert-warning py-2 small mb-0">
-                Chưa có hồ sơ tài xế. Liên hệ quản lý.
-            </div>
-            @endif
-        </div>
-
-        @if($profile)
-        <div class="card shadow-sm p-4">
-            <h5 class="card-title-bar mb-3">Trạng thái hoạt động</h5>
-            @php
-                $avail = $profile->availability_status ?? 'off_duty';
-                $availConfig = [
-                    'available' => ['label' => 'Sẵn sàng nhận chuyến', 'color' => 'success',  'icon' => '🟢'],
-                    'on_trip'   => ['label' => 'Đang chạy chuyến',     'color' => 'primary',   'icon' => '🔵'],
-                    'off_duty'  => ['label' => 'Nghỉ / Không nhận',    'color' => 'secondary', 'icon' => '⚫'],
-                ];
-            @endphp
-            <div class="mb-3 text-center">
-                <span class="fs-4">{{ $availConfig[$avail]['icon'] }}</span>
-                <div class="mt-1">
-                    <span class="badge bg-{{ $availConfig[$avail]['color'] }} fs-6 px-3 py-2">
-                        {{ $availConfig[$avail]['label'] }}
-                    </span>
-                </div>
-            </div>
-            <form method="POST" action="{{ route('driver.availability.update') }}">
-                @csrf @method('PATCH')
-                <div class="d-flex flex-column gap-2">
-                    @foreach($availConfig as $val => $cfg)
-                        <button type="submit" name="availability_status" value="{{ $val }}"
-                            class="btn btn-{{ $avail === $val ? $cfg['color'] : 'outline-'.$cfg['color'] }} text-start">
-                            {{ $cfg['icon'] }} {{ $cfg['label'] }}
-                        </button>
-                    @endforeach
-                </div>
-            </form>
-        </div>
+<div class="driver-page">
+    @if($profile)
+    <div class="driver-greeting mb-2">
+        Xin chào <strong>{{ $user->name }}</strong>
+        @if($profile->driver_code)
+            · <strong>{{ $profile->driver_code }}</strong>
         @endif
     </div>
+    @endif
 
-    {{-- Cột phải: yêu cầu + lịch chạy --}}
-    <div class="col-lg-8">
-        <div class="card shadow-sm p-4 mb-4" id="pending-requests-panel">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h4 class="card-title-bar mb-0">Yêu cầu nhận chuyến</h4>
-                <small class="text-muted" id="driver-sync-indicator">Đang cập nhật...</small>
+    @if(($profile && $profile->isMissedTripLocked()) || ($showTopUpBanner ?? false) || ($settlementBlockReason ?? null))
+    <div class="driver-notice-stack">
+        @if($profile && $profile->isMissedTripLocked())
+            <div class="driver-notice driver-notice-danger">
+                <strong>Tài khoản tạm khóa</strong> — không nhận chuyến được. Liên hệ quản lý để mở khóa.
             </div>
-            @if($pendingRequests->isEmpty())
-                <p class="text-muted mb-0" id="no-pending-msg">Không có yêu cầu mới.</p>
-            @else
-                <div class="d-flex flex-column gap-3" id="pending-requests-list">
-                    @foreach($pendingRequests as $req)
-                    <div class="border border-warning rounded-3 p-3 bg-warning-subtle">
-                        <div class="d-flex justify-content-between flex-wrap gap-2">
-                            <div>
-                                <strong>{{ $req->schedule->route->departure }} → {{ $req->schedule->route->destination }}</strong><br>
-                                <span class="text-muted small">{{ $req->schedule->departure_time->format('H:i · d/m/Y') }}</span><br>
-                                <span class="small">Khách: <strong>{{ $req->customer->name }}</strong> · {{ $req->customer->phone ?? '—' }}</span>
-                            </div>
-                            <div class="d-flex gap-2 align-items-center">
-                                <form method="POST" action="{{ route('driver.tripRequests.accept', $req) }}">@csrf
-                                    <button class="btn btn-success btn-sm">Nhận chuyến</button>
-                                </form>
-                                <form method="POST" action="{{ route('driver.tripRequests.reject', $req) }}">@csrf
-                                    <button class="btn btn-outline-danger btn-sm">Từ chối</button>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
-                    @endforeach
-                </div>
-            @endif
-        </div>
-
-        <div class="card shadow-sm p-4">
-            <h4 class="card-title-bar mb-3">Lịch chạy của tôi</h4>
-            @if($schedules->isEmpty())
-                <p class="text-muted">Chưa có lịch chạy nào được phân công.</p>
-            @else
-                <div class="d-flex flex-column gap-3">
-                    @foreach($schedules as $s)
-                    @php $isToday = $s->departure_time->isToday(); @endphp
-                    <div class="border rounded-3 p-3 {{ $isToday ? 'border-primary bg-light' : '' }}">
-                        <div class="row align-items-center g-2">
-                            <div class="col-md-4">
-                                @if($isToday)
-                                    <span class="badge bg-primary mb-1">Hôm nay</span><br>
-                                @endif
-                                <strong>{{ $s->route->departure }} → {{ $s->route->destination }}</strong><br>
-                                <span class="text-muted small">{{ $s->departure_time->format('H:i · d/m/Y') }}</span>
-                            </div>
-                            <div class="col-md-3">
-                                <span class="text-muted small d-block">Xe</span>
-                                {{ ucfirst($s->vehicle->type) }}<br>
-                                <small class="text-muted">{{ $s->vehicle->license_plate }} · {{ $s->vehicle->capacity }} ghế</small>
-                            </div>
-                            <div class="col-md-3">
-                                <span class="text-muted small d-block">Đã đặt</span>
-                                <strong>{{ $s->bookedSeatsCount() }}</strong>
-                                <span class="text-muted">/ {{ $s->capacity() }} ghế</span>
-                            </div>
-                            <div class="col-md-2 text-end">
-                                <span class="badge bg-{{ match($s->status) {
-                                    'running'   => 'primary',
-                                    'completed' => 'secondary',
-                                    'cancelled' => 'danger',
-                                    default     => 'warning text-dark'
-                                } }}">
-                                    {{ match($s->status) {
-                                        'scheduled' => 'Đã lên lịch',
-                                        'running'   => 'Đang chạy',
-                                        'completed' => 'Hoàn thành',
-                                        'cancelled' => 'Đã hủy',
-                                        default     => ucfirst($s->status)
-                                    } }}
-                                </span>
-                            </div>
-                        </div>
-
-                        @if($s->bookings->isNotEmpty())
-                        <hr class="my-2">
-                        <div class="small">
-                            <span class="text-muted fw-semibold">Hành khách ({{ $s->bookings->count() }}):</span>
-                            <div class="d-flex flex-column gap-2 mt-2">
-                                @foreach($s->bookings as $booking)
-                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 rounded-2 px-3 py-2 border {{ $booking->isConfirmedForDriver() ? 'bg-success-subtle border-success' : 'bg-white' }}">
-                                    <div>
-                                        <strong>{{ $booking->customer->name }}</strong>
-                                        <span class="text-muted"> · {{ $booking->customer->phone ?? '—' }}</span><br>
-                                        <span class="text-muted">Ghế {{ implode(', ', (array) $booking->seat_numbers) }}</span>
-                                        @if($booking->pickup_address)
-                                            · <span class="text-muted">Đón: {{ $booking->pickup_address }}</span>
-                                        @endif
-                                        @if($booking->dropoff_address)
-                                            · <span class="text-muted">Trả: {{ $booking->dropoff_address }}</span>
-                                        @endif
-                                    </div>
-                                    <div class="text-end">
-                                        @include('partials.booking-status', ['booking' => $booking])
-                                        @if($booking->trip_status === 'confirmed')
-                                            <form method="POST" action="{{ route('driver.bookings.complete', $booking) }}" class="mt-1"
-                                                onsubmit="return confirm('Báo hoàn thành chuyến cho khách {{ $booking->customer->name }}?')">
-                                                @csrf
-                                                <button class="btn btn-sm btn-outline-success">Báo hoàn thành chuyến</button>
-                                            </form>
-                                        @elseif($booking->trip_status === 'awaiting_completion')
-                                            <span class="badge bg-info text-dark mt-1">Chờ khách xác nhận</span>
-                                        @elseif($booking->trip_status === 'completed')
-                                            <span class="badge bg-success mt-1">Đã hoàn tất</span>
-                                        @endif
-                                    </div>
-                                </div>
-                                @endforeach
-                            </div>
-                        </div>
-                        @else
-                        <hr class="my-2">
-                        <p class="text-muted small mb-0">Chưa có hành khách đặt vé cho chuyến này.</p>
-                        @endif
-                    </div>
-                    @endforeach
-                </div>
-            @endif
-        </div>
+        @endif
+        @if($showTopUpBanner ?? false)
+            <div class="driver-notice driver-notice-warning">
+                ⚠️ Chưa đủ điều kiện nhận cuốc,
+                <a href="{{ route('driver.dashboard', ['tab' => 'deposit']) }}" class="ms-1 fw-semibold">nạp ví ngay →</a>
+            </div>
+        @endif
+        @if($settlementBlockReason ?? null)
+            <div class="driver-notice driver-notice-warning">
+                {{ $settlementBlockReason }}
+            </div>
+        @endif
     </div>
+    @endif
+
+    @include('partials.screen-tabs-start', [
+        'prefix' => 'driver-main',
+        'activeKey' => $driverDefaultTab,
+        'tabs' => [
+            ['key' => 'requests', 'label' => 'Yêu cầu', 'badge' => $pendingCount, 'hot' => $pendingCount > 0],
+            ['key' => 'trips', 'label' => 'Xem chuyến', 'badge' => $tripActionCount, 'hot' => $tripActionCount > 0],
+            ['key' => 'deposit', 'label' => 'Ví'],
+        ],
+    ])
+
+    @include('partials.screen-tab-pane', ['prefix' => 'driver-main', 'key' => 'requests', 'active' => $driverDefaultTab === 'requests'])
+    <section class="driver-section" id="driver-section-requests">
+        <div class="driver-section-head driver-section-head--tools">
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="driver-refresh-btn">↻ Dò chuyến</button>
+        </div>
+        @if($pendingRequests->isEmpty())
+            <div class="driver-empty" id="no-pending-msg">
+                Không có yêu cầu.
+                <span class="driver-empty-hint d-block mt-1">Chia sẻ QR đặt vé để nhận đơn.</span>
+            </div>
+            <div class="d-none flex-column gap-3" id="pending-requests-list"></div>
+        @else
+            <div class="d-flex flex-column gap-3" id="pending-requests-list">
+                @foreach($pendingRequests as $req)
+                    @include('partials.driver-trip-request-card', ['req' => $req, 'walletBlockReason' => $walletBlockReason ?? null])
+                @endforeach
+            </div>
+        @endif
+    </section>
+    @include('partials.screen-tab-pane-end')
+
+    @include('partials.screen-tab-pane', ['prefix' => 'driver-main', 'key' => 'trips', 'active' => $driverDefaultTab === 'trips'])
+    <section class="driver-section" id="driver-section-trips">
+        @if($tripSchedules->isEmpty())
+            <div class="driver-empty">Chưa có chuyến trong tuần này.</div>
+        @else
+            <div class="d-flex flex-column gap-3">
+                @foreach($tripSchedules as $schedule)
+                    @include('partials.driver-schedule-card', ['schedule' => $schedule, 'showActions' => true])
+                @endforeach
+            </div>
+        @endif
+    </section>
+    @include('partials.screen-tab-pane-end')
+
+    @include('partials.screen-tab-pane', ['prefix' => 'driver-main', 'key' => 'deposit', 'active' => $driverDefaultTab === 'deposit'])
+    <section class="driver-section" id="driver-section-deposit">
+        @include('partials.driver-tab-deposit', ['wallet' => $wallet, 'revenueStats' => $revenueStats])
+    </section>
+    @include('partials.screen-tab-pane-end')
+
+    @include('partials.screen-tabs-end')
 </div>
 @endsection
 
 @push('scripts')
+<script src="{{ asset('js/driver-transfer-form.js') }}?v={{ filemtime(public_path('js/driver-transfer-form.js')) }}"></script>
 <script>
 (function () {
     var syncUrl = @json(route('driver.liveSync'));
+    var walletBlocked = @json((bool) ($walletBlockReason ?? null));
+    var csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+    function escapeHtml(s) {
+        if (!s) return '';
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function renderPending(req) {
+        var modeBadge = req.booking_mode_key === 'whole_car' ? 'primary' : 'info text-dark';
+        var details = '';
+        if (req.passenger_name || req.booking_mode) {
+            details += '<div class="mb-2">';
+            if (req.passenger_name) {
+                details += '<strong>' + escapeHtml(req.passenger_name) + '</strong> ';
+            }
+            if (req.booking_mode) {
+                details += '<span class="badge bg-' + modeBadge + ' ms-1">' + escapeHtml(req.booking_mode) + '</span>';
+            }
+            details += '</div>';
+        }
+        if (req.pickup) {
+            details += '<div class="small">📍 Điểm đón cụ thể: <strong>' + escapeHtml(req.pickup) + '</strong></div>';
+        }
+        if (req.dropoff) {
+            details += '<div class="small">🏁 Điểm trả cụ thể: <strong>' + escapeHtml(req.dropoff) + '</strong></div>';
+        }
+        if (req.seats_label) {
+            details += '<div class="text-muted small mt-1">' + escapeHtml(req.seats_label) + '</div>';
+        }
+        if (req.notes) {
+            details += '<div class="text-muted small mt-1">📝 ' + escapeHtml(req.notes) + '</div>';
+        }
+        if (req.trip_total) {
+            details += '<div class="driver-trip-total mt-2">Tổng chuyến: <strong>' + escapeHtml(req.trip_total) + ' đ</strong></div>';
+        }
+        if (!details) {
+            details = '<p class="text-muted small mb-0">Chưa có chi tiết hành khách.</p>';
+        }
+        var expireHint = req.expires_in_label
+            ? '<div class="meta text-warning">Còn ' + escapeHtml(req.expires_in_label) + ' để nhận</div>'
+            : '';
+        var buttonsDisabled = walletBlocked ? ' disabled' : '';
+        var metaLine = req.meta_label || req.departure_time || '';
+        var tripCodeLine = req.trip_code
+            ? '<div class="meta driver-schedule-trip-code">Mã chuyến · <code class="driver-trip-code">' + escapeHtml(req.trip_code) + '</code></div>'
+            : '';
+        return '<div class="driver-request-card" data-request-id="' + escapeHtml(String(req.id)) + '">' +
+            '<div class="driver-card-top"><div>' +
+            '<div class="route">' + escapeHtml(req.route) + '</div>' +
+            '<div class="meta">' + escapeHtml(metaLine) + '</div>' + tripCodeLine + expireHint + '</div>' +
+            '<div class="driver-card-top-aside text-end"><span class="badge bg-warning text-dark">Cuốc mới</span></div></div>' +
+            '<div class="driver-card-body">' + details + '</div>' +
+            '<div class="driver-card-actions d-flex gap-2 flex-wrap justify-content-end">' +
+            '<form method="POST" action="' + escapeHtml(req.accept_url) + '">' +
+            '<input type="hidden" name="_token" value="' + escapeHtml(csrf) + '">' +
+            '<button class="btn btn-success btn-sm px-4"' + buttonsDisabled + '>Nhận cuốc</button></form>' +
+            '<form method="POST" action="' + escapeHtml(req.reject_url) + '">' +
+            '<input type="hidden" name="_token" value="' + escapeHtml(csrf) + '">' +
+            '<button class="btn btn-driver-reject btn-sm px-4"' + buttonsDisabled + '>Từ chối</button></form>' +
+            '</div></div>';
+    }
+
+    var refreshBtn = document.getElementById('driver-refresh-btn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', function () {
+            window.location.reload();
+        });
+    }
+
     function poll() {
         fetch(syncUrl, { headers: { 'Accept': 'application/json' } })
             .then(function (r) { return r.json(); })
             .then(function (data) {
-                var el = document.getElementById('driver-sync-indicator');
-                if (el) el.textContent = 'Cập nhật: ' + new Date().toLocaleTimeString('vi-VN');
                 var list = document.getElementById('pending-requests-list');
                 var empty = document.getElementById('no-pending-msg');
                 if (!data.pending_requests.length) {
-                    if (list) list.innerHTML = '';
-                    if (empty) empty.style.display = 'block';
+                    if (list) {
+                        list.innerHTML = '';
+                        list.classList.add('d-none');
+                        list.classList.remove('d-flex');
+                    }
+                    if (empty) empty.style.display = '';
                     return;
                 }
                 if (empty) empty.style.display = 'none';
                 if (!list) return;
-                list.innerHTML = data.pending_requests.map(function (req) {
-                    return '<div class="border border-warning rounded-3 p-3 bg-warning-subtle">' +
-                        '<strong>' + req.route + '</strong><br>' +
-                        '<span class="text-muted small">' + req.departure_time + '</span><br>' +
-                        '<span class="small">Khách: <strong>' + req.customer_name + '</strong></span>' +
-                        '<div class="mt-2"><span class="badge bg-warning text-dark">Chờ bạn phản hồi</span></div></div>';
-                }).join('');
+                list.classList.remove('d-none');
+                list.classList.add('d-flex');
+                list.innerHTML = data.pending_requests.map(renderPending).join('');
             }).catch(function () {});
     }
     poll();

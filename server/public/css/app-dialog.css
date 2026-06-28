@@ -1,0 +1,9 @@
+.app-dialog-content {
+    border-radius: 1rem;
+}
+#appDialogBody {
+    color: #334155;
+    font-size: .95rem;
+    line-height: 1.5;
+    white-space: pre-line;
+}

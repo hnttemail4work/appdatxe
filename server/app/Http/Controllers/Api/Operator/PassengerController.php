@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api\Operator;
 
 use App\Http\Controllers\Controller;
+use App\Models\Booking;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class PassengerController extends Controller
 {
@@ -12,39 +12,39 @@ class PassengerController extends Controller
     {
         $operatorId = $request->user()->id;
 
-        $passengers = DB::table('bookings')
+        $passengers = Booking::query()
+            ->with(['schedule.vehicle', 'schedule.route'])
+            ->whereHas('schedule.vehicle', fn ($q) => $q->where('operator_id', $operatorId))
+            ->whereHas('schedule', fn ($q) => $q->where('departure_time', '>=', now()))
+            ->where('trip_status', '!=', 'cancelled')
             ->join('schedules', 'bookings.schedule_id', '=', 'schedules.id')
-            ->join('vehicles', 'schedules.vehicle_id', '=', 'vehicles.id')
-            ->join('users', 'bookings.customer_id', '=', 'users.id')
-            ->where('vehicles.operator_id', $operatorId)
-            ->where('schedules.departure_time', '>=', now())
-            ->where('bookings.trip_status', '!=', 'cancelled')
-            ->select(
-                'bookings.id',
-                'bookings.ticket_code',
-                'bookings.booking_reference',
-                'bookings.seat_numbers',
-                'bookings.total_price',
-                'bookings.payment_status',
-                'bookings.trip_status',
-                'users.id as customer_id',
-                'users.name as customer_name',
-                'users.phone',
-                'schedules.departure_time',
-                'schedules.available_seats',
-                DB::raw('(SELECT GROUP_CONCAT(sr.seat_number) FROM seat_reservations sr WHERE sr.booking_id = bookings.id AND sr.status = "booked") as reserved_seats')
-            )
             ->orderBy('schedules.departure_time')
+            ->select('bookings.*')
             ->paginate(15);
 
+        $data = collect($passengers->items())->map(fn (Booking $b) => [
+            'id'                => $b->id,
+            'trip_code'         => $b->schedule?->shortTripCode(),
+            'booking_reference' => $b->booking_reference,
+            'contact_phone'     => $b->contact_phone,
+            'passenger_name'    => $b->passenger_name,
+            'pickup_label'      => $b->pickupLabel(),
+            'dropoff_label'     => $b->dropoffLabel(),
+            'seat_numbers'      => $b->seat_numbers,
+            'total_price'       => $b->total_price,
+            'payment_status'    => $b->payment_status,
+            'trip_status'       => $b->trip_status,
+            'departure_time'    => $b->schedule?->departure_time?->toIso8601String(),
+        ]);
+
         return response()->json([
-            'success' => true,
-            'data' => $passengers->items(),
+            'success'    => true,
+            'data'       => $data,
             'pagination' => [
-                'total' => $passengers->total(),
-                'per_page' => $passengers->perPage(),
+                'total'        => $passengers->total(),
+                'per_page'     => $passengers->perPage(),
                 'current_page' => $passengers->currentPage(),
-                'last_page' => $passengers->lastPage(),
+                'last_page'    => $passengers->lastPage(),
             ],
         ]);
     }

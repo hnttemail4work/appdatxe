@@ -39,7 +39,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       const tokenOk = await ensureCsrf(form);
       if (!tokenOk) {
         event.preventDefault();
-        alert('Lỗi bảo mật, vui lòng thử lại!');
+        if (window.AppDialog) {
+          window.AppDialog.alert('Lỗi bảo mật, vui lòng thử lại!');
+        }
       }
       // Allow native form POST — server redirects to the correct dashboard
     });
@@ -48,7 +50,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (profileForm) {
     profileForm.addEventListener('submit', async (event) => {
       event.preventDefault();
-      alert('Vui lòng cập nhật thông tin tại trang Dashboard Laravel (/customer/dashboard).');
+      if (window.AppDialog) {
+        window.AppDialog.alert('Vui lòng cập nhật thông tin tại trang Dashboard Laravel (/customer/dashboard).');
+      }
       window.location.href = '/dashboard';
     });
   }

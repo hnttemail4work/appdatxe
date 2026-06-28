@@ -1,0 +1,9 @@
+/* Auth — trang đăng nhập */
+.auth-card {
+    border-radius: 1rem;
+}
+
+.auth-card h2 {
+    font-weight: 800;
+    font-size: 1.5rem;
+}

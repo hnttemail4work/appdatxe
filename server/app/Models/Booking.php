@@ -7,22 +7,29 @@ use Illuminate\Database\Eloquent\Model;
 class Booking extends Model
 {
     protected $fillable = [
-        'customer_id',
+        'contact_phone',
+        'passenger_name',
         'schedule_id',
         'seat_numbers',
-        'ticket_code',
+        'trip_type',
+        'booking_mode',
         'booking_reference',
         'total_price',
         'payment_status',
         'trip_status',
         'booking_status',
         'pickup_address',
+        'pickup_detail',
         'dropoff_address',
+        'dropoff_detail',
         'notes',
+        'referral_code',
+        'operator_confirmed_at',
         'hold_expires_at',
         'confirmed_at',
         'completed_at',
         'cancelled_at',
+        'expired_at',
     ];
 
     protected function casts(): array
@@ -34,12 +41,84 @@ class Booking extends Model
             'confirmed_at'   => 'datetime',
             'completed_at'   => 'datetime',
             'cancelled_at'   => 'datetime',
+            'expired_at'     => 'datetime',
+            'operator_confirmed_at' => 'datetime',
         ];
     }
 
-    public function customer()
+    public function tripTypeLabel(): string
     {
-        return $this->belongsTo(User::class, 'customer_id');
+        return app(\App\Services\TripPricingService::class)->tripTypeLabel($this->trip_type ?? 'one_way');
+    }
+
+    public function contactPhone(): ?string
+    {
+        return $this->contact_phone;
+    }
+
+    public function referralCommission(): float
+    {
+        if (blank($this->referral_code)) {
+            return 0;
+        }
+
+        return round((float) $this->total_price * \App\Support\PlatformFees::referralCommissionRate(), 2);
+    }
+
+    public function matchesContactPhone(string $phone): bool
+    {
+        $stored = preg_replace('/\D+/', '', (string) $this->contact_phone);
+        $given = preg_replace('/\D+/', '', $phone);
+
+        return $stored !== '' && $stored === $given;
+    }
+
+    public function pickupLabel(): string
+    {
+        $city = trim((string) $this->pickup_address);
+        $detail = trim((string) $this->pickup_detail);
+
+        if ($city !== '' && $detail !== '') {
+            return $city . ' · ' . $detail;
+        }
+
+        return $detail !== '' ? $detail : ($city !== '' ? $city : '—');
+    }
+
+    /** Chỉ chi tiết đón — không ghép tỉnh/thành phố. */
+    public function driverPickupDetailLabel(): string
+    {
+        $detail = trim((string) $this->pickup_detail);
+        if ($detail !== '') {
+            return $detail;
+        }
+
+        $city = trim((string) $this->pickup_address);
+
+        return $city !== '' ? $city : 'liên hệ khách';
+    }
+
+    /** Chỉ chi tiết trả — nếu trống thì báo liên hệ khách. */
+    public function driverDropoffDetailLabel(): string
+    {
+        $detail = trim((string) $this->dropoff_detail);
+        if ($detail !== '') {
+            return $detail;
+        }
+
+        return 'liên hệ khách';
+    }
+
+    public function dropoffLabel(): string
+    {
+        $city = trim((string) $this->dropoff_address);
+        $detail = trim((string) $this->dropoff_detail);
+
+        if ($city !== '' && $detail !== '') {
+            return $city . ' · ' . $detail;
+        }
+
+        return $detail !== '' ? $detail : ($city !== '' ? $city : '—');
     }
 
     public function schedule()
@@ -52,16 +131,30 @@ class Booking extends Model
         return $this->hasMany(PaymentTransaction::class);
     }
 
-    public function hasPendingPaymentClaim(): bool
-    {
-        return $this->paymentTransactions()->where('status', 'pending')->exists();
-    }
-
     public function isConfirmedForDriver(): bool
     {
         return $this->booking_status === 'confirmed'
             && $this->payment_status === 'paid'
             && $this->trip_status === 'confirmed';
+    }
+
+    public function isExpired(): bool
+    {
+        if ($this->expired_at !== null) {
+            return true;
+        }
+
+        if ($this->booking_status !== 'pending') {
+            return false;
+        }
+
+        $this->loadMissing('schedule');
+
+        if ($this->hold_expires_at && $this->hold_expires_at->isPast()) {
+            return true;
+        }
+
+        return $this->schedule && $this->schedule->departure_time <= now();
     }
 
     public function seatReservations()
@@ -72,5 +165,186 @@ class Booking extends Model
     public function audits()
     {
         return $this->hasMany(BookingAudit::class);
+    }
+
+    public function hasDriverAccepted(): bool
+    {
+        $this->loadMissing('schedule');
+
+        return $this->schedule && (bool) $this->schedule->driver_id;
+    }
+
+    public function needsOperatorConfirmation(): bool
+    {
+        return $this->operator_confirmed_at === null
+            && ! in_array($this->booking_status, ['cancelled', 'rejected'], true);
+    }
+
+    public function bookingModeLabel(): string
+    {
+        return match ($this->booking_mode) {
+            'whole_car' => 'Đặt cả xe',
+            default     => 'Ghép xe',
+        };
+    }
+
+    public function seatCount(): int
+    {
+        return count($this->seat_numbers ?? []);
+    }
+
+    public function seatCountLabel(): string
+    {
+        if (($this->booking_mode ?? 'shared') === 'whole_car') {
+            return 'Cả xe';
+        }
+
+        $count = $this->seatCount();
+
+        return $count > 0 ? $count . ' ghế' : '';
+    }
+
+    /** Nhãn trạng thái thống nhất — luồng mới: khách → tài xế nhận → thu tiền trực tiếp. */
+    public function primaryStatusLabel(): string
+    {
+        if ($this->isExpired()) {
+            return 'Hết hạn';
+        }
+
+        if ($this->booking_status === 'cancelled') {
+            return 'Đã hủy';
+        }
+
+        if ($this->booking_status === 'rejected') {
+            return 'Từ chối';
+        }
+
+        if ($this->trip_status === 'completed') {
+            return 'Hoàn tất';
+        }
+
+        if (! $this->hasDriverAccepted()) {
+            return $this->needsOperatorConfirmation() ? 'Chờ QL xác nhận' : 'Chờ tài xế nhận';
+        }
+
+        $this->loadMissing('schedule');
+        if ($this->schedule
+            && ($this->schedule->status === 'running' || $this->schedule->departure_time <= now())) {
+            return 'Đang phục vụ';
+        }
+
+        return 'Sắp chạy';
+    }
+
+    /** Nhãn theo dõi trên dashboard quản lý — có thêm bước kết chuyến / phí nền tảng. */
+    public function operatorMonitorLabel(): string
+    {
+        if ($this->isExpired()) {
+            return 'Hết hạn';
+        }
+
+        if ($this->booking_status === 'cancelled') {
+            return 'Đã hủy';
+        }
+
+        if ($this->booking_status === 'rejected') {
+            return 'Từ chối';
+        }
+
+        if ($this->trip_status === 'completed') {
+            $this->loadMissing('schedule.tripSettlement');
+            $settlement = $this->schedule?->tripSettlement;
+            if ($settlement && $settlement->status !== 'completed') {
+                return 'Chờ kết chuyến';
+            }
+
+            return 'Hoàn tất';
+        }
+
+        if (! $this->hasDriverAccepted()) {
+            return $this->needsOperatorConfirmation() ? 'Chờ QL xác nhận' : 'Chờ tài xế nhận';
+        }
+
+        $this->loadMissing('schedule');
+        if ($this->schedule
+            && ($this->schedule->status === 'running' || $this->schedule->departure_time <= now())) {
+            return 'Đang phục vụ';
+        }
+
+        return 'Sắp chạy';
+    }
+
+    public function primaryStatusColor(): string
+    {
+        return $this->statusColorForLabel($this->primaryStatusLabel());
+    }
+
+    public function operatorMonitorColor(): string
+    {
+        return $this->statusColorForLabel($this->operatorMonitorLabel());
+    }
+
+    private function statusColorForLabel(string $label): string
+    {
+        if ($label === 'Hết hạn') {
+            return 'secondary';
+        }
+
+        return match ($label) {
+            'Đã hủy', 'Từ chối'     => 'danger',
+            'Hoàn tất'              => 'success',
+            'Đang phục vụ'          => 'primary',
+            'Chờ kết chuyến'        => 'warning text-dark',
+            'Chờ QL xác nhận', 'Chờ tài xế nhận' => 'warning text-dark',
+            default                 => 'secondary',
+        };
+    }
+
+    public function tripDisplayLabel(): ?string
+    {
+        if ($this->isExpired()) {
+            return null;
+        }
+
+        return match ($this->trip_status) {
+            'completed'           => 'Hoàn tất',
+            'awaiting_completion' => 'Chờ xác nhận hoàn',
+            'cancelled'           => 'Đã hủy',
+            'confirmed'           => $this->scheduleTripPhaseLabel(),
+            default               => null,
+        };
+    }
+
+    public function tripDisplayColor(): string
+    {
+        if ($this->isExpired()) {
+            return 'secondary';
+        }
+
+        $label = $this->tripDisplayLabel();
+
+        return match ($label) {
+            'Hoàn tất', 'Chạy xong' => 'success',
+            'Chờ xác nhận hoàn'     => 'info text-dark',
+            'Đã hủy'                => 'danger',
+            'Đang chạy'             => 'primary',
+            'Sắp chạy'             => 'warning text-dark',
+            default                 => 'secondary',
+        };
+    }
+
+    private function scheduleTripPhaseLabel(): ?string
+    {
+        $this->loadMissing('schedule');
+
+        if (! $this->schedule) {
+            return 'Sắp chạy';
+        }
+
+        return match ($this->schedule->displayStatus()) {
+            'completed' => 'Chạy xong',
+            'running'   => 'Đang chạy',
+            default     => 'Sắp chạy',
+        };
     }
 }
