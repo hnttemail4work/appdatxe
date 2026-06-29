@@ -29,6 +29,7 @@ $pendingSettleCount = $pendingSettleCount ?? 0;
                             <th>Loại</th>
                             <th>Ghế</th>
                             <th>Tổng tiền</th>
+                            <th>Giới thiệu</th>
                             <th>Trạng thái</th>
                             <th>Tài xế</th>
                         </tr>
@@ -51,6 +52,18 @@ $pendingSettleCount = $pendingSettleCount ?? 0;
                             </td>
                             <td>{{ $booking->booking_mode === 'shared' ? $booking->seatCountLabel() : 'Cả xe' }}</td>
                             <td class="fw-semibold">{{ number_format($booking->chargedTotal(), 0, ',', '.') }} đ</td>
+                            <td class="small cell-muted">
+                                @if($booking->appliedReferralCode)
+                                    <span class="driver-meta-code">{{ $booking->appliedReferralCode->code }}</span>
+                                    @if($booking->trip_status === 'completed')
+                                        <div>{{ number_format($booking->referralCommissionAmount(), 0, ',', '.') }} đ ({{ number_format($booking->appliedReferralCode->commissionPercent(), 1) }}%)</div>
+                                    @else
+                                        <div class="text-muted">Chờ hoàn tất</div>
+                                    @endif
+                                @else
+                                    —
+                                @endif
+                            </td>
                             <td>@include('partials.booking-status-operator', ['booking' => $booking])</td>
                             <td class="small">
                                 @include('partials.operator-booking-assign', ['booking' => $booking, 'drivers' => $drivers])

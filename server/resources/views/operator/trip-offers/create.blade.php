@@ -129,12 +129,15 @@ $vehicle = $formData['vehicle'] ?? [];
                 </div>
                 <div class="col-md-6">
                     <label class="form-label" for="offer-distance-km">Quãng đường (km)</label>
-                    <input type="number" id="offer-distance-km" class="form-control" readonly
+                    <input type="number" name="distance_km" id="offer-distance-km" class="form-control"
+                           min="1" max="2000" step="1"
                            value="{{ old('distance_km', $formData['distance_km'] ?? '') }}"
                            placeholder="Chọn điểm đi & điểm đến">
-                    <div class="form-text" id="offer-rate-hint"></div>
+                    <div class="form-text" id="offer-rate-hint">Có thể sửa km — giá sẽ tự tính lại.</div>
                 </div>
             </div>
+
+            <div id="offer-price-preview" class="mb-3 d-none"></div>
 
             <div class="console-panel-head px-0">
                 <div class="console-panel-head-accent">

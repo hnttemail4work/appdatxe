@@ -108,7 +108,7 @@
                 @if($passengers->isNotEmpty())
                 <ul class="small mb-0 mt-2 ps-3">
                     @foreach($passengers as $b)
-                    <li>{{ $b->passenger_name ?: 'HK' }}, {{ $b->contact_phone }}, {{ number_format($b->total_price, 0, ',', '.') }} đ</li>
+                    <li>{{ $b->passenger_name ?: 'HK' }}, {{ $b->passengerProfileDetail() }}, {{ $b->contact_phone }}, {{ number_format($b->total_price, 0, ',', '.') }} đ</li>
                     @endforeach
                 </ul>
                 @endif
@@ -156,7 +156,7 @@
             @if($passengers->isNotEmpty())
             <ul class="small mb-0 mt-1 ps-3">
                 @foreach($passengers as $b)
-                <li>{{ $b->passenger_name ?: 'HK' }}, {{ $b->contact_phone }}</li>
+                <li>{{ $b->passenger_name ?: 'HK' }}, {{ $b->passengerProfileDetail() }}, {{ $b->contact_phone }}</li>
                 @endforeach
             </ul>
             @endif

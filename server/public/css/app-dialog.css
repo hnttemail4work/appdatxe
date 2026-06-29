@@ -61,7 +61,3 @@
 .modal-content .btn-close:hover {
     opacity: 1;
 }
-
-.share-qr-hint {
-    color: var(--app-text-secondary, #e5e5e5);
-}

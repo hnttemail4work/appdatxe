@@ -8,7 +8,9 @@
     var quotePriceUrl = window.__quotePriceUrl;
     var basePrice = window.__customerBasePrices || {};
     var bookingTemplates = window.__bookingTemplates || [];
-    var presetDriver = window.__presetDriver || null;
+    var referralPrefill = (window.__referralPrefill || '').toUpperCase();
+    var referralHasCode = !!window.__referralHasCode;
+    var lastQuoteReferral = null;
     var weekdayNames = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
 
     window.__seatPicks = window.__seatPicks || {};
@@ -63,13 +65,6 @@
         activeSelectedCapacity = parseInt(capacity, 10) || activeSelectedCapacity || 0;
         var capInput = document.getElementById('modal-vehicle-capacity');
         if (capInput) capInput.value = String(activeSelectedCapacity);
-    }
-
-    function getDriverLockedCapacity() {
-        if (!presetDriver) {
-            return 0;
-        }
-        return parseInt(presetDriver.vehicle_seats, 10) || 0;
     }
 
     function vehicleLabelForGuest(capacity, template) {
@@ -161,6 +156,13 @@
             pickup_address: pickup.value,
             dropoff_address: dropoff.value,
         });
+        if (getBookingMode() !== 'whole_car') {
+            params.set('seat_count', String(clampSharedSeatCount()));
+        }
+        var phoneInput = document.getElementById('modal-contact-phone');
+        if (phoneInput && phoneInput.value.trim()) {
+            params.set('contact_phone', phoneInput.value.trim());
+        }
 
         fetch(quotePriceUrl + '?' + params.toString(), { headers: { Accept: 'application/json' } })
             .then(function (r) { return r.json(); })
@@ -168,7 +170,16 @@
                 if (seq !== quoteFetchSeq) {
                     return;
                 }
-                activeUnitPrice = Number(data.seat_price) || 0;
+                activeUnitPrice = Number(data.unit_price || data.seat_price) || 0;
+                lastQuoteReferral = {
+                    percent: Number(data.referral_discount_percent) || 0,
+                    amount: Number(data.referral_discount_amount) || 0,
+                    eligible: !!data.referral_eligible,
+                    attribution_only: !!data.referral_attribution_only,
+                    reason: data.referral_ineligible_reason || null,
+                    subtotal: Number(data.subtotal) || 0,
+                    total: Number(data.total_after_discount) || 0,
+                };
                 var typeSummary = document.getElementById('modal-trip-type-summary');
                 if (typeSummary) {
                     typeSummary.textContent = data.trip_type === 'round_trip' ? 'Khứ hồi' : 'Một chiều';
@@ -483,13 +494,7 @@
     function updateVehicleDisplay() {
         var step2 = document.getElementById('modal-vehicle');
         var tpl = findTemplate(activeTemplateId);
-        var label;
-        var locked = getDriverLockedCapacity();
-        if (locked > 0 && presetDriver) {
-            label = presetDriver.vehicle_label || (locked + ' chỗ');
-        } else {
-            label = vehicleLabelForGuest(activeCapacity, tpl);
-        }
+        var label = vehicleLabelForGuest(activeCapacity, tpl);
         if (step2) step2.textContent = label;
     }
 
@@ -498,16 +503,9 @@
 
         activeTemplateId = String(template.id);
         activeRoute = template.route;
-        var locked = getDriverLockedCapacity();
-        if (locked > 0) {
-            setSelectedCapacity(locked);
-            activeCapacity = locked;
-            activeVehicleLabel = presetDriver.vehicle_label || (locked + ' chỗ');
-        } else {
-            activeCapacity = parseInt(template.capacity, 10) || 0;
-            setSelectedCapacity(activeCapacity);
-            activeVehicleLabel = template.vehicle_label || (activeCapacity + ' chỗ');
-        }
+        activeCapacity = parseInt(template.capacity, 10) || 0;
+        setSelectedCapacity(activeCapacity);
+        activeVehicleLabel = template.vehicle_label || (activeCapacity + ' chỗ');
         syncActiveUnitPriceFromTemplate(template);
 
         var templateInput = document.getElementById('modal-template-id');
@@ -561,9 +559,6 @@
             template_id: activeTemplateId,
             service_date: dateInput.value,
         });
-        if (presetDriver && presetDriver.code) {
-            params.set('driver_code', presetDriver.code);
-        }
 
         fetch(seatAvailabilityUrl + '?' + params.toString(), { headers: { Accept: 'application/json' } })
             .then(function (r) { return r.json(); })
@@ -582,6 +577,32 @@
             });
     }
 
+    function renderReferralDiscount(subtotal, total) {
+        var html = '';
+        var ref = lastQuoteReferral;
+        if (referralHasCode && ref && ref.eligible && ref.percent > 0 && ref.amount > 0) {
+            html = '<div class="small text-success fw-semibold">Giảm GT −' + ref.percent + '% (−' + formatMoney(ref.amount) + ')</div>'
+                + '<div class="small text-muted text-decoration-line-through">' + formatMoney(subtotal) + '</div>';
+        } else if (referralHasCode && ref && ref.reason) {
+            html = '<div class="small text-warning">' + ref.reason + '</div>';
+        } else if (referralHasCode && (window.__referralAttributionOnly || (ref && ref.attribution_only))) {
+            html = '<div class="small text-muted">Mã người giới thiệu — không giảm giá vé</div>';
+        } else if (referralHasCode && window.__referralDiscountPercent > 0 && !ref) {
+            html = '<div class="small text-muted">Mã GT: giảm đến ' + window.__referralDiscountPercent + '%</div>';
+        }
+        ['modal-referral-discount-step1', 'modal-referral-discount-step2'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            if (html) {
+                el.innerHTML = html;
+                el.classList.remove('d-none');
+            } else {
+                el.innerHTML = '';
+                el.classList.add('d-none');
+            }
+        });
+    }
+
     function updateSummary(templateId) {
         var picks = window.__seatPicks[templateId] || new Set();
         var list = Array.from(picks).sort(function (a, b) { return Number(a) - Number(b); });
@@ -595,7 +616,12 @@
         var isWhole = getBookingMode() === 'whole_car';
         var seatCount = isWhole ? list.length : clampSharedSeatCount();
         var hasSeats = isStep1Ready();
-        var total = isWhole ? price : (seatCount * price);
+        var subtotal = isWhole ? price : (seatCount * price);
+        var total = subtotal;
+        if (lastQuoteReferral && lastQuoteReferral.eligible && lastQuoteReferral.total > 0) {
+            total = lastQuoteReferral.total;
+            subtotal = lastQuoteReferral.subtotal || subtotal;
+        }
 
         if (seatSummaryText) {
             seatSummaryText.textContent = isWhole ? bookingModeLabel('whole_car') : seatCountLabel(seatCount);
@@ -607,6 +633,7 @@
                 : ('Số ghế: ' + seatCountLabel(seatCount));
         }
         if (totalStep1) totalStep1.textContent = formatMoney(total);
+        renderReferralDiscount(subtotal, total);
         var unitEl = document.getElementById('modal-price-unit');
         if (unitEl && price > 0 && !isWhole) unitEl.textContent = formatMoney(price);
         if (nextBtn) {
@@ -619,7 +646,15 @@
     function updateDriverSummary() {
         var el = document.getElementById('modal-driver-summary');
         if (!el) return;
-        el.textContent = 'Hình thức: ' + bookingModeLabel(getBookingMode());
+        var parts = ['Hình thức: ' + bookingModeLabel(getBookingMode())];
+        if (referralPrefill) {
+            parts.push('Mã GT: ' + referralPrefill);
+        }
+        el.textContent = parts.join(' · ');
+    }
+
+    function applyReferralPrefill() {
+        // Mã GT chỉ từ link ?ref= — hiển thị readonly trên form, không chỉnh tay.
     }
 
     function setBookingStep(step) {
@@ -650,6 +685,14 @@
             updateDriverSummary();
             updateSummary(activeTemplateId);
             focusPassengerNameField();
+            var phoneInput = document.getElementById('modal-contact-phone');
+            if (phoneInput && !phoneInput.dataset.referralQuoteBound) {
+                phoneInput.dataset.referralQuoteBound = '1';
+                phoneInput.addEventListener('input', function () {
+                    fetchQuotePrice();
+                });
+            }
+            fetchQuotePrice();
         }
     }
 
@@ -711,6 +754,7 @@
             if (!modal) return;
 
             resetBookingModal();
+            applyReferralPrefill();
 
             var routeText = btn.dataset.route || '';
             activeRoute = routeText;
@@ -871,7 +915,6 @@
             template_id: activeTemplateId,
             service_date: dateInput.value,
         });
-        if (presetDriver && presetDriver.code) params.set('driver_code', presetDriver.code);
 
         fetch(seatAvailabilityUrl + '?' + params.toString(), { headers: { Accept: 'application/json' } })
             .then(function (r) { return r.json(); })
@@ -1162,11 +1205,12 @@
         }, 350);
     }
 
-    if (presetDriver && getDriverLockedCapacity()) {
-        setSelectedCapacity(getDriverLockedCapacity());
-    }
-
     restoreBookingModalFromValidation();
+
+    applyReferralPrefill();
+    if (referralPrefill) {
+        updateDriverSummary();
+    }
 
     if (window.__bookingShowResult && !window.__bookingRestoreModal) {
         scrollToBookingResult();

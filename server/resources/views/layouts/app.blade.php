@@ -61,12 +61,6 @@
     $minimalNav = auth()->check()
         && in_array(auth()->user()->role, ['operator', 'admin', 'driver'], true)
         && ! $isGuestBookingPage;
-    $bookingShareQrNav = $isGuestBookingPage
-        && auth()->check()
-        && in_array(auth()->user()->role, ['operator', 'admin', 'driver'], true);
-    $navDriverProfile = ($minimalNav && auth()->check() && auth()->user()->role === 'driver')
-        ? \App\Models\DriverProfile::query()->where('user_id', auth()->id())->first()
-        : null;
     $brandHref = route('home');
     if (auth()->check() && in_array(auth()->user()->role, ['operator', 'driver'], true)) {
         $brandHref = \App\Support\RoleDashboard::route(auth()->user()->role);
@@ -96,12 +90,6 @@
                     <div class="navbar-console-name">{{ auth()->user()->name }}</div>
                 </div>
             @else
-                @include('partials.share-booking-qr-button', [
-                    'shareUrl' => \App\Support\BookingShareUrl::guest(),
-                    'shareLabel' => 'QR đặt vé',
-                    'modalId' => 'shareQrModal-driver-guest',
-                    'iconOnly' => true,
-                ])
                 @include('partials.driver-emergency-call')
             @endif
             @include('partials.logout-button')
@@ -114,32 +102,9 @@
                     <a href="{{ route('operator.tripOffers.create') }}" class="btn btn-sm btn-outline-primary">Tạo chuyến</a>
                 @endif
             @elseif(auth()->user()->role === 'driver')
-                @include('partials.share-booking-qr-button', [
-                    'shareUrl' => \App\Support\BookingShareUrl::guest(),
-                    'shareLabel' => 'QR đặt vé',
-                    'modalId' => 'shareQrModal-driver-guest-mobile',
-                    'iconOnly' => true,
-                ])
                 @include('partials.driver-emergency-call')
             @endif
             @include('partials.logout-button')
-        </div>
-        @elseif($bookingShareQrNav)
-        <div class="app-navbar-desktop d-none d-lg-flex ms-auto align-items-center">
-            @include('partials.share-booking-qr-button', [
-                'shareUrl' => \App\Support\BookingShareUrl::guest(),
-                'shareLabel' => 'QR đặt vé',
-                'modalId' => 'shareQrModal-booking-guest',
-                'iconOnly' => true,
-            ])
-        </div>
-        <div class="app-navbar-mobile d-flex d-lg-none ms-auto align-items-center gap-2">
-            @include('partials.share-booking-qr-button', [
-                'shareUrl' => \App\Support\BookingShareUrl::guest(),
-                'shareLabel' => 'QR đặt vé',
-                'modalId' => 'shareQrModal-booking-guest-mobile',
-                'iconOnly' => true,
-            ])
         </div>
         @elseif(! $hidePublicNav)
         <div class="app-navbar-desktop d-none d-lg-flex ms-auto align-items-center gap-1">
@@ -216,20 +181,6 @@
 </footer>
 
 @stack('modals')
-@if($navDriverProfile ?? null)
-    @include('partials.share-booking-qr-modal', [
-        'shareUrl' => \App\Support\BookingShareUrl::guest(),
-        'shareLabel' => 'QR đặt vé',
-        'modalId' => 'shareQrModal-driver-guest',
-    ])
-@endif
-@if($bookingShareQrNav ?? false)
-    @include('partials.share-booking-qr-modal', [
-        'shareUrl' => \App\Support\BookingShareUrl::guest(),
-        'shareLabel' => 'QR đặt vé',
-        'modalId' => 'shareQrModal-booking-guest',
-    ])
-@endif
 
 @include('partials.app-dialog')
 
@@ -335,9 +286,6 @@
     }
 })();
 </script>
-@if(($bookingShareQrNav ?? false) || (auth()->check() && auth()->user()->role === 'driver'))
-<script src="{{ asset('js/share-booking-qr.js') }}"></script>
-@endif
 @stack('scripts')
 </body>
 </html>

@@ -23,13 +23,13 @@ $pendingDeposits = $pendingDeposits ?? collect();
                 <div class="fw-semibold">{{ number_format($driverWallet->cumulative_revenue, 0, ',', '.') }} đ</div>
             </div>
             <div class="col-sm-4">
-                <div class="text-muted small">Trạng thái ví</div>
+                <div class="text-muted small">Giữ số dư tối thiểu</div>
                 @if($driverWallet->wallet_gate_enabled)
-                    <span class="status-pill status-pill--success">Đã kích hoạt</span>
-                    <div class="small text-muted mt-1">Giữ trên {{ number_format(DriverWalletConfig::MIN_BALANCE, 0, ',', '.') }} đ</div>
+                    <span class="status-pill status-pill--warning">Đang áp dụng</span>
+                    <div class="small text-muted mt-1">Trên {{ number_format(DriverWalletConfig::MIN_BALANCE, 0, ',', '.') }} đ để nhận cuốc</div>
                 @else
-                    <span class="status-pill status-pill--neutral">Chưa kích hoạt</span>
-                    <div class="small text-muted mt-1">Chưa có chuyến kết ≥ 500k</div>
+                    <span class="status-pill status-pill--neutral">Chưa áp dụng</span>
+                    <div class="small text-muted mt-1">Sau chuyến kết ≥ {{ DriverWalletConfig::revenueThresholdShortLabel() }}</div>
                 @endif
             </div>
         </div>

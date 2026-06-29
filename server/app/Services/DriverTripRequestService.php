@@ -8,6 +8,7 @@ use App\Models\DriverProfile;
 use App\Models\DriverTripRequest;
 use App\Models\Schedule;
 use App\Models\SeatReservation;
+use App\Models\TripLedger;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -17,12 +18,30 @@ class DriverTripRequestService
 {
     public const ACCEPT_WINDOW_DAYS = 1;
 
-    public function __construct(private readonly DriverAvailabilityService $availability, private readonly DriverWalletService $wallets)
-    {
+    public const ACCEPT_TIMEOUT_MINUTES = 15;
+
+    public function __construct(
+        private readonly DriverAvailabilityService $availability,
+        private readonly DriverWalletService $wallets,
+        private readonly TripLedgerService $tripLedger,
+        private readonly DriverProximityService $proximity,
+    ) {
     }
 
     public function expireStale(): void
     {
+        DriverTripRequest::query()
+            ->where('status', 'pending')
+            ->whereNotNull('expires_at')
+            ->where('expires_at', '<=', now())
+            ->with(['schedule.route', 'schedule.vehicle'])
+            ->each(function (DriverTripRequest $request): void {
+                $request->update([
+                    'status'       => 'expired',
+                    'responded_at' => now(),
+                ]);
+                $this->tryReassignAfterDecline($request);
+            });
     }
 
     /** @deprecated Không khôi phục yêu cầu hết hạn — chuyển sang tài xế khác. */
@@ -99,6 +118,13 @@ class DriverTripRequestService
             throw new InvalidArgumentException('Tài xế đã full ghế khung giờ này. Vui lòng chọn tài xế khác.');
         }
 
+        if (! $alreadyOnTrip) {
+            $blockReason = $this->wallets->acceptBlockReason($profile);
+            if ($blockReason) {
+                throw new InvalidArgumentException('Tài xế không thể nhận cuốc: ' . $blockReason);
+            }
+        }
+
         if ($schedule->driver_id) {
             if ((int) $schedule->driver_id === (int) $profile->user_id) {
                 if ($schedule->bookedSeatsCount() >= $schedule->capacity()) {
@@ -137,8 +163,52 @@ class DriverTripRequestService
             'contact_phone' => $contactPhone,
             'driver_id'     => $profile->user_id,
             'status'        => 'pending',
-            'expires_at'    => null,
+            'expires_at'    => now()->addMinutes(self::ACCEPT_TIMEOUT_MINUTES),
         ]);
+    }
+
+    public function autoAssignForBooking(Booking $booking): ?DriverTripRequest
+    {
+        $this->expireStale();
+
+        $booking->loadMissing(['schedule.route', 'schedule.vehicle']);
+        $schedule = $booking->schedule;
+
+        if (! $schedule
+            || $schedule->driver_id
+            || in_array($booking->booking_status, ['cancelled', 'rejected'], true)) {
+            return null;
+        }
+
+        if (DriverTripRequest::query()
+            ->where('schedule_id', $schedule->id)
+            ->where('contact_phone', $booking->contact_phone)
+            ->where('status', 'pending')
+            ->exists()) {
+            return null;
+        }
+
+        $tried = $this->triedDriverIds($schedule, (string) $booking->contact_phone);
+
+        for ($attempt = 0; $attempt < 15; $attempt++) {
+            $driver = $this->proximity->pickBest($schedule, $booking, $tried);
+
+            if (! $driver?->driver_code) {
+                return null;
+            }
+
+            try {
+                return $this->requestDriver(
+                    $schedule,
+                    $driver->driver_code,
+                    (string) $booking->contact_phone,
+                );
+            } catch (InvalidArgumentException) {
+                $tried->push((int) $driver->user_id);
+            }
+        }
+
+        return null;
     }
 
     public function accept(DriverTripRequest $request, int $driverUserId): void
@@ -256,6 +326,9 @@ class DriverTripRequestService
     {
         return [
             'passenger_name'   => $booking->passenger_name,
+            'passenger_gender' => $booking->passengerGenderLabel(),
+            'passenger_age'    => $booking->passenger_age,
+            'passenger_profile'=> $booking->passengerProfileDetail(),
             'booking_mode'     => $booking->bookingModeLabel(),
             'booking_mode_key' => $booking->booking_mode ?? 'shared',
             'pickup_time'      => $booking->pickupTimeLabel(),
@@ -427,6 +500,15 @@ class DriverTripRequestService
 
             $this->tryReassignAfterDecline($sibling);
         }
+
+        $request->loadMissing('schedule.route');
+        if ($request->schedule) {
+            $profile = DriverProfile::query()->with('user')->where('user_id', $driverUserId)->first();
+            $this->tripLedger->recordForSchedule($request->schedule, TripLedger::OUTCOME_CANCELLED_DRIVER, [
+                'actor_label' => $profile?->user?->name ?? 'Tài xế',
+                'actor_code'  => $profile?->driver_code,
+            ]);
+        }
     }
 
     private function tryReassignAfterDecline(DriverTripRequest $request): void
@@ -438,38 +520,49 @@ class DriverTripRequestService
             return;
         }
 
-        $triedDriverIds = DriverTripRequest::query()
-            ->where('schedule_id', $schedule->id)
-            ->where('contact_phone', $request->contact_phone)
-            ->whereIn('status', ['expired', 'rejected', 'cancelled'])
-            ->pluck('driver_id');
+        $triedDriverIds = $this->triedDriverIds($schedule, (string) $request->contact_phone);
+        $booking = $this->bookingForRequest($request);
 
-        $candidates = $this->suggestDrivers($schedule);
+        for ($attempt = 0; $attempt < 15; $attempt++) {
+            $next = $this->proximity->pickBest($schedule, $booking, $triedDriverIds);
 
-        foreach ($candidates as $profile) {
-            if ($triedDriverIds->contains($profile->user_id)) {
-                continue;
+            if (! $next?->driver_code) {
+                return;
             }
 
-            if ($this->availability->isDriverBusyForSlot(
-                (int) $profile->user_id,
-                $schedule->route->departure,
-                $schedule->route->destination,
-                $schedule->departure_time,
-            )) {
-                continue;
+            try {
+                $this->requestDriver($schedule, $next->driver_code, (string) $request->contact_phone);
+
+                return;
+            } catch (InvalidArgumentException) {
+                $triedDriverIds->push((int) $next->user_id);
             }
-
-            DriverTripRequest::query()->create([
-                'schedule_id'   => $schedule->id,
-                'contact_phone' => $request->contact_phone,
-                'driver_id'     => $profile->user_id,
-                'status'        => 'pending',
-                'expires_at'    => null,
-            ]);
-
-            return;
         }
+    }
+
+    private function bookingForRequest(DriverTripRequest $request): Booking
+    {
+        $booking = $request->relatedBooking();
+        if ($booking) {
+            return $booking;
+        }
+
+        return Booking::query()
+            ->where('schedule_id', $request->schedule_id)
+            ->where('contact_phone', $request->contact_phone)
+            ->latest()
+            ->firstOrFail();
+    }
+
+    /** @return Collection<int, int> */
+    private function triedDriverIds(Schedule $schedule, string $contactPhone): Collection
+    {
+        return DriverTripRequest::query()
+            ->where('schedule_id', $schedule->id)
+            ->where('contact_phone', $contactPhone)
+            ->whereIn('status', ['expired', 'rejected', 'cancelled'])
+            ->pluck('driver_id')
+            ->map(fn ($id): int => (int) $id);
     }
 
     public function cancelByContactPhone(DriverTripRequest $request, string $contactPhone): void
@@ -488,6 +581,8 @@ class DriverTripRequestService
             'status'       => 'cancelled',
             'responded_at' => now(),
         ]);
+
+        $this->tryReassignAfterDecline($request->fresh());
     }
 
     /** @return array<string, mixed> */

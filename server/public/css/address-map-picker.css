@@ -1,3 +1,16 @@
+.address-map-input-group {
+    flex-wrap: nowrap;
+}
+
+.address-map-input-group .form-control.is-invalid {
+    z-index: 1;
+}
+
+.address-map-input-group + .guest-field-error {
+    width: 100%;
+    margin-top: 0.25rem;
+}
+
 .address-map-input-group .address-map-trigger {
     flex-shrink: 0;
     width: 2.5rem;

@@ -11,6 +11,8 @@ class DriverProfile extends Model
         'user_id', 'operator_id', 'driver_code',
         'license_number', 'license_class', 'license_expiry', 'experience_years',
         'status', 'approval_status', 'availability_status', 'notes',
+        'preference_likes', 'preference_dislikes',
+        'last_lat', 'last_lng', 'last_location_at',
         'missed_trip_strikes', 'missed_trip_locked_at',
         'bank_name', 'bank_account',
         'vehicle_license_plate', 'vehicle_type', 'vehicle_brand', 'vehicle_model', 'vehicle_color', 'vehicle_seats',
@@ -27,6 +29,11 @@ class DriverProfile extends Model
                     'driver_code' => self::generateDriverCode($profile->id),
                 ]);
             }
+
+            DriverWallet::query()->firstOrCreate(
+                ['driver_profile_id' => $profile->id],
+                ['balance' => 0],
+            );
         });
     }
 
@@ -116,7 +123,19 @@ class DriverProfile extends Model
             'photo_vehicles'   => 'array',
             'missed_trip_strikes' => 'integer',
             'missed_trip_locked_at' => 'datetime',
+            'last_lat' => 'float',
+            'last_lng' => 'float',
+            'last_location_at' => 'datetime',
         ];
+    }
+
+    public function hasFreshLocation(int $maxAgeMinutes = 15): bool
+    {
+        if ($this->last_lat === null || $this->last_lng === null || ! $this->last_location_at) {
+            return false;
+        }
+
+        return $this->last_location_at->gte(now()->subMinutes($maxAgeMinutes));
     }
 
     public function photoUrl(string $column): ?string

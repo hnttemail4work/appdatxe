@@ -6,20 +6,41 @@ use Illuminate\Database\Eloquent\Model;
 
 class Booking extends Model
 {
+    protected static function booted(): void
+    {
+        static::updated(function (Booking $booking): void {
+            if (! $booking->wasChanged(['booking_status', 'trip_status'])) {
+                return;
+            }
+
+            $cancelled = in_array($booking->booking_status, ['cancelled', 'rejected'], true)
+                || $booking->trip_status === 'cancelled';
+
+            if ($cancelled) {
+                app(\App\Services\ReferralCodeService::class)->purgeForBooking($booking);
+            }
+        });
+    }
+
     protected $fillable = [
         'contact_phone',
         'passenger_name',
+        'passenger_gender',
+        'passenger_age',
         'schedule_id',
         'seat_numbers',
         'trip_type',
         'booking_mode',
         'booking_reference',
+        'applied_referral_code_id',
         'total_price',
         'payment_status',
         'trip_status',
         'booking_status',
         'pickup_address',
         'pickup_detail',
+        'pickup_lat',
+        'pickup_lng',
         'pickup_time',
         'dropoff_address',
         'dropoff_detail',
@@ -29,6 +50,7 @@ class Booking extends Model
         'confirmed_at',
         'completed_at',
         'cancelled_at',
+        'cancelled_by',
         'expired_at',
     ];
 
@@ -36,6 +58,9 @@ class Booking extends Model
     {
         return [
             'seat_numbers'   => 'array',
+            'passenger_age'  => 'integer',
+            'pickup_lat'     => 'float',
+            'pickup_lng'     => 'float',
             'total_price'    => 'decimal:2',
             'hold_expires_at' => 'datetime',
             'confirmed_at'   => 'datetime',
@@ -62,6 +87,44 @@ class Booking extends Model
         $given = preg_replace('/\D+/', '', $phone);
 
         return $stored !== '' && $stored === $given;
+    }
+
+    public function passengerGenderLabel(): string
+    {
+        return ($this->passenger_gender ?? 'male') === 'female' ? 'Nữ' : 'Nam';
+    }
+
+    public function passengerAgeLabel(): ?string
+    {
+        if ($this->passenger_age === null) {
+            return null;
+        }
+
+        return $this->passenger_age . ' tuổi';
+    }
+
+    public function passengerProfileDetail(): string
+    {
+        $parts = [$this->passengerGenderLabel()];
+        if ($age = $this->passengerAgeLabel()) {
+            $parts[] = $age;
+        }
+
+        return implode(', ', $parts);
+    }
+
+    public function cancelledByLabel(): ?string
+    {
+        if (! in_array($this->booking_status, ['cancelled', 'rejected'], true)
+            && $this->trip_status !== 'cancelled') {
+            return null;
+        }
+
+        return match ($this->cancelled_by) {
+            'customer' => 'Khách hủy',
+            'driver'   => 'Tài xế hủy',
+            default    => 'Đã hủy',
+        };
     }
 
     public function pickupLabel(): string
@@ -126,6 +189,11 @@ class Booking extends Model
         return $this->belongsTo(Schedule::class);
     }
 
+    public function tripReview()
+    {
+        return $this->hasOne(TripReview::class);
+    }
+
     public function paymentTransactions()
     {
         return $this->hasMany(PaymentTransaction::class);
@@ -146,6 +214,26 @@ class Booking extends Model
     public function seatReservations()
     {
         return $this->hasMany(SeatReservation::class);
+    }
+
+    public function referralCode()
+    {
+        return $this->hasOne(ReferralCode::class)->where('type', ReferralCode::TYPE_BOOKING_TEMP);
+    }
+
+    public function appliedReferralCode()
+    {
+        return $this->belongsTo(ReferralCode::class, 'applied_referral_code_id');
+    }
+
+    public function referralCommissionAmount(): int
+    {
+        $this->loadMissing('appliedReferralCode');
+        if (! $this->appliedReferralCode || $this->trip_status !== 'completed') {
+            return 0;
+        }
+
+        return (int) round((float) $this->total_price * $this->appliedReferralCode->commissionPercent() / 100, 0);
     }
 
     public function audits()

@@ -7,6 +7,7 @@ use App\Models\ScheduleTemplate;
 use App\Models\SeatReservation;
 use App\Models\DriverTripRequest;
 use App\Services\DriverMissedTripService;
+use App\Services\DriverTripRequestService;
 use App\Support\TripCode;
 use Carbon\Carbon;
 
@@ -121,6 +122,7 @@ class ScheduleLifecycleService
 
     private function expireStaleDriverRequests(): void
     {
+        app(DriverTripRequestService::class)->expireStale();
     }
 
     /** Xóa ghế đã hết hạn / đã nhả để có thể đặt lại cùng schedule + số ghế. */

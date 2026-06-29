@@ -225,16 +225,6 @@
     color: var(--app-text-secondary) !important;
 }
 
-.app-nav-drawer-actions .share-booking-btn {
-    width: 100%;
-    justify-content: center;
-}
-
-.app-nav-drawer-actions .share-booking-btn:not(.share-booking-btn-icon) {
-    padding: .7rem .85rem;
-    font-size: .9375rem;
-}
-
 .app-pagination .page-link {
     background: var(--app-surface-raised);
     border-color: rgba(212, 175, 55, .22);

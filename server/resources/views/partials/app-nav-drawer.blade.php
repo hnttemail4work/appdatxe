@@ -24,27 +24,10 @@
                 <div class="app-nav-drawer-user mb-3">
                     <div class="app-nav-drawer-user-name">{{ auth()->user()->name }}</div>
                 </div>
-                <div class="app-nav-drawer-actions mb-2">
-                    @include('partials.share-booking-qr-button', [
-                        'shareUrl' => \App\Support\BookingShareUrl::guest(),
-                        'shareLabel' => 'QR đặt vé',
-                        'modalId' => 'shareQrModal-driver-guest',
-                        'iconOnly' => false,
-                    ])
-                </div>
                 @include('partials.driver-emergency-call')
             @endif
             <div class="app-nav-drawer-footer mt-4">
                 @include('partials.logout-button', ['class' => 'app-nav-drawer-link app-nav-drawer-link--logout w-100 text-start'])
-            </div>
-        @elseif($bookingShareQrNav ?? false)
-            <div class="app-nav-drawer-actions">
-                @include('partials.share-booking-qr-button', [
-                    'shareUrl' => \App\Support\BookingShareUrl::guest(),
-                    'shareLabel' => 'QR đặt vé',
-                    'modalId' => 'shareQrModal-booking-guest',
-                    'iconOnly' => false,
-                ])
             </div>
         @else
             <a href="{{ route('home') }}" class="app-nav-drawer-link {{ request()->routeIs('home') ? 'is-active' : '' }}">Đặt vé</a>

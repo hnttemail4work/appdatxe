@@ -52,13 +52,15 @@ class DatabaseSeeder extends Seeder
 
         PlatformSetting::setValue('commission_percentage', ['value' => 2], 'finance');
         PlatformSetting::setValue('app_commission_percentage', ['value' => 2], 'finance');
+        PlatformSetting::setValue('referral_commission_first_percentage', ['value' => 8], 'finance');
+        PlatformSetting::setValue('referral_commission_repeat_percentage', ['value' => 2], 'finance');
         PlatformSetting::setValue('round_trip_discount_percentage', ['value' => 15], 'finance');
 
         PlatformSetting::setValue('platform_bank', [
-            'bank_name'    => 'Vietcombank',
-            'bank_bin'     => '970436',
-            'account'      => '0123456789',
-            'account_name' => 'TAM LONG LIMO',
+            'bank_name'    => 'VietinBank',
+            'bank_bin'     => '970415',
+            'account'      => '108887132437',
+            'account_name' => 'HỒ NGỌC THANH TÂM',
         ], 'finance');
 
         // Routes — tên tỉnh khớp SouthernProvinces (TP.HCM & lân cận)

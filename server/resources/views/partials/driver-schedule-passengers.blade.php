@@ -21,6 +21,7 @@ $phase = $schedule->driverWorkflowPhase();
                 <strong>{{ $booking->passenger_name ?: 'Hành khách' }}</strong>
                 <span class="status-pill status-pill--{{ $modeBadge }} ms-1">{{ $booking->bookingModeLabel() }}</span>
             </div>
+            <div class="text-muted small">{{ $booking->passengerProfileDetail() }}</div>
             <div class="text-muted small">🕐 Giờ đón: <strong>{{ $booking->pickupTimeLabel() ?? '—' }}</strong></div>
             <div class="text-muted small">📍 Địa chỉ đón: <strong>{{ $booking->driverPickupDetailLabel() }}</strong></div>
             <div class="text-muted small">🏁 Địa chỉ trả: <strong>{{ $booking->driverDropoffDetailLabel() }}</strong></div>

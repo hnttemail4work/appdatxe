@@ -338,6 +338,30 @@ class Schedule extends Model
         return 'upcoming';
     }
 
+    /** Tài xế có thể hủy trước khi khách hoàn thành chuyến. */
+    public function driverCanCancelTrip(): bool
+    {
+        if (in_array($this->status, ['completed', 'cancelled'], true)) {
+            return false;
+        }
+
+        if ((int) $this->driver_id < 1) {
+            return false;
+        }
+
+        $bookings = $this->driverRelevantBookings();
+
+        if ($bookings->isEmpty()) {
+            return false;
+        }
+
+        if ($bookings->contains(fn (Booking $b): bool => $b->trip_status === 'completed')) {
+            return false;
+        }
+
+        return $bookings->contains(fn (Booking $b): bool => ! in_array($b->booking_status, ['cancelled', 'rejected'], true));
+    }
+
     public function driverWorkflowLabel(): string
     {
         $bookings = $this->driverRelevantBookings();

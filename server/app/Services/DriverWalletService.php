@@ -131,7 +131,9 @@ class DriverWalletService
         }
 
         if ($settlement->isUnderThreshold()) {
-            throw new InvalidArgumentException('Chuyến dưới 500k — dùng Xác nhận thay vì cấp mã.');
+            throw new InvalidArgumentException(
+                'Chuyến dưới ' . DriverWalletConfig::revenueThresholdShortLabel() . ' — dùng Xác nhận thay vì cấp mã.'
+            );
         }
 
         $settlement->loadMissing('wallet.driverProfile');
@@ -168,10 +170,6 @@ class DriverWalletService
         }
 
         $wallet = $this->walletFor($profile);
-
-        if (! $wallet->wallet_gate_enabled) {
-            throw new InvalidArgumentException('Ví chưa kích hoạt — hoàn tất kết chuyến đầu tiên có doanh thu ≥ 500k trước.');
-        }
 
         if ($wallet->transactions()->where('type', 'deposit')->where('status', 'pending')->exists()) {
             throw new InvalidArgumentException('Đang có yêu cầu nạp tiền chờ duyệt.');
@@ -265,7 +263,8 @@ class DriverWalletService
         }
 
         if ($wallet->wallet_gate_enabled && $wallet->balance <= DriverWalletConfig::MIN_BALANCE) {
-            return 'Đã có chuyến doanh thu ≥ 500k — từ chuyến tiếp theo cần nạp ví trên '
+            return 'Đã có chuyến doanh thu ≥ ' . DriverWalletConfig::revenueThresholdShortLabel()
+                . ' — từ chuyến tiếp theo cần nạp ví trên '
                 . number_format(DriverWalletConfig::MIN_BALANCE, 0, ',', '.') . ' đ.';
         }
 
@@ -277,7 +276,7 @@ class DriverWalletService
         return $this->shouldShowTopUpBanner($profile);
     }
 
-    /** Banner nạp ví — ẩn khi chưa từng có chuyến ≥500k, đã nạp đủ, hoặc chưa bật cổng ví. */
+    /** Banner nạp ví — ẩn khi chưa từng có chuyến ≥ ngưỡng, đã nạp đủ, hoặc chưa bật cổng ví. */
     public function shouldShowTopUpBanner(DriverProfile $profile): bool
     {
         $wallet = $this->walletFor($profile);
@@ -535,7 +534,7 @@ class DriverWalletService
         $settlement->update(['transfer_ref' => $transferRef]);
     }
 
-    /** Quản lý xác nhận chuyến doanh thu dưới 500k — không cần mã kết chuyến. */
+    /** Quản lý xác nhận chuyến doanh thu dưới ngưỡng — không cần mã kết chuyến. */
     public function approveUnderThresholdSettlement(DriverTripSettlement $settlement, int $operatorId): void
     {
         if (! $settlement->isUnderThreshold()) {
@@ -576,12 +575,12 @@ class DriverWalletService
             return 'under_threshold';
         }
 
-        $hadPrior500kTrip = $wallet->settlements()
+        $hadPriorOverThresholdTrip = $wallet->settlements()
             ->where('status', 'completed')
             ->where('revenue_amount', '>=', DriverWalletConfig::REVENUE_THRESHOLD)
             ->exists();
 
-        if (! $wallet->wallet_gate_enabled && ! $hadPrior500kTrip) {
+        if (! $wallet->wallet_gate_enabled && ! $hadPriorOverThresholdTrip) {
             return 'first_over_threshold';
         }
 

@@ -15,6 +15,7 @@ $drivers = $drivers ?? collect();
             <p class="mb-0">Chưa có tài xế.</p>
         </div>
 @else
+        <p class="text-muted small mb-3">Lượt thích / không thích tự cập nhật khi khách đánh giá sau chuyến.</p>
         <div class="driver-mgmt-panel pt-3">
     <div class="console-panel-head driver-mgmt-head px-0 pt-0">
         <div class="console-panel-head-accent">
@@ -29,6 +30,8 @@ $drivers = $drivers ?? collect();
                         <th>Tài xế</th>
                         <th>Số điện thoại</th>
                         <th>Xe</th>
+                        <th>Thích</th>
+                        <th>Không thích</th>
                         <th>Trạng thái</th>
                         <th class="text-end" style="width:11rem"></th>
                     </tr>
@@ -65,6 +68,8 @@ $drivers = $drivers ?? collect();
                                 —
                             @endif
                         </td>
+                        <td class="fw-semibold text-success">{{ number_format($d->preference_likes) }}</td>
+                        <td class="fw-semibold text-danger">{{ number_format($d->preference_dislikes) }}</td>
                         <td>
                             <span class="status-pill status-pill--{{ $d->displayStatusColor() }}">{{ $d->displayStatusLabel() }}</span>
                             @if($d->missedTripStrikeLabel() && ! $d->isMissedTripLocked() && ! $d->isPendingApproval() && ! $d->isRejected())
@@ -73,14 +78,6 @@ $drivers = $drivers ?? collect();
                         </td>
                         <td class="text-end">
                             <div class="d-flex flex-wrap gap-1 justify-content-end">
-                                @if($d->driver_code)
-                                    @include('partials.share-booking-qr-button', [
-                                        'shareUrl' => \App\Support\BookingShareUrl::guest($d->driver_code),
-                                        'shareLabel' => 'QR đặt vé — ' . $d->user->name,
-                                        'modalId' => 'shareQrDriver-' . $d->id,
-                                        'iconOnly' => true,
-                                    ])
-                                @endif
                                 <a href="{{ route('operator.drivers.edit', $d) }}" class="btn btn-sm {{ $d->isPendingApproval() ? 'btn-primary' : 'btn-outline-primary' }}">
                                     Xem hồ sơ
                                 </a>
@@ -98,18 +95,6 @@ $drivers = $drivers ?? collect();
     </div>
 </div>
 @endsection
-
-@push('modals')
-    @foreach($drivers as $d)
-        @if($d->driver_code)
-            @include('partials.share-booking-qr-modal', [
-                'shareUrl' => \App\Support\BookingShareUrl::guest($d->driver_code),
-                'shareLabel' => 'QR đặt vé — ' . $d->user->name,
-                'modalId' => 'shareQrDriver-' . $d->id,
-            ])
-        @endif
-    @endforeach
-@endpush
 
 @push('styles')
 <link rel="stylesheet" href="{{ asset('css/driver-mgmt.css') }}">

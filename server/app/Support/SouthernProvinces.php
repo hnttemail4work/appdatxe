@@ -2,102 +2,41 @@
 
 namespace App\Support;
 
-use Illuminate\Validation\Rule;
-
-/** Điểm đi/đến quanh TP.HCM — tỉnh lân cận và khu vực Nam Bộ hay đi. */
+/**
+ * @deprecated Dùng LocationCatalog — giữ tên class để tương thích validate cũ.
+ */
 class SouthernProvinces
 {
     /** @return array<string, list<string>> */
     public static function grouped(): array
     {
-        return [
-            'Trung tâm' => [
-                'TP.HCM',
-            ],
-            'Lân cận TP.HCM' => [
-                'Bình Dương',
-                'Đồng Nai',
-                'Long An',
-                'Tây Ninh',
-            ],
-            'Ven biển & du lịch gần' => [
-                'Vũng Tàu',
-                'Bà Rịa',
-                'Phan Thiết',
-                'Mũi Né',
-                'Đà Lạt',
-            ],
-            'Đồng bằng sông Cửu Long' => [
-                'Mỹ Tho',
-                'Bến Tre',
-                'Vĩnh Long',
-                'Cần Thơ',
-                'Long Xuyên',
-                'Châu Đốc',
-            ],
-        ];
+        return LocationCatalog::grouped();
     }
 
-    /** Khoảng cách ước tính từ TP.HCM (km). */
     public static function distanceFromHub(string $city): int
     {
-        return match ($city) {
-            'TP.HCM'       => 0,
-            'Bình Dương'   => 30,
-            'Đồng Nai'     => 30,
-            'Long An'      => 50,
-            'Tây Ninh'     => 100,
-            'Vũng Tàu'     => 100,
-            'Bà Rịa'       => 85,
-            'Phan Thiết'   => 200,
-            'Mũi Né'       => 220,
-            'Đà Lạt'       => 300,
-            'Mỹ Tho'       => 70,
-            'Bến Tre'      => 85,
-            'Vĩnh Long'    => 135,
-            'Cần Thơ'      => 165,
-            'Long Xuyên'   => 190,
-            'Châu Đốc'     => 250,
-            default        => 0,
-        };
+        return LocationCatalog::distanceFromHub($city);
     }
 
     public static function distanceBetween(string $from, string $to): int
     {
-        $from = trim($from);
-        $to = trim($to);
-
-        if ($from === $to) {
-            return 0;
-        }
-
-        if ($from === 'TP.HCM') {
-            return self::distanceFromHub($to);
-        }
-
-        if ($to === 'TP.HCM') {
-            return self::distanceFromHub($from);
-        }
-
-        return self::distanceFromHub($from) + self::distanceFromHub($to);
+        return LocationCatalog::distanceBetween($from, $to);
     }
 
     /** @return list<string> */
     public static function all(): array
     {
-        return array_merge(...array_values(self::grouped()));
+        return LocationCatalog::all();
     }
 
     public static function isAllowed(?string $value): bool
     {
-        $value = trim((string) $value);
-
-        return $value !== '' && in_array($value, self::all(), true);
+        return LocationCatalog::isAllowed($value);
     }
 
     /** @return \Illuminate\Validation\Rules\In */
     public static function inRule()
     {
-        return Rule::in(self::all());
+        return LocationCatalog::inRule();
     }
 }

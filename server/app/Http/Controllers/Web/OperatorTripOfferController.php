@@ -6,8 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\ScheduleTemplate;
 use App\Services\TripOfferService;
 use App\Services\TripPricingService;
+use App\Support\LocationCatalog;
+use App\Support\PlatformFees;
 use App\Support\PageList;
-use App\Support\SouthernProvinces;
 use App\Support\VehicleCapacityOptions;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -74,19 +75,47 @@ class OperatorTripOfferController extends Controller
     public function quote(Request $request)
     {
         $request->validate([
-            'departure'   => ['required', 'string', SouthernProvinces::inRule()],
-            'destination' => ['required', 'string', 'different:departure', SouthernProvinces::inRule()],
-            'seats'       => ['required', 'integer', Rule::in(VehicleCapacityOptions::STANDARD)],
+            'distance_km' => ['nullable', 'integer', 'min:1', 'max:2000'],
+            'departure'   => ['required_without:distance_km', 'string', LocationCatalog::inRule()],
+            'destination' => [
+                'required_without:distance_km',
+                'string',
+                'different:departure',
+                LocationCatalog::inRule(),
+            ],
+            'seats'       => ['nullable', 'integer', Rule::in(VehicleCapacityOptions::STANDARD)],
         ]);
 
-        $distance = \App\Support\RouteDistanceCatalog::resolveKm(
-            $request->input('departure'),
-            $request->input('destination'),
-        );
+        $distance = $request->filled('distance_km')
+            ? (int) $request->input('distance_km')
+            : \App\Support\RouteDistanceCatalog::resolveKm(
+                $request->input('departure'),
+                $request->input('destination'),
+            );
 
-        return response()->json(
-            $this->pricing->suggestOfferPrices($distance, (int) $request->input('seats')),
-        );
+        $rate = $distance > 100
+            ? PlatformFees::kmRateOver100()
+            : PlatformFees::kmRateUnder100();
+
+        $pricesBySeats = [];
+        foreach (VehicleCapacityOptions::STANDARD as $capacity) {
+            $pricesBySeats[(string) $capacity] = $this->pricing->suggestOfferPrices($distance, $capacity);
+        }
+
+        $payload = [
+            'distance_km'     => $distance,
+            'rate_per_km'     => $rate,
+            'prices_by_seats' => $pricesBySeats,
+        ];
+
+        if ($request->filled('seats')) {
+            $payload = array_merge(
+                $payload,
+                $this->pricing->suggestOfferPrices($distance, (int) $request->input('seats')),
+            );
+        }
+
+        return response()->json($payload);
     }
 
     public function destroy(ScheduleTemplate $scheduleTemplate)
@@ -112,8 +141,8 @@ class OperatorTripOfferController extends Controller
         $hasVehiclePhoto = $this->operatorVehicleHasPhoto($editingFrom);
 
         $request->validate([
-            'departure'             => ['required', 'string', SouthernProvinces::inRule()],
-            'destination'           => ['required', 'string', 'different:departure', SouthernProvinces::inRule()],
+            'departure'             => ['required', 'string', LocationCatalog::inRule()],
+            'destination'           => ['required', 'string', 'different:departure', LocationCatalog::inRule()],
             'departure_time'        => ['required', 'date_format:H:i'],
             'expected_arrival_time' => ['nullable', 'date_format:H:i'],
             'seats'                 => ['required', 'integer', Rule::in(VehicleCapacityOptions::STANDARD)],
@@ -121,6 +150,7 @@ class OperatorTripOfferController extends Controller
             'seat_one_way'          => ['required', 'integer', 'min:10000'],
             'whole_car_round'       => ['required', 'integer', 'min:10000'],
             'seat_round'            => ['required', 'integer', 'min:10000'],
+            'distance_km'           => ['nullable', 'integer', 'min:1', 'max:2000'],
             'vehicle_photo'         => $hasVehiclePhoto
                 ? ['nullable', 'image', 'max:5120']
                 : ['required', 'image', 'max:5120'],
@@ -158,6 +188,7 @@ class OperatorTripOfferController extends Controller
             'seat_one_way'          => (int) $request->input('seat_one_way'),
             'whole_car_round'       => (int) $request->input('whole_car_round'),
             'seat_round'            => (int) $request->input('seat_round'),
+            'distance_km'           => $request->filled('distance_km') ? (int) $request->input('distance_km') : null,
             'photo'                 => $request->file('vehicle_photo'),
         ];
     }

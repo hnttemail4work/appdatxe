@@ -3,9 +3,13 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
-use App\Models\DriverProfile;
+use App\Models\ReferralCode;
 use App\Models\ScheduleTemplate;
 use App\Services\BookingWorkflowService;
+use App\Services\DriverAvailabilityService;
+use App\Services\DriverTripRequestService;
+use App\Services\GuestTripWatchService;
+use App\Services\ReferralCodeService;
 use App\Services\ScheduleLifecycleService;
 use App\Services\TripListingService;
 use App\Services\TripPricingService;
@@ -23,6 +27,10 @@ class GuestBookingController extends Controller
         private readonly TripListingService $tripListing,
         private readonly ScheduleLifecycleService $scheduleLifecycle,
         private readonly TripPricingService $pricing,
+        private readonly ReferralCodeService $referralCodes,
+        private readonly GuestTripWatchService $tripWatch,
+        private readonly DriverTripRequestService $driverRequests,
+        private readonly DriverAvailabilityService $driverAvailability,
     ) {
     }
 
@@ -31,22 +39,41 @@ class GuestBookingController extends Controller
         $filters = $this->tripListing->filtersFromRequest($request);
         $offers = PageList::paginateCollection($this->tripListing->query($filters), $request);
 
-        $driverCode = strtoupper(trim((string) $request->query('tx', '')));
-        $driverProfile = null;
+        $prefillReferral = strtoupper(trim((string) $request->query('ref', '')));
+        $appliedReferral = $prefillReferral !== ''
+            ? $this->referralCodes->resolveUsableCode($prefillReferral)
+            : null;
 
-        if ($driverCode !== '') {
-            $driverProfile = DriverProfile::query()
-                ->operational()
-                ->where('driver_code', $driverCode)
-                ->with('user')
+        if ($request->has('ref')) {
+            if ($appliedReferral) {
+                session(['guest_referral_code' => $appliedReferral->code]);
+            } else {
+                session()->forget('guest_referral_code');
+            }
+        } elseif (session()->has('guest_referral_code')) {
+            $appliedReferral = $this->referralCodes->resolveUsableCode(session('guest_referral_code'));
+            if (! $appliedReferral) {
+                session()->forget('guest_referral_code');
+            }
+        }
+
+        $pendingReferral = null;
+        if ($prefillReferral !== '' && ! $appliedReferral) {
+            $pendingReferral = ReferralCode::query()
+                ->where('code', $prefillReferral)
+                ->where('status', ReferralCode::STATUS_PENDING)
                 ->first();
         }
+
+        $referralDiscountMeta = $this->referralCodes->discountMeta($appliedReferral);
 
         return view('booking.index', compact(
             'offers',
             'filters',
-            'driverCode',
-            'driverProfile',
+            'prefillReferral',
+            'appliedReferral',
+            'pendingReferral',
+            'referralDiscountMeta',
         ));
     }
 
@@ -125,25 +152,12 @@ class GuestBookingController extends Controller
         $validated = $request->validate([
             'template_id'      => ['required', 'exists:schedule_templates,id'],
             'service_date'     => ['required', 'date', 'after_or_equal:today'],
-            'driver_code'      => ['nullable', 'string', 'max:20'],
             'vehicle_capacity' => ['nullable', 'integer', 'min:1', 'max:50'],
         ]);
 
         $template = ScheduleTemplate::query()->with('vehicle')->findOrFail($validated['template_id']);
 
         $capacity = $template->capacity();
-        $driverCode = strtoupper(trim((string) ($validated['driver_code'] ?? '')));
-
-        if ($driverCode !== '') {
-            $profile = DriverProfile::query()
-                ->operational()
-                ->where('driver_code', $driverCode)
-                ->first();
-
-            if ($profile && (int) $profile->vehicle_seats > 0) {
-                $capacity = (int) $profile->vehicle_seats;
-            }
-        }
 
         return response()->json([
             'occupied_map' => $this->tripListing->occupiedSeatMapForDate(
@@ -163,6 +177,8 @@ class GuestBookingController extends Controller
             'booking_mode'    => ['nullable', 'in:whole_car,shared'],
             'pickup_address'  => ['nullable', 'string', 'max:255', SouthernProvinces::inRule()],
             'dropoff_address' => ['nullable', 'string', 'max:255', SouthernProvinces::inRule()],
+            'seat_count'      => ['nullable', 'integer', 'min:1', 'max:50'],
+            'contact_phone'   => ['nullable', 'string', 'max:30'],
         ]);
 
         $template = ScheduleTemplate::query()
@@ -170,13 +186,40 @@ class GuestBookingController extends Controller
             ->with(['route', 'vehicle'])
             ->findOrFail($validated['template_id']);
 
-        return response()->json($this->pricing->quote(
+        $bookingMode = $validated['booking_mode'] ?? 'shared';
+        $quote = $this->pricing->quote(
             $template,
             $validated['trip_type'],
             $validated['pickup_address'] ?? null,
             $validated['dropoff_address'] ?? null,
-            $validated['booking_mode'] ?? 'shared',
-        ));
+            $bookingMode,
+        );
+
+        $unitPrice = (int) ($bookingMode === 'whole_car' ? $quote['whole_car_price'] : $quote['seat_price']);
+        $seatCount = max((int) ($validated['seat_count'] ?? 1), 1);
+        $subtotal = $bookingMode === 'whole_car' ? $unitPrice : $unitPrice * $seatCount;
+
+        $referral = $this->referralCodes->resolveUsableCode(session('guest_referral_code'));
+        $discountMeta = $this->referralCodes->discountMeta(
+            $referral,
+            $validated['contact_phone'] ?? null,
+        );
+        $discountPercent = $discountMeta['eligible'] ? $discountMeta['percent'] : 0.0;
+        $total = $this->referralCodes->applyDiscount((float) $subtotal, $discountPercent);
+        $discountAmount = (int) round($subtotal - $total, 0);
+
+        return response()->json(array_merge($quote, [
+            'unit_price'           => $unitPrice,
+            'seat_count'           => $seatCount,
+            'subtotal'             => $subtotal,
+            'referral_code'        => $discountMeta['code'],
+            'referral_discount_percent' => $discountPercent,
+            'referral_discount_amount'  => $discountAmount,
+            'referral_eligible'    => $discountMeta['eligible'] && $discountPercent > 0,
+            'referral_attribution_only' => $discountMeta['attribution_only'] ?? false,
+            'referral_ineligible_reason' => $discountMeta['reason'],
+            'total_after_discount' => (int) round($total, 0),
+        ]));
     }
 
     public function store(Request $request)
@@ -186,9 +229,13 @@ class GuestBookingController extends Controller
             'service_date'    => ['required', 'date', 'after_or_equal:today'],
             'pickup_time'     => ['required', 'string', 'max:20'],
             'passenger_name'  => ['required', 'string', 'max:255'],
+            'passenger_gender' => ['nullable', 'in:male,female'],
+            'passenger_age'   => ['nullable', 'integer', 'min:1', 'max:120'],
             'contact_phone'   => ['required', 'string', 'max:30'],
             'pickup_address'  => ['required', 'string', 'max:255', SouthernProvinces::inRule()],
             'pickup_detail'   => ['required', 'string', 'max:500'],
+            'pickup_lat'      => ['nullable', 'numeric', 'between:-90,90'],
+            'pickup_lng'      => ['nullable', 'numeric', 'between:-180,180'],
             'dropoff_address' => ['required', 'string', 'max:255', SouthernProvinces::inRule()],
             'dropoff_detail'  => ['nullable', 'string', 'max:500'],
             'notes'           => ['nullable', 'string', 'max:500'],
@@ -196,7 +243,6 @@ class GuestBookingController extends Controller
             'booking_mode'    => ['required', 'in:whole_car,shared'],
             'seat_count'      => ['nullable', 'integer', 'min:1', 'max:50'],
             'vehicle_capacity' => ['nullable', 'integer', 'min:1', 'max:50'],
-            'tx'              => ['nullable', 'string', 'max:20'],
         ]);
 
         $template = ScheduleTemplate::query()
@@ -244,6 +290,14 @@ class GuestBookingController extends Controller
             $seatNumbers = array_slice($freeSeats, 0, $seatCount);
         }
 
+        $appliedReferral = $this->referralCodes->resolveUsableCode(session('guest_referral_code'));
+        $appliedReferralId = $appliedReferral?->id;
+
+        $passengerGender = ($validated['passenger_gender'] ?? 'male') === 'female' ? 'female' : 'male';
+        $passengerAge = isset($validated['passenger_age']) ? (int) $validated['passenger_age'] : null;
+        $pickupLat = isset($validated['pickup_lat']) ? (float) $validated['pickup_lat'] : null;
+        $pickupLng = isset($validated['pickup_lng']) ? (float) $validated['pickup_lng'] : null;
+
         try {
             $booking = $this->workflow->createBookingFromTemplate(
                 $template,
@@ -259,16 +313,31 @@ class GuestBookingController extends Controller
                 $validated['notes'] ?? null,
                 $validated['trip_type'],
                 $bookingMode,
+                $appliedReferralId,
+                $passengerGender,
+                $passengerAge,
+                $pickupLat,
+                $pickupLng,
             );
         } catch (InvalidArgumentException $e) {
             return back()->withErrors(['seat_numbers' => $e->getMessage()])->withInput();
         }
 
-        $booking->loadMissing('schedule');
+        session()->forget('guest_referral_code');
+
+        $this->tripWatch->addToWatchlist($booking->booking_reference, $validated['contact_phone']);
+
+        $booking->loadMissing(['schedule', 'referralCode', 'appliedReferralCode']);
+        $issuedReferral = $booking->referralCode;
 
         return redirect()->route('home')->with('booking_success', [
             'trip_code'         => $booking->schedule->shortTripCode(),
+            'booking_reference' => $booking->booking_reference,
             'contact_phone'     => $validated['contact_phone'],
+            'referral_code'     => $issuedReferral?->code,
+            'referral_url'      => $issuedReferral ? $issuedReferral->landingUrl() : null,
+            'referral_pending'  => true,
+            'referral_discount_percent' => PlatformFees::referralCommissionRepeatPercent(),
             'awaiting_operator' => true,
         ]);
     }

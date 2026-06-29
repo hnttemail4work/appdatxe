@@ -136,6 +136,23 @@ class DriverController extends Controller
         return view('driver.profile', compact('user', 'profile'));
     }
 
+    public function updateLocation(Request $request)
+    {
+        $validated = $request->validate([
+            'lat' => ['required', 'numeric', 'between:-90,90'],
+            'lng' => ['required', 'numeric', 'between:-180,180'],
+        ]);
+
+        $profile = DriverProfile::query()->where('user_id', Auth::id())->firstOrFail();
+        $profile->update([
+            'last_lat'         => $validated['lat'],
+            'last_lng'         => $validated['lng'],
+            'last_location_at' => now(),
+        ]);
+
+        return response()->json(['ok' => true]);
+    }
+
     public function updateAvailability(Request $request)
     {
         $validated = $request->validate([
@@ -203,6 +220,17 @@ class DriverController extends Controller
             : 'Đã hoàn thành chuyến. Kết chuyến tại mục Ví & kết chuyến.';
 
         return redirect()->route('driver.dashboard')->with('success', $message);
+    }
+
+    public function cancelSchedule(Request $request, Schedule $schedule)
+    {
+        try {
+            $this->workflow->cancelScheduleByDriver($schedule, Auth::id());
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['booking' => $e->getMessage()]);
+        }
+
+        return redirect()->route('driver.dashboard')->with('success', 'Đã hủy chuyến. Quản lý sẽ được thông báo qua hệ thống.');
     }
 
     public function index(Request $request)

@@ -4,12 +4,12 @@ namespace App\Support;
 
 use App\Models\TripRoute;
 
-/** Quãng đường cố định từ TP.HCM — admin có thể ghi đè qua bảng routes. */
+/** Quãng đường cố định — admin cấu hình qua bảng routes từ TP.HCM. */
 class RouteDistanceCatalog
 {
     public const HUB = 'TP.HCM';
 
-    /** @return array<string, int> km từ TP.HCM */
+    /** @return array<string, int> km từ TP.HCM — chỉ dùng khi seed DB. */
     public static function defaultsFromHub(): array
     {
         return [
@@ -40,26 +40,27 @@ class RouteDistanceCatalog
             return 0;
         }
 
-        $stored = TripRoute::query()
+        $direct = TripRoute::query()
             ->where('departure', $departure)
             ->where('destination', $destination)
+            ->where('is_active', true)
             ->value('distance_km');
 
-        if ($stored !== null && (int) $stored > 0) {
-            return (int) $stored;
+        if ($direct !== null && (int) $direct > 0) {
+            return (int) $direct;
         }
 
-        $defaults = self::defaultsFromHub();
+        $reverse = TripRoute::query()
+            ->where('departure', $destination)
+            ->where('destination', $departure)
+            ->where('is_active', true)
+            ->value('distance_km');
 
-        if ($departure === self::HUB && isset($defaults[$destination])) {
-            return (int) $defaults[$destination];
+        if ($reverse !== null && (int) $reverse > 0) {
+            return (int) $reverse;
         }
 
-        if ($destination === self::HUB && isset($defaults[$departure])) {
-            return (int) $defaults[$departure];
-        }
-
-        return SouthernProvinces::distanceBetween($departure, $destination);
+        return LocationCatalog::distanceBetween($departure, $destination);
     }
 
     /** @return list<array{departure: string, destination: string, distance_km: int}> */

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\DriverWalletConfig;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 
@@ -99,9 +100,11 @@ class DriverTripSettlement extends Model
 
     public function categoryLabel(): string
     {
+        $threshold = DriverWalletConfig::revenueThresholdShortLabel();
+
         return match ($this->category) {
-            'under_threshold'      => 'Doanh thu chuyến < 500k',
-            'first_over_threshold' => 'Chuyến đầu ≥ 500k',
+            'under_threshold'      => 'Doanh thu chuyến < ' . $threshold,
+            'first_over_threshold' => 'Chuyến đầu ≥ ' . $threshold,
             'over_threshold'       => 'Từ chuyến 2 — duy trì ví',
             default                => $this->category,
         };

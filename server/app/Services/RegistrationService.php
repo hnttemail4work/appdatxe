@@ -27,21 +27,27 @@ class RegistrationService
     public function operatorRules(): array
     {
         return [
-            'name'     => ['required', 'string', 'max:255'],
-            'email'    => ['required', 'email', 'max:255', 'unique:users,email'],
-            'phone'    => ['nullable', 'string', 'max:30'],
-            'password' => ['required', 'string', 'min:8'],
+            'name'                  => ['required', 'string', 'max:255'],
+            'email'                 => ['nullable', 'email', 'max:255', 'unique:users,email'],
+            'phone'                 => ['required', 'string', 'max:30'],
+            'password'              => ['required', 'string', 'min:8', 'confirmed'],
+            'password_confirmation' => ['required', 'string', 'min:8'],
         ];
     }
 
     public function registerOperator(array $validated, int $approvedBy): User
     {
         return DB::transaction(function () use ($validated, $approvedBy): User {
+            $phoneDigits = preg_replace('/\D/', '', $validated['phone']);
+            $email = filled($validated['email'] ?? null)
+                ? $validated['email']
+                : $this->placeholderEmail($phoneDigits);
+
             $user = User::query()->create([
                 'name'     => $validated['name'],
-                'email'    => $validated['email'],
+                'email'    => $email,
                 'password' => Hash::make($validated['password']),
-                'phone'    => $validated['phone'] ?? null,
+                'phone'    => $validated['phone'],
                 'role'     => 'operator',
                 'status'   => 'active',
             ]);

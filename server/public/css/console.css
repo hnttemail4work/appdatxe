@@ -43,9 +43,55 @@
     flex-wrap: wrap;
 }
 
+.console-table tbody tr.destination-row-hidden td {
+    opacity: 0.55;
+}
+
+.console-table tbody tr.destination-row-hidden .cell-primary {
+    color: var(--tl-text-muted);
+}
+
+.referral-qr-thumb {
+    display: inline-block;
+    padding: 2px;
+    background: #fff;
+    border-radius: 0.35rem;
+    line-height: 0;
+    cursor: pointer;
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.referral-qr-thumb:hover {
+    box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.45);
+    transform: scale(1.03);
+}
+.referral-qr-thumb img,
+.referral-qr-thumb canvas {
+    display: block;
+    width: 72px !important;
+    height: 72px !important;
+    pointer-events: none;
+}
+.referral-qr-modal-canvas {
+    display: inline-block;
+    padding: 8px;
+    background: #fff;
+    border-radius: 0.5rem;
+    line-height: 0;
+}
+.referral-qr-modal-canvas img,
+.referral-qr-modal-canvas canvas {
+    display: block;
+}
+
 .console-table-actions form {
     display: inline;
     margin: 0;
+}
+
+.console-table-sm th,
+.console-table-sm td {
+    padding: 0.4rem 0.5rem;
+    font-size: 0.875rem;
 }
 
 .trip-offer-capacity-section {
@@ -134,17 +180,6 @@ body:has(.console-page) {
     color: var(--tl-primary);
 }
 
-/* QR share modal — canvas không chặn click nút Copy */
-.share-qr-canvas img,
-.share-qr-canvas canvas {
-    display: block;
-    max-width: 100%;
-    height: auto;
-    pointer-events: none;
-}
-.share-qr-modal .share-url-input {
-    font-size: .75rem;
-}
 .console-breadcrumb {
     font-size: .75rem;
     opacity: .75;

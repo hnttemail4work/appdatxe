@@ -4,33 +4,29 @@
 @php
 use Carbon\Carbon;
 $basePrices = [];
-$hasDriverCode = ($driverCode ?? '') !== '';
 $filterServiceDate = $filters['service_date'] ?? now()->addDay()->toDateString();
 $filterDateLabel = Carbon::parse($filterServiceDate)->format('d/m/Y');
 $filterWeekday = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][(int) Carbon::parse($filterServiceDate)->dayOfWeek];
 $filterQuery = array_filter([
-    'tx' => $hasDriverCode ? $driverCode : null,
     'departure' => $filters['departure'] ?? null,
     'destination' => $filters['destination'] ?? null,
     'service_date' => $filterServiceDate,
+    'ref' => ($appliedReferral ?? null)?->code ?? (($prefillReferral ?? '') !== '' ? $prefillReferral : null),
 ]);
-$presetDriver = ($driverProfile ?? null)
-    ? [
-        'code' => $driverCode,
-        'name' => $driverProfile->user->name,
-        'vehicle_label' => \App\Support\VehicleDisplay::labelFromDriverProfile($driverProfile),
-        'vehicle_seats' => \App\Support\VehicleDisplay::capacityFromDriverProfile($driverProfile),
-        'capacity_label' => \App\Support\VehicleCapacityOptions::label(
-            \App\Support\VehicleDisplay::capacityFromDriverProfile($driverProfile)
-        ),
-        'vehicle_photo' => \App\Support\VehicleDisplay::photoFromDriverProfile($driverProfile),
-    ]
-    : null;
 $bookingRestoreModal = $errors->any() && old('template_id')
     ? [
         'template_id' => old('template_id'),
         'seat_count' => old('seat_count', 1),
         'step' => 2,
+    ]
+    : null;
+
+$bookingReferralSuccess = session('booking_success.referral_code')
+    ? [
+        'code' => session('booking_success.referral_code'),
+        'url' => session('booking_success.referral_url'),
+        'discount_percent' => session('booking_success.referral_discount_percent'),
+        'pending' => session('booking_success.referral_pending', true),
     ]
     : null;
 
@@ -81,6 +77,12 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                 <p class="mb-1">
                     Mã chuyến: <span class="booking-ticket-code">{{ $bookingSuccess['trip_code'] ?? '—' }}</span>
                 </p>
+                @if(! empty($bookingSuccess['referral_code']))
+                <p class="mb-1 small">
+                    Mã giới thiệu: <span class="driver-meta-code">{{ $bookingSuccess['referral_code'] }}</span>
+                    <span class="text-muted">(dùng được sau khi bạn hoàn tất chuyến)</span>
+                </p>
+                @endif
                 <p class="mb-0 small booking-flash-note">
                     @if(! empty($bookingSuccess['awaiting_operator']))
                         Quản lý sẽ gọi xác nhận trong thời gian sớm nhất
@@ -113,16 +115,23 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
             <div class="col-lg-8">
                 <h1>Đặt vé xe liên tỉnh</h1>
                 <p>Hân hạnh phục vụ quý khách hàng.</p>
-                @if($hasDriverCode)
-                    <div class="booking-driver-chip mt-2">
-                        @if($driverProfile)
-                            Tài xế: <strong>{{ $driverProfile->user->name }}</strong>
-                            Mã <span class="driver-meta-code">{{ $driverCode }}</span>
-                        @else
-                            Mã tài xế: <span class="driver-meta-code">{{ $driverCode }}</span>
-                            <span class="text-warning ms-1">(không tìm thấy hoặc chưa hoạt động)</span>
+                @if($appliedReferral ?? null)
+                    <div class="small mt-2">
+                        Giới thiệu: <strong>{{ $appliedReferral->name }}</strong>
+                        — mã <span class="driver-meta-code">{{ $appliedReferral->code }}</span>
+                        @if($appliedReferral->grantsCustomerDiscount() && ($referralDiscountMeta['eligible'] ?? false))
+                            <span class="text-success">(giảm {{ number_format($referralDiscountMeta['percent'] ?? 0, 1) }}%)</span>
+                        @elseif($appliedReferral->type === \App\Models\ReferralCode::TYPE_REFERRER)
+                            <span class="text-muted">(mã người giới thiệu)</span>
                         @endif
                     </div>
+                @elseif($pendingReferral ?? null)
+                    <div class="small mt-2 text-warning">
+                        Mã <span class="driver-meta-code">{{ $pendingReferral->code }}</span> chưa kích hoạt —
+                        hoàn tất chuyến giới thiệu trước khi dùng được.
+                    </div>
+                @elseif(($prefillReferral ?? '') !== '')
+                    <div class="small mt-2 text-warning">Mã {{ $prefillReferral }} không hợp lệ hoặc chưa sử dụng được.</div>
                 @endif
             </div>
             <div class="col-lg-4 text-lg-end d-none d-lg-block">
@@ -133,9 +142,6 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
 
     <div class="search-panel mb-4">
         <form method="GET" action="{{ route('home') }}" id="trip-filter-form">
-            @if($hasDriverCode)
-                <input type="hidden" name="tx" value="{{ $driverCode }}">
-            @endif
             <div class="row g-2 align-items-end search-panel-grid">
                 <div class="col-6 col-md-3">
                     <label class="form-label">Điểm đi</label>
@@ -166,6 +172,8 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
         </form>
     </div>
 
+    @include('partials.guest-trip-watch')
+
     <div class="booking-list-head mb-3">
         <div>
             @php
@@ -188,9 +196,7 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
     <div id="trips-list">
         @forelse($offers as $offer)
         @php
-            $capacity = ($hasDriverCode && $driverProfile && $driverProfile->vehicle_seats)
-                ? (int) $driverProfile->vehicle_seats
-                : $offer->capacity();
+            $capacity = $offer->capacity();
             $schedule = $offer->scheduleInfoForDate($filterServiceDate);
             $tripQuote = $pricingService->quote($offer, 'one_way', null, null, 'shared');
             $wholeQuote = $pricingService->quote($offer, 'one_way', null, null, 'whole_car');
@@ -199,16 +205,12 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
             $listPriceLabel = $pricingService->formatSeatRange($seatRange['min'], $seatRange['max']);
             $roundPrice = $roundQuote['shared_seat_price'];
             $vehicleCapacityLabel = \App\Support\VehicleCapacityOptions::label($capacity);
-            $vehiclePhotoUrl = ($hasDriverCode && $driverProfile)
-                ? \App\Support\VehicleDisplay::photoFromDriverProfile($driverProfile)
-                : \App\Support\VehicleDisplay::photoFromVehicle($offer->vehicle);
+            $vehiclePhotoUrl = \App\Support\VehicleDisplay::photoFromVehicle($offer->vehicle);
             $basePrices[$offer->id] = [
                 'one_way' => $tripQuote['one_way_seat_price'],
                 'round_trip' => $roundPrice,
             ];
-            $vehicleType = $hasDriverCode && $driverProfile
-                ? ($driverProfile->vehicle_type ?? 'sedan')
-                : ($offer->vehicle->type ?? 'sedan');
+            $vehicleType = $offer->vehicle->type ?? 'sedan';
         @endphp
         <article class="trip-card-pro" data-template-id="{{ $offer->id }}">
             <div class="trip-card-layout">
@@ -266,7 +268,7 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
             <div class="booking-empty-icon">🔍</div>
             <h3 class="h6 fw-bold">Không có chuyến phù hợp</h3>
             <p class="text-muted small mb-3">Đổi ngày hoặc bộ lọc.</p>
-            <a href="{{ route('home', $hasDriverCode ? ['tx' => $driverCode] : []) }}" class="btn btn-sm btn-outline-primary">Xem tất cả chuyến</a>
+            <a href="{{ route('home') }}" class="btn btn-sm btn-outline-primary">Xem tất cả chuyến</a>
         </div>
         @endforelse
     </div>
@@ -280,9 +282,6 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                 @csrf
                 <input type="hidden" name="template_id" id="modal-template-id">
                 <input type="hidden" name="vehicle_capacity" id="modal-vehicle-capacity" value="{{ old('vehicle_capacity') }}">
-                @if($hasDriverCode)
-                    <input type="hidden" name="tx" value="{{ $driverCode }}">
-                @endif
 
                 <div class="modal-header border-0 p-0 booking-modal-header">
                     <div class="booking-modal-header-inner w-100">
@@ -324,6 +323,8 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                                         ])
                                     </div>
                                     <input type="hidden" name="pickup_address" id="modal-pickup" value="{{ old('pickup_address') }}">
+                                    <input type="hidden" name="pickup_lat" id="modal-pickup-lat" value="{{ old('pickup_lat') }}">
+                                    <input type="hidden" name="pickup_lng" id="modal-pickup-lng" value="{{ old('pickup_lng') }}">
                                     <input type="hidden" name="dropoff_address" id="modal-dropoff" value="{{ old('dropoff_address') }}">
                                     <div class="col-12">
                                         <label class="form-label" for="modal-pickup-detail">Địa chỉ đón <span class="text-danger">*</span></label>
@@ -334,6 +335,8 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                                             <button type="button" class="btn btn-outline-primary address-map-trigger"
                                                     data-address-map-for="modal-pickup-detail"
                                                     data-address-map-province="modal-pickup"
+                                                    data-address-map-lat="modal-pickup-lat"
+                                                    data-address-map-lng="modal-pickup-lng"
                                                     data-address-map-label="Chọn điểm đón trên bản đồ"
                                                     aria-label="Chọn điểm đón trên bản đồ" title="Chọn trên bản đồ">
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
@@ -362,6 +365,15 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                                             </button>
                                         </div>
                                     </div>
+                                    @if($appliedReferral)
+                                    <div class="col-12">
+                                        <label class="form-label" for="modal-referral-code">Mã giới thiệu</label>
+                                        <input type="text" id="modal-referral-code" class="form-control bg-light"
+                                               value="{{ $appliedReferral->code }}" readonly tabindex="-1" autocomplete="off"
+                                               aria-readonly="true">
+                                        <div class="form-text">Mã từ link giới thiệu — không thể chỉnh sửa.</div>
+                                    </div>
+                                    @endif
                                     <div class="col-12">
                                         <label class="form-label">Loại chuyến</label>
                                         <div class="d-flex flex-wrap gap-3" id="modal-trip-type-group">
@@ -433,6 +445,7 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                                         <div class="small text-muted">Tổng tiền</div>
                                         <div class="booking-summary-total" id="modal-total-price">0 đ</div>
                                         <div class="small text-muted d-none" id="modal-price-unit-wrap"><span id="modal-price-unit">0 đ</span>/vé</div>
+                                        <div id="modal-referral-discount-step2" class="booking-referral-discount mt-2 d-none"></div>
                                     </div>
                                 </div>
                             </div>
@@ -454,6 +467,27 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                                                data-validate-label="Số điện thoại" autocomplete="tel"
                                                value="{{ old('contact_phone') }}">
                                     </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label d-block">Giới tính</label>
+                                        <div class="d-flex gap-3 pt-1">
+                                            <div class="form-check">
+                                                <input type="radio" name="passenger_gender" id="modal-passenger-gender-male" value="male"
+                                                       class="form-check-input" @checked(old('passenger_gender', 'male') === 'male')>
+                                                <label class="form-check-label" for="modal-passenger-gender-male">Nam</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input type="radio" name="passenger_gender" id="modal-passenger-gender-female" value="female"
+                                                       class="form-check-input" @checked(old('passenger_gender') === 'female')>
+                                                <label class="form-check-label" for="modal-passenger-gender-female">Nữ</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label" for="modal-passenger-age">Tuổi</label>
+                                        <input type="number" name="passenger_age" id="modal-passenger-age" class="form-control"
+                                               min="1" max="120" inputmode="numeric" placeholder="Không bắt buộc"
+                                               value="{{ old('passenger_age') }}">
+                                    </div>
                                     <div class="col-12">
                                         <label class="form-label" for="modal-notes">Ghi chú cho tài xế</label>
                                         <textarea name="notes" id="modal-notes" rows="2" maxlength="500"
@@ -470,6 +504,7 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                     <div class="seat-footer-summary">
                         <div class="fw-semibold" id="modal-seat-list-step1">Số ghế: 1 ghế</div>
                         <div class="booking-footer-price" id="modal-total-price-step1">0 đ</div>
+                        <div id="modal-referral-discount-step1" class="booking-referral-discount d-none"></div>
                     </div>
                     <button type="button" class="btn btn-outline-primary fw-semibold px-4" id="modal-next-btn">
                         Tiếp tục
@@ -488,6 +523,9 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
 </div>
 
 @include('partials.address-map-picker-modal')
+@if(session('booking_success.referral_code'))
+    @include('partials.booking-referral-success-modal')
+@endif
 @endsection
 
 @push('styles')
@@ -507,9 +545,20 @@ window.__bookingRestoreModal = @json($bookingRestoreModal);
 window.__bookingShowResult = @json(session('booking_success') !== null || $errors->any());
 window.__filterServiceDate = @json($filterServiceDate);
 window.__bookingTemplates = @json($bookingTemplates);
-window.__presetDriver = @json($presetDriver);
+window.__referralPrefill = @json($appliedReferral?->code ?? '');
+window.__referralDiscountPercent = @json($referralDiscountMeta['percent'] ?? 0);
+window.__referralAttributionOnly = @json($referralDiscountMeta['attribution_only'] ?? false);
+window.__referralHasCode = @json((bool) ($appliedReferral ?? null));
+window.__bookingReferralSuccess = @json($bookingReferralSuccess);
 window.__roundTripMultiplier = @json(\App\Support\PlatformFees::roundTripMultiplier());
+window.__guestTripWatchUrl = @json(route('guest.tripWatch'));
+window.__guestTripReviewUrl = @json(route('guest.tripReviews.store'));
+window.__guestTripCancelUrl = @json(route('guest.bookings.cancel'));
 </script>
 <script src="{{ asset('js/customer-booking.js') }}"></script>
+<script src="{{ asset('js/guest-trip-watch.js') }}?v={{ filemtime(public_path('js/guest-trip-watch.js')) }}"></script>
+@if(session('booking_success.referral_code'))
+<script src="{{ asset('js/booking-referral-success.js') }}?v={{ filemtime(public_path('js/booking-referral-success.js')) }}"></script>
+@endif
 <script src="{{ asset('js/address-map-picker.js') }}?v={{ filemtime(public_path('js/address-map-picker.js')) }}"></script>
 @endpush

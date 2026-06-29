@@ -70,7 +70,7 @@
         @if($pendingGroups->isEmpty())
             <div class="driver-empty" id="no-pending-msg">
                 Không có yêu cầu.
-                <span class="driver-empty-hint d-block mt-1">Chia sẻ QR đặt vé để nhận đơn.</span>
+                <span class="driver-empty-hint d-block mt-1">Bấm Dò chuyến để tìm đơn mới.</span>
             </div>
             <div class="d-none flex-column gap-3" id="pending-requests-list"></div>
         @else
@@ -109,11 +109,15 @@
 
     @include('partials.screen-tab-pane', ['prefix' => 'driver-main', 'key' => 'deposit', 'active' => $driverDefaultTab === 'deposit'])
     <section class="driver-section" id="driver-section-deposit">
-        @include('partials.driver-tab-deposit', [
-            'wallet' => $wallet,
-            'revenueStats' => $revenueStats,
-            'walletHistory' => $walletHistory ?? collect(),
-        ])
+        @if($wallet)
+            @include('partials.driver-tab-deposit', [
+                'wallet' => $wallet,
+                'revenueStats' => $revenueStats,
+                'walletHistory' => $walletHistory ?? collect(),
+            ])
+        @else
+            <div class="driver-empty">Chưa có hồ sơ tài xế.</div>
+        @endif
     </section>
     @include('partials.screen-tab-pane-end')
 
@@ -122,6 +126,8 @@
 @endsection
 
 @push('scripts')
+<script>window.__driverLocationUrl = @json(route('driver.location.update'));</script>
+<script src="{{ asset('js/driver-location.js') }}?v={{ filemtime(public_path('js/driver-location.js')) }}"></script>
 <script src="{{ asset('js/driver-transfer-form.js') }}?v={{ filemtime(public_path('js/driver-transfer-form.js')) }}"></script>
 <script src="{{ asset('js/driver-wallet-deposit.js') }}?v={{ filemtime(public_path('js/driver-wallet-deposit.js')) }}"></script>
 <script>
@@ -146,6 +152,9 @@
             html += '<span class="status-pill status-pill--' + modeBadge + ' ms-1">' + escapeHtml(passenger.booking_mode) + '</span>';
         }
         html += '</div>';
+        if (passenger.passenger_profile) {
+            html += '<div class="text-muted small">' + escapeHtml(passenger.passenger_profile) + '</div>';
+        }
         if (passenger.pickup_time) {
             html += '<div class="text-muted small">🕐 Giờ đón: <strong>' + escapeHtml(passenger.pickup_time) + '</strong></div>';
         }
@@ -184,7 +193,9 @@
         } else {
             details = '<p class="text-muted small mb-0">Chưa có chi tiết hành khách.</p>';
         }
-        var expireHint = '';
+        var expireHint = req.expires_in_label
+            ? '<div class="meta text-warning">⏱ ' + escapeHtml(req.expires_in_label) + '</div>'
+            : '';
         var passengerHint = req.passenger_count > 1
             ? '<div class="meta">' + escapeHtml(String(req.passenger_count)) + ' khách ghép</div>'
             : '';

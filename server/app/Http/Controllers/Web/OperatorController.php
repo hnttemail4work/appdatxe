@@ -67,6 +67,8 @@ class OperatorController extends Controller
                 'schedule.driver',
                 'schedule.driverTripRequests',
                 'schedule.tripSettlement',
+                'appliedReferralCode',
+                'tripReview',
             ])
             ->whereHas('schedule.vehicle', fn ($q) => $q->where('operator_id', $user->id))
             ->where(function ($q): void {

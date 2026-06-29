@@ -54,6 +54,9 @@ class LiveSyncController extends Controller
                 'trip_total'     => number_format($s->tripRevenueTotal(), 0, ',', '.'),
                 'bookings'       => $s->bookings->map(fn (Booking $b) => [
                     'passenger_name'   => $b->passenger_name,
+                    'passenger_gender' => $b->passengerGenderLabel(),
+                    'passenger_age'    => $b->passenger_age,
+                    'passenger_profile'=> $b->passengerProfileDetail(),
                     'booking_mode'     => $b->bookingModeLabel(),
                     'booking_mode_key' => $b->booking_mode ?? 'shared',
                     'pickup_time'      => $b->pickupTimeLabel(),

@@ -6,7 +6,6 @@ use App\Models\ScheduleTemplate;
 use App\Models\TripRoute;
 use App\Models\Vehicle;
 use App\Support\RouteDistanceCatalog;
-use App\Support\SouthernProvinces;
 use App\Support\VehicleCapacityOptions;
 use App\Support\VehicleDisplay;
 use Illuminate\Http\UploadedFile;
@@ -58,10 +57,10 @@ class TripOfferService
                 ? substr((string) $template->expected_arrival_time, 0, 5)
                 : null,
             'distance_km'            => $template->route
-                ? \App\Support\RouteDistanceCatalog::resolveKm(
+                ? (int) ($template->route->distance_km ?: RouteDistanceCatalog::resolveKm(
                     $template->route->departure,
                     $template->route->destination,
-                )
+                ))
                 : null,
             'vehicle'                => [
                 'seats'             => (int) $template->vehicle->capacity,
@@ -85,6 +84,7 @@ class TripOfferService
      *   seat_one_way: int,
      *   whole_car_round: int,
      *   seat_round: int,
+     *   distance_km?: int|null,
      *   photo?: UploadedFile|null,
      * }  $data
      * @return array{route: TripRoute, anchor: ScheduleTemplate|null}
@@ -101,7 +101,10 @@ class TripOfferService
         return DB::transaction(function () use ($operatorId, $data, $seats, $editingFrom, $arrivalTime): array {
             $departure = trim($data['departure']);
             $destination = trim($data['destination']);
-            $distance = RouteDistanceCatalog::resolveKm($departure, $destination);
+            $manualKm = isset($data['distance_km']) ? (int) $data['distance_km'] : 0;
+            $distance = $manualKm > 0
+                ? $manualKm
+                : RouteDistanceCatalog::resolveKm($departure, $destination);
 
             $route = TripRoute::query()->updateOrCreate(
                 ['departure' => $departure, 'destination' => $destination],

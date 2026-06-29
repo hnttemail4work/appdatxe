@@ -52,17 +52,29 @@
         return field.getAttribute('name') || field.getAttribute('aria-label') || 'trường này';
     }
 
+    function findFeedback(field) {
+        var key = field.id || field.name || '';
+        if (!key) {
+            return null;
+        }
+        var root = field.closest('form') || document;
+        return root.querySelector('.' + FEEDBACK_CLASS + '[data-for="' + key + '"]');
+    }
+
+    function feedbackInsertAfter(field) {
+        var group = field.closest('.input-group');
+        return group || field;
+    }
+
     function feedbackElement(field) {
-        var existing = field.parentElement
-            ? field.parentElement.querySelector('.' + FEEDBACK_CLASS + '[data-for="' + (field.id || field.name) + '"]')
-            : null;
+        var existing = findFeedback(field);
         if (existing) {
             return existing;
         }
         var el = document.createElement('div');
         el.className = 'invalid-feedback d-block ' + FEEDBACK_CLASS;
         el.setAttribute('data-for', field.id || field.name || '');
-        field.insertAdjacentElement('afterend', el);
+        feedbackInsertAfter(field).insertAdjacentElement('afterend', el);
         return el;
     }
 
@@ -71,8 +83,8 @@
             return;
         }
         field.classList.remove(INVALID_CLASS);
-        var fb = field.nextElementSibling;
-        if (fb && fb.classList.contains(FEEDBACK_CLASS)) {
+        var fb = findFeedback(field);
+        if (fb) {
             fb.textContent = '';
             fb.classList.remove('d-block');
         }

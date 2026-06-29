@@ -4,8 +4,8 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
-use App\Models\PlatformSetting;
 use App\Models\Payout;
+use App\Support\PlatformFees;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -22,7 +22,7 @@ class RevenueAnalyticsController extends Controller
 
         $startDate = isset($validated['start_date']) ? Carbon::parse($validated['start_date'])->startOfDay() : now()->startOfMonth();
         $endDate = isset($validated['end_date']) ? Carbon::parse($validated['end_date'])->endOfDay() : now()->endOfDay();
-        $commissionPercentage = (float) data_get(PlatformSetting::getValue('commission_percentage', ['value' => 10]), 'value', 10);
+        $commissionPercentage = PlatformFees::appCommissionPercent();
 
         $grossRevenue = (float) Booking::query()
             ->whereBetween(DB::raw('COALESCE(confirmed_at, created_at)'), [$startDate, $endDate])

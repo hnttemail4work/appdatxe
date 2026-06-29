@@ -42,6 +42,10 @@
     var marker = null;
     var targetInputId = null;
     var provinceInputId = null;
+    var latInputId = null;
+    var lngInputId = null;
+    var pendingLat = null;
+    var pendingLng = null;
     var reverseAbort = null;
     var searchAbort = null;
     var isResolving = false;
@@ -150,7 +154,26 @@
         isResolving = false;
         targetInputId = null;
         provinceInputId = null;
+        latInputId = null;
+        lngInputId = null;
+        pendingLat = null;
+        pendingLng = null;
         hideSearchResults();
+    }
+
+    function applyCoords(lat, lng) {
+        if (latInputId) {
+            var latEl = document.getElementById(latInputId);
+            if (latEl) {
+                latEl.value = String(lat);
+            }
+        }
+        if (lngInputId) {
+            var lngEl = document.getElementById(lngInputId);
+            if (lngEl) {
+                lngEl.value = String(lng);
+            }
+        }
     }
 
     function applyAddress(address) {
@@ -177,6 +200,9 @@
 
     function finishWithAddress(address) {
         applyAddress(address);
+        if (latInputId && pendingLat !== null && pendingLng !== null) {
+            applyCoords(pendingLat, pendingLng);
+        }
         closePicker();
     }
 
@@ -224,6 +250,9 @@
         if (!mapInstance || !window.L || isResolving) {
             return;
         }
+
+        pendingLat = lat;
+        pendingLng = lng;
 
         if (marker) {
             marker.setLatLng([lat, lng]);
@@ -325,6 +354,8 @@
     function openPicker(btn) {
         targetInputId = btn.getAttribute('data-address-map-for') || '';
         provinceInputId = btn.getAttribute('data-address-map-province') || '';
+        latInputId = btn.getAttribute('data-address-map-lat') || '';
+        lngInputId = btn.getAttribute('data-address-map-lng') || '';
         if (!targetInputId) {
             return;
         }

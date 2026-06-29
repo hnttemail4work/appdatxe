@@ -16,7 +16,7 @@ use App\Support\PlatformFees;
 
 use App\Support\RouteDistanceCatalog;
 
-use App\Support\SouthernProvinces;
+use App\Support\LocationCatalog;
 
 
 
@@ -348,13 +348,13 @@ class TripPricingService
 
         if ($pickup && $dropoff
 
-            && SouthernProvinces::isAllowed($pickup)
+            && LocationCatalog::isAllowed($pickup)
 
-            && SouthernProvinces::isAllowed($dropoff)
+            && LocationCatalog::isAllowed($dropoff)
 
         ) {
 
-            return SouthernProvinces::distanceBetween($pickup, $dropoff);
+            return LocationCatalog::distanceBetween($pickup, $dropoff);
 
         }
 

@@ -9,13 +9,19 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('driver_trip_settlements', function (Blueprint $table): void {
-            $table->string('settlement_code', 20)->nullable()->after('transfer_ref');
-            $table->timestamp('settlement_code_expires_at')->nullable()->after('settlement_code');
-            $table->timestamp('operator_code_issued_at')->nullable()->after('settlement_code_expires_at');
-            $table->foreignId('operator_code_issued_by')->nullable()->after('operator_code_issued_at')
-                ->constrained('users')->nullOnDelete();
-        });
+        if (! Schema::hasTable('driver_trip_settlements')) {
+            return;
+        }
+
+        if (! Schema::hasColumn('driver_trip_settlements', 'settlement_code')) {
+            Schema::table('driver_trip_settlements', function (Blueprint $table): void {
+                $table->string('settlement_code', 20)->nullable()->after('transfer_ref');
+                $table->timestamp('settlement_code_expires_at')->nullable()->after('settlement_code');
+                $table->timestamp('operator_code_issued_at')->nullable()->after('settlement_code_expires_at');
+                $table->foreignId('operator_code_issued_by')->nullable()->after('operator_code_issued_at')
+                    ->constrained('users')->nullOnDelete();
+            });
+        }
 
         if (DB::getDriverName() === 'mysql') {
             DB::statement("ALTER TABLE driver_trip_settlements MODIFY COLUMN status ENUM(

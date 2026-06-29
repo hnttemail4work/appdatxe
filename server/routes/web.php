@@ -6,6 +6,7 @@ use App\Http\Controllers\Web\DriverController;
 use App\Http\Controllers\Web\DriverWalletController;
 use App\Http\Controllers\Web\GeocodeController;
 use App\Http\Controllers\Web\GuestBookingController;
+use App\Http\Controllers\Web\GuestTripWatchController;
 use App\Http\Controllers\Web\LiveSyncController;
 use App\Http\Controllers\Web\OperatorController;
 use App\Http\Controllers\Web\OperatorTripOfferController;
@@ -50,6 +51,9 @@ Route::get('available-drivers', [GuestBookingController::class, 'availableDriver
 Route::get('seat-availability', [GuestBookingController::class, 'seatAvailability'])->name('booking.seatAvailability');
 Route::get('quote-price', [GuestBookingController::class, 'quotePrice'])->name('booking.quotePrice');
 Route::post('bookings', [GuestBookingController::class, 'store'])->name('booking.store');
+Route::get('guest/trip-watch', [GuestTripWatchController::class, 'index'])->name('guest.tripWatch');
+Route::post('guest/trip-reviews', [GuestTripWatchController::class, 'store'])->middleware('throttle:12,1')->name('guest.tripReviews.store');
+Route::post('guest/bookings/cancel', [GuestTripWatchController::class, 'cancelBooking'])->middleware('throttle:12,1')->name('guest.bookings.cancel');
 Route::get('geocode/reverse', [GeocodeController::class, 'reverse'])->name('geocode.reverse');
 Route::get('geocode/search', [GeocodeController::class, 'search'])->name('geocode.search');
 
@@ -63,6 +67,7 @@ Route::post('dat-xe/bookings', [GuestBookingController::class, 'store']);
 // ── Driver ────────────────────────────────────────────────────────────────
 Route::middleware(['auth', 'role:driver'])->group(function () {
     Route::get('driver/dashboard', [DriverController::class, 'myDashboard'])->name('driver.dashboard');
+    Route::post('driver/location', [DriverController::class, 'updateLocation'])->name('driver.location.update');
     Route::get('driver/live-sync', [LiveSyncController::class, 'driver'])->name('driver.liveSync');
     Route::post('driver/trip-requests/{driverTripRequest}/accept', [DriverController::class, 'acceptTripRequest'])->name('driver.tripRequests.accept');
     Route::post('driver/trip-requests/{driverTripRequest}/reject', [DriverController::class, 'rejectTripRequest'])->name('driver.tripRequests.reject');
@@ -72,6 +77,7 @@ Route::middleware(['auth', 'role:driver'])->group(function () {
     Route::post('driver/photos', [DriverController::class, 'uploadMyPhotos'])->name('driver.photos.upload');
     Route::post('driver/bookings/{booking}/complete', [DriverController::class, 'completeTrip'])->name('driver.bookings.complete');
     Route::post('driver/schedules/{schedule}/complete', [DriverController::class, 'completeSchedule'])->name('driver.schedules.complete');
+    Route::post('driver/schedules/{schedule}/cancel', [DriverController::class, 'cancelSchedule'])->name('driver.schedules.cancel');
     Route::post('driver/settlements/{settlement}/settle', [DriverWalletController::class, 'settle'])->name('driver.settlements.settle');
     Route::post('driver/settlements/{settlement}/confirm-transfer', [DriverWalletController::class, 'confirmSettlementTransfer'])->name('driver.settlements.confirmTransfer');
     Route::post('driver/wallet/deposit', [DriverWalletController::class, 'deposit'])->name('driver.wallet.deposit');
@@ -109,7 +115,14 @@ Route::middleware(['auth', 'role:operator'])->group(function () {
 Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::get('admin/dashboard',              [AdminController::class, 'dashboard'])->name('admin.dashboard');
     Route::post('admin/operators',            [AdminController::class, 'storeOperator'])->name('admin.operators.store');
+    Route::post('admin/referrers',           [AdminController::class, 'storeReferrer'])->name('admin.referrers.store');
+    Route::post('admin/referrers/{referralCode}/hide', [AdminController::class, 'suspendReferrer'])->name('admin.referrers.hide');
+    Route::post('admin/referrers/{referralCode}/show', [AdminController::class, 'showReferrer'])->name('admin.referrers.show');
+    Route::post('admin/bank-settings',         [AdminController::class, 'updateBankSettings'])->name('admin.bankSettings.update');
     Route::post('admin/fee-settings',         [AdminController::class, 'updateFeeSettings'])->name('admin.feeSettings.update');
     Route::post('admin/route-distances',      [AdminController::class, 'updateRouteDistances'])->name('admin.routeDistances.update');
+    Route::post('admin/destinations',         [AdminController::class, 'storeDestination'])->name('admin.destinations.store');
+    Route::post('admin/destinations/{tripRoute}/show', [AdminController::class, 'showDestination'])->name('admin.destinations.show');
+    Route::delete('admin/destinations/{tripRoute}', [AdminController::class, 'destroyDestination'])->name('admin.destinations.destroy');
     Route::patch('admin/users/{user}/status',  [AdminController::class, 'updateUserStatus'])->name('admin.users.status');
 });

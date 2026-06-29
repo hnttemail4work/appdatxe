@@ -43,6 +43,17 @@ $visibleSteps = collect($steps)->filter(function (array $step) use ($settlement)
     </div>
 
     @if($currentKey === 'complete' && in_array($phase, ['upcoming', 'active'], true))
+        @if($schedule->driverCanCancelTrip())
+            <form method="POST" action="{{ route('driver.schedules.cancel', $schedule) }}"
+                  class="mb-2"
+                  data-confirm="Hủy chuyến? Khách chưa lên xe / không đi."
+                  data-confirm-title="Hủy chuyến"
+                  data-confirm-ok="Hủy chuyến"
+                  data-confirm-variant="danger">
+                @csrf
+                <button type="submit" class="btn btn-outline-danger btn-sm w-100 mb-2">Hủy chuyến (khách chưa lên xe)</button>
+            </form>
+        @endif
         <form method="POST" action="{{ route('driver.schedules.complete', $schedule) }}"
               data-confirm="Xác nhận đã chạy xong chuyến này ({{ $bookings->count() }} khách)?"
               data-confirm-title="Hoàn thành chuyến"
@@ -104,6 +115,17 @@ $visibleSteps = collect($steps)->filter(function (array $step) use ($settlement)
         </form>
 
     @elseif($currentKey === 'upcoming' && in_array($phase, ['upcoming', 'active'], true))
+        @if($schedule->driverCanCancelTrip())
+            <form method="POST" action="{{ route('driver.schedules.cancel', $schedule) }}"
+                  class="mb-2"
+                  data-confirm="Hủy chuyến này? Khách chưa lên xe — quản lý sẽ được cập nhật."
+                  data-confirm-title="Hủy chuyến"
+                  data-confirm-ok="Hủy chuyến"
+                  data-confirm-variant="danger">
+                @csrf
+                <button type="submit" class="btn btn-outline-danger btn-sm w-100">Hủy chuyến (khách chưa lên xe)</button>
+            </form>
+        @endif
         <p class="small text-muted mb-0">Chuẩn bị khởi hành theo giờ trên vé.</p>
     @endif
 </div>

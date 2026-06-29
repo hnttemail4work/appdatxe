@@ -20,6 +20,38 @@ class PlatformFees
         return (float) ($legacy['value'] ?? 2);
     }
 
+    /** % hoa hồng người giới thiệu — mã admin (QR người GT). */
+    public static function referralCommissionFirstPercent(): float
+    {
+        $setting = PlatformSetting::getValue('referral_commission_first_percentage', ['value' => 8]);
+
+        return (float) ($setting['value'] ?? 8);
+    }
+
+    /** % giảm giá khách + hoa hồng — mã phát sinh từ khách đặt chuyến thành công. */
+    public static function referralCommissionRepeatPercent(): float
+    {
+        $setting = PlatformSetting::getValue('referral_commission_repeat_percentage', ['value' => 2]);
+
+        return (float) ($setting['value'] ?? 2);
+    }
+
+    /**
+     * @param  int  $occurrence  1 = lần giới thiệu đầu, >= 2 = các lần sau
+     */
+    public static function referralCommissionPercentForOccurrence(int $occurrence): float
+    {
+        return $occurrence <= 1
+            ? self::referralCommissionFirstPercent()
+            : self::referralCommissionRepeatPercent();
+    }
+
+    /** @deprecated Dùng referralCommissionFirstPercent() */
+    public static function referralCommissionPercent(): float
+    {
+        return self::referralCommissionFirstPercent();
+    }
+
     public static function roundTripDiscountPercent(): float
     {
         $setting = PlatformSetting::getValue('round_trip_discount_percentage', ['value' => 15]);
