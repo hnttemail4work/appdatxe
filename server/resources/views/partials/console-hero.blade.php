@@ -3,12 +3,18 @@
     @param string|null $subtitle
     @param string|null $breadcrumbHref
     @param string|null $breadcrumbLabel
+    @param string|null $backHref
+    @param string|null $backLabel
 --}}
 <div class="console-hero">
     <div class="console-hero-inner">
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
             <div>
-                @if(!empty($breadcrumbHref) && !empty($breadcrumbLabel))
+                @if(!empty($backHref) && !empty($backLabel))
+                    <a href="{{ $backHref }}" class="console-back-link">
+                        <span aria-hidden="true">←</span> {{ $backLabel }}
+                    </a>
+                @elseif(!empty($breadcrumbHref) && !empty($breadcrumbLabel))
                     <div class="console-breadcrumb">
                         <a href="{{ $breadcrumbHref }}">{{ $breadcrumbLabel }}</a>
                         <span class="mx-1">/</span>

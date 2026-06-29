@@ -10,10 +10,9 @@ use App\Services\ScheduleLifecycleService;
 use App\Services\TripListingService;
 use App\Services\TripPricingService;
 use App\Support\PlatformFees;
+use App\Support\PageList;
 use App\Support\SouthernProvinces;
-use App\Support\VehicleCapacityOptions;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use InvalidArgumentException;
 
 class GuestBookingController extends Controller
@@ -29,7 +28,7 @@ class GuestBookingController extends Controller
     public function index(Request $request)
     {
         $filters = $this->tripListing->filtersFromRequest($request);
-        $offers = $this->tripListing->query($filters);
+        $offers = PageList::paginateCollection($this->tripListing->query($filters), $request);
 
         $driverCode = strtoupper(trim((string) $request->query('tx', '')));
         $driverProfile = null;
@@ -52,11 +51,8 @@ class GuestBookingController extends Controller
 
     public function liveSync(Request $request)
     {
-        $this->driverRequests->expireStale();
-
         $filters = $this->tripListing->filtersFromRequest($request);
-        $offers = $this->tripListing->query($filters);
-        $priceRanges = $this->tripListing->wholeCarPriceRanges($offers);
+        $offers = PageList::paginateCollection($this->tripListing->query($filters), $request);
 
         return response()->json([
             'synced_at'    => now()->toIso8601String(),
@@ -64,8 +60,12 @@ class GuestBookingController extends Controller
             'trips'        => $offers->map(fn (ScheduleTemplate $t) => $this->tripListing->serializeOffer(
                 $t,
                 $filters['service_date'] ?? null,
-                $priceRanges[$t->route_id] ?? null,
             ))->values(),
+            'pagination'   => [
+                'total'        => $offers->total(),
+                'current_page' => $offers->currentPage(),
+                'last_page'    => $offers->lastPage(),
+            ],
         ]);
     }
 
@@ -126,14 +126,13 @@ class GuestBookingController extends Controller
             'service_date'     => ['required', 'date', 'after_or_equal:today'],
             'preferred_time'   => ['nullable', 'date_format:H:i'],
             'driver_code'      => ['nullable', 'string', 'max:20'],
-            'vehicle_capacity' => ['nullable', 'integer', Rule::in(VehicleCapacityOptions::STANDARD)],
+            'vehicle_capacity' => ['nullable', 'integer', 'min:1', 'max:50'],
         ]);
 
         $template = ScheduleTemplate::query()->with('vehicle')->findOrFail($validated['template_id']);
 
         $capacity = $template->capacity();
         $driverCode = strtoupper(trim((string) ($validated['driver_code'] ?? '')));
-        $guestCapacity = (int) ($validated['vehicle_capacity'] ?? 0);
 
         if ($driverCode !== '') {
             $profile = DriverProfile::query()
@@ -144,12 +143,6 @@ class GuestBookingController extends Controller
             if ($profile && (int) $profile->vehicle_seats > 0) {
                 $capacity = (int) $profile->vehicle_seats;
             }
-        } elseif ($guestCapacity > 0) {
-            $resolved = $this->resolveTemplateForCapacity($template, $guestCapacity);
-            if ($resolved) {
-                $template = $resolved;
-            }
-            $capacity = $guestCapacity;
         }
 
         return response()->json([
@@ -202,8 +195,7 @@ class GuestBookingController extends Controller
             'trip_type'       => ['required', 'in:one_way,round_trip'],
             'booking_mode'    => ['required', 'in:whole_car,shared'],
             'seat_count'      => ['nullable', 'integer', 'min:1', 'max:50'],
-            'vehicle_capacity' => ['nullable', 'integer', Rule::in(VehicleCapacityOptions::STANDARD)],
-            'referral_code'   => ['nullable', 'string', 'max:20'],
+            'vehicle_capacity' => ['nullable', 'integer', 'min:1', 'max:50'],
             'tx'              => ['nullable', 'string', 'max:20'],
         ]);
 
@@ -211,16 +203,6 @@ class GuestBookingController extends Controller
             ->where('status', 'active')
             ->with(['route', 'vehicle'])
             ->findOrFail($validated['template_id']);
-
-        if (blank($validated['tx'] ?? null) && ! empty($validated['vehicle_capacity'])) {
-            $resolved = $this->resolveTemplateForCapacity($template, (int) $validated['vehicle_capacity']);
-            if (! $resolved) {
-                return back()
-                    ->withErrors(['vehicle_capacity' => 'Chưa có chuyến xe ' . $validated['vehicle_capacity'] . ' chỗ trên tuyến này.'])
-                    ->withInput();
-            }
-            $template = $resolved;
-        }
 
         $preferredTime = trim((string) ($validated['preferred_time'] ?? ''));
         $preferredTime = $preferredTime !== '' ? $preferredTime : null;
@@ -263,22 +245,6 @@ class GuestBookingController extends Controller
             $seatNumbers = array_slice($freeSeats, 0, $seatCount);
         }
 
-        $referralCode = strtoupper(trim((string) ($validated['referral_code'] ?? '')));
-        if ($referralCode !== '') {
-            $referrer = DriverProfile::query()
-                ->operational()
-                ->where('driver_code', $referralCode)
-                ->first();
-
-            if (! $referrer) {
-                return back()
-                    ->withErrors(['referral_code' => 'Không tìm thấy tài xế với mã giới thiệu này.'])
-                    ->withInput();
-            }
-        } else {
-            $referralCode = null;
-        }
-
         try {
             $booking = $this->workflow->createBookingFromTemplate(
                 $template,
@@ -293,7 +259,6 @@ class GuestBookingController extends Controller
                 $validated['dropoff_detail'] ?? null,
                 $validated['notes'] ?? null,
                 $validated['trip_type'],
-                $referralCode,
                 $bookingMode,
             );
         } catch (InvalidArgumentException $e) {
@@ -302,24 +267,10 @@ class GuestBookingController extends Controller
 
         $booking->loadMissing('schedule');
 
-        return redirect()->route('booking.index')->with('booking_success', [
+        return redirect()->route('home')->with('booking_success', [
             'trip_code'         => $booking->schedule->shortTripCode(),
             'contact_phone'     => $validated['contact_phone'],
             'awaiting_operator' => true,
         ]);
-    }
-
-    private function resolveTemplateForCapacity(ScheduleTemplate $from, int $capacity): ?ScheduleTemplate
-    {
-        if (! VehicleCapacityOptions::isStandard($capacity)) {
-            return null;
-        }
-
-        return ScheduleTemplate::query()
-            ->where('status', 'active')
-            ->where('route_id', $from->route_id)
-            ->whereHas('vehicle', fn ($q) => $q->where('capacity', $capacity))
-            ->with(['route', 'vehicle'])
-            ->first();
     }
 }

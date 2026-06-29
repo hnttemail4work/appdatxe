@@ -2,7 +2,7 @@
 
 @section('console')
 @php
-$drivers = $drivers->sortBy(fn ($d) => $d->isPendingApproval() ? 0 : 1)->values();
+$drivers = $drivers ?? collect();
 @endphp
 
 <div class="console-panel">
@@ -49,7 +49,7 @@ $drivers = $drivers->sortBy(fn ($d) => $d->isPendingApproval() ? 0 : 1)->values(
                                 <div>
                                     <div class="cell-primary">{{ $d->user->name }}</div>
                                     @if($d->driver_code)
-                                        <div class="cell-muted small"><code>{{ $d->driver_code }}</code></div>
+                                        <div class="driver-meta-code">{{ $d->driver_code }}</div>
                                     @endif
                                 </div>
                             </div>
@@ -57,18 +57,18 @@ $drivers = $drivers->sortBy(fn ($d) => $d->isPendingApproval() ? 0 : 1)->values(
                         <td class="cell-muted">{{ $d->user->phone ?? '—' }}</td>
                         <td class="cell-muted">
                             @if($d->vehicle_license_plate)
-                                <strong>{{ $d->vehicle_license_plate }}</strong>
+                                <strong class="text-white">{{ $d->vehicle_license_plate }}</strong>
                                 @if($d->vehicle_type)
-                                    <span class="text-muted"> · {{ ucfirst($d->vehicle_type) }}</span>
+                                    <span class="driver-meta-sub ms-1">{{ ucfirst($d->vehicle_type) }}</span>
                                 @endif
                             @else
                                 —
                             @endif
                         </td>
                         <td>
-                            <span class="badge bg-{{ $d->displayStatusColor() }}">{{ $d->displayStatusLabel() }}</span>
+                            <span class="status-pill status-pill--{{ $d->displayStatusColor() }}">{{ $d->displayStatusLabel() }}</span>
                             @if($d->missedTripStrikeLabel() && ! $d->isMissedTripLocked() && ! $d->isPendingApproval() && ! $d->isRejected())
-                                <div class="mt-1"><span class="badge bg-warning text-dark">{{ $d->missedTripStrikeLabel() }}</span></div>
+                                <div class="mt-1"><span class="status-pill status-pill--pending">{{ $d->missedTripStrikeLabel() }}</span></div>
                             @endif
                         </td>
                         <td class="text-end">
@@ -76,7 +76,7 @@ $drivers = $drivers->sortBy(fn ($d) => $d->isPendingApproval() ? 0 : 1)->values(
                                 @if($d->driver_code)
                                     @include('partials.share-booking-qr-button', [
                                         'shareUrl' => \App\Support\BookingShareUrl::guest($d->driver_code),
-                                        'shareLabel' => 'QR đặt vé · ' . $d->user->name,
+                                        'shareLabel' => 'QR đặt vé — ' . $d->user->name,
                                         'modalId' => 'shareQrDriver-' . $d->id,
                                         'iconOnly' => true,
                                     ])
@@ -91,6 +91,7 @@ $drivers = $drivers->sortBy(fn ($d) => $d->isPendingApproval() ? 0 : 1)->values(
                 </tbody>
             </table>
         </div>
+        @include('partials.pagination', ['paginator' => $drivers])
     </div>
         </div>
 @endif
@@ -103,7 +104,7 @@ $drivers = $drivers->sortBy(fn ($d) => $d->isPendingApproval() ? 0 : 1)->values(
         @if($d->driver_code)
             @include('partials.share-booking-qr-modal', [
                 'shareUrl' => \App\Support\BookingShareUrl::guest($d->driver_code),
-                'shareLabel' => 'QR đặt vé · ' . $d->user->name,
+                'shareLabel' => 'QR đặt vé — ' . $d->user->name,
                 'modalId' => 'shareQrDriver-' . $d->id,
             ])
         @endif

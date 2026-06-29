@@ -76,7 +76,7 @@ $inventoryDefaultTab = old('name') || old('quantity') ? 'add' : 'history';
                     <option value="">— Tất cả —</option>
                     @foreach($vehicles as $v)
                         <option value="{{ $v->id }}" {{ old('vehicle_id') == $v->id ? 'selected' : '' }}>
-                            {{ $v->license_plate }} · {{ ucfirst($v->type) }}
+                            {{ $v->license_plate }}, {{ ucfirst($v->type) }}
                         </option>
                     @endforeach
                 </select>
@@ -146,6 +146,7 @@ $inventoryDefaultTab = old('name') || old('quantity') ? 'add' : 'history';
                     </tbody>
                 </table>
             </div>
+            @include('partials.pagination', ['paginator' => $items])
         @endif
         @include('partials.screen-tab-pane-end')
 

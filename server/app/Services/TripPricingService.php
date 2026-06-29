@@ -16,8 +16,6 @@ use App\Support\PlatformFees;
 
 use App\Support\SouthernProvinces;
 
-use App\Support\VehicleCapacityOptions;
-
 
 
 /** Giá vé: cả xe theo số chỗ (mốc 7 chỗ = 1tr), ghép = 15% giá cả xe / ghế. */
@@ -75,14 +73,18 @@ class TripPricingService
 
 
         $isWholeCar = $bookingMode === 'whole_car';
-
         $oneWayUnit = $isWholeCar ? $oneWayWhole : $oneWaySeat;
+        $discount = $this->tripDiscountPercent($template);
 
-        $unit = $this->priceForTripType($oneWayUnit, $tripType);
-
-        $sharedUnit = $this->priceForTripType($oneWaySeat, $tripType);
-
-        $wholeUnit = $this->priceForTripType($oneWayWhole, $tripType);
+        if ($tripType === 'round_trip' && $this->hasExplicitRoundTripPricing($template)) {
+            $wholeUnit = (int) ($template->whole_car_round_trip_price ?? $this->priceForTripType($oneWayWhole, $tripType, $discount));
+            $sharedUnit = (int) ($template->seat_round_trip_price ?? $this->priceForTripType($oneWaySeat, $tripType, $discount));
+            $unit = $isWholeCar ? $wholeUnit : $sharedUnit;
+        } else {
+            $unit = $this->priceForTripType($oneWayUnit, $tripType, $discount);
+            $sharedUnit = $this->priceForTripType($oneWaySeat, $tripType, $discount);
+            $wholeUnit = $this->priceForTripType($oneWayWhole, $tripType, $discount);
+        }
 
 
 
@@ -272,30 +274,22 @@ class TripPricingService
 
 
 
-    public function seatPriceForTripType(int $oneWaySeatPrice, string $tripType): int
-
+    public function seatPriceForTripType(int $oneWaySeatPrice, string $tripType, ?float $discountPercent = null): int
     {
-
-        return $this->priceForTripType($oneWaySeatPrice, $tripType);
-
+        return $this->priceForTripType($oneWaySeatPrice, $tripType, $discountPercent);
     }
 
-
-
-    public function priceForTripType(int $oneWayPrice, string $tripType): int
-
+    public function priceForTripType(int $oneWayPrice, string $tripType, ?float $discountPercent = null): int
     {
-
         if ($tripType === 'round_trip') {
+            $multiplier = $discountPercent !== null
+                ? round(2 * (1 - $discountPercent / 100), 4)
+                : PlatformFees::roundTripMultiplier();
 
-            return $this->roundToThousand((int) round($oneWayPrice * PlatformFees::roundTripMultiplier()));
-
+            return $this->roundToThousand((int) round($oneWayPrice * $multiplier));
         }
 
-
-
         return $oneWayPrice;
-
     }
 
 
@@ -322,7 +316,7 @@ class TripPricingService
 
 
 
-            return (float) $this->priceForTripType($oneWay, $tripType);
+            return (float) $this->priceForTripType($oneWay, $tripType, $this->tripDiscountPercent($entity));
 
         }
 
@@ -330,7 +324,7 @@ class TripPricingService
 
         $oneWay = $this->oneWaySeatPrice($entity, $pickup, $dropoff);
 
-        $unit = $this->priceForTripType($oneWay, $tripType);
+        $unit = $this->priceForTripType($oneWay, $tripType, $this->tripDiscountPercent($entity));
 
 
 
@@ -416,12 +410,9 @@ class TripPricingService
 
 
 
-    public function roundTripHint(int $oneWaySeatPrice): int
-
+    public function roundTripHint(int $oneWaySeatPrice, ?float $discountPercent = null): int
     {
-
-        return $this->priceForTripType($oneWaySeatPrice, 'round_trip');
-
+        return $this->priceForTripType($oneWaySeatPrice, 'round_trip', $discountPercent);
     }
 
 
@@ -435,25 +426,20 @@ class TripPricingService
     }
 
     /**
-     * Khoảng giá cả xe (một chiều) theo 4 / 7 / 16 chỗ trên cùng tuyến.
+     * Khoảng giá cả xe (một chiều) theo các loại xe đã cấu hình trên tuyến.
      *
      * @param  iterable<ScheduleTemplate>  $templatesOnRoute
      * @return array{min: int, max: int}
      */
     public function wholeCarPriceRangeForRoute(iterable $templatesOnRoute): array
     {
-        $byCapacity = [];
+        $prices = [];
         foreach ($templatesOnRoute as $template) {
-            $byCapacity[$template->capacity()] = $template;
+            $prices[] = $this->oneWayWholeCarPrice($template);
         }
 
-        $prices = [];
-        foreach (VehicleCapacityOptions::STANDARD as $cap) {
-            if (isset($byCapacity[$cap])) {
-                $prices[] = $this->oneWayWholeCarPrice($byCapacity[$cap]);
-            } else {
-                $prices[] = $this->defaultWholeCarPrice($cap);
-            }
+        if ($prices === []) {
+            return ['min' => 0, 'max' => 0];
         }
 
         return [
@@ -471,6 +457,40 @@ class TripPricingService
         }
 
         return $minFormatted . ' ~ ' . number_format($max, 0, ',', '.') . ' đ';
+    }
+
+    /** @return array{min: int, max: int} */
+    public function seatPriceRangeForTemplate(ScheduleTemplate $template): array
+    {
+        $oneWay = $this->oneWaySeatPrice($template);
+        $roundTrip = (int) $this->quote($template, 'round_trip', null, null, 'shared')['shared_seat_price'];
+
+        return [
+            'min' => min($oneWay, $roundTrip),
+            'max' => max($oneWay, $roundTrip),
+        ];
+    }
+
+    public function formatSeatRange(int $min, int $max): string
+    {
+        return $this->formatWholeCarRange($min, $max);
+    }
+
+    private function hasExplicitRoundTripPricing(ScheduleTemplate|Schedule $entity): bool
+    {
+        return $entity->whole_car_round_trip_price !== null
+            || $entity->seat_round_trip_price !== null;
+    }
+
+    private function tripDiscountPercent(ScheduleTemplate|Schedule $entity): ?float
+    {
+        $entity->loadMissing('route');
+
+        if (! $entity->route || $entity->route->round_trip_discount_percent === null) {
+            return null;
+        }
+
+        return (float) $entity->route->round_trip_discount_percent;
     }
 
     private function hasExplicitPricing(ScheduleTemplate|Schedule $entity): bool

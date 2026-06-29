@@ -9,6 +9,35 @@ use App\Services\DriverTripRequestService;
 /** Nhãn & ảnh xe thống nhất — quản lý (Vehicle), tài xế (DriverProfile), đặt xe. */
 class VehicleDisplay
 {
+    /** @var array<string, string> */
+    public const TYPE_LABELS = [
+        'sedan'     => 'Sedan',
+        'suv'       => 'SUV',
+        'limousine' => 'Limousine',
+    ];
+
+    public static function typeLabel(?string $type): string
+    {
+        if ($type === null || $type === '') {
+            return '';
+        }
+
+        return self::TYPE_LABELS[$type] ?? ucfirst($type);
+    }
+
+    public static function typeForCapacity(int $capacity): string
+    {
+        if ($capacity <= 5) {
+            return 'sedan';
+        }
+
+        if ($capacity <= 9) {
+            return 'suv';
+        }
+
+        return 'limousine';
+    }
+
     public static function labelFromVehicle(?Vehicle $vehicle): string
     {
         if (! $vehicle) {
@@ -24,12 +53,12 @@ class VehicleDisplay
 
     public static function compactLabel(?string $type, ?string $plate, ?int $capacity): string
     {
-        $typeLabel = $type ? ucfirst($type) : '';
+        $typeLabel = self::typeLabel($type);
         $head = trim($typeLabel . ($typeLabel && $plate ? ' ' : '') . ($plate ?? ''));
         $capLabel = $capacity ? VehicleCapacityOptions::label($capacity) : null;
 
         if ($head !== '' && $capLabel) {
-            return $head . ' · ' . $capLabel;
+            return $head . ', ' . $capLabel;
         }
 
         if ($head !== '') {

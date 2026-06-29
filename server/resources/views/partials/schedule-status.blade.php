@@ -1,13 +1,6 @@
 @php
     $displayStatus = $schedule->displayStatus();
-    $statusColor = match($displayStatus) {
-        'running'   => 'primary',
-        'completed' => 'success',
-        'cancelled' => 'danger',
-        default     => 'warning text-dark',
-    };
-    if ($displayStatus === 'scheduled' && $schedule->departure_time <= now()) {
-        $statusColor = 'secondary';
-    }
+    $departedIdle = $displayStatus === 'scheduled' && $schedule->departure_time <= now();
+    $statusVariant = \App\Support\StatusBadge::scheduleDisplay($displayStatus, $departedIdle);
 @endphp
-<span class="badge bg-{{ $statusColor }}">{{ $schedule->statusLabel() }}</span>
+<span class="status-pill status-pill--{{ $statusVariant }}">{{ $schedule->statusLabel() }}</span>

@@ -1,2 +1,2 @@
 {{-- Một nhãn duy nhất — luồng quản lý theo dõi đặt xe --}}
-<span class="badge bg-{{ $booking->operatorMonitorColor() }}">{{ $booking->operatorMonitorLabel() }}</span>
+<span class="status-pill status-pill--{{ $booking->operatorMonitorColor() }}">{{ $booking->operatorMonitorLabel() }}</span>

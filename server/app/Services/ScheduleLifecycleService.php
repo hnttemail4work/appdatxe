@@ -120,32 +120,10 @@ class ScheduleLifecycleService
 
     private function expireStaleHolds(): void
     {
-        $scheduleIds = SeatReservation::query()
-            ->where('status', 'held')
-            ->whereNotNull('expires_at')
-            ->where('expires_at', '<=', now())
-            ->pluck('schedule_id')
-            ->unique();
-
-        SeatReservation::query()
-            ->where('status', 'held')
-            ->whereNotNull('expires_at')
-            ->where('expires_at', '<=', now())
-            ->delete();
-
-        if ($scheduleIds->isNotEmpty()) {
-            Schedule::query()
-                ->whereIn('id', $scheduleIds)
-                ->with(['vehicle', 'seatReservations'])
-                ->each(function (Schedule $schedule): void {
-                    app(BookingWorkflowService::class)->syncScheduleAvailability($schedule);
-                });
-        }
     }
 
     private function expireStaleDriverRequests(): void
     {
-        app(DriverMissedTripService::class)->processExpiredPendingRequests();
     }
 
     /** Xóa ghế đã hết hạn / đã nhả để có thể đặt lại cùng schedule + số ghế. */

@@ -25,10 +25,10 @@ $pendingDeposits = $pendingDeposits ?? collect();
             <div class="col-sm-4">
                 <div class="text-muted small">Trạng thái ví</div>
                 @if($driverWallet->wallet_gate_enabled)
-                    <span class="badge bg-success">Đã kích hoạt</span>
+                    <span class="status-pill status-pill--success">Đã kích hoạt</span>
                     <div class="small text-muted mt-1">Giữ trên {{ number_format(DriverWalletConfig::MIN_BALANCE, 0, ',', '.') }} đ</div>
                 @else
-                    <span class="badge bg-secondary">Chưa kích hoạt</span>
+                    <span class="status-pill status-pill--neutral">Chưa kích hoạt</span>
                     <div class="small text-muted mt-1">Chưa có chuyến kết ≥ 500k</div>
                 @endif
             </div>
@@ -41,22 +41,14 @@ $pendingDeposits = $pendingDeposits ?? collect();
         @endif
 
         @if($pendingDeposits->isNotEmpty())
-            <h6 class="fw-semibold mb-2">Yêu cầu nạp chờ duyệt</h6>
-            @foreach($pendingDeposits as $tx)
-            <div class="border rounded-3 p-3 mb-3 bg-light">
-                <div class="small mb-2">
-                    Số tiền: <strong>{{ number_format($tx->amount, 0, ',', '.') }} đ</strong>
-                    · Mã CK: <code>{{ $tx->transfer_ref }}</code>
-                    · Gửi lúc {{ $tx->created_at->format('d/m/Y H:i') }}
-                </div>
-                <form method="POST" action="{{ route('operator.walletTransactions.approve', $tx) }}" class="d-inline">
-                    @csrf
-                    <button class="btn btn-sm btn-success">Xác nhận &amp; cộng vào ví</button>
-                </form>
+            <div class="console-alert info mb-3">
+                Có {{ $pendingDeposits->total() }} yêu cầu nạp tiền chờ duyệt.
+                <a href="{{ route('operator.driverWallet', ['tab' => 'deposits']) }}" class="fw-semibold ms-1">Xử lý tại mục Xử lý yêu cầu →</a>
             </div>
-            @endforeach
         @else
-            <p class="text-muted small mb-0">Chưa có yêu cầu nạp tiền chờ duyệt.</p>
+            <p class="text-muted small mb-3">Duyệt nạp ví và cấp mã kết chuyến tại <a href="{{ route('operator.driverWallet') }}">Xử lý yêu cầu</a>.</p>
         @endif
+
+        @include('partials.driver-wallet-history', ['walletHistory' => $walletHistory ?? collect()])
     </div>
 </div>

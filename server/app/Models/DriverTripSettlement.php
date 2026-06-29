@@ -7,6 +7,8 @@ use Illuminate\Support\Collection;
 
 class DriverTripSettlement extends Model
 {
+    public const DRIVER_TRANSFER_CONFIRMED = 'driver_confirmed';
+
     protected $fillable = [
         'driver_wallet_id',
         'schedule_id',
@@ -60,12 +62,22 @@ class DriverTripSettlement extends Model
         return $this->status !== 'completed';
     }
 
+    public function isUnderThreshold(): bool
+    {
+        return $this->category === 'under_threshold';
+    }
+
+    public function driverConfirmedTransfer(): bool
+    {
+        return $this->transfer_ref === self::DRIVER_TRANSFER_CONFIRMED;
+    }
+
     public function statusLabel(): string
     {
         return match ($this->status) {
             'pending_settle'      => 'Chờ cấp mã kết chuyến',
             'pending_driver_code' => 'Chờ tài xế nhập mã',
-            'completed'           => 'Đã kết chuyến',
+            'completed'           => 'Hoàn thành chuyến',
             default               => $this->status,
         };
     }

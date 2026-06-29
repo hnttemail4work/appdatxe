@@ -1,0 +1,73 @@
+.address-map-input-group .address-map-trigger {
+    flex-shrink: 0;
+    width: 2.5rem;
+    padding-left: 0;
+    padding-right: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.address-map-picker-modal {
+    z-index: 1070;
+}
+
+.address-map-picker-modal + .modal-backdrop.show {
+    z-index: 1065;
+}
+
+.address-map-canvas {
+    height: 17.5rem;
+    width: 100%;
+    border-radius: .65rem;
+    border: 1px solid rgba(212, 175, 55, .25);
+    background: #1a1a1a;
+    overflow: hidden;
+}
+
+.address-map-preview {
+    color: var(--bs-secondary-color, #adb5bd);
+    min-height: 2.5rem;
+}
+
+.address-map-preview.is-loading {
+    opacity: .7;
+}
+
+.address-map-search-results {
+    border: 1px solid rgba(212, 175, 55, .22);
+    border-radius: .55rem;
+    background: var(--bs-body-bg, #1a1a1a);
+    max-height: 9.5rem;
+    overflow-y: auto;
+    margin-bottom: .5rem;
+}
+
+.address-map-search-item {
+    display: block;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    padding: .55rem .75rem;
+    font-size: .8125rem;
+    color: inherit;
+    cursor: pointer;
+    line-height: 1.35;
+}
+
+.address-map-search-item:hover,
+.address-map-search-item:focus-visible {
+    background: rgba(212, 175, 55, .12);
+    outline: none;
+}
+
+.address-map-search-empty {
+    padding: .55rem .75rem;
+    font-size: .8125rem;
+    color: var(--bs-secondary-color, #adb5bd);
+}
+
+.address-map-canvas .leaflet-control-attribution {
+    font-size: 9px;
+}

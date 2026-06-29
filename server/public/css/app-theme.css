@@ -1,0 +1,450 @@
+/* Tam Long Limo — theme vàng–đen toàn site */
+:root {
+    --app-gold: #d4af37;
+    --app-gold-light: #e8c547;
+    --app-gold-bright: #f5d76e;
+    --app-gold-dim: #c9a84c;
+    --app-black: #0a0a0a;
+    --app-surface: #141414;
+    --app-surface-raised: #1a1a1a;
+    --app-border: #404040;
+    --app-text: #f5f5f5;
+    --app-text-secondary: #d4d4d4;
+    --app-text-muted: #d1d5db;
+
+    /* Bootstrap — ép màu chữ trên nền tối */
+    --bs-body-bg: #0a0a0a;
+    --bs-body-color: #f5f5f5;
+    --bs-emphasis-color: #fff;
+    --bs-secondary-color: #d1d5db;
+    --bs-secondary-bg: #1a1a1a;
+    --bs-tertiary-color: #c4c4c4;
+    --bs-tertiary-bg: #222;
+    --bs-border-color: #404040;
+    --bs-link-color: #d4af37;
+    --bs-link-hover-color: #e8c547;
+}
+
+/* —— Navbar thống nhất —— */
+.app-navbar {
+    background: var(--app-surface) !important;
+    border-bottom: 1px solid var(--app-border) !important;
+    box-shadow: 0 2px 16px rgba(0, 0, 0, .35) !important;
+    min-height: 58px;
+}
+
+.app-navbar .navbar-brand {
+    font-weight: 800;
+    letter-spacing: -.5px;
+    font-size: 1.3rem;
+    color: var(--app-gold) !important;
+}
+
+.app-brand-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .55rem;
+    text-decoration: none;
+}
+
+.app-brand-mark {
+    width: 2rem;
+    height: 2rem;
+    border-radius: .55rem;
+    background: linear-gradient(135deg, #d4af37, #9a7b0a);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    color: #0a0a0a;
+    font-size: .72rem;
+    letter-spacing: -.02em;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.app-brand-text {
+    color: var(--app-gold);
+    font-weight: 800;
+    letter-spacing: -.5px;
+}
+
+.app-navbar .navbar-toggler {
+    display: none;
+}
+
+.app-navbar .nav-link {
+    color: var(--app-text-secondary) !important;
+    font-weight: 600;
+    font-size: .875rem;
+    padding: .45rem .75rem;
+    border-radius: .45rem;
+    transition: color .15s, background .15s;
+}
+
+.app-navbar .nav-link:hover {
+    color: var(--app-gold-light) !important;
+    background: rgba(212, 175, 55, .08);
+}
+
+.app-navbar .nav-link.active-page {
+    color: var(--app-gold) !important;
+    background: rgba(212, 175, 55, .12);
+    border-bottom: none;
+}
+
+.app-navbar .navbar-console-role {
+    font-size: .65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--app-text-muted);
+}
+
+.app-navbar .navbar-console-name {
+    font-size: .8125rem;
+    font-weight: 600;
+    color: var(--app-text);
+}
+
+.app-navbar .navbar-console-user {
+    line-height: 1.2;
+}
+
+/* Menu mobile — drawer từ phải */
+.app-navbar-inner {
+    position: relative;
+}
+
+.app-nav-drawer-trigger {
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    background: transparent;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: .4rem;
+    flex-shrink: 0;
+    transition: background .15s ease;
+}
+
+.app-nav-drawer-trigger:hover,
+.app-nav-drawer-trigger:focus-visible {
+    background: rgba(212, 175, 55, .1);
+    outline: none;
+}
+
+.app-nav-drawer-bars {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    width: 1.125rem;
+    height: .8125rem;
+}
+
+.app-nav-drawer-bars i {
+    display: block;
+    height: 2px;
+    background: var(--app-gold);
+    border-radius: 1px;
+}
+
+.app-nav-drawer.offcanvas-end {
+    width: min(17.5rem, 86vw);
+    background: var(--app-surface-raised);
+    border-left: 1px solid rgba(212, 175, 55, .18);
+    color: var(--app-text);
+}
+
+.app-navbar-mobile {
+    flex-shrink: 0;
+}
+
+.app-nav-drawer .offcanvas-body {
+    position: relative;
+    padding: 2.75rem 1.1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+}
+
+.app-nav-drawer-close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    z-index: 1;
+}
+
+.app-nav-drawer-user-role {
+    font-size: .65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--app-text-muted);
+}
+
+.app-nav-drawer-user-name {
+    font-size: .9375rem;
+    font-weight: 600;
+    color: var(--app-text);
+}
+
+.app-nav-drawer-link {
+    display: block;
+    width: 100%;
+    padding: .7rem .85rem;
+    border-radius: .55rem;
+    color: var(--app-text) !important;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: .9375rem;
+    border: 1px solid transparent;
+    background: transparent;
+    text-align: left;
+    transition: background .15s, border-color .15s, color .15s;
+}
+
+.app-nav-drawer-link:hover,
+.app-nav-drawer-link.is-active {
+    background: rgba(212, 175, 55, .1);
+    border-color: rgba(212, 175, 55, .2);
+    color: var(--app-gold-light) !important;
+}
+
+.app-nav-drawer-link--primary {
+    background: rgba(212, 175, 55, .14);
+    border-color: rgba(212, 175, 55, .35);
+    color: var(--app-gold) !important;
+    text-align: center;
+}
+
+.app-nav-drawer-link--logout {
+    color: var(--app-text-secondary) !important;
+}
+
+.app-nav-drawer-actions .share-booking-btn {
+    width: 100%;
+    justify-content: center;
+}
+
+.app-nav-drawer-actions .share-booking-btn:not(.share-booking-btn-icon) {
+    padding: .7rem .85rem;
+    font-size: .9375rem;
+}
+
+.app-pagination .page-link {
+    background: var(--app-surface-raised);
+    border-color: rgba(212, 175, 55, .22);
+    color: var(--app-text-secondary);
+}
+
+.app-pagination .page-item.active .page-link {
+    background: rgba(212, 175, 55, .2);
+    border-color: rgba(212, 175, 55, .45);
+    color: var(--app-gold);
+}
+
+.app-pagination .page-link:hover {
+    background: rgba(212, 175, 55, .12);
+    border-color: rgba(212, 175, 55, .35);
+    color: var(--app-gold-light);
+}
+
+.app-pagination .page-item.disabled .page-link {
+    background: transparent;
+    border-color: rgba(255, 255, 255, .06);
+    color: var(--app-text-muted);
+}
+
+/* —— Nút: filled = CTA chính, outline = hành động phụ —— */
+.btn {
+    transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.btn-primary {
+    --bs-btn-bg: var(--app-gold);
+    --bs-btn-border-color: var(--app-gold);
+    --bs-btn-color: var(--app-black);
+    --bs-btn-hover-bg: var(--app-gold-light);
+    --bs-btn-hover-border-color: var(--app-gold-light);
+    --bs-btn-hover-color: var(--app-black);
+    --bs-btn-active-bg: var(--app-gold-bright);
+    --bs-btn-active-border-color: var(--app-gold-bright);
+    --bs-btn-active-color: var(--app-black);
+    --bs-btn-focus-shadow-rgb: 212, 175, 55;
+    font-weight: 700;
+}
+
+.btn-primary:hover,
+.btn-primary:focus-visible {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 18px rgba(212, 175, 55, .38);
+}
+
+.btn-outline-primary {
+    --bs-btn-bg: var(--app-black);
+    --bs-btn-border-color: var(--app-gold);
+    --bs-btn-color: var(--app-gold);
+    --bs-btn-hover-bg: rgba(212, 175, 55, .14);
+    --bs-btn-hover-border-color: var(--app-gold-light);
+    --bs-btn-hover-color: var(--app-gold-light);
+    --bs-btn-active-bg: rgba(212, 175, 55, .22);
+    --bs-btn-active-border-color: var(--app-gold-bright);
+    --bs-btn-active-color: var(--app-gold-bright);
+    --bs-btn-focus-shadow-rgb: 212, 175, 55;
+    font-weight: 600;
+}
+
+.btn-outline-primary:hover,
+.btn-outline-primary:focus-visible {
+    transform: translateY(-1px);
+    box-shadow: 0 0 0 1px rgba(212, 175, 55, .25), 0 4px 14px rgba(0, 0, 0, .35);
+}
+
+.btn-logout {
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+.btn-logout svg {
+    display: block;
+}
+
+/* —— Chữ phụ trên nền tối —— */
+.text-muted,
+.text-body-secondary {
+    color: var(--app-text-muted) !important;
+    opacity: 1 !important;
+}
+
+.cell-muted {
+    color: var(--app-text-secondary) !important;
+}
+
+.cell-muted.small,
+.cell-muted .small,
+small.cell-muted {
+    color: var(--app-text-secondary) !important;
+}
+
+.driver-meta-sub {
+    font-size: .8125rem;
+    font-weight: 500;
+    color: var(--app-text-secondary);
+    letter-spacing: .02em;
+}
+
+.driver-meta-code {
+    font-size: .8125rem;
+    font-weight: 600;
+    color: var(--app-gold-dim);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    letter-spacing: .04em;
+}
+
+code:not(pre code) {
+    color: var(--app-gold-dim);
+    background: rgba(212, 175, 55, .1);
+    padding: .1em .4em;
+    border-radius: .3rem;
+    font-size: .88em;
+    border: 1px solid rgba(212, 175, 55, .15);
+}
+
+/* —— Form chung —— */
+body.app-shell {
+    background-color: var(--app-black);
+    color: var(--app-text);
+    font-family: 'Inter', sans-serif;
+}
+
+.form-control,
+.form-select {
+    background-color: var(--app-surface-raised);
+    color: var(--app-text);
+    border: 1px solid var(--app-border);
+}
+
+.form-control:focus,
+.form-select:focus {
+    background-color: var(--app-surface-raised);
+    color: var(--app-text);
+    border-color: var(--app-gold);
+    box-shadow: 0 0 0 .2rem rgba(212, 175, 55, .2);
+}
+
+.form-control::placeholder {
+    color: #9ca3af;
+}
+
+.form-label,
+label.form-label {
+    color: var(--app-text-secondary);
+    font-weight: 600;
+    font-size: .8125rem;
+    margin-bottom: .35rem;
+}
+
+small,
+.small {
+    color: var(--app-text-muted);
+}
+
+/* —— Alert / thông báo —— */
+.alert {
+    border-radius: .75rem;
+    font-size: .875rem;
+    line-height: 1.5;
+}
+
+.alert-success,
+.app-flash.alert-success {
+    background: rgba(74, 222, 128, .12) !important;
+    border-color: rgba(74, 222, 128, .35) !important;
+    color: #bbf7d0 !important;
+}
+
+.alert-danger,
+.app-flash.alert-danger {
+    background: rgba(248, 113, 113, .12) !important;
+    border-color: rgba(248, 113, 113, .35) !important;
+    color: #fecaca !important;
+}
+
+.alert-warning {
+    background: rgba(251, 191, 36, .12) !important;
+    border-color: rgba(251, 191, 36, .35) !important;
+    color: #fde68a !important;
+}
+
+.alert-info {
+    background: rgba(212, 175, 55, .1) !important;
+    border-color: rgba(212, 175, 55, .32) !important;
+    color: #fef3c7 !important;
+}
+
+.alert-light {
+    background: var(--app-surface-raised) !important;
+    border-color: var(--app-border) !important;
+    color: var(--app-text-secondary) !important;
+}
+
+.alert-light strong {
+    color: var(--app-text);
+}
+
+.alert a {
+    color: var(--app-gold-light);
+}
+
+.alert a:hover {
+    color: var(--app-gold-bright);
+}

@@ -36,13 +36,13 @@
     margin-bottom: -1px;
 }
 .screen-tabs .nav-link:hover {
-    color: #1e40af;
-    background: #f8fafc;
+    color: #d4af37;
+    background: rgba(212, 175, 55, .08);
 }
 .screen-tabs .nav-link.active {
-    color: #1e40af;
-    background: #eff6ff;
-    border-bottom-color: #2563eb;
+    color: #d4af37;
+    background: rgba(212, 175, 55, .12);
+    border-bottom-color: #d4af37;
 }
 .operator-nav-tabs .nav-link {
     text-decoration: none;
@@ -66,9 +66,6 @@
     border: 1px solid #e2e8f0;
     border-radius: .85rem;
     padding: 1rem;
-}
-.driver-page .screen-tabs-wrap {
-    background: #fff;
 }
 button.driver-stat-pill {
     cursor: pointer;

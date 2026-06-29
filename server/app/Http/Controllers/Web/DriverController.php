@@ -15,6 +15,7 @@ use App\Services\DriverProfileSyncService;
 use App\Services\DriverTripRequestService;
 use App\Services\DriverWalletService;
 use App\Services\ScheduleLifecycleService;
+use App\Support\PageList;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -33,7 +34,7 @@ class DriverController extends Controller
     ) {
     }
 
-    public function myDashboard()
+    public function myDashboard(Request $request)
     {
         $this->scheduleLifecycle->sync();
         $this->driverRequests->expireStale();
@@ -48,14 +49,12 @@ class DriverController extends Controller
                 'settlements.schedule.route',
                 'settlements.schedule.bookings',
                 'settlements.booking.schedule.route',
-                'transactions',
+                'transactions' => fn ($q) => $q->where('type', 'deposit')->latest(),
             ]);
         }
 
-        $weekStart = now()->startOfWeek(\Carbon\Carbon::MONDAY)->startOfDay();
-        $weekEnd = now()->endOfWeek(\Carbon\Carbon::SUNDAY)->endOfDay();
 
-        $tripSchedules = Schedule::query()
+        $tripSchedulesAll = Schedule::query()
             ->with([
                 'route',
                 'vehicle',
@@ -64,22 +63,20 @@ class DriverController extends Controller
             ])
             ->where('driver_id', $user->id)
             ->whereNot('status', 'cancelled')
-            ->whereBetween('departure_time', [$weekStart, $weekEnd])
+            ->where('departure_time', '>=', now()->subHours(2))
             ->whereHas('bookings', fn ($q) => $q->whereNotIn('booking_status', ['cancelled', 'rejected']))
             ->get()
             ->filter(fn (Schedule $schedule): bool => $schedule->driverRelevantBookings()->isNotEmpty())
             ->sortBy(fn (Schedule $schedule): string => $schedule->driverViewSortKey())
             ->values();
 
-        $pendingRequests = DriverTripRequest::query()
-            ->where('driver_id', $user->id)
-            ->where('status', 'pending')
-            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
-            ->with(['schedule.route', 'schedule.vehicle', 'schedule.bookings'])
-            ->latest()
-            ->get();
+        $tripSchedules = PageList::paginateCollection($tripSchedulesAll, $request, 'trips_page');
 
-        $tripActionCount = $tripSchedules
+        $pendingGroupsAll = $this->driverRequests->pendingGroupsForDriver($user->id);
+        $pendingGroups = PageList::paginateCollection($pendingGroupsAll, $request, 'requests_page');
+        $pendingPassengerCount = $pendingGroupsAll->sum(fn (array $group): int => $group['passengers']->count());
+
+        $tripActionCount = $tripSchedulesAll
             ->filter(fn (Schedule $s): bool => in_array($s->driverWorkflowPhase(), ['active', 'needs_settle', 'enter_settle_code'], true))
             ->count();
 
@@ -88,13 +85,19 @@ class DriverController extends Controller
         $revenueStats = $profile
             ? $this->driverWallet->driverRevenueStats($profile)
             : ['day' => 0, 'week' => 0];
+        $walletHistoryAll = $driverWallet
+            ? $this->driverWallet->walletActivityHistory($driverWallet)
+            : collect();
+        $walletHistory = PageList::paginateCollection($walletHistoryAll, $request, 'history_page');
 
         return view('driver.dashboard', compact(
             'user',
             'profile',
-            'pendingRequests',
+            'pendingGroups',
+            'pendingPassengerCount',
             'walletBlockReason',
             'driverWallet',
+            'walletHistory',
             'showTopUpBanner',
             'settlementBlockReason',
             'revenueStats',
@@ -111,7 +114,7 @@ class DriverController extends Controller
             return back()->withErrors(['driver_request' => $e->getMessage()]);
         }
 
-        return redirect()->route('driver.dashboard')->with('success', 'Đã nhận chuyến. Thông tin đã đồng bộ tới khách và quản lý.');
+        return redirect()->route('driver.dashboard', ['tab' => 'trips'])->with('success', 'Đã nhận chuyến. Xem tab Xem chuyến để theo dõi.');
     }
 
     public function rejectTripRequest(Request $request, DriverTripRequest $driverTripRequest)
@@ -202,18 +205,23 @@ class DriverController extends Controller
         return redirect()->route('driver.dashboard')->with('success', $message);
     }
 
-    public function index()
+    public function index(Request $request)
     {
-        $drivers = DriverProfile::query()
-            ->with(['user', 'operator'])
-            ->forOperatorManagement(Auth::id())
-            ->latest()
-            ->get();
+        $drivers = PageList::paginateCollection(
+            DriverProfile::query()
+                ->with(['user', 'operator'])
+                ->forOperatorManagement(Auth::id())
+                ->latest()
+                ->get()
+                ->sortBy(fn ($d) => $d->isPendingApproval() ? 0 : 1)
+                ->values(),
+            $request,
+        );
 
         return view('operator.drivers.index', compact('drivers'));
     }
 
-    public function edit(DriverProfile $driverProfile)
+    public function edit(Request $request, DriverProfile $driverProfile)
     {
         if (! $this->canManageDriver($driverProfile)) {
             abort(403);
@@ -221,13 +229,20 @@ class DriverController extends Controller
 
         $driverProfile->load(['user', 'operator']);
         $driverWallet = $this->driverWallet->walletFor($driverProfile);
-        $driverWallet->load('transactions');
-        $pendingDeposits = $this->driverWallet->pendingDepositsForDriver($driverProfile);
+        $driverWallet->load([
+            'transactions',
+            'settlements.schedule.route',
+        ]);
+        $pendingDepositsAll = $this->driverWallet->pendingDepositsForDriver($driverProfile);
+        $pendingDeposits = PageList::paginateCollection($pendingDepositsAll, $request, 'deposit_page');
+        $walletHistoryAll = $this->driverWallet->walletActivityHistory($driverWallet);
+        $walletHistory = PageList::paginateCollection($walletHistoryAll, $request, 'history_page');
 
         return view('operator.drivers.edit', [
             'driver'          => $driverProfile,
             'driverWallet'    => $driverWallet,
             'pendingDeposits' => $pendingDeposits,
+            'walletHistory'   => $walletHistory,
         ]);
     }
 

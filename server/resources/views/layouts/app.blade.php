@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="vi" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -9,44 +9,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ asset('css/app-theme.css') }}?v={{ filemtime(public_path('css/app-theme.css')) }}">
     <style>
-        body { font-family: 'Inter', sans-serif; background-color: #f0f4ff; color: #212529; }
-        .navbar-brand { font-weight: 800; letter-spacing: -.5px; font-size: 1.3rem; }
         .card { border-radius: 1rem; border: none; }
-        .form-control, .form-select {
-            background-color: #fff;
-            color: #212529;
-            border: 1px solid #d0d7e6;
-        }
-        .form-control:focus, .form-select:focus {
-            background-color: #fff;
-            color: #212529;
-            border-color: #86b7fe;
-            box-shadow: 0 0 0 0.2rem rgba(13,110,253,.18);
-        }
-        .form-control::placeholder { color: #8898aa; }
-        .card-title-bar { border-left: 4px solid #0d6efd; padding-left: .75rem; }
-        .nav-link.active-page {
-            color: #0d6efd !important;
-            font-weight: 600;
-            border-bottom: 2px solid #0d6efd;
-        }
-        .navbar { min-height: 58px; }
-.navbar-console-user {
-    line-height: 1.2;
-}
-.navbar-console-role {
-    font-size: .65rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: .04em;
-    color: #64748b;
-}
-.navbar-console-name {
-    font-size: .8125rem;
-    font-weight: 600;
-    color: #0f172a;
-}
+        .card-title-bar { border-left: 4px solid #d4af37; padding-left: .75rem; }
 .share-booking-btn-icon {
     width: 2.25rem;
     height: 2.25rem;
@@ -77,22 +43,20 @@
             padding: 0;
         }
         .app-flash-close:hover { background: rgba(15, 23, 42, .14); }
-        .booking-flash .app-flash-close { background: rgba(6, 95, 70, .12); }
-        .booking-flash .app-flash-close:hover { background: rgba(6, 95, 70, .2); }
-        .booking-flash-error .app-flash-close { background: rgba(185, 28, 28, .1); }
-        .booking-flash-error .app-flash-close:hover { background: rgba(185, 28, 28, .18); }
+        .booking-flash .app-flash-close { background: rgba(212, 175, 55, .15); }
+        .booking-flash .app-flash-close:hover { background: rgba(212, 175, 55, .28); }
+        .booking-flash-error .app-flash-close { background: rgba(248, 113, 113, .15); }
+        .booking-flash-error .app-flash-close:hover { background: rgba(248, 113, 113, .28); }
     </style>
-    <link rel="stylesheet" href="{{ asset('css/screen-tabs.css') }}">
-    <link rel="stylesheet" href="{{ asset('css/app-layout.css') }}">
-    <link rel="stylesheet" href="{{ asset('css/app-dialog.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/app-status.css') }}?v={{ filemtime(public_path('css/app-status.css')) }}">
+    <link rel="stylesheet" href="{{ asset('css/screen-tabs.css') }}?v={{ filemtime(public_path('css/screen-tabs.css')) }}">
+    <link rel="stylesheet" href="{{ asset('css/app-layout.css') }}?v={{ filemtime(public_path('css/app-layout.css')) }}">
+    <link rel="stylesheet" href="{{ asset('css/app-dialog.css') }}?v={{ filemtime(public_path('css/app-dialog.css')) }}">
     @stack('styles')
-    @if(auth()->check() && auth()->user()->role === 'operator')
-    <link rel="stylesheet" href="{{ asset('css/operator-notifications.css') }}">
-    @endif
 </head>
 <body class="app-shell">
 @php
-    $isGuestBookingPage = request()->routeIs('booking.*');
+    $isGuestBookingPage = request()->routeIs('home');
     $hidePublicNav = $isGuestBookingPage || request()->routeIs('admin.*');
     $minimalNav = auth()->check()
         && in_array(auth()->user()->role, ['operator', 'admin', 'driver'], true)
@@ -103,35 +67,29 @@
     $navDriverProfile = ($minimalNav && auth()->check() && auth()->user()->role === 'driver')
         ? \App\Models\DriverProfile::query()->where('user_id', auth()->id())->first()
         : null;
-    $brandHref = url('/');
-    if (auth()->check()) {
-        $brandHref = match (auth()->user()->role) {
-            'operator' => route('operator.dashboard'),
-            'admin'    => route('admin.dashboard'),
-            'driver'   => route('driver.dashboard'),
-            default    => url('/'),
-        };
-    } elseif ($hidePublicNav) {
-        $brandHref = route('booking.index');
+    $brandHref = route('home');
+    if (auth()->check() && in_array(auth()->user()->role, ['operator', 'driver'], true)) {
+        $brandHref = \App\Support\RoleDashboard::route(auth()->user()->role);
     }
 @endphp
-<nav class="navbar navbar-expand-lg bg-white border-bottom shadow-sm">
-    <div class="container">
-        <a class="navbar-brand text-primary" href="{{ $brandHref }}">{{ config('app.name') }}</a>
+<nav class="navbar navbar-expand-lg app-navbar navbar-dark">
+    <div class="container app-navbar-inner">
+        <a class="navbar-brand app-brand-link" href="{{ $brandHref }}">
+            <span class="app-brand-mark" aria-hidden="true">TL</span>
+            <span class="app-brand-text">Limo</span>
+        </a>
         @if($minimalNav)
-        <div class="ms-auto d-flex align-items-center gap-2 gap-md-3 flex-wrap justify-content-end">
+        <div class="app-navbar-desktop d-none d-lg-flex ms-auto align-items-center gap-2 gap-md-3 flex-wrap justify-content-end">
             @if(auth()->user()->role === 'operator')
                 <div class="navbar-console-user text-end">
                     <div class="navbar-console-role">Quản lý</div>
                     <div class="navbar-console-name">{{ auth()->user()->name }}</div>
                 </div>
-                @include('partials.share-booking-qr-button', [
-                    'shareUrl' => \App\Support\BookingShareUrl::guest(),
-                    'shareLabel' => 'QR đặt vé chung',
-                    'modalId' => 'shareQrModal-operator-guest',
-                    'iconOnly' => true,
-                ])
-                @include('partials.operator-notifications-bell')
+                @if(request()->routeIs('operator.tripOffers.*'))
+                    <a href="{{ route('operator.dashboard') }}" class="btn btn-sm btn-outline-primary">← Trang quản lý</a>
+                @else
+                    <a href="{{ route('operator.tripOffers.create') }}" class="btn btn-sm btn-outline-primary">Tạo chuyến</a>
+                @endif
             @elseif(auth()->user()->role === 'admin')
                 <div class="navbar-console-user text-end">
                     <div class="navbar-console-role">Quản trị</div>
@@ -146,52 +104,91 @@
                 ])
                 @include('partials.driver-emergency-call')
             @endif
-            <form action="{{ route('logout') }}" method="POST" class="d-inline">
-                @csrf
-                <button type="submit" class="btn btn-sm btn-outline-primary">Đăng xuất</button>
-            </form>
+            @include('partials.logout-button')
+        </div>
+        <div class="app-navbar-mobile d-flex d-lg-none ms-auto align-items-center gap-2">
+            @if(auth()->user()->role === 'operator')
+                @if(request()->routeIs('operator.tripOffers.*'))
+                    <a href="{{ route('operator.dashboard') }}" class="btn btn-sm btn-outline-primary">← Quản lý</a>
+                @else
+                    <a href="{{ route('operator.tripOffers.create') }}" class="btn btn-sm btn-outline-primary">Tạo chuyến</a>
+                @endif
+            @elseif(auth()->user()->role === 'driver')
+                @include('partials.share-booking-qr-button', [
+                    'shareUrl' => \App\Support\BookingShareUrl::guest(),
+                    'shareLabel' => 'QR đặt vé',
+                    'modalId' => 'shareQrModal-driver-guest-mobile',
+                    'iconOnly' => true,
+                ])
+                @include('partials.driver-emergency-call')
+            @endif
+            @include('partials.logout-button')
         </div>
         @elseif($bookingShareQrNav)
-        <div class="ms-auto d-flex align-items-center">
+        <div class="app-navbar-desktop d-none d-lg-flex ms-auto align-items-center">
             @include('partials.share-booking-qr-button', [
                 'shareUrl' => \App\Support\BookingShareUrl::guest(),
-                'shareLabel' => 'QR đặt vé chung',
+                'shareLabel' => 'QR đặt vé',
                 'modalId' => 'shareQrModal-booking-guest',
                 'iconOnly' => true,
             ])
         </div>
+        <div class="app-navbar-mobile d-flex d-lg-none ms-auto align-items-center gap-2">
+            @include('partials.share-booking-qr-button', [
+                'shareUrl' => \App\Support\BookingShareUrl::guest(),
+                'shareLabel' => 'QR đặt vé',
+                'modalId' => 'shareQrModal-booking-guest-mobile',
+                'iconOnly' => true,
+            ])
+        </div>
         @elseif(! $hidePublicNav)
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
-            aria-controls="navbarNav" aria-expanded="false" aria-label="Mở menu điều hướng">
-            <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav ms-auto align-items-center gap-1">
+        <div class="app-navbar-desktop d-none d-lg-flex ms-auto align-items-center gap-1">
+            <ul class="navbar-nav flex-row align-items-center gap-1">
                 @auth
                     <li class="nav-item">
                         <span class="nav-link text-muted small pe-0">{{ auth()->user()->name }}</span>
                     </li>
                     <li class="nav-item ms-1">
-                        <form action="{{ route('logout') }}" method="POST" class="d-inline">
-                            @csrf
-                            <button type="submit" class="btn btn-sm btn-outline-primary">Đăng xuất</button>
-                        </form>
+                        @include('partials.logout-button')
                     </li>
                 @else
                     <li class="nav-item">
-                        <a class="nav-link {{ request()->routeIs('booking.*') ? 'active-page' : '' }}"
-                           href="{{ route('booking.index') }}">Đặt vé</a>
+                        <a class="btn btn-sm btn-outline-primary {{ request()->routeIs('home') ? 'active' : '' }}"
+                           href="{{ route('home') }}">Đặt vé</a>
                     </li>
-                    <li class="nav-item"><a class="nav-link" href="{{ route('login') }}">Đăng nhập</a></li>
                     <li class="nav-item ms-1">
-                        <a class="btn btn-outline-primary btn-sm" href="{{ route('register') }}">Đăng ký tài xế</a>
+                        <a class="btn btn-sm btn-outline-primary" href="{{ route('login') }}">Đăng nhập</a>
+                    </li>
+                    <li class="nav-item ms-1">
+                        <a class="btn btn-sm btn-primary" href="{{ route('register') }}">Đăng ký tài xế</a>
                     </li>
                 @endauth
             </ul>
         </div>
+        @auth
+        <div class="app-navbar-mobile d-flex d-lg-none ms-auto align-items-center gap-2">
+            @include('partials.logout-button')
+        </div>
+        @endauth
+        @endif
+        @php
+            $showMobileDrawer = ! auth()->check();
+        @endphp
+        @if($showMobileDrawer)
+            <button type="button"
+                    class="app-nav-drawer-trigger d-lg-none ms-auto"
+                    data-bs-toggle="offcanvas"
+                    data-bs-target="#appNavDrawer"
+                    aria-controls="appNavDrawer"
+                    aria-label="Mở menu">
+                <span class="app-nav-drawer-bars" aria-hidden="true"><i></i><i></i><i></i></span>
+            </button>
         @endif
     </div>
 </nav>
+@if($showMobileDrawer ?? false)
+    @include('partials.app-nav-drawer')
+@endif
 
 <main class="app-main">
 <div class="container py-4">
@@ -202,19 +199,19 @@
 
 <footer class="app-footer bg-dark text-secondary border-top">
     <div class="container">
-        <div class="row g-4">
+        <div class="row g-2 app-footer-grid">
             <div class="col-md-6">
-                <h6 class="text-white fw-bold mb-2">{{ config('app.name') }}</h6>
-                <p class="small mb-0">Nền tảng đặt vé xe khách liên tỉnh cao cấp.</p>
+                <h6 class="text-white fw-bold mb-1">{{ config('app.name') }}</h6>
+                <p class="small mb-0 app-footer-text">Nền tảng đặt vé xe khách liên tỉnh cao cấp.</p>
             </div>
             <div class="col-md-6">
-                <h6 class="text-white fw-bold mb-2">Liên hệ</h6>
-                <p class="small mb-1">Tổng đài: {{ config('app.contact_phone') }}</p>
-                <p class="small mb-0">Thư điện tử: {{ config('app.contact_email') }}</p>
+                <h6 class="text-white fw-bold mb-1">Liên hệ</h6>
+                <p class="small mb-0 app-footer-text">Tổng đài: {{ config('app.contact_phone') }}</p>
+                <p class="small mb-0 app-footer-text">Thư điện tử: {{ config('app.contact_email') }}</p>
             </div>
         </div>
-        <hr class="border-secondary mt-4">
-        <p class="small text-center mb-0">© {{ date('Y') }} {{ config('app.name') }}. Bảo lưu mọi quyền.</p>
+        <hr class="border-secondary app-footer-divider">
+        <p class="small text-center mb-0 app-footer-copy">© Bản quyền thuộc về {{ config('app.name') }}.</p>
     </div>
 </footer>
 
@@ -229,7 +226,7 @@
 @if($bookingShareQrNav ?? false)
     @include('partials.share-booking-qr-modal', [
         'shareUrl' => \App\Support\BookingShareUrl::guest(),
-        'shareLabel' => 'QR đặt vé chung',
+        'shareLabel' => 'QR đặt vé',
         'modalId' => 'shareQrModal-booking-guest',
     ])
 @endif
@@ -254,19 +251,48 @@
         .then(function (data) { syncCsrfToken(data && data.token); })
         .catch(function () {});
 
-    var logoutForm = document.getElementById('logout-form');
-    if (logoutForm) {
+    document.querySelectorAll('.logout-form').forEach(function (logoutForm) {
         logoutForm.addEventListener('submit', function (e) {
+            if (logoutForm.dataset.logoutSubmitting === '1') {
+                logoutForm.dataset.logoutSubmitting = '';
+                return;
+            }
+
             e.preventDefault();
-            fetch('/csrf-token', { credentials: 'same-origin' })
-                .then(function (r) { return r.json(); })
-                .then(function (data) {
-                    syncCsrfToken(data.token);
-                    logoutForm.submit();
-                })
-                .catch(function () { logoutForm.submit(); });
+
+            function submitLogout() {
+                fetch('/csrf-token', { credentials: 'same-origin' })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        syncCsrfToken(data.token);
+                        logoutForm.dataset.logoutSubmitting = '1';
+                        if (typeof logoutForm.requestSubmit === 'function') {
+                            logoutForm.requestSubmit();
+                        } else {
+                            logoutForm.submit();
+                        }
+                    })
+                    .catch(function () {
+                        logoutForm.dataset.logoutSubmitting = '1';
+                        logoutForm.submit();
+                    });
+            }
+
+            if (window.AppDialog) {
+                window.AppDialog.confirm({
+                    title: 'Đăng xuất',
+                    message: 'Bạn có chắc muốn đăng xuất?',
+                    confirmText: 'Đăng xuất',
+                    cancelText: 'Huỷ',
+                    variant: 'danger',
+                }).then(function (ok) {
+                    if (ok) submitLogout();
+                });
+            } else if (window.confirm('Bạn có chắc muốn đăng xuất?')) {
+                submitLogout();
+            }
         });
-    }
+    });
 
     document.querySelectorAll('.app-flash').forEach(function (flash) {
         var hideTimer = null;
@@ -296,6 +322,19 @@
 </script>
 <script src="{{ asset('js/form-field-validation.js') }}"></script>
 <script src="{{ asset('js/screen-tabs.js') }}"></script>
+<script>
+(function () {
+    var drawer = document.getElementById('appNavDrawer');
+    if (drawer) {
+        drawer.querySelectorAll('a.app-nav-drawer-link[href]').forEach(function (link) {
+            link.addEventListener('click', function () {
+                var instance = bootstrap.Offcanvas.getInstance(drawer);
+                if (instance) instance.hide();
+            });
+        });
+    }
+})();
+</script>
 @if(($bookingShareQrNav ?? false) || (auth()->check() && auth()->user()->role === 'driver'))
 <script src="{{ asset('js/share-booking-qr.js') }}"></script>
 @endif

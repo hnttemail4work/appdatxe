@@ -45,8 +45,7 @@ class DriverTripRequest extends Model
 
     public function isPending(): bool
     {
-        return $this->status === 'pending'
-            && ($this->expires_at === null || $this->expires_at->isFuture());
+        return $this->status === 'pending';
     }
 
     public function acceptTimeRemainingLabel(): ?string
@@ -72,8 +71,7 @@ class DriverTripRequest extends Model
         $active = $this->schedule->bookings
             ->filter(fn (Booking $b): bool => ! in_array($b->booking_status, ['cancelled', 'rejected'], true));
 
-        return $active->first(fn (Booking $b): bool => $b->matchesContactPhone((string) $this->contact_phone))
-            ?? $active->sortByDesc('id')->first();
+        return $active->first(fn (Booking $b): bool => $b->matchesContactPhone((string) $this->contact_phone));
     }
 
     public function statusLabel(): string

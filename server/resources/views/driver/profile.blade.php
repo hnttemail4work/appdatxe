@@ -33,9 +33,9 @@
         <div>
             <h5 class="mb-0">{{ $user->name }}</h5>
             <span class="text-muted small">{{ $user->phone }}</span>
-            <span class="badge bg-{{ $profile->displayStatusColor() }} ms-1">{{ $profile->displayStatusLabel() }}</span>
+            <span class="status-pill status-pill--{{ $profile->displayStatusColor() }} ms-1">{{ $profile->displayStatusLabel() }}</span>
             @if($profile->driver_code)
-                <span class="text-muted small ms-1">· <code>{{ $profile->driver_code }}</code></span>
+                <span class="driver-meta-code ms-1">{{ $profile->driver_code }}</span>
             @endif
         </div>
     </div>

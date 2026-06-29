@@ -13,16 +13,27 @@ class TripRoute extends Model
         'destination',
         'base_price',
         'distance_km',
+        'round_trip_discount_percent',
         'is_active',
     ];
 
     protected function casts(): array
     {
         return [
-            'base_price'  => 'decimal:2',
-            'distance_km' => 'integer',
-            'is_active'   => 'boolean',
+            'base_price'                  => 'decimal:2',
+            'distance_km'                 => 'integer',
+            'round_trip_discount_percent' => 'decimal:2',
+            'is_active'                   => 'boolean',
         ];
+    }
+
+    public function roundTripDiscountPercent(): float
+    {
+        if ($this->round_trip_discount_percent !== null) {
+            return (float) $this->round_trip_discount_percent;
+        }
+
+        return \App\Support\PlatformFees::roundTripDiscountPercent();
     }
 
     public function schedules()

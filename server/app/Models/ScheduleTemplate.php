@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\DepartureTimeDisplay;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 
@@ -16,6 +17,8 @@ class ScheduleTemplate extends Model
         'expected_arrival_time',
         'seat_price',
         'whole_car_price',
+        'whole_car_round_trip_price',
+        'seat_round_trip_price',
         'duration_minutes',
         'status',
     ];
@@ -24,8 +27,10 @@ class ScheduleTemplate extends Model
     {
         return [
             'duration_minutes' => 'integer',
-            'seat_price'       => 'decimal:2',
-            'whole_car_price'  => 'decimal:2',
+            'seat_price'                 => 'decimal:2',
+            'whole_car_price'            => 'decimal:2',
+            'whole_car_round_trip_price' => 'decimal:2',
+            'seat_round_trip_price'      => 'decimal:2',
         ];
     }
 
@@ -122,22 +127,21 @@ class ScheduleTemplate extends Model
             'date_month'         => $date->format('m/Y'),
             'date_short'         => $date->format('d/m/Y'),
             'date_label'         => $weekdays[(int) $date->dayOfWeek] . ', ' . $date->format('d/m/Y'),
-            'departure_time'     => $departure->format('H:i'),
+            'departure_time'     => DepartureTimeDisplay::label($this->departure_time),
+            'departure_clock'    => DepartureTimeDisplay::normalizeForClock($this->departure_time),
             'arrival_time'       => $arrival->format('H:i'),
             'arrival_date_short' => $arrival->format('d/m/Y'),
             'same_day'           => $arrival->isSameDay($departure),
             'time_range'         => $arrival->isSameDay($departure)
                 ? $departure->format('H:i') . ' → ' . $arrival->format('H:i')
-                : $departure->format('H:i') . ' · ' . $departure->format('d/m')
-                . ' → ' . $arrival->format('H:i') . ' · ' . $arrival->format('d/m/Y'),
+                : $departure->format('H:i') . ', ' . $departure->format('d/m')
+                . ' → ' . $arrival->format('H:i') . ', ' . $arrival->format('d/m/Y'),
         ];
     }
 
     private function clockOnDate(Carbon $serviceDate, mixed $time): Carbon
     {
-        $timeStr = is_string($time)
-            ? substr($time, 0, 8)
-            : Carbon::parse($time)->format('H:i:s');
+        $timeStr = \App\Support\DepartureTimeDisplay::normalizeForClock($time) . ':00';
 
         return Carbon::parse($serviceDate->toDateString() . ' ' . $timeStr, config('app.timezone'));
     }

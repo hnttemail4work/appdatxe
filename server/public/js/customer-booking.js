@@ -8,16 +8,17 @@
     var quotePriceUrl = window.__quotePriceUrl;
     var basePrice = window.__customerBasePrices || {};
     var bookingTemplates = window.__bookingTemplates || [];
-    var vehicleCapacityOptions = window.__vehicleCapacityOptions || [4, 7, 16];
     var presetDriver = window.__presetDriver || null;
     var weekdayNames = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
 
     window.__seatPicks = window.__seatPicks || {};
     var activeTemplateId = null;
     var activeRoute = '';
-    var activeSelectedCapacity = 7;
+    var activeDepartureTime = '';
+    var activeSelectedCapacity = 0;
     var activeCapacity = 0;
     var activeOccupied = {};
+    var activeSeatsPartiallyBooked = false;
     var activeUnitPrice = 0;
     var activeVehicleLabel = '';
     var currentStep = 1;
@@ -59,18 +60,8 @@
         return bookingTemplates.find(function (t) { return String(t.id) === String(id); }) || null;
     }
 
-    function findFirstTemplateForRoute(route) {
-        return bookingTemplates.find(function (t) { return t.route === route; }) || null;
-    }
-
-    function findTemplateForRouteAndCapacity(route, capacity) {
-        return bookingTemplates.find(function (t) {
-            return t.route === route && parseInt(t.capacity, 10) === parseInt(capacity, 10);
-        }) || null;
-    }
-
     function setSelectedCapacity(capacity) {
-        activeSelectedCapacity = parseInt(capacity, 10) || 7;
+        activeSelectedCapacity = parseInt(capacity, 10) || activeSelectedCapacity || 0;
         var capInput = document.getElementById('modal-vehicle-capacity');
         if (capInput) capInput.value = String(activeSelectedCapacity);
     }
@@ -80,31 +71,6 @@
             return 0;
         }
         return parseInt(presetDriver.vehicle_seats, 10) || 0;
-    }
-
-    function isCapacityAllowed(capacity) {
-        var locked = getDriverLockedCapacity();
-        if (locked <= 0) {
-            return true;
-        }
-        return parseInt(capacity, 10) === locked;
-    }
-
-    function defaultCapacityForRoute(route, openingTemplate) {
-        var locked = getDriverLockedCapacity();
-        if (locked > 0) {
-            return locked;
-        }
-        var preferred = vehicleCapacityOptions.slice();
-        if (openingTemplate && preferred.indexOf(parseInt(openingTemplate.capacity, 10)) >= 0) {
-            return parseInt(openingTemplate.capacity, 10);
-        }
-        for (var i = 0; i < preferred.length; i++) {
-            if (findTemplateForRouteAndCapacity(route, preferred[i])) {
-                return preferred[i];
-            }
-        }
-        return 7;
     }
 
     function vehicleLabelForGuest(capacity, template) {
@@ -118,7 +84,8 @@
         if (!template) return;
         basePrice[template.id] = {
             one_way: template.one_way_price || template.price,
-            round_trip: template.round_trip_price || template.price,
+            round_trip: template.seat_round_trip_price || template.round_trip_price || template.price,
+            whole_car_round: template.whole_car_round_trip_price || null,
         };
     }
 
@@ -136,10 +103,16 @@
 
         if (tripType === 'round_trip') {
             if (bookingMode === 'whole_car') {
+                if (template.whole_car_round_trip_price) {
+                    return Number(template.whole_car_round_trip_price);
+                }
                 if (whole > 0 && shared > 0 && template.round_trip_price) {
                     return roundToThousand(Math.round(whole * (Number(template.round_trip_price) / shared)));
                 }
                 return roundToThousand(Math.round(oneWay * roundTripMultiplier));
+            }
+            if (template.seat_round_trip_price) {
+                return Number(template.seat_round_trip_price);
             }
             return Number(template.round_trip_price) || shared;
         }
@@ -339,6 +312,61 @@
         }, 220);
     }
 
+    function isWholeCarAvailable() {
+        var cap = activeCapacity || 0;
+        if (cap <= 0) {
+            return false;
+        }
+        if (canLoadSeats()) {
+            return getAvailableSeatCount() === cap;
+        }
+        return !activeSeatsPartiallyBooked;
+    }
+
+    function syncWholeCarOption() {
+        var wholeRadio = document.getElementById('booking-mode-whole-car');
+        var sharedRadio = document.getElementById('booking-mode-shared');
+        var wholeWrap = document.getElementById('booking-mode-whole-car-wrap');
+        var hint = document.getElementById('modal-whole-car-unavailable-hint');
+        var available = isWholeCarAvailable();
+        var switchedMode = false;
+
+        if (wholeRadio) {
+            wholeRadio.disabled = !available;
+        }
+        if (wholeWrap) {
+            wholeWrap.classList.toggle('is-disabled', !available);
+            wholeWrap.setAttribute('aria-disabled', available ? 'false' : 'true');
+        }
+        if (hint) {
+            hint.classList.toggle('d-none', available);
+        }
+        if (!available && wholeRadio && wholeRadio.checked && sharedRadio) {
+            sharedRadio.checked = true;
+            switchedMode = true;
+        }
+        updateBookingModeUi();
+        if (switchedMode) {
+            syncActiveUnitPriceFromTemplate(findTemplate(activeTemplateId));
+            fetchQuotePrice();
+        }
+        updateSummary(activeTemplateId);
+    }
+
+    function setPartialBookingFromCard(capacity, seatsFree) {
+        var cap = parseInt(capacity, 10) || 0;
+        if (seatsFree === undefined || seatsFree === null || seatsFree === '') {
+            activeSeatsPartiallyBooked = false;
+            return;
+        }
+        var free = parseInt(seatsFree, 10);
+        if (cap <= 0 || isNaN(free)) {
+            activeSeatsPartiallyBooked = false;
+            return;
+        }
+        activeSeatsPartiallyBooked = free < cap;
+    }
+
     function updateBookingModeUi() {
         var isWhole = getBookingMode() === 'whole_car';
         var wrap = document.getElementById('modal-seat-count-wrap');
@@ -361,117 +389,34 @@
 
     function updateVehicleDisplay() {
         var step2 = document.getElementById('modal-vehicle');
+        var tpl = findTemplate(activeTemplateId);
         var label;
         var locked = getDriverLockedCapacity();
-        if (locked > 0 && parseInt(activeSelectedCapacity, 10) === locked && presetDriver) {
+        if (locked > 0 && presetDriver) {
             label = presetDriver.vehicle_label || (locked + ' chỗ');
+        } else if (tpl && tpl.trip_meta_label) {
+            label = tpl.trip_meta_label;
         } else {
-            label = vehicleLabelForGuest(activeSelectedCapacity, findTemplate(activeTemplateId));
+            label = vehicleLabelForGuest(activeCapacity, tpl);
         }
         if (step2) step2.textContent = label;
     }
 
-    function renderVehicleOptionCard(tpl, capacity, selected, disabled) {
-        var locked = getDriverLockedCapacity();
-        var photo = null;
-        if (locked > 0 && parseInt(capacity, 10) === locked && presetDriver && presetDriver.vehicle_photo) {
-            photo = presetDriver.vehicle_photo;
-        } else if (tpl && tpl.vehicle_photo) {
-            photo = tpl.vehicle_photo;
-        }
-        var img = photo
-            ? '<img src="' + photo + '" alt="" class="booking-vehicle-option__img" loading="lazy" decoding="async">'
-            : '<div class="booking-vehicle-option__placeholder">' + capacity + '</div>';
-        var cls = 'booking-vehicle-option' + (selected ? ' is-selected' : '') + (disabled ? ' is-disabled' : '');
-        return '<button type="button" class="' + cls + '" data-capacity="' + capacity + '"' +
-            (tpl ? ' data-template-id="' + tpl.id + '"' : '') +
-            ' role="option" aria-selected="' + (selected ? 'true' : 'false') + '"' +
-            (disabled ? ' disabled aria-disabled="true"' : '') + '>' +
-            img +
-            '<span class="booking-vehicle-option__label">' + capacity + ' chỗ</span>' +
-            '</button>';
-    }
-
-    function renderVehiclePicker(route, selectedId) {
-        var section = document.getElementById('modal-vehicle-picker-section');
-        var divider = document.getElementById('modal-vehicle-picker-divider');
-        var picker = document.getElementById('modal-vehicle-picker');
-        if (!section || !picker) return;
-
-        picker.classList.remove('booking-vehicle-picker--single');
-        section.classList.remove('d-none');
-        if (divider) divider.classList.remove('d-none');
-
-        picker.innerHTML = vehicleCapacityOptions.map(function (cap) {
-            var tpl = findTemplateForRouteAndCapacity(route, cap);
-            var selected = parseInt(activeSelectedCapacity, 10) === parseInt(cap, 10);
-            var disabled = !isCapacityAllowed(cap);
-            return renderVehicleOptionCard(tpl, cap, selected, disabled);
-        }).join('');
-
-        picker.querySelectorAll('.booking-vehicle-option:not(.is-disabled)').forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                selectGuestCapacity(parseInt(btn.dataset.capacity, 10), route);
-            });
-        });
-    }
-
-    function selectGuestCapacity(capacity, route) {
-        var cap = parseInt(capacity, 10) || 7;
-        var routeKey = route || activeRoute;
-        var tpl = findTemplateForRouteAndCapacity(routeKey, cap) || findFirstTemplateForRoute(routeKey);
-        if (!tpl) {
-            return;
-        }
-
-        setSelectedCapacity(cap);
-        activeTemplateId = String(tpl.id);
-        activeRoute = routeKey;
-        activeCapacity = cap;
-        var locked = getDriverLockedCapacity();
-        if (locked > 0 && cap === locked && presetDriver) {
-            activeVehicleLabel = presetDriver.vehicle_label || (cap + ' chỗ');
-        } else {
-            activeVehicleLabel = tpl.capacity === cap && tpl.vehicle_label
-                ? tpl.vehicle_label
-                : (cap + ' chỗ');
-        }
-        syncActiveUnitPriceFromTemplate(tpl);
-
-        if (activeTemplateId && window.__seatPicks[activeTemplateId]) {
-            window.__seatPicks[activeTemplateId].clear();
-        }
-        if (!window.__seatPicks[activeTemplateId]) {
-            window.__seatPicks[activeTemplateId] = new Set();
-        }
-
-        var templateInput = document.getElementById('modal-template-id');
-        if (templateInput) templateInput.value = activeTemplateId;
-
-        syncTemplatePrices(tpl);
-
-        var priceUnit = document.getElementById('modal-price-unit');
-        if (priceUnit && getBookingMode() !== 'whole_car') {
-            priceUnit.textContent = formatMoney(activeUnitPrice);
-        }
-
-        updateVehicleDisplay();
-        renderVehiclePicker(routeKey, activeTemplateId);
-        updateSummary(activeTemplateId);
-        fetchQuotePrice();
-        loadSeatAvailability();
-        updateBookingModeUi();
-    }
-
-    function applyTemplate(template, skipPickerRender) {
+    function applyTemplate(template) {
         if (!template) return;
 
         activeTemplateId = String(template.id);
         activeRoute = template.route;
-        activeCapacity = parseInt(template.capacity, 10) || 0;
-        activeVehicleLabel = template.vehicle_label || '';
-        setSelectedCapacity(activeSelectedCapacity || getDriverLockedCapacity() || template.capacity);
-        activeCapacity = parseInt(activeSelectedCapacity, 10) || parseInt(template.capacity, 10) || 0;
+        var locked = getDriverLockedCapacity();
+        if (locked > 0) {
+            setSelectedCapacity(locked);
+            activeCapacity = locked;
+            activeVehicleLabel = presetDriver.vehicle_label || (locked + ' chỗ');
+        } else {
+            activeCapacity = parseInt(template.capacity, 10) || 0;
+            setSelectedCapacity(activeCapacity);
+            activeVehicleLabel = template.trip_meta_label || template.vehicle_label || (activeCapacity + ' chỗ');
+        }
         syncActiveUnitPriceFromTemplate(template);
 
         var templateInput = document.getElementById('modal-template-id');
@@ -485,6 +430,7 @@
         }
 
         if (template.reference_time) {
+            activeDepartureTime = template.reference_time;
             setPreferredTimeFromValue(template.reference_time);
         }
 
@@ -493,17 +439,11 @@
         }
 
         updateVehicleDisplay();
-        renderVehiclePicker(activeRoute, activeTemplateId);
 
         fetchQuotePrice();
         loadSeatAvailability();
-        updateBookingModeUi();
+        syncWholeCarOption();
         updateSummary(activeTemplateId);
-    }
-
-    function applyGuestCapacity(capacity, route) {
-        selectGuestCapacity(capacity, route);
-        return !!findFirstTemplateForRoute(route);
     }
 
     function canLoadSeats() {
@@ -518,12 +458,12 @@
     }
 
     function loadSeatAvailability() {
-        updateBookingModeUi();
         if (!canLoadSeats() || !seatAvailabilityUrl) {
             activeOccupied = {};
             if (activeTemplateId && window.__seatPicks[activeTemplateId]) {
                 window.__seatPicks[activeTemplateId].clear();
             }
+            syncWholeCarOption();
             updateSummary(activeTemplateId);
             return;
         }
@@ -540,21 +480,17 @@
         if (presetDriver && presetDriver.code) {
             params.set('driver_code', presetDriver.code);
         }
-        if (activeSelectedCapacity) {
-            params.set('vehicle_capacity', String(activeSelectedCapacity));
-        }
 
         fetch(seatAvailabilityUrl + '?' + params.toString(), { headers: { Accept: 'application/json' } })
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 activeOccupied = data.occupied_map || {};
                 if (data.capacity) activeCapacity = data.capacity;
+                activeSeatsPartiallyBooked = activeCapacity > 0 && getAvailableSeatCount() < activeCapacity;
                 clampSharedSeatCount();
-                updateBookingModeUi();
+                syncWholeCarOption();
                 if (getBookingMode() === 'whole_car') {
                     selectAllFreeSeats(activeTemplateId);
-                } else {
-                    updateSummary(activeTemplateId);
                 }
             })
             .catch(function () {
@@ -660,15 +596,17 @@
     function resetBookingModal() {
         stopSeatPolling();
         activeUnitPrice = 0;
+        activeSeatsPartiallyBooked = false;
+        activeOccupied = {};
         setBookingStep(1);
-        updateBookingModeUi();
+        syncWholeCarOption();
     }
 
-    function selectOptionByValue(select, value) {
-        if (!select || !value) return;
-        Array.from(select.options).forEach(function (o) {
-            if (o.value === value) select.value = o.value;
-        });
+    function setRouteEndpoints(pickup, dropoff) {
+        var pickupEl = document.getElementById('modal-pickup');
+        var dropoffEl = document.getElementById('modal-dropoff');
+        if (pickupEl) pickupEl.value = pickup || '';
+        if (dropoffEl) dropoffEl.value = dropoff || '';
     }
 
     function adjustSeatCount(delta) {
@@ -692,6 +630,7 @@
 
             var routeText = btn.dataset.route || '';
             activeRoute = routeText;
+            activeDepartureTime = btn.dataset.referenceTime || '';
             var serviceDate = btn.dataset.serviceDate || getFilterServiceDate();
 
             document.getElementById('modal-route').textContent = routeText;
@@ -703,18 +642,17 @@
                 dateInput.value = serviceDate;
             }
 
-            var pickup = document.getElementById('modal-pickup');
-            var dropoff = document.getElementById('modal-dropoff');
-            selectOptionByValue(pickup, btn.dataset.pickupDefault || '');
-            selectOptionByValue(dropoff, btn.dataset.dropoffDefault || '');
+            setRouteEndpoints(btn.dataset.pickupDefault || '', btn.dataset.dropoffDefault || '');
+            onTripContextChange();
 
             var seatCountInput = document.getElementById('modal-seat-count');
             if (seatCountInput) seatCountInput.value = '1';
 
+            setPartialBookingFromCard(btn.dataset.capacity, btn.dataset.seatsFree);
+
             var template = findTemplate(id);
-            var defaultCap = defaultCapacityForRoute(routeText, template);
-            if (!applyGuestCapacity(defaultCap, routeText) && template) {
-                applyTemplate(template, true);
+            if (template) {
+                applyTemplate(template);
             }
 
             if (btn.dataset.referenceTime) {
@@ -777,6 +715,12 @@
 
     document.querySelectorAll('input[name="booking_mode"]').forEach(function (radio) {
         radio.addEventListener('change', function () {
+            if (radio.value === 'whole_car' && !isWholeCarAvailable()) {
+                var sharedRadio = document.getElementById('booking-mode-shared');
+                if (sharedRadio) sharedRadio.checked = true;
+                syncWholeCarOption();
+                return;
+            }
             if (activeTemplateId && window.__seatPicks[activeTemplateId]) {
                 window.__seatPicks[activeTemplateId].clear();
             }
@@ -850,9 +794,6 @@
         var prefTime = document.getElementById('modal-preferred-time');
         if (prefTime && prefTime.value) params.set('preferred_time', prefTime.value);
         if (presetDriver && presetDriver.code) params.set('driver_code', presetDriver.code);
-        if (activeSelectedCapacity) {
-            params.set('vehicle_capacity', String(activeSelectedCapacity));
-        }
 
         fetch(seatAvailabilityUrl + '?' + params.toString(), { headers: { Accept: 'application/json' } })
             .then(function (r) { return r.json(); })
@@ -970,8 +911,11 @@
             vehicle_label: trip.vehicle_label || '',
             price: trip.price_raw || trip.one_way_price,
             one_way_price: trip.one_way_price || trip.price_raw,
+            whole_car_price: trip.whole_car_price || null,
+            whole_car_round_trip_price: trip.whole_car_round_trip_price || null,
+            seat_round_trip_price: trip.seat_round_trip_price || null,
             round_trip_price: trip.round_trip_price || trip.price_raw,
-            reference_time: trip.departure_time || trip.reference_time,
+            reference_time: trip.reference_clock || trip.reference_time,
             service_date: trip.service_date,
             pickup_default: trip.pickup_default,
             dropoff_default: trip.dropoff_default,
@@ -988,6 +932,7 @@
 
         var thumbWrap = card.querySelector('.trip-vehicle-thumb');
         if (thumbWrap && trip.vehicle_photo_url) {
+            thumbWrap.classList.remove('trip-route-thumb');
             var existing = thumbWrap.querySelector('.trip-vehicle-photo');
             if (existing && existing.tagName === 'IMG') {
                 if (existing.src !== trip.vehicle_photo_url) {
@@ -998,26 +943,27 @@
             }
         }
         var seatsHint = card.querySelector('.trip-seats-hint');
-        if (seatsHint && trip.seats_hint) {
-            seatsHint.textContent = trip.seats_hint;
+        if (seatsHint && trip.trip_meta_label) {
+            seatsHint.textContent = trip.trip_meta_label;
         }
-        var progressBar = card.querySelector('.seats-progress-bar');
-        if (progressBar && trip.capacity) {
-            var pct = Math.min(100, Math.round(((trip.seats_taken || 0) / trip.capacity) * 100));
-            progressBar.style.width = pct + '%';
-            progressBar.classList.toggle('almost-full', pct >= 80);
-        }
-        var priceLabel = card.querySelector('.trip-price-label');
-        if (priceLabel && trip.price) {
-            priceLabel.textContent = trip.price;
+        var priceAmounts = card.querySelectorAll('.trip-price-amount');
+        if (priceAmounts.length && trip.price) {
+            priceAmounts.forEach(function (el) {
+                el.textContent = trip.price;
+            });
         }
         if (trip.one_way_price) {
             basePrice[trip.id] = {
                 one_way: trip.one_way_price,
-                round_trip: trip.round_trip_price || trip.one_way_price,
+                round_trip: trip.seat_round_trip_price || trip.round_trip_price || trip.one_way_price,
+                whole_car_round: trip.whole_car_round_trip_price || null,
             };
         } else if (trip.price_raw) {
-            basePrice[trip.id] = { one_way: trip.price_raw, round_trip: trip.price_raw };
+            basePrice[trip.id] = {
+                one_way: trip.price_raw,
+                round_trip: trip.seat_round_trip_price || trip.round_trip_price || trip.price_raw,
+                whole_car_round: trip.whole_car_round_trip_price || null,
+            };
         }
         var btn = card.querySelector('[data-open-booking]');
         if (btn) {
@@ -1025,7 +971,7 @@
             btn.dataset.dateLabel = trip.date_label || btn.dataset.dateLabel;
             btn.dataset.weekday = trip.weekday || btn.dataset.weekday;
             btn.dataset.dateShort = trip.date_short || btn.dataset.dateShort;
-            btn.dataset.referenceTime = trip.departure_time || trip.reference_time || btn.dataset.referenceTime;
+            btn.dataset.referenceTime = trip.reference_clock || trip.reference_time || btn.dataset.referenceTime;
             btn.dataset.arrivalTime = trip.arrival_time || btn.dataset.arrivalTime;
             btn.dataset.timeRange = trip.time_range || btn.dataset.timeRange;
             btn.dataset.price = trip.price_raw || btn.dataset.price;
@@ -1044,19 +990,29 @@
         }
 
         if (activeTemplateId && String(activeTemplateId) === String(trip.id)) {
-            activeVehicleLabel = trip.vehicle_label || activeVehicleLabel;
+            activeVehicleLabel = trip.trip_meta_label || trip.vehicle_label || activeVehicleLabel;
             updateVehicleDisplay();
+            if (trip.capacity != null && trip.seats_free != null) {
+                setPartialBookingFromCard(trip.capacity, trip.seats_free);
+                syncWholeCarOption();
+            }
         }
     }
 
     function poll() {
         if (!form || !syncUrl) return;
         var params = new URLSearchParams(new FormData(form));
+        var page = new URLSearchParams(window.location.search).get('page');
+        if (page) params.set('page', page);
         fetch(syncUrl + '?' + params.toString(), { headers: { Accept: 'application/json' } })
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 var cnt = document.getElementById('trip-count');
-                if (cnt) cnt.textContent = data.trips.length;
+                if (cnt) {
+                    cnt.textContent = (data.pagination && data.pagination.total != null)
+                        ? data.pagination.total
+                        : data.trips.length;
+                }
                 if (data.service_date) {
                     var listDate = document.getElementById('list-service-date-label');
                     if (listDate) {
@@ -1064,12 +1020,20 @@
                         listDate.textContent = info.label;
                     }
                 }
+                var visibleIds = data.trips.map(function (trip) { return String(trip.id); });
+                document.querySelectorAll('.trip-card-pro[data-template-id]').forEach(function (card) {
+                    if (visibleIds.indexOf(card.getAttribute('data-template-id')) === -1) {
+                        card.remove();
+                    }
+                });
                 data.trips.forEach(function (trip) {
                     var card = document.querySelector('.trip-card-pro[data-template-id="' + trip.id + '"]');
                     if (card) updateTripCard(card, trip);
                 });
-                if (activeRoute && activeTemplateId) {
-                    renderVehiclePicker(activeRoute, activeTemplateId);
+                var list = document.getElementById('trips-list');
+                var emptyMsg = document.getElementById('no-trips-msg');
+                if (list && emptyMsg && !list.querySelector('.trip-card-pro') && !emptyMsg.parentElement) {
+                    list.innerHTML = emptyMsg.outerHTML;
                 }
             }).catch(function () {});
     }
@@ -1121,9 +1085,6 @@
             if (restore.seat_count) {
                 var seatCountInput = document.getElementById('modal-seat-count');
                 if (seatCountInput) seatCountInput.value = String(restore.seat_count);
-            }
-            if (restore.vehicle_capacity) {
-                applyGuestCapacity(parseInt(restore.vehicle_capacity, 10), activeRoute);
             }
             updateSummary(String(restore.template_id));
             setBookingStep(restore.step || 2);

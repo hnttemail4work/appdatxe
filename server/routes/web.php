@@ -4,15 +4,14 @@ use App\Http\Controllers\Web\AdminController;
 use App\Http\Controllers\Web\AuthController;
 use App\Http\Controllers\Web\DriverController;
 use App\Http\Controllers\Web\DriverWalletController;
+use App\Http\Controllers\Web\GeocodeController;
 use App\Http\Controllers\Web\GuestBookingController;
 use App\Http\Controllers\Web\LiveSyncController;
 use App\Http\Controllers\Web\OperatorController;
+use App\Http\Controllers\Web\OperatorTripOfferController;
 use App\Support\RoleDashboard;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-Route::get('/', function () {
-    return view('home');
-})->name('home');
 
 Route::get('csrf-token', function () {
     return response()->json(['token' => csrf_token()]);
@@ -33,24 +32,33 @@ Route::middleware('auth')->get('dashboard', function () {
 
 Route::get('trips/search', function (Request $request) {
     if (! auth()->check()) {
-        return redirect()->route('booking.index', $request->query());
+        return redirect()->route('home', $request->query());
     }
 
     return match (auth()->user()->role) {
         'driver'   => redirect()->route('driver.dashboard'),
         'operator' => redirect()->route('operator.dashboard'),
         'admin'    => redirect()->route('admin.dashboard'),
-        default    => redirect()->route('booking.index', $request->query()),
+        default    => redirect()->route('home', $request->query()),
     };
 })->name('trips.search');
 
-// ── Guest booking (public) ─────────────────────────────────────────────────
-Route::get('dat-xe', [GuestBookingController::class, 'index'])->name('booking.index');
-Route::get('dat-xe/live-sync', [GuestBookingController::class, 'liveSync'])->name('booking.liveSync');
-Route::get('dat-xe/available-drivers', [GuestBookingController::class, 'availableDrivers'])->name('booking.availableDrivers');
-Route::get('dat-xe/seat-availability', [GuestBookingController::class, 'seatAvailability'])->name('booking.seatAvailability');
-Route::get('dat-xe/quote-price', [GuestBookingController::class, 'quotePrice'])->name('booking.quotePrice');
-Route::post('dat-xe/bookings', [GuestBookingController::class, 'store'])->name('booking.store');
+// ── Đặt vé (trang chủ) ─────────────────────────────────────────────────────
+Route::get('/', [GuestBookingController::class, 'index'])->name('home');
+Route::get('live-sync', [GuestBookingController::class, 'liveSync'])->name('booking.liveSync');
+Route::get('available-drivers', [GuestBookingController::class, 'availableDrivers'])->name('booking.availableDrivers');
+Route::get('seat-availability', [GuestBookingController::class, 'seatAvailability'])->name('booking.seatAvailability');
+Route::get('quote-price', [GuestBookingController::class, 'quotePrice'])->name('booking.quotePrice');
+Route::post('bookings', [GuestBookingController::class, 'store'])->name('booking.store');
+Route::get('geocode/reverse', [GeocodeController::class, 'reverse'])->name('geocode.reverse');
+Route::get('geocode/search', [GeocodeController::class, 'search'])->name('geocode.search');
+
+Route::permanentRedirect('dat-xe', '/');
+Route::permanentRedirect('dat-xe/live-sync', '/live-sync');
+Route::permanentRedirect('dat-xe/available-drivers', '/available-drivers');
+Route::permanentRedirect('dat-xe/seat-availability', '/seat-availability');
+Route::permanentRedirect('dat-xe/quote-price', '/quote-price');
+Route::post('dat-xe/bookings', [GuestBookingController::class, 'store']);
 
 // ── Driver ────────────────────────────────────────────────────────────────
 Route::middleware(['auth', 'role:driver'])->group(function () {
@@ -73,7 +81,6 @@ Route::middleware(['auth', 'role:driver'])->group(function () {
 // ── Operator ───────────────────────────────────────────────────────────────
 Route::middleware(['auth', 'role:operator'])->group(function () {
     Route::get('operator/dashboard',                   [OperatorController::class, 'dashboard'])->name('operator.dashboard');
-    Route::get('operator/live-sync',                   [LiveSyncController::class, 'operator'])->name('operator.liveSync');
     Route::post('operator/bookings/{booking}/assign', [OperatorController::class, 'confirmAndAssignBooking'])->name('operator.bookings.assign');
 
     Route::get('operator/drivers',                     [DriverController::class, 'index'])->name('operator.drivers');
@@ -85,8 +92,15 @@ Route::middleware(['auth', 'role:operator'])->group(function () {
     Route::post('operator/drivers/{driverProfile}/photos', [DriverController::class, 'uploadPhotos'])->name('operator.drivers.photos');
     Route::delete('operator/drivers/{driverProfile}',  [DriverController::class, 'destroy'])->name('operator.drivers.destroy');
 
+    Route::get('operator/dat-chuyen', [OperatorTripOfferController::class, 'create'])->name('operator.tripOffers.create');
+    Route::post('operator/dat-chuyen', [OperatorTripOfferController::class, 'store'])->name('operator.tripOffers.store');
+    Route::get('operator/dat-chuyen/{scheduleTemplate}/chinh-sua', [OperatorTripOfferController::class, 'edit'])->name('operator.tripOffers.edit');
+    Route::put('operator/dat-chuyen/{scheduleTemplate}', [OperatorTripOfferController::class, 'update'])->name('operator.tripOffers.update');
+    Route::delete('operator/dat-chuyen/{scheduleTemplate}', [OperatorTripOfferController::class, 'destroy'])->name('operator.tripOffers.destroy');
+
     Route::get('operator/driver-wallet', [OperatorController::class, 'driverWallet'])->name('operator.driverWallet');
     Route::post('operator/settlements/{settlement}/issue-code', [OperatorController::class, 'issueSettlementCode'])->name('operator.settlements.issueCode');
+    Route::post('operator/settlements/{settlement}/approve', [OperatorController::class, 'approveSettlement'])->name('operator.settlements.approve');
     Route::post('operator/wallet-transactions/{transaction}/approve', [OperatorController::class, 'approveDeposit'])->name('operator.walletTransactions.approve');
 });
 

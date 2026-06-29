@@ -74,6 +74,32 @@ class Schedule extends Model
         return $this->hasMany(DriverTripRequest::class);
     }
 
+    /** Tài xế đã nhận chuyến hoặc đang được giao (chờ phản hồi) — dùng chung cho mọi khách ghép. */
+    public function designatedDriverProfile(): ?DriverProfile
+    {
+        if ($this->driver_id) {
+            return DriverProfile::query()
+                ->where('user_id', $this->driver_id)
+                ->with('user')
+                ->first();
+        }
+
+        $pendingDriverId = $this->driverTripRequests()
+            ->where('status', 'pending')
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->orderBy('created_at')
+            ->value('driver_id');
+
+        if (! $pendingDriverId) {
+            return null;
+        }
+
+        return DriverProfile::query()
+            ->where('user_id', $pendingDriverId)
+            ->with('user')
+            ->first();
+    }
+
     public function capacity(): int
     {
         return (int) ($this->vehicle?->capacity ?? 0);
@@ -86,7 +112,7 @@ class Schedule extends Model
 
     public function tripMetaLabel(): string
     {
-        $parts = [$this->departure_time->format('H:i · d/m/Y')];
+        $parts = [$this->departure_time->format('H:i, d/m/Y')];
 
         if ($this->vehicle) {
             $parts[] = ucfirst($this->vehicle->type) . ' ' . $this->vehicle->license_plate;
@@ -97,7 +123,7 @@ class Schedule extends Model
             $parts[] = $guestCount . ' khách';
         }
 
-        return implode(' · ', $parts);
+        return implode(', ', $parts);
     }
 
     public function seatPrice(): float
@@ -178,11 +204,11 @@ class Schedule extends Model
         $arrival = $this->expectedArrivalAt();
 
         if ($arrival->isSameDay($this->departure_time)) {
-            return $departure . ' → ' . $arrival->format('H:i') . ' · ' . $this->departure_time->format('d/m/Y');
+            return $departure . ' → ' . $arrival->format('H:i') . ', ' . $this->departure_time->format('d/m/Y');
         }
 
-        return $departure . ' · ' . $this->departure_time->format('d/m')
-            . ' → ' . $arrival->format('H:i') . ' · ' . $arrival->format('d/m/Y');
+        return $departure . ', ' . $this->departure_time->format('d/m')
+            . ' → ' . $arrival->format('H:i') . ', ' . $arrival->format('d/m/Y');
     }
 
     /** Chỉ chuyến đã duyệt mới coi là đang / đã chạy theo giờ. */
@@ -318,11 +344,11 @@ class Schedule extends Model
         $count = $bookings->count();
 
         return match ($this->driverWorkflowPhase()) {
-            'upcoming'          => $count > 1 ? "Sắp chạy · {$count} vé" : 'Sắp chạy',
-            'active'            => $count > 1 ? "Đang phục vụ · {$count} vé" : 'Đang phục vụ',
+            'upcoming'          => $count > 1 ? "Sắp chạy ({$count} vé)" : 'Sắp chạy',
+            'active'            => $count > 1 ? "Đang phục vụ ({$count} vé)" : 'Đang phục vụ',
             'needs_settle'      => 'Chuyển phí nền tảng',
             'enter_settle_code' => 'Nhập mã kết chuyến',
-            'settled'           => 'Đã hoàn tất',
+            'settled'           => 'Hoàn thành chuyến',
             default             => '—',
         };
     }
@@ -330,18 +356,20 @@ class Schedule extends Model
     public function driverWorkflowColor(): string
     {
         return match ($this->driverWorkflowPhase()) {
-            'upcoming'           => 'secondary',
-            'active'             => 'primary',
-            'needs_settle'      => 'warning text-dark',
-            'enter_settle_code' => 'warning text-dark',
-            'settled'           => 'success',
-            default              => 'secondary',
+            'upcoming'           => \App\Support\StatusBadge::NEUTRAL,
+            'active'             => \App\Support\StatusBadge::GOLD,
+            'needs_settle'      => \App\Support\StatusBadge::PENDING,
+            'enter_settle_code' => \App\Support\StatusBadge::PENDING,
+            'settled'           => \App\Support\StatusBadge::SUCCESS,
+            default              => \App\Support\StatusBadge::NEUTRAL,
         };
     }
 
     public function driverViewSortKey(): string
     {
-        $priority = match ($this->driverWorkflowPhase()) {
+        $phase = $this->driverWorkflowPhase();
+
+        $priority = match ($phase) {
             'active'            => 0,
             'enter_settle_code' => 1,
             'needs_settle'      => 2,
@@ -350,7 +378,11 @@ class Schedule extends Model
             default             => 5,
         };
 
-        return sprintf('%02d-%010d', $priority, $this->departure_time->timestamp);
+        $timeKey = in_array($phase, ['active', 'enter_settle_code', 'needs_settle'], true)
+            ? 9_999_999_999 - $this->departure_time->timestamp
+            : $this->departure_time->timestamp;
+
+        return sprintf('%02d-%010d', $priority, $timeKey);
     }
 
     public function driverIncompleteBookings(): \Illuminate\Support\Collection

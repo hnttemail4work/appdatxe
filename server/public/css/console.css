@@ -1,37 +1,82 @@
-/* Tam Long Limo — Operator / Admin Console UI */
+/* Tam Long Limo — Operator / Admin Console UI (vàng–đen) */
 :root {
-    --tl-primary: #1e40af;
-    --tl-primary-light: #3b82f6;
-    --tl-accent: #0ea5e9;
-    --tl-surface: #f8fafc;
-    --tl-border: #e2e8f0;
-    --tl-text-muted: #64748b;
-    --tl-success: #059669;
-    --tl-warning: #d97706;
-    --tl-danger: #dc2626;
+    --tl-primary: #d4af37;
+    --tl-primary-light: #e8c547;
+    --tl-primary-dark: #9a7b0a;
+    --tl-accent: #f5d76e;
+    --tl-black: #0a0a0a;
+    --tl-surface: #141414;
+    --tl-border: #333;
+    --tl-text-muted: #d1d5db;
+    --tl-success: #4ade80;
+    --tl-warning: #fbbf24;
+    --tl-danger: #f87171;
 }
 
 .console-page {
     --bs-primary: var(--tl-primary);
-    --bs-primary-rgb: 30, 64, 175;
+    --bs-primary-rgb: 212, 175, 55;
 }
 
 /* Page shell — tránh tràn ngang/dọc */
-.console-page {
+.console-table tbody tr.table-row-link {
+    cursor: pointer;
+}
+
+.console-table tbody tr.table-row-link:hover {
+    background: rgba(212, 175, 55, .06);
+}
+
+.console-table tbody tr.is-editing {
+    background: rgba(212, 175, 55, .1);
+}
+
+.console-table tbody tr.is-editing td {
+    border-color: rgba(212, 175, 55, .25);
+}
+
+.console-table-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+}
+
+.console-table-actions form {
+    display: inline;
     margin: 0;
-    padding-bottom: 1rem;
-    max-width: 100%;
-    overflow-x: clip;
+}
+
+.trip-offer-capacity-section {
+    border: 1px solid transparent;
+    border-radius: 0.65rem;
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.trip-offer-capacity-section.has-validation-error {
+    border-color: var(--tl-danger);
+    background: #fef2f2;
+}
+
+.capacity-validation-error {
+    color: var(--tl-danger);
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin: 0 0 0.75rem;
 }
 
 body:has(.console-page) {
-    background: linear-gradient(180deg, #eef2ff 0%, #f8fafc 40%, #f0f4ff 100%);
+    background: linear-gradient(180deg, #0a0a0a 0%, #141414 40%, #1a1a1a 100%);
     overflow-x: hidden;
 }
 
 /* Hero */
 .console-hero {
-    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 45%, #2563eb 100%);
+    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 45%, #2a2410 100%);
+    border: 1px solid rgba(212, 175, 55, .2);
     border-radius: 1.25rem;
     color: #fff;
     padding: 1.5rem 1.75rem;
@@ -111,6 +156,27 @@ body:has(.console-page) {
 }
 .console-breadcrumb a:hover {
     text-decoration: underline;
+}
+
+.console-back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: .8125rem;
+    font-weight: 600;
+    color: #e8c547;
+    text-decoration: none;
+    margin-bottom: .65rem;
+    padding: .4rem .75rem;
+    border-radius: .5rem;
+    border: 1px solid rgba(212, 175, 55, .35);
+    background: rgba(212, 175, 55, .1);
+    transition: background .15s, color .15s, border-color .15s;
+}
+.console-back-link:hover {
+    color: #fff;
+    background: rgba(212, 175, 55, .2);
+    border-color: rgba(232, 197, 71, .5);
 }
 
 /* Stat cards */
@@ -242,7 +308,7 @@ body:has(.console-page) {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: .04em;
-    color: var(--tl-text-muted);
+    color: var(--app-text-secondary, #d4d4d4);
     margin-bottom: .35rem;
 }
 .console-form .form-control,
@@ -299,7 +365,7 @@ body:has(.console-page) {
 }
 .console-table .cell-muted {
     font-size: .78rem;
-    color: var(--tl-text-muted);
+    color: var(--app-text-secondary, #c8c8c8);
 }
 
 /* List items (fleet, merchants) */
@@ -335,14 +401,14 @@ body:has(.console-page) {
     flex-wrap: wrap;
 }
 .console-alert.warning {
-    background: #fffbeb;
-    border: 1px solid #fde68a;
-    color: #92400e;
+    background: rgba(251, 191, 36, .12);
+    border: 1px solid rgba(251, 191, 36, .35);
+    color: #fde68a;
 }
 .console-alert.info {
-    background: #eff6ff;
-    border: 1px solid #bfdbfe;
-    color: #1e40af;
+    background: rgba(212, 175, 55, .1);
+    border: 1px solid rgba(212, 175, 55, .32);
+    color: #fef3c7;
 }
 
 /* Empty state */
@@ -454,4 +520,57 @@ body:has(.console-page) {
 }
 .console-table td:last-child .btn {
     width: auto !important;
+}
+
+/* —— Vàng–đen: panel, bảng, thẻ —— */
+.console-page .console-panel {
+    background: var(--tl-surface);
+    border: 1px solid var(--tl-border);
+    color: #f5f5f5;
+}
+.console-page .console-panel-head h2,
+.console-page .console-panel-head h3,
+.console-page .console-panel-head h4,
+.console-page .console-panel-head h5 {
+    color: #f5f5f5;
+}
+.console-page .console-stat {
+    background: var(--tl-surface);
+    border-color: var(--tl-border);
+    color: #f5f5f5;
+}
+.console-page .console-stat-value {
+    color: var(--tl-primary-light);
+}
+.console-page .console-stat-icon.primary { background: rgba(212, 175, 55, .15); }
+.console-page .console-table tbody td {
+    border-bottom-color: var(--tl-border);
+    color: #e5e5e5;
+}
+.console-page .console-table tbody tr:hover {
+    background: rgba(212, 175, 55, .06);
+}
+.console-page .console-table tbody tr.is-editing {
+    background: rgba(212, 175, 55, .1);
+}
+.console-page .console-table .cell-primary {
+    color: #f5f5f5;
+}
+.console-page .console-form .form-control,
+.console-page .console-form .form-select {
+    background: #1a1a1a;
+    border-color: var(--tl-border);
+    color: #f5f5f5;
+}
+.console-page .console-form .form-control:focus,
+.console-page .console-form .form-select:focus {
+    border-color: var(--tl-primary);
+    box-shadow: 0 0 0 3px rgba(212, 175, 55, .15);
+}
+.console-page .console-hero h1 {
+    color: var(--tl-primary-light);
+}
+.console-page .screen-tabs-wrap {
+    background: var(--tl-surface);
+    border-color: var(--tl-border);
 }

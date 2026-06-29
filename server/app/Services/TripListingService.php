@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Schedule;
 use App\Models\ScheduleTemplate;
+use App\Support\DepartureTimeDisplay;
 use App\Support\SouthernProvinces;
 use App\Services\TripPricingService;
 use Illuminate\Http\Request;
@@ -59,7 +60,36 @@ class TripListingService
                 fn ($v) => $v->where('type', $type)
             ))
             ->orderBy('id')
-            ->get();
+            ->get()
+            ->values();
+    }
+
+    public function isOfferVisibleForDate(
+        ScheduleTemplate $template,
+        string $serviceDate,
+        ?string $preferredTime = null,
+    ): bool {
+        return true;
+    }
+
+    public function resolveScheduleForDate(
+        ScheduleTemplate $template,
+        string $serviceDate,
+        ?string $preferredTime = null,
+    ): ?Schedule {
+        $departure = app(DriverAvailabilityService::class)->resolveDepartureTime(
+            $template,
+            $serviceDate,
+            $preferredTime,
+        );
+
+        return Schedule::query()
+            ->where('template_id', $template->id)
+            ->whereDate('service_date', $serviceDate)
+            ->where('departure_time', $departure)
+            ->whereIn('status', ['scheduled', 'running'])
+            ->with('bookings')
+            ->first();
     }
 
     public function routeOptions(): Collection
@@ -85,11 +115,20 @@ class TripListingService
         return $ranges;
     }
 
+    public function offerMetaLabel(
+        ScheduleTemplate $template,
+        string $serviceDate,
+        ?string $preferredTime = null,
+    ): string {
+        $time = $preferredTime ?: $template->departure_time;
+
+        return DepartureTimeDisplay::metaLabel($time);
+    }
+
     /** @return array<string, mixed> */
     public function serializeOffer(
         ScheduleTemplate $template,
         ?string $serviceDate = null,
-        ?array $routeWholeCarRange = null,
     ): array {
         $capacity = $template->capacity();
         $quote = $this->pricing->quote($template, 'one_way', null, null, 'shared');
@@ -97,17 +136,19 @@ class TripListingService
         $roundQuote = $this->pricing->quote($template, 'round_trip', null, null, 'shared');
         $hintDate = $serviceDate ?? now()->addDay()->toDateString();
         $schedule = $template->scheduleInfoForDate($hintDate);
-        $occupied = $this->occupiedSeatMapForDate($template, $hintDate, $schedule['departure_time']);
+        $referenceTime = DepartureTimeDisplay::normalizeForClock($template->departure_time);
+        $occupied = $this->occupiedSeatMapForDate($template, $hintDate, $referenceTime);
         $taken = count($occupied);
         $free = max($capacity - $taken, 0);
-        $wholeRange = $routeWholeCarRange ?? $this->pricing->wholeCarPriceRangeForRoute([$template]);
-        $priceLabel = $this->pricing->formatWholeCarRange($wholeRange['min'], $wholeRange['max']);
+        $seatRange = $this->pricing->seatPriceRangeForTemplate($template);
+        $priceLabel = $this->pricing->formatSeatRange($seatRange['min'], $seatRange['max']);
 
         return [
             'id'               => $template->id,
             'departure'        => $template->route->departure,
             'destination'      => $template->route->destination,
-            'reference_time'   => $schedule['departure_time'],
+            'reference_time'   => $referenceTime,
+            'reference_clock'  => $referenceTime,
             'service_date'     => $schedule['service_date'],
             'weekday'          => $schedule['weekday'],
             'weekday_short'    => $schedule['weekday_short'],
@@ -115,7 +156,8 @@ class TripListingService
             'date_month'       => $schedule['date_month'],
             'date_short'       => $schedule['date_short'],
             'date_label'       => $schedule['date_label'],
-            'departure_time'   => $schedule['departure_time'],
+            'departure_time'   => DepartureTimeDisplay::label($template->departure_time),
+            'departure_clock'  => $referenceTime,
             'arrival_time'     => $schedule['arrival_time'],
             'time_range'       => $schedule['time_range'],
             'vehicle_type'     => $template->vehicle->type,
@@ -127,19 +169,27 @@ class TripListingService
             'seats_taken'      => $taken,
             'distance_km'      => $quote['distance_km'],
             'price'            => $priceLabel,
-            'price_raw'        => $wholeRange['min'],
-            'price_range_min'  => $wholeRange['min'],
-            'price_range_max'  => $wholeRange['max'],
+            'price_raw'        => $seatRange['min'],
+            'price_range_min'  => $seatRange['min'],
+            'price_range_max'  => $seatRange['max'],
+            'seat_price_min'   => $seatRange['min'],
+            'seat_price_max'   => $seatRange['max'],
             'one_way_price'    => $quote['one_way_seat_price'],
             'whole_car_price'  => $wholeQuote['one_way_whole_car_price'],
+            'whole_car_round_trip_price' => $template->whole_car_round_trip_price !== null
+                ? (int) $template->whole_car_round_trip_price
+                : null,
+            'seat_round_trip_price' => $template->seat_round_trip_price !== null
+                ? (int) $template->seat_round_trip_price
+                : null,
             'round_trip_price' => $roundQuote['shared_seat_price'],
             'rate_per_km'      => $quote['rate_per_km'],
             'route_line'       => $template->route->departure . ' → ' . $template->route->destination,
             'vehicle_label'    => \App\Support\VehicleDisplay::labelFromVehicle($template->vehicle),
+            'trip_meta_label'  => $this->offerMetaLabel($template, $hintDate, $referenceTime),
             'vehicle_photo_url' => \App\Support\VehicleDisplay::photoFromVehicle($template->vehicle),
             'pickup_default'   => $template->route->departure,
             'dropoff_default'  => $template->route->destination,
-            'seats_hint'       => $this->seatsHintForDate($template, $hintDate, $schedule['departure_time']),
             'is_bookable'      => true,
         ];
     }
@@ -165,19 +215,5 @@ class TripListingService
         }
 
         return $this->scheduleLifecycle->occupiedSeatMap($schedule);
-    }
-
-    public function seatsHintForDate(ScheduleTemplate $template, string $serviceDate, ?string $preferredTime = null): string
-    {
-        $capacity = $template->capacity();
-        $occupied = $this->occupiedSeatMapForDate($template, $serviceDate, $preferredTime);
-        $taken = count($occupied);
-        $free = max($capacity - $taken, 0);
-
-        if ($taken === 0) {
-            return 'Còn ' . $capacity . ' ghế';
-        }
-
-        return 'Còn ' . $free . ' ghế';
     }
 }

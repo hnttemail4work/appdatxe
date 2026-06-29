@@ -44,9 +44,9 @@
 }
 
 .operator-nav-tabs .nav-link.active-parent {
-    color: #1e40af;
-    background: #eff6ff;
-    border-bottom-color: #2563eb;
+    color: var(--tl-primary);
+    background: rgba(212, 175, 55, .12);
+    border-bottom-color: var(--tl-primary);
 }
 
 .driver-edit-back {
@@ -101,12 +101,12 @@
     font-size: 1.15rem;
     font-weight: 700;
     margin: 0 0 .35rem;
-    color: #0f172a;
+    color: #f5f5f5;
 }
 
 .driver-edit-code {
     font-size: .8rem;
-    color: var(--tl-text-muted);
+    color: var(--app-text-secondary, #c8c8c8);
 }
 
 .driver-edit-actions {

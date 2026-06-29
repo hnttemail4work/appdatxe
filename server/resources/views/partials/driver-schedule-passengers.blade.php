@@ -2,7 +2,7 @@
 /** @var \App\Models\Schedule $schedule */
 /** @var \Illuminate\Support\Collection<int, \App\Models\Booking> $bookings */
 $bookings = $bookings ?? $schedule->driverRelevantBookings();
-$tripTotal = $schedule->tripRevenueTotal();
+$tripTotal = $tripTotal ?? (float) $bookings->sum(fn (\App\Models\Booking $b) => (float) $b->total_price);
 $showTripTotal = $showTripTotal ?? true;
 $phase = $schedule->driverWorkflowPhase();
 @endphp
@@ -14,16 +14,16 @@ $phase = $schedule->driverWorkflowPhase();
         @foreach($bookings as $booking)
         @php
             $mode = $booking->booking_mode ?? 'shared';
-            $modeBadge = $mode === 'whole_car' ? 'primary' : 'info text-dark';
+            $modeBadge = \App\Support\StatusBadge::bookingMode($mode);
         @endphp
         <div class="driver-passenger-item {{ ! $loop->last ? 'mb-2 pb-2 border-bottom' : '' }}">
             <div class="mb-1">
                 <strong>{{ $booking->passenger_name ?: 'Hành khách' }}</strong>
-                <span class="badge bg-{{ $modeBadge }} ms-1">{{ $booking->bookingModeLabel() }}</span>
+                <span class="status-pill status-pill--{{ $modeBadge }} ms-1">{{ $booking->bookingModeLabel() }}</span>
             </div>
             <div class="text-muted small">📍 Điểm đón cụ thể: <strong>{{ $booking->driverPickupDetailLabel() }}</strong></div>
             <div class="text-muted small">🏁 Điểm trả cụ thể: <strong>{{ $booking->driverDropoffDetailLabel() }}</strong></div>
-            @if($label = $booking->seatCountLabel())
+            @if(($booking->booking_mode ?? 'shared') === 'shared' && ($label = $booking->seatCountLabel()))
                 <div class="text-muted small">{{ $label }}</div>
             @endif
             @if($booking->notes)

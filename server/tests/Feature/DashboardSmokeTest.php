@@ -13,7 +13,7 @@ class DashboardSmokeTest extends TestCase
     public function test_public_pages_load(): void
     {
         $this->get('/')->assertOk();
-        $this->get('/dat-xe')->assertOk();
+        $this->get('/dat-xe')->assertRedirect('/');
         $this->get('/login')->assertOk();
     }
 

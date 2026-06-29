@@ -47,7 +47,7 @@
                 <span class="flex-grow-1">
                     <span class="{{ $textClass }}">{{ $meta['icon'] }} {{ $meta['label'] }}</span>
                     @if(!empty($meta['optional']))
-                        <span class="badge bg-light text-muted border ms-1" style="font-size:.6rem;">Tùy chọn</span>
+                        <span class="status-pill status-pill--neutral ms-1" style="font-size:.6rem;">Tùy chọn</span>
                     @endif
                 </span>
             </li>
@@ -56,11 +56,11 @@
     @if($missing !== [])
         <div class="alert alert-light border small py-2 mt-3 mb-0">
             <strong class="d-block mb-1">Cần bổ sung:</strong>
-            {{ implode(' · ', $missing) }}
+            {{ implode(', ', $missing) }}
         </div>
     @elseif($missingOptional !== [])
         <div class="alert alert-light border small py-2 mt-3 mb-0">
-            {{ implode(' · ', $missingOptional) }}
+            {{ implode(', ', $missingOptional) }}
         </div>
     @else
         <div class="alert alert-success small py-2 mt-3 mb-0">Hồ sơ đã đầy đủ.</div>

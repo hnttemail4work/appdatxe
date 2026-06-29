@@ -10,6 +10,3 @@
 @if($booking->notes)
     <div class="cell-muted small mt-1">📝 {{ \Illuminate\Support\Str::limit($booking->notes, 80) }}</div>
 @endif
-@if($booking->referral_code)
-    <div class="cell-muted small mt-1">Mã GT: <strong>{{ $booking->referral_code }}</strong></div>
-@endif

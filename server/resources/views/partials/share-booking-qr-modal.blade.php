@@ -1,6 +1,6 @@
 @php
     $shareUrl = $shareUrl ?? '';
-    $shareLabel = $shareLabel ?? 'Chia sẻ đặt vé';
+    $shareLabel = $shareLabel ?? 'QR đặt vé';
     $modalId = $modalId ?? ('shareQrModal-' . md5($shareUrl . $shareLabel));
 @endphp
 
@@ -13,7 +13,6 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
             </div>
             <div class="modal-body text-center pt-2">
-                <p class="text-muted small mb-3">Quét mã QR để mở trang đặt vé</p>
                 <div class="d-flex justify-content-center mb-3">
                     <div class="share-qr-canvas p-2 bg-white border rounded"
                          data-share-qr data-url="{{ $shareUrl }}"></div>

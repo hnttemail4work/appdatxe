@@ -1,7 +1,7 @@
 /* Sticky footer — tránh khoảng trắng body lộ dưới footer trên mobile */
 html {
     height: 100%;
-    background-color: #212529;
+    background-color: #0a0a0a;
     -webkit-text-size-adjust: 100%;
 }
 
@@ -26,8 +26,31 @@ body.app-shell {
 .app-footer {
     flex-shrink: 0;
     margin-top: auto;
-    padding-top: 2rem;
-    padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+    padding-top: 1.25rem;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+}
+
+.app-footer-grid {
+    --bs-gutter-x: 1rem;
+    --bs-gutter-y: 0.5rem;
+}
+
+.app-footer h6 {
+    margin-bottom: .25rem;
+}
+
+.app-footer-text + .app-footer-text {
+    margin-top: .15rem;
+}
+
+.app-footer-divider {
+    margin-top: 0.85rem !important;
+    margin-bottom: 0.65rem !important;
+    opacity: 0.35;
+}
+
+.app-footer-copy {
+    line-height: 1.35;
 }
 
 @media (max-width: 767.98px) {

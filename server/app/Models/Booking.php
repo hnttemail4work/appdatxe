@@ -23,7 +23,6 @@ class Booking extends Model
         'dropoff_address',
         'dropoff_detail',
         'notes',
-        'referral_code',
         'operator_confirmed_at',
         'hold_expires_at',
         'confirmed_at',
@@ -56,15 +55,6 @@ class Booking extends Model
         return $this->contact_phone;
     }
 
-    public function referralCommission(): float
-    {
-        if (blank($this->referral_code)) {
-            return 0;
-        }
-
-        return round((float) $this->total_price * \App\Support\PlatformFees::referralCommissionRate(), 2);
-    }
-
     public function matchesContactPhone(string $phone): bool
     {
         $stored = preg_replace('/\D+/', '', (string) $this->contact_phone);
@@ -79,7 +69,7 @@ class Booking extends Model
         $detail = trim((string) $this->pickup_detail);
 
         if ($city !== '' && $detail !== '') {
-            return $city . ' · ' . $detail;
+            return $city . ', ' . $detail;
         }
 
         return $detail !== '' ? $detail : ($city !== '' ? $city : '—');
@@ -115,7 +105,7 @@ class Booking extends Model
         $detail = trim((string) $this->dropoff_detail);
 
         if ($city !== '' && $detail !== '') {
-            return $city . ' · ' . $detail;
+            return $city . ', ' . $detail;
         }
 
         return $detail !== '' ? $detail : ($city !== '' ? $city : '—');
@@ -140,21 +130,7 @@ class Booking extends Model
 
     public function isExpired(): bool
     {
-        if ($this->expired_at !== null) {
-            return true;
-        }
-
-        if ($this->booking_status !== 'pending') {
-            return false;
-        }
-
-        $this->loadMissing('schedule');
-
-        if ($this->hold_expires_at && $this->hold_expires_at->isPast()) {
-            return true;
-        }
-
-        return $this->schedule && $this->schedule->departure_time <= now();
+        return $this->expired_at !== null;
     }
 
     public function seatReservations()
@@ -191,6 +167,26 @@ class Booking extends Model
     public function seatCount(): int
     {
         return count($this->seat_numbers ?? []);
+    }
+
+    /** Tổng tiền đơn theo loại đặt (cả xe / ghép × số ghế × loại chuyến). */
+    public function chargedTotal(): float
+    {
+        $stored = (float) $this->total_price;
+        $this->loadMissing('schedule');
+
+        if (! $this->schedule) {
+            return $stored;
+        }
+
+        return app(\App\Services\TripPricingService::class)->bookingTotal(
+            $this->schedule,
+            $this->trip_type ?? 'one_way',
+            $this->booking_mode ?? 'shared',
+            max($this->seatCount(), 1),
+            $this->pickup_address,
+            $this->dropoff_address,
+        );
     }
 
     public function seatCountLabel(): string
@@ -287,16 +283,16 @@ class Booking extends Model
     private function statusColorForLabel(string $label): string
     {
         if ($label === 'Hết hạn') {
-            return 'secondary';
+            return \App\Support\StatusBadge::NEUTRAL;
         }
 
         return match ($label) {
-            'Đã hủy', 'Từ chối'     => 'danger',
-            'Hoàn tất'              => 'success',
-            'Đang phục vụ'          => 'primary',
-            'Chờ kết chuyến'        => 'warning text-dark',
-            'Chờ QL xác nhận', 'Chờ tài xế nhận' => 'warning text-dark',
-            default                 => 'secondary',
+            'Đã hủy', 'Từ chối'     => \App\Support\StatusBadge::DANGER,
+            'Hoàn tất'              => \App\Support\StatusBadge::SUCCESS,
+            'Đang phục vụ'          => \App\Support\StatusBadge::GOLD,
+            'Chờ kết chuyến'        => \App\Support\StatusBadge::PENDING,
+            'Chờ QL xác nhận', 'Chờ tài xế nhận' => \App\Support\StatusBadge::PENDING,
+            default                 => \App\Support\StatusBadge::NEUTRAL,
         };
     }
 
@@ -318,18 +314,18 @@ class Booking extends Model
     public function tripDisplayColor(): string
     {
         if ($this->isExpired()) {
-            return 'secondary';
+            return \App\Support\StatusBadge::NEUTRAL;
         }
 
         $label = $this->tripDisplayLabel();
 
         return match ($label) {
-            'Hoàn tất', 'Chạy xong' => 'success',
-            'Chờ xác nhận hoàn'     => 'info text-dark',
-            'Đã hủy'                => 'danger',
-            'Đang chạy'             => 'primary',
-            'Sắp chạy'             => 'warning text-dark',
-            default                 => 'secondary',
+            'Hoàn tất', 'Chạy xong' => \App\Support\StatusBadge::SUCCESS,
+            'Chờ xác nhận hoàn'     => \App\Support\StatusBadge::INFO,
+            'Đã hủy'                => \App\Support\StatusBadge::DANGER,
+            'Đang chạy'             => \App\Support\StatusBadge::GOLD,
+            'Sắp chạy'             => \App\Support\StatusBadge::PENDING,
+            default                 => \App\Support\StatusBadge::NEUTRAL,
         };
     }
 

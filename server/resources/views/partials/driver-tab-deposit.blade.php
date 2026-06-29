@@ -2,8 +2,10 @@
 use App\Support\DriverWalletConfig;
 
 /** @var \App\Models\DriverWallet|null $wallet */
+/** @var \Illuminate\Support\Collection $walletHistory */
 
 $pendingDeposits = $wallet ? $wallet->transactions->where('status', 'pending') : collect();
+$walletHistory = $walletHistory ?? collect();
 $revenueStats = $revenueStats ?? ['day' => 0, 'week' => 0];
 $walletQrId = 'wallet-deposit-qr';
 @endphp
@@ -33,7 +35,7 @@ $walletQrId = 'wallet-deposit-qr';
 
     @if($pendingDeposits->isNotEmpty())
     <div class="driver-notice driver-notice-info mb-3">
-        Đang chờ quản lý duyệt {{ $pendingDeposits->count() }} yêu cầu nạp tiền.
+        Đã gửi yêu cầu nạp tiền — chờ quản lý duyệt ({{ $pendingDeposits->count() }}).
     </div>
     @elseif($wallet->wallet_gate_enabled)
     <p class="small text-muted mb-3">Luôn giữ số dư ví trên 100 nghìn để nhận cuốc bạn nhé</p>
@@ -43,16 +45,10 @@ $walletQrId = 'wallet-deposit-qr';
         'qrElementId' => $walletQrId,
     ])
 
-    @include('partials.transfer-confirm-form', [
-        'action' => route('driver.wallet.deposit'),
-        'amount' => (int) old('amount', DriverWalletConfig::MIN_BALANCE),
-        'amountEditable' => true,
-        'startLabel' => 'Nạp tiền',
-        'confirmLabel' => 'Xác nhận',
-        'formId' => 'wallet-deposit-form',
+    @include('partials.driver-wallet-deposit-form', [
         'qrElementId' => $walletQrId,
-        'minAmount' => DriverWalletConfig::MIN_BALANCE,
-        'openRefStep' => (bool) old('transfer_ref') || $errors->has('transfer_ref'),
     ])
     @endif
+
+    @include('partials.driver-wallet-history', ['walletHistory' => $walletHistory])
 @endif

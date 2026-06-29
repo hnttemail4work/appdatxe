@@ -21,6 +21,9 @@
             }
             return !field.checked;
         }
+        if (field.type === 'file') {
+            return !field.files || field.files.length === 0;
+        }
         if (field.tagName === 'SELECT') {
             return String(field.value || '').trim() === '';
         }

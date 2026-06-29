@@ -80,12 +80,12 @@ class DriverProfile extends Model
     public function displayStatusColor(): string
     {
         return match ($this->displayStatusLabel()) {
-            'Sẵn sàng'           => 'success',
-            'Đang chạy'          => 'primary',
-            'Nghỉ'               => 'secondary',
-            'Chờ duyệt'          => 'warning text-dark',
-            'Tạm khóa', 'Từ chối', 'Tạm ngưng' => 'danger',
-            default              => 'secondary',
+            'Sẵn sàng'           => \App\Support\StatusBadge::SUCCESS,
+            'Đang chạy'          => \App\Support\StatusBadge::GOLD,
+            'Nghỉ'               => \App\Support\StatusBadge::NEUTRAL,
+            'Chờ duyệt'          => \App\Support\StatusBadge::PENDING,
+            'Tạm khóa', 'Từ chối', 'Tạm ngưng' => \App\Support\StatusBadge::DANGER,
+            default              => \App\Support\StatusBadge::NEUTRAL,
         };
     }
 
@@ -194,6 +194,12 @@ class DriverProfile extends Model
                     ->whereNull('operator_id')
                     ->where('approval_status', 'pending'));
         });
+    }
+
+    /** Tài xế thuộc quản lý (ví, nạp tiền, kết chuyến). */
+    public function scopeManagedByOperator($query, int $operatorId)
+    {
+        return $query->where('operator_id', $operatorId);
     }
 
     public static function pendingCountForOperator(int $operatorId): int
@@ -479,7 +485,7 @@ class DriverProfile extends Model
             $this->vehicle_model,
         ]);
 
-        return implode(' · ', $parts);
+        return implode(', ', $parts);
     }
 
     public function accountStatusLabel(): string

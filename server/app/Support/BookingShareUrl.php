@@ -6,7 +6,7 @@ class BookingShareUrl
 {
     public static function guest(?string $driverCode = null): string
     {
-        $url = route('booking.index');
+        $url = route('home');
 
         $code = strtoupper(trim((string) $driverCode));
 

@@ -61,7 +61,7 @@ class PlatformPaymentInfo
         $bank = self::bank();
 
         return sprintf(
-            '%s · %s · %s',
+            '%s, %s, %s',
             $bank['bank_name'] ?: 'Ngân hàng',
             $bank['account'] ?: '—',
             number_format($amount, 0, ',', '.') . ' đ',

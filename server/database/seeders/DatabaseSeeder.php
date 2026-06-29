@@ -52,7 +52,6 @@ class DatabaseSeeder extends Seeder
 
         PlatformSetting::setValue('commission_percentage', ['value' => 2], 'finance');
         PlatformSetting::setValue('app_commission_percentage', ['value' => 2], 'finance');
-        PlatformSetting::setValue('referral_commission_percentage', ['value' => 8], 'finance');
         PlatformSetting::setValue('round_trip_discount_percentage', ['value' => 15], 'finance');
 
         PlatformSetting::setValue('platform_bank', [

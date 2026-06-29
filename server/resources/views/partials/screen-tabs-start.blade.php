@@ -19,7 +19,7 @@
                     aria-selected="{{ $isActive ? 'true' : 'false' }}">
                     {{ $tab['label'] }}
                     @if(isset($tab['badge']) && $tab['badge'] !== '' && $tab['badge'] !== 0)
-                        <span class="badge {{ ! empty($tab['hot']) ? 'bg-warning text-dark' : 'bg-secondary' }} ms-1">{{ $tab['badge'] }}</span>
+                        <span class="status-pill status-pill--{{ ! empty($tab['hot']) ? 'accent' : 'neutral' }} ms-1">{{ $tab['badge'] }}</span>
                     @endif
                 </button>
             </li>

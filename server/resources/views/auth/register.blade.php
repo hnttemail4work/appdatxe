@@ -3,7 +3,7 @@
 @section('content')
 <div class="customer-page register-shell register-shell-wide">
     <div class="card shadow-sm border-0 overflow-hidden">
-        <div class="register-header bg-white pb-0">
+        <div class="register-header pb-0">
             <h2 class="mb-0">Đăng ký tài xế</h2>
         </div>
         <div class="card-body p-4 pt-3">

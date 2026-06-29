@@ -34,4 +34,22 @@ class DriverWalletTransaction extends Model
     {
         return $this->belongsTo(User::class, 'approved_by');
     }
+
+    public function statusLabel(): string
+    {
+        return match ($this->status) {
+            'approved' => 'Đã cộng ví',
+            'rejected' => 'Từ chối',
+            default    => 'Chờ duyệt',
+        };
+    }
+
+    public function statusBadgeClass(): string
+    {
+        return match ($this->status) {
+            'approved' => \App\Support\StatusBadge::SUCCESS,
+            'rejected' => \App\Support\StatusBadge::DANGER,
+            default    => \App\Support\StatusBadge::PENDING,
+        };
+    }
 }

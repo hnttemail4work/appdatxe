@@ -3,6 +3,7 @@
 @section('content')
 @php
 use Carbon\Carbon;
+use App\Support\DepartureTimeDisplay;
 $basePrices = [];
 $hasDriverCode = ($driverCode ?? '') !== '';
 $filterServiceDate = $filters['service_date'] ?? now()->addDay()->toDateString();
@@ -30,19 +31,22 @@ $bookingRestoreModal = $errors->any() && old('template_id')
     ? [
         'template_id' => old('template_id'),
         'seat_count' => old('seat_count', 1),
-        'vehicle_capacity' => old('vehicle_capacity', 7),
         'step' => 2,
     ]
     : null;
 
 $pricingService = app(\App\Services\TripPricingService::class);
 $tripListingService = app(\App\Services\TripListingService::class);
-$routePriceRanges = $tripListingService->wholeCarPriceRanges(collect($offers ?? []));
 
-$bookingTemplates = collect($offers ?? [])->map(function ($offer) use ($filterServiceDate, $pricingService) {
+$offerItems = ($offers instanceof \Illuminate\Contracts\Pagination\Paginator)
+    ? collect($offers->items())
+    : collect($offers ?? []);
+
+$bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, $pricingService, $tripListingService) {
     $schedule = $offer->scheduleInfoForDate($filterServiceDate);
     $tripQuote = $pricingService->quote($offer, 'one_way', null, null, 'shared');
     $wholeQuote = $pricingService->quote($offer, 'one_way', null, null, 'whole_car');
+    $roundQuote = $pricingService->quote($offer, 'round_trip', null, null, 'shared');
     $capacity = $offer->capacity();
 
     return [
@@ -56,11 +60,18 @@ $bookingTemplates = collect($offers ?? [])->map(function ($offer) use ($filterSe
         'vehicle_photo' => \App\Support\VehicleDisplay::photoFromVehicle($offer->vehicle),
         'vehicle_type' => $offer->vehicle->type ?? 'sedan',
         'vehicle_label' => \App\Support\VehicleDisplay::labelFromVehicle($offer->vehicle),
+        'trip_meta_label' => $tripListingService->offerMetaLabel(
+            $offer,
+            $filterServiceDate,
+            DepartureTimeDisplay::normalizeForClock($offer->departure_time),
+        ),
         'price' => $tripQuote['shared_seat_price'],
         'one_way_price' => $tripQuote['one_way_seat_price'],
         'whole_car_price' => $wholeQuote['one_way_whole_car_price'],
-        'round_trip_price' => $pricingService->roundTripHint($tripQuote['one_way_seat_price']),
-        'reference_time' => $schedule['departure_time'] ?? null,
+        'whole_car_round_trip_price' => $offer->whole_car_round_trip_price !== null ? (int) $offer->whole_car_round_trip_price : null,
+        'seat_round_trip_price' => $offer->seat_round_trip_price !== null ? (int) $offer->seat_round_trip_price : null,
+        'round_trip_price' => $roundQuote['shared_seat_price'],
+        'reference_time' => DepartureTimeDisplay::normalizeForClock($offer->departure_time),
         'service_date' => $schedule['service_date'] ?? $filterServiceDate,
         'pickup_default' => $offer->route->departure,
         'dropoff_default' => $offer->route->destination,
@@ -114,32 +125,26 @@ $bookingTemplates = collect($offers ?? [])->map(function ($offer) use ($filterSe
                     <div class="booking-driver-chip mt-2">
                         @if($driverProfile)
                             Tài xế: <strong>{{ $driverProfile->user->name }}</strong>
-                            · Mã <code>{{ $driverCode }}</code>
+                            Mã <span class="driver-meta-code">{{ $driverCode }}</span>
                         @else
-                            Mã tài xế: <code>{{ $driverCode }}</code>
+                            Mã tài xế: <span class="driver-meta-code">{{ $driverCode }}</span>
                             <span class="text-warning ms-1">(không tìm thấy hoặc chưa hoạt động)</span>
                         @endif
                     </div>
                 @endif
             </div>
             <div class="col-lg-4 text-lg-end d-none d-lg-block">
-                <span class="badge bg-white text-primary px-3 py-2">Tổng đài {{ config('app.contact_phone') }}</span>
+                <span class="badge customer-hero-badge px-3 py-2">Tổng đài {{ config('app.contact_phone') }}</span>
             </div>
         </div>
     </div>
 
     <div class="search-panel mb-4">
-        <div class="search-panel-title mb-3">
-            <span class="search-panel-icon">🔍</span>
-            <div>
-                <strong>Tìm chuyến</strong>
-            </div>
-        </div>
-        <form method="GET" action="{{ route('booking.index') }}" id="trip-filter-form">
+        <form method="GET" action="{{ route('home') }}" id="trip-filter-form">
             @if($hasDriverCode)
                 <input type="hidden" name="tx" value="{{ $driverCode }}">
             @endif
-            <div class="row g-3 align-items-end">
+            <div class="row g-2 align-items-end search-panel-grid">
                 <div class="col-6 col-md-3">
                     <label class="form-label">Điểm đi</label>
                     <select name="departure" class="form-select">
@@ -162,11 +167,8 @@ $bookingTemplates = collect($offers ?? [])->map(function ($offer) use ($filterSe
                     <input type="date" name="service_date" id="filter-service-date" class="form-control"
                            min="{{ now()->toDateString() }}" value="{{ $filterServiceDate }}" required>
                 </div>
-                <div class="col-12">
-                    <div class="d-flex flex-wrap gap-2 align-items-center">
-                        <button type="submit" class="btn btn-primary fw-semibold px-4">Tìm chuyến</button>
-                        <a href="{{ route('booking.index', $hasDriverCode ? ['tx' => $driverCode] : []) }}" class="btn btn-sm btn-link text-muted">Xóa bộ lọc</a>
-                    </div>
+                <div class="col-6 col-md-3 search-panel-submit">
+                    <button type="submit" class="btn btn-outline-primary fw-semibold w-100">Tìm chuyến</button>
                 </div>
             </div>
         </form>
@@ -183,7 +185,7 @@ $bookingTemplates = collect($offers ?? [])->map(function ($offer) use ($filterSe
                 @else
                     Kết quả tìm kiếm
                 @endif
-                <span class="badge bg-primary rounded-pill" id="trip-count">{{ $offers->count() }}</span>
+                <span class="status-pill status-pill--gold" id="trip-count">{{ $offers->total() }}</span>
             </h2>
             <p class="text-muted small mb-0">
                 Ngày đi: <strong id="list-service-date-label">{{ $filterWeekday }}, {{ $filterDateLabel }}</strong>
@@ -200,31 +202,19 @@ $bookingTemplates = collect($offers ?? [])->map(function ($offer) use ($filterSe
             $schedule = $offer->scheduleInfoForDate($filterServiceDate);
             $tripQuote = $pricingService->quote($offer, 'one_way', null, null, 'shared');
             $wholeQuote = $pricingService->quote($offer, 'one_way', null, null, 'whole_car');
-            $wholeRange = $routePriceRanges[$offer->route_id] ?? ['min' => $wholeQuote['one_way_whole_car_price'], 'max' => $wholeQuote['one_way_whole_car_price']];
-            if ($hasDriverCode && $driverProfile && $driverProfile->vehicle_seats) {
-                $listPriceLabel = number_format($wholeQuote['one_way_whole_car_price'], 0, ',', '.') . ' đ';
-            } else {
-                $listPriceLabel = $pricingService->formatWholeCarRange($wholeRange['min'], $wholeRange['max']);
-            }
-            $roundPrice = $pricingService->roundTripHint($tripQuote['one_way_seat_price']);
-            $occupied = app(\App\Services\TripListingService::class)->occupiedSeatMapForDate(
-                $offer,
-                $filterServiceDate,
-                $schedule['departure_time'],
-            );
-            $seatsTaken = count($occupied);
-            $seatsFree = max($capacity - $seatsTaken, 0);
-            $seatPct = $capacity > 0 ? min(100, round(($seatsTaken / $capacity) * 100)) : 0;
+            $roundQuote = $pricingService->quote($offer, 'round_trip', null, null, 'shared');
+            $seatRange = $pricingService->seatPriceRangeForTemplate($offer);
+            $listPriceLabel = $pricingService->formatSeatRange($seatRange['min'], $seatRange['max']);
+            $roundPrice = $roundQuote['shared_seat_price'];
+            $departureClock = DepartureTimeDisplay::normalizeForClock($offer->departure_time);
+            $tripMetaLabel = DepartureTimeDisplay::metaLabel($offer->departure_time);
+            $vehiclePhotoUrl = ($hasDriverCode && $driverProfile)
+                ? \App\Support\VehicleDisplay::photoFromDriverProfile($driverProfile)
+                : \App\Support\VehicleDisplay::photoFromVehicle($offer->vehicle);
             $basePrices[$offer->id] = [
                 'one_way' => $tripQuote['one_way_seat_price'],
                 'round_trip' => $roundPrice,
             ];
-            $vehiclePhotoUrl = ($hasDriverCode && $driverProfile)
-                ? \App\Support\VehicleDisplay::photoFromDriverProfile($driverProfile)
-                : \App\Support\VehicleDisplay::photoFromVehicle($offer->vehicle);
-            $vehicleLabel = ($hasDriverCode && $driverProfile)
-                ? \App\Support\VehicleDisplay::labelFromDriverProfile($driverProfile)
-                : \App\Support\VehicleDisplay::labelFromVehicle($offer->vehicle);
             $vehicleType = $hasDriverCode && $driverProfile
                 ? ($driverProfile->vehicle_type ?? 'sedan')
                 : ($offer->vehicle->type ?? 'sedan');
@@ -240,28 +230,29 @@ $bookingTemplates = collect($offers ?? [])->map(function ($offer) use ($filterSe
                 </div>
 
                 <div class="trip-card-body">
-                    <div class="trip-route-line mb-2">
+                    <div class="trip-route-line">
                         <span class="city">{{ $offer->route->departure }}</span>
                         <span class="arrow">→</span>
                         <span class="city">{{ $offer->route->destination }}</span>
                     </div>
 
-                    <div class="trip-card-meta mt-2">
-                        <span class="trip-meta trip-seats-hint">{{ $vehicleLabel }}</span>
+                    <div class="trip-card-meta">
+                        <span class="trip-meta trip-seats-hint">{{ $tripMetaLabel }}</span>
                     </div>
 
-                    @if($capacity > 0)
-                    <div class="seats-progress mt-2" title="{{ $seatsFree }} ghế trống">
-                        <div class="seats-progress-bar {{ $seatPct >= 80 ? 'almost-full' : '' }}" style="width: {{ $seatPct }}%"></div>
+                    <div class="trip-card-prices trip-card-prices--mobile">
+                        <span class="trip-price-inline">
+                            <span class="trip-price-amount">{{ $listPriceLabel }}</span><span class="trip-price-unit">/ghế</span>
+                        </span>
                     </div>
-                    @endif
                 </div>
 
                 <div class="trip-card-side">
-                    <div class="price-tag trip-price-label text-md-end">
-                        {{ $listPriceLabel }}
+                    <div class="price-tag trip-price-label trip-card-prices--desktop text-md-end">
+                        <span class="trip-price-amount">{{ $listPriceLabel }}</span>
+                        <small class="trip-price-unit-hint">/ghế</small>
                     </div>
-                    <button type="button" class="btn btn-primary btn-book fw-semibold w-100 mt-2"
+                    <button type="button" class="btn btn-outline-primary btn-book fw-semibold w-100 mt-2"
                         data-open-booking
                         data-template-id="{{ $offer->id }}"
                         data-route="{{ $offer->route->departure }} → {{ $offer->route->destination }}"
@@ -269,7 +260,7 @@ $bookingTemplates = collect($offers ?? [])->map(function ($offer) use ($filterSe
                         data-date-label="{{ $schedule['date_label'] }}"
                         data-weekday="{{ $schedule['weekday'] }}"
                         data-date-short="{{ $schedule['date_short'] }}"
-                        data-reference-time="{{ $schedule['departure_time'] }}"
+                        data-reference-time="{{ $departureClock }}"
                         data-arrival-time="{{ $schedule['arrival_time'] }}"
                         data-time-range="{{ $schedule['time_range'] }}"
                         data-price="{{ $wholeQuote['one_way_whole_car_price'] }}"
@@ -278,8 +269,7 @@ $bookingTemplates = collect($offers ?? [])->map(function ($offer) use ($filterSe
                         data-round-trip-price="{{ $roundPrice }}"
                         data-capacity="{{ $capacity }}"
                         data-vehicle-photo="{{ $vehiclePhotoUrl ?? '' }}"
-                        data-vehicle-label="{{ $vehicleLabel }}"
-                        data-seats-free="{{ $seatsFree }}"
+                        data-vehicle-label="{{ $tripMetaLabel }}"
                         data-pickup-default="{{ $offer->route->departure }}"
                         data-dropoff-default="{{ $offer->route->destination }}">
                         Đặt chuyến
@@ -292,10 +282,11 @@ $bookingTemplates = collect($offers ?? [])->map(function ($offer) use ($filterSe
             <div class="booking-empty-icon">🔍</div>
             <h3 class="h6 fw-bold">Không có chuyến phù hợp</h3>
             <p class="text-muted small mb-3">Đổi ngày hoặc bộ lọc.</p>
-            <a href="{{ route('booking.index', $hasDriverCode ? ['tx' => $driverCode] : []) }}" class="btn btn-sm btn-outline-primary">Xem tất cả chuyến</a>
+            <a href="{{ route('home', $hasDriverCode ? ['tx' => $driverCode] : []) }}" class="btn btn-sm btn-outline-primary">Xem tất cả chuyến</a>
         </div>
         @endforelse
     </div>
+    @include('partials.pagination', ['paginator' => $offers])
 </div>
 
 <div class="modal fade" id="bookingModal" tabindex="-1" aria-labelledby="modal-route" aria-hidden="true">
@@ -304,7 +295,7 @@ $bookingTemplates = collect($offers ?? [])->map(function ($offer) use ($filterSe
             <form method="POST" action="{{ route('booking.store') }}" id="booking-form" class="booking-modal-form" novalidate>
                 @csrf
                 <input type="hidden" name="template_id" id="modal-template-id">
-                <input type="hidden" name="vehicle_capacity" id="modal-vehicle-capacity" value="{{ old('vehicle_capacity', $presetDriver ? ($presetDriver['vehicle_seats'] ?: 7) : 7) }}">
+                <input type="hidden" name="vehicle_capacity" id="modal-vehicle-capacity" value="{{ old('vehicle_capacity') }}">
                 @if($hasDriverCode)
                     <input type="hidden" name="tx" value="{{ $driverCode }}">
                 @endif
@@ -320,7 +311,7 @@ $bookingTemplates = collect($offers ?? [])->map(function ($offer) use ($filterSe
                                     <span class="step-num">2</span> Liên hệ
                                 </div>
                             </div>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Đóng"></button>
                         </div>
                         <div class="booking-trip-banner" id="modal-trip-banner">
                             <div class="booking-trip-banner-route" id="modal-route">—</div>
@@ -341,36 +332,50 @@ $bookingTemplates = collect($offers ?? [])->map(function ($offer) use ($filterSe
                                                min="{{ now()->toDateString() }}" value="{{ old('service_date', $filterServiceDate) }}">
                                     </div>
                                     <div class="col-6 col-md-6">
-                                        <label class="form-label" for="modal-preferred-time">Giờ khởi hành</label>
-                                        <input type="text" name="preferred_time" id="modal-preferred-time" class="form-control time-input-24h"
-                                               inputmode="numeric" autocomplete="off" maxlength="5"
-                                               placeholder="20:00" pattern="([01][0-9]|2[0-3]):[0-5][0-9]"
-                                               value="{{ old('preferred_time', '07:00') }}" aria-label="Giờ khởi hành">
+                                        @include('partials.departure-time-input', [
+                                            'name' => 'preferred_time',
+                                            'id' => 'modal-preferred-time',
+                                            'value' => old('preferred_time', '07:00'),
+                                        ])
                                     </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label" for="modal-pickup">Điểm đi <span class="text-danger">*</span></label>
-                                        <select name="pickup_address" id="modal-pickup" class="form-select" required
-                                                data-validate-label="Điểm đi">
-                                            @include('partials.province-options', ['selected' => old('pickup_address', '')])
-                                        </select>
-                                    </div>
+                                    <input type="hidden" name="pickup_address" id="modal-pickup" value="{{ old('pickup_address') }}">
+                                    <input type="hidden" name="dropoff_address" id="modal-dropoff" value="{{ old('dropoff_address') }}">
                                     <div class="col-12">
                                         <label class="form-label" for="modal-pickup-detail">Điểm đón cụ thể <span class="text-danger">*</span></label>
-                                        <input type="text" name="pickup_detail" id="modal-pickup-detail" class="form-control" required
-                                               data-validate-label="Điểm đón cụ thể"
-                                               value="{{ old('pickup_detail') }}">
+                                        <div class="input-group address-map-input-group">
+                                            <input type="text" name="pickup_detail" id="modal-pickup-detail" class="form-control" required
+                                                   data-validate-label="Điểm đón cụ thể"
+                                                   value="{{ old('pickup_detail') }}">
+                                            <button type="button" class="btn btn-outline-primary address-map-trigger"
+                                                    data-address-map-for="modal-pickup-detail"
+                                                    data-address-map-province="modal-pickup"
+                                                    data-address-map-label="Chọn điểm đón trên bản đồ"
+                                                    aria-label="Chọn điểm đón trên bản đồ" title="Chọn trên bản đồ">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                                                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                                                    <circle cx="12" cy="10" r="3"/>
+                                                </svg>
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label" for="modal-dropoff">Điểm đến <span class="text-danger">*</span></label>
-                                        <select name="dropoff_address" id="modal-dropoff" class="form-select" required
-                                                data-validate-label="Điểm đến">
-                                            @include('partials.province-options', ['selected' => old('dropoff_address', '')])
-                                        </select>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label">Điểm trả cụ thể</label>
-                                        <input type="text" name="dropoff_detail" id="modal-dropoff-detail" class="form-control"
-                                               value="{{ old('dropoff_detail') }}">
+                                    <div class="col-12">
+                                        <label class="form-label" for="modal-dropoff-detail">Điểm trả cụ thể</label>
+                                        <div class="input-group address-map-input-group">
+                                            <input type="text" name="dropoff_detail" id="modal-dropoff-detail" class="form-control"
+                                                   value="{{ old('dropoff_detail') }}">
+                                            <button type="button" class="btn btn-outline-primary address-map-trigger"
+                                                    data-address-map-for="modal-dropoff-detail"
+                                                    data-address-map-province="modal-dropoff"
+                                                    data-address-map-label="Chọn điểm trả trên bản đồ"
+                                                    aria-label="Chọn điểm trả trên bản đồ" title="Chọn trên bản đồ">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                                                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                                                    <circle cx="12" cy="10" r="3"/>
+                                                </svg>
+                                            </button>
+                                        </div>
                                     </div>
                                     <div class="col-12">
                                         <label class="form-label">Loại chuyến</label>
@@ -395,7 +400,7 @@ $bookingTemplates = collect($offers ?? [])->map(function ($offer) use ($filterSe
                             <div class="booking-panel-section">
                                 <div class="booking-panel-label">Hình thức đặt</div>
                                 <div class="d-flex flex-wrap gap-3 mb-2" id="modal-booking-mode-group">
-                                    <div class="form-check">
+                                    <div class="form-check" id="booking-mode-whole-car-wrap">
                                         <input class="form-check-input" type="radio" name="booking_mode" id="booking-mode-whole-car"
                                                value="whole_car" {{ old('booking_mode', 'whole_car') !== 'shared' ? 'checked' : '' }}>
                                         <label class="form-check-label" for="booking-mode-whole-car">Đặt cả xe</label>
@@ -406,6 +411,9 @@ $bookingTemplates = collect($offers ?? [])->map(function ($offer) use ($filterSe
                                         <label class="form-check-label" for="booking-mode-shared">Ghép xe</label>
                                     </div>
                                 </div>
+                                <p class="small text-muted mb-0 d-none" id="modal-whole-car-unavailable-hint">
+                                    Chuyến đã có khách ghép — chỉ có thể đặt ghép xe.
+                                </p>
                                 @error('booking_mode')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
                             </div>
 
@@ -419,13 +427,6 @@ $bookingTemplates = collect($offers ?? [])->map(function ($offer) use ($filterSe
                                            style="max-width:4.5rem" min="1" value="{{ old('seat_count', 1) }}" inputmode="numeric">
                                     <button type="button" class="btn btn-outline-secondary btn-sm" id="modal-seat-count-plus" aria-label="Tăng số ghế">+</button>
                                 </div>
-                            </div>
-
-                            <div class="booking-panel-divider d-none" id="modal-vehicle-picker-divider"></div>
-
-                            <div class="booking-panel-section d-none" id="modal-vehicle-picker-section">
-                                <div class="booking-panel-label">Chọn xe</div>
-                                <div class="booking-vehicle-picker" id="modal-vehicle-picker" role="listbox" aria-label="Chọn loại xe"></div>
                             </div>
                         </div>
                     </div>
@@ -469,15 +470,6 @@ $bookingTemplates = collect($offers ?? [])->map(function ($offer) use ($filterSe
                                                value="{{ old('contact_phone') }}">
                                     </div>
                                     <div class="col-12">
-                                        <label class="form-label" for="modal-referral-code">Mã giới thiệu</label>
-                                        <input type="text" name="referral_code" id="modal-referral-code"
-                                               class="form-control @error('referral_code') is-invalid @enderror"
-                                               value="{{ old('referral_code') }}"
-                                               maxlength="20" autocomplete="off"
-                                               style="text-transform: uppercase;">
-                                        @error('referral_code')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
-                                    </div>
-                                    <div class="col-12">
                                         <label class="form-label" for="modal-notes">Ghi chú cho tài xế</label>
                                         <textarea name="notes" id="modal-notes" rows="2" maxlength="500"
                                                   class="form-control @error('notes') is-invalid @enderror">{{ old('notes') }}</textarea>
@@ -494,7 +486,7 @@ $bookingTemplates = collect($offers ?? [])->map(function ($offer) use ($filterSe
                         <div class="fw-semibold" id="modal-seat-list-step1">Số ghế: 1 ghế</div>
                         <div class="booking-footer-price" id="modal-total-price-step1">0 đ</div>
                     </div>
-                    <button type="button" class="btn btn-primary fw-semibold px-4" id="modal-next-btn">
+                    <button type="button" class="btn btn-outline-primary fw-semibold px-4" id="modal-next-btn">
                         Tiếp tục
                     </button>
                 </div>
@@ -509,10 +501,13 @@ $bookingTemplates = collect($offers ?? [])->map(function ($offer) use ($filterSe
         </div>
     </div>
 </div>
+
+@include('partials.address-map-picker-modal')
 @endsection
 
 @push('styles')
 <link rel="stylesheet" href="{{ asset('css/customer.css') }}?v={{ filemtime(public_path('css/customer.css')) }}">
+<link rel="stylesheet" href="{{ asset('css/address-map-picker.css') }}?v={{ filemtime(public_path('css/address-map-picker.css')) }}">
 @endpush
 
 @push('scripts')
@@ -520,14 +515,16 @@ $bookingTemplates = collect($offers ?? [])->map(function ($offer) use ($filterSe
 window.__customerSyncUrl = @json(route('booking.liveSync'));
 window.__seatAvailabilityUrl = @json(route('booking.seatAvailability'));
 window.__quotePriceUrl = @json(route('booking.quotePrice'));
+window.__geocodeReverseUrl = @json(route('geocode.reverse'));
+window.__geocodeSearchUrl = @json(route('geocode.search'));
 window.__customerBasePrices = @json($basePrices);
 window.__bookingRestoreModal = @json($bookingRestoreModal);
 window.__bookingShowResult = @json(session('booking_success') !== null || $errors->any());
 window.__filterServiceDate = @json($filterServiceDate);
 window.__bookingTemplates = @json($bookingTemplates);
-window.__vehicleCapacityOptions = @json(\App\Support\VehicleCapacityOptions::STANDARD);
 window.__presetDriver = @json($presetDriver);
 window.__roundTripMultiplier = @json(\App\Support\PlatformFees::roundTripMultiplier());
 </script>
 <script src="{{ asset('js/customer-booking.js') }}"></script>
+<script src="{{ asset('js/address-map-picker.js') }}?v={{ filemtime(public_path('js/address-map-picker.js')) }}"></script>
 @endpush

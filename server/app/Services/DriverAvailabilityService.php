@@ -85,7 +85,7 @@ class DriverAvailabilityService
             if ($schedule && (int) $schedule->driver_id === (int) $profile->user_id) {
                 $booked = $schedule->bookedSeatsCount();
                 $cap = $schedule->capacity();
-                $data['seats_hint'] = $booked . '/' . $cap . ' ghế · còn nhận thêm';
+                $data['seats_hint'] = $booked . '/' . $cap . ' ghế, còn nhận thêm';
                 $data['already_assigned'] = true;
             } else {
                 $data['already_assigned'] = false;
@@ -103,7 +103,10 @@ class DriverAvailabilityService
         $template->loadMissing('route');
 
         return $preferredTime
-            ? Carbon::parse($serviceDate . ' ' . $preferredTime, config('app.timezone'))
+            ? Carbon::parse(
+                $serviceDate . ' ' . \App\Support\DepartureTimeDisplay::normalizeForClock($preferredTime) . ':00',
+                config('app.timezone'),
+            )
             : $template->departureAt(Carbon::parse($serviceDate)->startOfDay());
     }
 

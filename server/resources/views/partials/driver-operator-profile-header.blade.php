@@ -15,9 +15,9 @@
         @endif
         <div>
             <h2 class="driver-edit-title">{{ $user->name }}</h2>
-            <span class="badge bg-{{ $driver->displayStatusColor() }}">{{ $driver->displayStatusLabel() }}</span>
+<span class="status-pill status-pill--{{ $driver->displayStatusColor() }}">{{ $driver->displayStatusLabel() }}</span>
             @if($driver->driver_code)
-                <code class="driver-edit-code ms-1">{{ $driver->driver_code }}</code>
+                <span class="driver-meta-code ms-1">{{ $driver->driver_code }}</span>
             @endif
         </div>
     </div>

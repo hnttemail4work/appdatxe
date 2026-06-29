@@ -5,20 +5,25 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Controller;
 use App\Models\InventoryItem;
 use App\Models\Vehicle;
+use App\Support\PageList;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 
 class InventoryController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $items = InventoryItem::query()
-            ->where('operator_id', Auth::id())
+        $baseQuery = InventoryItem::query()->where('operator_id', Auth::id());
+
+        $items = (clone $baseQuery)
             ->with('vehicle')
             ->latest('transaction_date')
             ->latest()
-            ->get();
+            ->paginate(PageList::PER_PAGE)
+            ->withQueryString();
+
+        $allItems = (clone $baseQuery)->get();
 
         $vehicles = Vehicle::query()
             ->where('operator_id', Auth::id())
@@ -26,9 +31,9 @@ class InventoryController extends Controller
             ->get();
 
         $summary = [
-            'total_import' => $items->where('type', 'import')->sum(fn ($i) => $i->quantity * $i->unit_price),
-            'total_export' => $items->where('type', 'export')->sum(fn ($i) => $i->quantity * $i->unit_price),
-            'by_category'  => $items->groupBy('category')->map(fn ($g) => [
+            'total_import' => $allItems->where('type', 'import')->sum(fn ($i) => $i->quantity * $i->unit_price),
+            'total_export' => $allItems->where('type', 'export')->sum(fn ($i) => $i->quantity * $i->unit_price),
+            'by_category'  => $allItems->groupBy('category')->map(fn ($g) => [
                 'import' => $g->where('type', 'import')->sum('quantity'),
                 'export' => $g->where('type', 'export')->sum('quantity'),
             ]),

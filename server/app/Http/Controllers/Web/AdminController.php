@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\RegistrationService;
 use App\Services\ScheduleLifecycleService;
 use App\Support\PlatformFees;
+use App\Support\PageList;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -27,10 +28,10 @@ class AdminController extends Controller
         $operators = User::query()
             ->where('role', 'operator')
             ->latest()
-            ->get();
+            ->paginate(PageList::PER_PAGE)
+            ->withQueryString();
 
         $feeSettings = [
-            'referral_commission' => PlatformFees::referralCommissionPercent(),
             'app_commission'      => PlatformFees::appCommissionPercent(),
             'round_trip_discount' => PlatformFees::roundTripDiscountPercent(),
         ];
@@ -73,14 +74,9 @@ class AdminController extends Controller
     public function updateFeeSettings(Request $request)
     {
         $validated = $request->validate([
-            'referral_commission' => ['required', 'numeric', 'min:0', 'max:100'],
             'app_commission'      => ['required', 'numeric', 'min:0', 'max:100'],
             'round_trip_discount' => ['required', 'numeric', 'min:0', 'max:100'],
         ]);
-
-        PlatformSetting::setValue('referral_commission_percentage', [
-            'value' => (float) $validated['referral_commission'],
-        ], 'finance');
 
         PlatformSetting::setValue('app_commission_percentage', [
             'value' => (float) $validated['app_commission'],

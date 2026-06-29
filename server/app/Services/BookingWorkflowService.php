@@ -35,7 +35,6 @@ class BookingWorkflowService
         ?string $dropoffDetail,
         ?string $notes,
         string $tripType = 'one_way',
-        ?string $referralCode = null,
         string $bookingMode = 'shared',
     ): Booking {
         $template->loadMissing(['route', 'vehicle']);
@@ -60,7 +59,6 @@ class BookingWorkflowService
                 $dropoffDetail,
                 $notes,
                 $tripType,
-                $referralCode,
                 $bookingMode,
             );
         }
@@ -76,7 +74,6 @@ class BookingWorkflowService
             $dropoffDetail,
             $notes,
             $tripType,
-            $referralCode,
             $bookingMode,
         );
     }
@@ -92,10 +89,9 @@ class BookingWorkflowService
         ?string $dropoffDetail = null,
         ?string $notes = null,
         string $tripType = 'one_way',
-        ?string $referralCode = null,
         string $bookingMode = 'shared',
     ): Booking {
-        return DB::transaction(function () use ($schedule, $contactPhone, $passengerName, $seatNumbers, $pickupAddress, $pickupDetail, $dropoffAddress, $dropoffDetail, $notes, $tripType, $referralCode, $bookingMode): Booking {
+        return DB::transaction(function () use ($schedule, $contactPhone, $passengerName, $seatNumbers, $pickupAddress, $pickupDetail, $dropoffAddress, $dropoffDetail, $notes, $tripType, $bookingMode): Booking {
             $this->scheduleLifecycle->sync();
 
             $schedule = Schedule::query()
@@ -124,7 +120,7 @@ class BookingWorkflowService
                 $pickupAddress,
                 $dropoffAddress,
             );
-            $holdExpires = now()->addMinutes(15);
+            $holdExpires = null;
 
             $booking = Booking::query()->create([
                 'contact_phone'     => trim($contactPhone),
@@ -143,7 +139,6 @@ class BookingWorkflowService
                 'dropoff_address'   => $dropoffAddress,
                 'dropoff_detail'    => $dropoffDetail ? trim($dropoffDetail) : null,
                 'notes'             => $notes,
-                'referral_code'     => $referralCode,
                 'hold_expires_at'   => $holdExpires,
             ]);
 
@@ -197,7 +192,11 @@ class BookingWorkflowService
     /** Tài xế nhận cuốc — khách trả trực tiếp, không cần QL xác nhận thanh toán. */
     public function confirmForDriverAccept(Booking $booking): void
     {
-        if (in_array($booking->booking_status, ['confirmed', 'cancelled', 'rejected'], true)) {
+        if (in_array($booking->booking_status, ['cancelled', 'rejected'], true)) {
+            return;
+        }
+
+        if ($booking->booking_status === 'confirmed' && $booking->trip_status === 'confirmed') {
             return;
         }
 
@@ -333,15 +332,18 @@ class BookingWorkflowService
         ?string $dropoffDetail,
         ?string $notes,
         string $tripType = 'one_way',
-        ?string $referralCode = null,
         string $bookingMode = 'shared',
     ): Booking {
-        $holdExpires = now()->addMinutes(15);
-
         $booking->loadMissing('schedule.route');
-        $oneWay = $this->pricing->oneWaySeatPrice($booking->schedule, $pickupAddress, $dropoffAddress);
-        $unitPrice = $this->pricing->seatPriceForTripType($oneWay, $tripType);
         $seatCount = count($booking->seat_numbers ?? []);
+        $totalPrice = $this->pricing->bookingTotal(
+            $booking->schedule,
+            $tripType,
+            $bookingMode,
+            max($seatCount, 1),
+            $pickupAddress,
+            $dropoffAddress,
+        );
 
         $booking->update([
             'passenger_name'  => trim($passengerName),
@@ -350,16 +352,15 @@ class BookingWorkflowService
             'dropoff_address' => $dropoffAddress,
             'dropoff_detail'  => $dropoffDetail ? trim($dropoffDetail) : null,
             'notes'           => $notes,
-            'referral_code'   => $referralCode,
             'booking_mode'    => $bookingMode,
             'trip_type'       => $tripType,
-            'total_price'     => round($unitPrice * max($seatCount, 1), 2),
-            'hold_expires_at' => $holdExpires,
+            'total_price'     => $totalPrice,
+            'hold_expires_at' => null,
         ]);
 
         $booking->seatReservations()
             ->where('status', 'held')
-            ->update(['expires_at' => $holdExpires]);
+            ->update(['expires_at' => null]);
 
         return $booking->fresh(['schedule']);
     }
@@ -400,35 +401,6 @@ class BookingWorkflowService
 
     public function expireStaleBookings(): void
     {
-        Booking::query()
-            ->with('schedule')
-            ->where('booking_status', 'pending')
-            ->whereHas('schedule', fn ($s) => $s->whereNull('driver_id'))
-            ->where(function ($q): void {
-                $q->where(fn ($q2) => $q2
-                    ->whereNotNull('hold_expires_at')
-                    ->where('hold_expires_at', '<=', now()))
-                    ->orWhereHas('schedule', fn ($s) => $s->where('departure_time', '<=', now()));
-            })
-            ->each(function (Booking $booking): void {
-                DB::transaction(function () use ($booking): void {
-                    $before = $booking->toArray();
-
-                    $booking->update([
-                        'booking_status' => 'cancelled',
-                        'trip_status'    => 'cancelled',
-                        'expired_at'     => now(),
-                        'cancelled_at'   => now(),
-                    ]);
-
-                    $booking->seatReservations()->delete();
-                    $booking->paymentTransactions()->where('status', 'pending')->update(['status' => 'failed']);
-                    $this->syncScheduleAvailability(
-                        $booking->schedule()->with(['vehicle', 'seatReservations'])->first()
-                    );
-                    $this->audit($booking, null, 'booking_expired', $before, $booking->fresh()->toArray());
-                });
-            });
     }
 
     private function assertContactPhone(Booking $booking, string $phone): void

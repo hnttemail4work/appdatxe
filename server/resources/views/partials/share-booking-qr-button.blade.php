@@ -1,6 +1,6 @@
 @php
     $shareUrl = $shareUrl ?? '';
-    $shareLabel = $shareLabel ?? 'Chia sẻ đặt vé';
+    $shareLabel = $shareLabel ?? 'QR đặt vé';
     $modalId = $modalId ?? ('shareQrModal-' . md5($shareUrl . $shareLabel));
     $iconOnly = $iconOnly ?? false;
 @endphp

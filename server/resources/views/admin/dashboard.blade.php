@@ -20,7 +20,7 @@ if (! in_array($adminDefaultTab, ['create', 'list', 'fees'], true)) {
                     'activeKey' => 'create',
                     'tabs' => [
                         ['key' => 'create', 'label' => 'Tạo quản lý'],
-                        ['key' => 'list', 'label' => 'Danh sách', 'badge' => $operators->count()],
+                        ['key' => 'list', 'label' => 'Danh sách', 'badge' => $operators->total()],
                     ],
                 ])
 
@@ -87,6 +87,7 @@ if (! in_array($adminDefaultTab, ['create', 'list', 'fees'], true)) {
                             </tbody>
                         </table>
                     </div>
+                    @include('partials.pagination', ['paginator' => $operators])
                 @endif
                 @include('partials.screen-tab-pane-end')
 

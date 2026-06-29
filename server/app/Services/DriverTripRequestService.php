@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Support\VehicleDisplay;
+use App\Models\Booking;
 use App\Models\DriverProfile;
 use App\Models\DriverTripRequest;
 use App\Models\Schedule;
@@ -22,21 +23,6 @@ class DriverTripRequestService
 
     public function expireStale(): void
     {
-        $expired = DriverTripRequest::query()
-            ->with(['schedule.route', 'schedule.vehicle'])
-            ->where('status', 'pending')
-            ->whereNotNull('expires_at')
-            ->where('expires_at', '<=', now())
-            ->get();
-
-        foreach ($expired as $request) {
-            $request->update([
-                'status'       => 'expired',
-                'responded_at' => now(),
-            ]);
-
-            $this->tryReassignAfterDecline($request);
-        }
     }
 
     /** @deprecated Không khôi phục yêu cầu hết hạn — chuyển sang tài xế khác. */
@@ -93,6 +79,15 @@ class DriverTripRequestService
             throw new InvalidArgumentException('Không tìm thấy tài xế với mã này.');
         }
 
+        $designated = $schedule->designatedDriverProfile();
+        if ($designated && (int) $designated->user_id !== (int) $profile->user_id) {
+            $designated->loadMissing('user');
+            throw new InvalidArgumentException(
+                'Chuyến này đã được giao cho tài xế ' . $designated->user->name
+                . '. Các khách ghép cùng chuyến phải dùng một tài xế.'
+            );
+        }
+
         $alreadyOnTrip = $schedule->driver_id && (int) $schedule->driver_id === (int) $profile->user_id;
 
         if (! $alreadyOnTrip && $this->availability->isDriverBusyForSlot(
@@ -130,7 +125,6 @@ class DriverTripRequestService
         $existing = DriverTripRequest::query()
             ->where('schedule_id', $schedule->id)
             ->where('status', 'pending')
-            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
             ->where('contact_phone', $contactPhone)
             ->first();
 
@@ -138,15 +132,12 @@ class DriverTripRequestService
             throw new InvalidArgumentException('Bạn đang chờ tài xế phản hồi cho chuyến này.');
         }
 
-        $schedule->loadMissing('route');
-        $expiresAt = now()->addDays(self::ACCEPT_WINDOW_DAYS);
-
         return DriverTripRequest::query()->create([
             'schedule_id'   => $schedule->id,
             'contact_phone' => $contactPhone,
             'driver_id'     => $profile->user_id,
             'status'        => 'pending',
-            'expires_at'    => $expiresAt,
+            'expires_at'    => null,
         ]);
     }
 
@@ -183,40 +174,115 @@ class DriverTripRequestService
                 'driver_name' => $driverName,
             ]);
 
-            $request->update([
-                'status'       => 'accepted',
-                'responded_at' => now(),
-            ]);
-
             DriverTripRequest::query()
                 ->where('schedule_id', $schedule->id)
-                ->where('id', '!=', $request->id)
+                ->where('driver_id', $request->driver_id)
                 ->where('status', 'pending')
                 ->update([
-                    'status'       => 'cancelled',
+                    'status'       => 'accepted',
                     'responded_at' => now(),
                 ]);
 
-            $this->anchorBookingForAcceptedRequest($schedule->fresh(), $request);
+            $this->anchorAllBookingsForAcceptedSchedule($schedule->fresh());
         });
     }
 
-    /** Giữ vé còn hiệu lực sau khi tài xế nhận — tránh hết hạn 15 phút khi chờ phản hồi. */
-    private function anchorBookingForAcceptedRequest(Schedule $schedule, DriverTripRequest $request): void
+    /** @return Collection<int, array{primary: DriverTripRequest, schedule: Schedule, passengers: Collection<int, Booking>}> */
+    public function pendingGroupsForDriver(int $driverUserId): Collection
     {
-        $holdUntil = $schedule->departure_time->isFuture()
-            ? $schedule->departure_time->copy()->addHours(2)
-            : now()->addHours(4);
-
-        $booking = Booking::query()
-            ->where('schedule_id', $schedule->id)
+        return DriverTripRequest::query()
+            ->where('driver_id', $driverUserId)
+            ->where('status', 'pending')
+            ->with(['schedule.route', 'schedule.vehicle', 'schedule.bookings'])
+            ->latest()
             ->get()
-            ->first(fn (Booking $b) => $b->matchesContactPhone((string) $request->contact_phone));
+            ->groupBy('schedule_id')
+            ->map(function (Collection $requests): array {
+                $primary = $requests->sortByDesc('created_at')->first();
+                $schedule = $primary->schedule;
+                $schedule->loadMissing('bookings', 'route', 'vehicle');
 
-        if (! $booking) {
-            return;
+                return [
+                    'primary'    => $primary,
+                    'schedule'   => $schedule,
+                    'passengers' => $this->passengersForPendingGroup($schedule, $requests),
+                ];
+            })
+            ->values();
+    }
+
+    /** @return array<string, mixed> */
+    public function serializePendingGroup(array $group): array
+    {
+        /** @var DriverTripRequest $primary */
+        $primary = $group['primary'];
+        /** @var Schedule $schedule */
+        $schedule = $group['schedule'];
+        /** @var Collection<int, Booking> $passengers */
+        $passengers = $group['passengers'];
+
+        return [
+            'id'               => $primary->id,
+            'accept_url'       => route('driver.tripRequests.accept', $primary),
+            'reject_url'       => route('driver.tripRequests.reject', $primary),
+            'route'            => $schedule->route->departure . ' → ' . $schedule->route->destination,
+            'departure_time'   => $schedule->departure_time->format('H:i, d/m/Y'),
+            'expires_at'       => $primary->expires_at?->toIso8601String(),
+            'expires_in_label' => $primary->acceptTimeRemainingLabel(),
+            'trip_code'        => $schedule->shortTripCode(),
+            'meta_label'       => $schedule->tripMetaLabel(),
+            'passenger_count'  => $passengers->count(),
+            'trip_total'       => number_format((float) $passengers->sum(fn (Booking $b) => (float) $b->total_price), 0, ',', '.'),
+            'passengers'       => $passengers->map(fn (Booking $b): array => $this->serializePassengerForRequest($b))->values()->all(),
+        ];
+    }
+
+    /** @return Collection<int, Booking> */
+    private function passengersForPendingGroup(Schedule $schedule, Collection $requests): Collection
+    {
+        return $schedule->driverRelevantBookings()->filter(function (Booking $booking) use ($requests): bool {
+            foreach ($requests as $request) {
+                if ($booking->matchesContactPhone((string) $request->contact_phone)) {
+                    return true;
+                }
+            }
+
+            return $booking->operator_confirmed_at !== null && ! $booking->hasDriverAccepted();
+        })->values();
+    }
+
+    /** @return array<string, mixed> */
+    private function serializePassengerForRequest(Booking $booking): array
+    {
+        return [
+            'passenger_name'   => $booking->passenger_name,
+            'booking_mode'     => $booking->bookingModeLabel(),
+            'booking_mode_key' => $booking->booking_mode ?? 'shared',
+            'pickup'           => $booking->driverPickupDetailLabel(),
+            'dropoff'          => $booking->driverDropoffDetailLabel(),
+            'notes'            => $booking->notes,
+            'seats_label'      => ($booking->booking_mode ?? 'shared') === 'shared' && $booking->seatCount() > 0
+                ? $booking->seatCountLabel()
+                : null,
+            'trip_total'       => number_format((float) $booking->total_price, 0, ',', '.'),
+        ];
+    }
+
+    /** Xác nhận vé sau khi tài xế nhận chuyến. */
+    private function anchorAllBookingsForAcceptedSchedule(Schedule $schedule): void
+    {
+        $workflow = app(BookingWorkflowService::class);
+
+        foreach ($schedule->driverRelevantBookings() as $booking) {
+            $this->anchorBookingForDriverAccept($schedule, $booking, $workflow);
         }
+    }
 
+    private function anchorBookingForDriverAccept(
+        Schedule $schedule,
+        Booking $booking,
+        BookingWorkflowService $workflow,
+    ): void {
         if (in_array($booking->booking_status, ['cancelled', 'rejected'], true)) {
             if (! $booking->expired_at) {
                 return;
@@ -227,7 +293,7 @@ class DriverTripRequestService
                 'trip_status'     => 'pending',
                 'expired_at'      => null,
                 'cancelled_at'    => null,
-                'hold_expires_at' => $holdUntil,
+                'hold_expires_at' => null,
             ]);
 
             foreach ((array) $booking->seat_numbers as $seat) {
@@ -239,24 +305,101 @@ class DriverTripRequestService
                     ],
                     [
                         'status'            => 'held',
-                        'expires_at'        => $holdUntil,
+                        'expires_at'        => null,
                         'reservation_token' => (string) Str::uuid(),
                     ],
                 );
             }
 
-            app(BookingWorkflowService::class)->syncScheduleAvailability($schedule);
-            app(BookingWorkflowService::class)->confirmForDriverAccept($booking->fresh());
+            $workflow->syncScheduleAvailability($schedule);
+            $workflow->confirmForDriverAccept($booking->fresh());
 
             return;
         }
 
-        $booking->update(['hold_expires_at' => $holdUntil]);
+        $booking->update(['hold_expires_at' => null]);
         $booking->seatReservations()
             ->whereIn('status', ['held', 'booked'])
-            ->update(['expires_at' => $holdUntil]);
+            ->update(['expires_at' => null]);
 
-        app(BookingWorkflowService::class)->confirmForDriverAccept($booking->fresh());
+        $workflow->confirmForDriverAccept($booking->fresh());
+    }
+
+    public function reassignScheduleDriver(Schedule $schedule, string $newDriverCode, int $operatorUserId): void
+    {
+        $this->expireStale();
+
+        $schedule->loadMissing(['route', 'vehicle', 'bookings']);
+
+        if ((int) $schedule->vehicle->operator_id !== $operatorUserId) {
+            throw new InvalidArgumentException('Không có quyền phân công chuyến này.');
+        }
+
+        if ($schedule->departure_time <= now()) {
+            throw new InvalidArgumentException('Chuyến đã khởi hành, không thể đổi tài xế.');
+        }
+
+        $profile = DriverProfile::query()
+            ->operational()
+            ->where('operator_id', $operatorUserId)
+            ->where('driver_code', strtoupper(trim($newDriverCode)))
+            ->with('user')
+            ->first();
+
+        if (! $profile) {
+            throw new InvalidArgumentException('Không tìm thấy tài xế với mã này.');
+        }
+
+        if ($schedule->driver_id && (int) $schedule->driver_id === (int) $profile->user_id) {
+            throw new InvalidArgumentException('Chuyến đang được tài xế này phục vụ.');
+        }
+
+        if ($this->availability->isDriverBusyForSlot(
+            (int) $profile->user_id,
+            $schedule->route->departure,
+            $schedule->route->destination,
+            $schedule->departure_time,
+        )) {
+            throw new InvalidArgumentException('Tài xế mới đã bận khung giờ này. Vui lòng chọn tài xế khác.');
+        }
+
+        $bookingsToReassign = $schedule->driverRelevantBookings()
+            ->filter(fn (Booking $booking): bool => ! in_array($booking->trip_status, ['completed'], true));
+
+        if ($bookingsToReassign->isEmpty()) {
+            throw new InvalidArgumentException('Chuyến không còn vé cần phân công.');
+        }
+
+        DB::transaction(function () use ($schedule, $bookingsToReassign): void {
+            $locked = Schedule::query()->lockForUpdate()->findOrFail($schedule->id);
+
+            DriverTripRequest::query()
+                ->where('schedule_id', $locked->id)
+                ->whereIn('status', ['pending', 'accepted'])
+                ->update([
+                    'status'       => 'cancelled',
+                    'responded_at' => now(),
+                ]);
+
+            $locked->update([
+                'driver_id'   => null,
+                'driver_name' => null,
+            ]);
+
+            foreach ($bookingsToReassign as $booking) {
+                $booking->update([
+                    'trip_status' => 'pending',
+                ]);
+            }
+        });
+
+        foreach ($bookingsToReassign as $booking) {
+            $this->requestDriver(
+                $schedule->fresh(['route']),
+                $newDriverCode,
+                (string) $booking->contact_phone,
+            );
+        }
     }
 
     public function reject(DriverTripRequest $request, int $driverUserId): void
@@ -269,12 +412,20 @@ class DriverTripRequestService
             throw new InvalidArgumentException('Yêu cầu không còn hiệu lực.');
         }
 
-        $request->update([
-            'status'       => 'rejected',
-            'responded_at' => now(),
-        ]);
+        $siblings = DriverTripRequest::query()
+            ->where('schedule_id', $request->schedule_id)
+            ->where('driver_id', $driverUserId)
+            ->where('status', 'pending')
+            ->get();
 
-        $this->tryReassignAfterDecline($request);
+        foreach ($siblings as $sibling) {
+            $sibling->update([
+                'status'       => 'rejected',
+                'responded_at' => now(),
+            ]);
+
+            $this->tryReassignAfterDecline($sibling);
+        }
     }
 
     private function tryReassignAfterDecline(DriverTripRequest $request): void
@@ -313,7 +464,7 @@ class DriverTripRequestService
                 'contact_phone' => $request->contact_phone,
                 'driver_id'     => $profile->user_id,
                 'status'        => 'pending',
-                'expires_at'    => now()->addDays(self::ACCEPT_WINDOW_DAYS),
+                'expires_at'    => null,
             ]);
 
             return;

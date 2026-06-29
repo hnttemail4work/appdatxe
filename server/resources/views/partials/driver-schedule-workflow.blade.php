@@ -6,109 +6,104 @@ $incomplete = $schedule->driverIncompleteBookings();
 $settlement = $schedule->tripSettlement;
 $totalRevenue = $bookings->sum(fn ($b) => (float) $b->total_price);
 
-$stepIndex = match ($phase) {
-    'upcoming', 'active' => $incomplete->isEmpty() ? 1 : 0,
-    'needs_settle' => 2,
-    'enter_settle_code' => 3,
-    'settled' => 4,
-    default => 0,
+$currentKey = match (true) {
+    $phase === 'settled' => 'done',
+    $phase === 'enter_settle_code' => 'code',
+    $phase === 'needs_settle' => 'fee',
+    in_array($phase, ['upcoming', 'active'], true) && $incomplete->isNotEmpty() => 'complete',
+    in_array($phase, ['upcoming', 'active'], true) => 'upcoming',
+    default => 'upcoming',
 };
 
 $steps = [
-    ['label' => 'Sắp chạy'],
-    ['label' => 'Hoàn thành'],
-    ['label' => 'Chuyển phí'],
-    ['label' => 'Kết chuyến'],
-    ['label' => 'Xong'],
+    ['key' => 'upcoming', 'label' => 'Sắp chạy'],
+    ['key' => 'complete', 'label' => 'Hoàn thành'],
+    ['key' => 'fee', 'label' => 'Chuyển phí'],
+    ['key' => 'code', 'label' => 'Kết chuyến'],
+    ['key' => 'done', 'label' => 'Hoàn tất'],
 ];
+
+$order = ['upcoming' => 0, 'complete' => 1, 'fee' => 2, 'code' => 3, 'done' => 4];
+$currentOrder = $order[$currentKey] ?? 0;
+
+$visibleSteps = collect($steps)->filter(function (array $step) use ($settlement): bool {
+    return ! ($step['key'] === 'code' && $settlement?->isUnderThreshold());
+})->values();
 @endphp
 
-<div class="driver-workflow-steps" aria-label="Tiến trình chuyến">
-    @foreach($steps as $i => $step)
-        @php
-            $cls = 'driver-workflow-step';
-            if ($i < $stepIndex) {
-                $cls .= ' is-done';
-            } elseif ($i === $stepIndex) {
-                $cls .= ' is-current';
-            }
-        @endphp
-        <div class="{{ $cls }}">{{ $step['label'] }}</div>
-    @endforeach
-</div>
+<div class="driver-workflow-compact" aria-label="Tiến trình chuyến">
+    <div class="driver-workflow-compact-steps">
+        @foreach($visibleSteps as $step)
+            @php
+                $stepOrder = $order[$step['key']] ?? 0;
+                $state = $stepOrder < $currentOrder ? 'done' : ($step['key'] === $currentKey ? 'current' : 'pending');
+            @endphp
+            <span class="driver-workflow-compact-step is-{{ $state }}">{{ $step['label'] }}</span>
+        @endforeach
+    </div>
 
-<div class="driver-action-panel">
-    <div class="action-title">{{ $schedule->driverWorkflowLabel() }}</div>
-
-    @if($incomplete->isNotEmpty() && in_array($phase, ['upcoming', 'active'], true))
+    @if($currentKey === 'complete' && in_array($phase, ['upcoming', 'active'], true))
         <form method="POST" action="{{ route('driver.schedules.complete', $schedule) }}"
               data-confirm="Xác nhận đã chạy xong chuyến này ({{ $bookings->count() }} khách)?"
               data-confirm-title="Hoàn thành chuyến"
               data-confirm-ok="Hoàn thành"
               data-confirm-variant="success">
             @csrf
-            <button class="btn btn-success btn-sm w-100">
-                Hoàn thành chuyến
-                @if($bookings->count() > 1)
-                    · {{ $bookings->count() }} vé
-                @endif
-            </button>
+            <button class="btn btn-success btn-sm w-100">Hoàn thành chuyến</button>
         </form>
-        @elseif($settlement && in_array($phase, ['needs_settle', 'enter_settle_code'], true))
-        @if($phase === 'needs_settle')
-            @php
-                $feeQrId = 'platform-fee-qr-' . $settlement->id;
-            @endphp
-            @include('partials.platform-fee-transfer', [
-                'feeAmount' => $settlement->platform_fee_amount,
-                'qrElementId' => $feeQrId,
-            ])
-            <p class="small text-muted mb-0 mt-2">
-                Doanh thu: <strong>{{ number_format($totalRevenue, 0, ',', '.') }} đ</strong>
-                · Phí: <strong>{{ number_format($settlement->platform_fee_amount, 0, ',', '.') }} đ</strong>
-                @if($settlement->category === 'under_threshold')
-                    <span class="d-block mt-1">Chuyến doanh thu dưới 500k — chuyển phí chiết khấu rồi xác nhận.</span>
-                @endif
-            </p>
 
-            @if($settlement->transfer_ref)
-                <div class="driver-notice driver-notice-info mt-2 mb-0">
-                    Đã xác nhận chuyển phí · Mã CK: <code>{{ $settlement->transfer_ref }}</code>
-                    — chờ quản lý cấp mã kết chuyến.
-                </div>
+    @elseif($currentKey === 'fee' && $settlement && $phase === 'needs_settle')
+        @php $feeQrId = 'platform-fee-qr-' . $settlement->id; @endphp
+        <div class="driver-workflow-compact-panel">
+            <div class="small text-muted mb-2">
+                Phí <strong>{{ number_format($settlement->platform_fee_amount, 0, ',', '.') }} đ</strong>
+                Doanh thu {{ number_format($totalRevenue, 0, ',', '.') }} đ
+            </div>
+            @if($settlement->driverConfirmedTransfer())
+                <p class="small text-muted mb-0">
+                    @if($settlement->isUnderThreshold())
+                        Đã xác nhận chuyển phí — chờ quản lý.
+                    @else
+                        Đã xác nhận CK, chờ quản lý cấp mã.
+                    @endif
+                </p>
             @else
-                @include('partials.transfer-confirm-form', [
-                    'action' => route('driver.settlements.confirmTransfer', $settlement),
-                    'amount' => $settlement->platform_fee_amount,
-                    'amountEditable' => false,
-                    'startLabel' => 'Đã chuyển phí',
-                    'confirmLabel' => 'Xác nhận',
-                    'formId' => 'settlement-transfer-' . $settlement->id,
+                @include('partials.platform-fee-transfer', [
+                    'feeAmount' => $settlement->platform_fee_amount,
                     'qrElementId' => $feeQrId,
-                    'openRefStep' => (bool) old('transfer_ref') || $errors->has('transfer_ref'),
                 ])
-            @endif
-
-        @elseif($phase === 'enter_settle_code')
-            <form method="POST" action="{{ route('driver.settlements.settle', $settlement) }}">
-                @csrf
-                <label class="form-label small mb-1">Mã kết chuyến từ quản lý (cả chuyến)</label>
-                <div class="input-group input-group-sm">
-                    <input type="text" name="settlement_code" class="form-control" required maxlength="20"
-                           placeholder="VD: 482931" autocomplete="off">
-                    <button class="btn btn-primary">Kết chuyến</button>
-                </div>
-                @if($settlement->settlement_code_expires_at)
-                    <p class="small text-muted mb-0 mt-2">Hết hạn mã: {{ $settlement->settlement_code_expires_at->format('d/m/Y H:i') }}</p>
+                @if($settlement->isUnderThreshold())
+                    <form method="POST" action="{{ route('driver.settlements.confirmTransfer', $settlement) }}" class="mt-2">
+                        @csrf
+                        <button class="btn btn-success btn-sm w-100">Đã chuyển phí</button>
+                    </form>
+                @else
+                    @include('partials.transfer-confirm-form', [
+                        'action' => route('driver.settlements.confirmTransfer', $settlement),
+                        'amount' => $settlement->platform_fee_amount,
+                        'amountEditable' => false,
+                        'startLabel' => 'Đã chuyển phí',
+                        'confirmLabel' => 'Xác nhận',
+                        'formId' => 'settlement-transfer-' . $settlement->id,
+                        'qrElementId' => $feeQrId,
+                        'openRefStep' => (bool) old('transfer_ref') || $errors->has('transfer_ref'),
+                    ])
                 @endif
-            </form>
+            @endif
+        </div>
 
-        @endif
+    @elseif($currentKey === 'code' && $settlement && $phase === 'enter_settle_code')
+        <form method="POST" action="{{ route('driver.settlements.settle', $settlement) }}">
+            @csrf
+            <label class="form-label small mb-1">Mã kết chuyến</label>
+            <div class="input-group input-group-sm">
+                <input type="text" name="settlement_code" class="form-control" required maxlength="20"
+                       placeholder="VD: 482931" autocomplete="off">
+                <button class="btn btn-primary">Kết chuyến</button>
+            </div>
+        </form>
 
-    @elseif($phase === 'settled')
-        <p class="small text-success mb-0 fw-semibold">✓ Chuyến đã kết xong</p>
-
-    @else
-        <p class="small text-muted mb-0">Không có thao tác.</p>
+    @elseif($currentKey === 'upcoming' && in_array($phase, ['upcoming', 'active'], true))
+        <p class="small text-muted mb-0">Chuẩn bị khởi hành theo giờ trên vé.</p>
     @endif
 </div>

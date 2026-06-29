@@ -6,8 +6,11 @@
 
 @section('content')
 @php
-    $pendingCount = $pendingRequests->count();
+    $pendingGroups = $pendingGroups ?? collect();
+    $pendingPassengerCount = $pendingPassengerCount ?? $pendingGroups->sum(fn (array $group): int => ($group['passengers'] ?? collect())->count());
+    $pendingCount = $pendingPassengerCount;
     $wallet = $driverWallet;
+    $walletHistory = $walletHistory ?? collect();
     $tripSchedules = $tripSchedules ?? collect();
     $tripActionCount = $tripActionCount ?? 0;
     $revenueStats = $revenueStats ?? ['day' => 0, 'week' => 0];
@@ -23,7 +26,7 @@
     <div class="driver-greeting mb-2">
         Xin chào <strong>{{ $user->name }}</strong>
         @if($profile->driver_code)
-            · <strong>{{ $profile->driver_code }}</strong>
+            <span class="driver-meta-code ms-1">{{ $profile->driver_code }}</span>
         @endif
     </div>
     @endif
@@ -53,7 +56,7 @@
         'prefix' => 'driver-main',
         'activeKey' => $driverDefaultTab,
         'tabs' => [
-            ['key' => 'requests', 'label' => 'Yêu cầu', 'badge' => $pendingCount, 'hot' => $pendingCount > 0],
+            ['key' => 'requests', 'label' => 'Tìm chuyến', 'badge' => $pendingCount, 'hot' => $pendingCount > 0],
             ['key' => 'trips', 'label' => 'Xem chuyến', 'badge' => $tripActionCount, 'hot' => $tripActionCount > 0],
             ['key' => 'deposit', 'label' => 'Ví'],
         ],
@@ -64,7 +67,7 @@
         <div class="driver-section-head driver-section-head--tools">
             <button type="button" class="btn btn-outline-secondary btn-sm" id="driver-refresh-btn">↻ Dò chuyến</button>
         </div>
-        @if($pendingRequests->isEmpty())
+        @if($pendingGroups->isEmpty())
             <div class="driver-empty" id="no-pending-msg">
                 Không có yêu cầu.
                 <span class="driver-empty-hint d-block mt-1">Chia sẻ QR đặt vé để nhận đơn.</span>
@@ -72,10 +75,16 @@
             <div class="d-none flex-column gap-3" id="pending-requests-list"></div>
         @else
             <div class="d-flex flex-column gap-3" id="pending-requests-list">
-                @foreach($pendingRequests as $req)
-                    @include('partials.driver-trip-request-card', ['req' => $req, 'walletBlockReason' => $walletBlockReason ?? null])
+                @foreach($pendingGroups as $group)
+                    @include('partials.driver-trip-request-card', [
+                        'req' => $group['primary'],
+                        'schedule' => $group['schedule'],
+                        'passengers' => $group['passengers'],
+                        'walletBlockReason' => $walletBlockReason ?? null,
+                    ])
                 @endforeach
             </div>
+            @include('partials.pagination', ['paginator' => $pendingGroups])
         @endif
     </section>
     @include('partials.screen-tab-pane-end')
@@ -83,20 +92,28 @@
     @include('partials.screen-tab-pane', ['prefix' => 'driver-main', 'key' => 'trips', 'active' => $driverDefaultTab === 'trips'])
     <section class="driver-section" id="driver-section-trips">
         @if($tripSchedules->isEmpty())
-            <div class="driver-empty">Chưa có chuyến trong tuần này.</div>
+            <div class="driver-empty">Chưa có chuyến sắp chạy.</div>
         @else
-            <div class="d-flex flex-column gap-3">
+            <div class="driver-trips-list">
                 @foreach($tripSchedules as $schedule)
-                    @include('partials.driver-schedule-card', ['schedule' => $schedule, 'showActions' => true])
+                    @include('partials.driver-schedule-card', [
+                        'schedule' => $schedule,
+                        'showActions' => true,
+                    ])
                 @endforeach
             </div>
+            @include('partials.pagination', ['paginator' => $tripSchedules])
         @endif
     </section>
     @include('partials.screen-tab-pane-end')
 
     @include('partials.screen-tab-pane', ['prefix' => 'driver-main', 'key' => 'deposit', 'active' => $driverDefaultTab === 'deposit'])
     <section class="driver-section" id="driver-section-deposit">
-        @include('partials.driver-tab-deposit', ['wallet' => $wallet, 'revenueStats' => $revenueStats])
+        @include('partials.driver-tab-deposit', [
+            'wallet' => $wallet,
+            'revenueStats' => $revenueStats,
+            'walletHistory' => $walletHistory ?? collect(),
+        ])
     </section>
     @include('partials.screen-tab-pane-end')
 
@@ -106,6 +123,7 @@
 
 @push('scripts')
 <script src="{{ asset('js/driver-transfer-form.js') }}?v={{ filemtime(public_path('js/driver-transfer-form.js')) }}"></script>
+<script src="{{ asset('js/driver-wallet-deposit.js') }}?v={{ filemtime(public_path('js/driver-wallet-deposit.js')) }}"></script>
 <script>
 (function () {
     var syncUrl = @json(route('driver.liveSync'));
@@ -117,50 +135,66 @@
         return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
+    function renderPassenger(passenger) {
+        var modeBadge = passenger.booking_mode_key === 'whole_car' ? 'gold' : 'info';
+        var html = '<div class="driver-passenger-item mb-2 pb-2 border-bottom">';
+        html += '<div class="mb-1">';
+        if (passenger.passenger_name) {
+            html += '<strong>' + escapeHtml(passenger.passenger_name) + '</strong> ';
+        }
+        if (passenger.booking_mode) {
+            html += '<span class="status-pill status-pill--' + modeBadge + ' ms-1">' + escapeHtml(passenger.booking_mode) + '</span>';
+        }
+        html += '</div>';
+        if (passenger.pickup) {
+            html += '<div class="text-muted small">📍 Điểm đón cụ thể: <strong>' + escapeHtml(passenger.pickup) + '</strong></div>';
+        }
+        if (passenger.dropoff) {
+            html += '<div class="text-muted small">🏁 Điểm trả cụ thể: <strong>' + escapeHtml(passenger.dropoff) + '</strong></div>';
+        }
+        if (passenger.seats_label) {
+            html += '<div class="text-muted small">' + escapeHtml(passenger.seats_label) + '</div>';
+        }
+        if (passenger.notes) {
+            html += '<div class="text-muted small">📝 ' + escapeHtml(passenger.notes) + '</div>';
+        }
+        html += '</div>';
+        return html;
+    }
+
     function renderPending(req) {
-        var modeBadge = req.booking_mode_key === 'whole_car' ? 'primary' : 'info text-dark';
+        var passengers = Array.isArray(req.passengers) ? req.passengers : [];
         var details = '';
-        if (req.passenger_name || req.booking_mode) {
-            details += '<div class="mb-2">';
-            if (req.passenger_name) {
-                details += '<strong>' + escapeHtml(req.passenger_name) + '</strong> ';
-            }
-            if (req.booking_mode) {
-                details += '<span class="badge bg-' + modeBadge + ' ms-1">' + escapeHtml(req.booking_mode) + '</span>';
-            }
+        if (passengers.length) {
+            details += '<div class="driver-passenger-list">';
+            passengers.forEach(function (passenger, index) {
+                var block = renderPassenger(passenger);
+                if (index === passengers.length - 1) {
+                    block = block.replace(' mb-2 pb-2 border-bottom', '');
+                }
+                details += block;
+            });
             details += '</div>';
-        }
-        if (req.pickup) {
-            details += '<div class="small">📍 Điểm đón cụ thể: <strong>' + escapeHtml(req.pickup) + '</strong></div>';
-        }
-        if (req.dropoff) {
-            details += '<div class="small">🏁 Điểm trả cụ thể: <strong>' + escapeHtml(req.dropoff) + '</strong></div>';
-        }
-        if (req.seats_label) {
-            details += '<div class="text-muted small mt-1">' + escapeHtml(req.seats_label) + '</div>';
-        }
-        if (req.notes) {
-            details += '<div class="text-muted small mt-1">📝 ' + escapeHtml(req.notes) + '</div>';
-        }
-        if (req.trip_total) {
-            details += '<div class="driver-trip-total mt-2">Tổng chuyến: <strong>' + escapeHtml(req.trip_total) + ' đ</strong></div>';
-        }
-        if (!details) {
+            if (req.trip_total) {
+                details += '<div class="driver-trip-total border-top pt-2 mt-2">Tổng chuyến: <strong>' + escapeHtml(req.trip_total) + ' đ</strong></div>';
+            }
+        } else {
             details = '<p class="text-muted small mb-0">Chưa có chi tiết hành khách.</p>';
         }
-        var expireHint = req.expires_in_label
-            ? '<div class="meta text-warning">Còn ' + escapeHtml(req.expires_in_label) + ' để nhận</div>'
+        var expireHint = '';
+        var passengerHint = req.passenger_count > 1
+            ? '<div class="meta">' + escapeHtml(String(req.passenger_count)) + ' khách ghép</div>'
             : '';
         var buttonsDisabled = walletBlocked ? ' disabled' : '';
         var metaLine = req.meta_label || req.departure_time || '';
         var tripCodeLine = req.trip_code
-            ? '<div class="meta driver-schedule-trip-code">Mã chuyến · <code class="driver-trip-code">' + escapeHtml(req.trip_code) + '</code></div>'
+            ? '<div class="meta driver-schedule-trip-code">Mã chuyến: <code class="driver-trip-code">' + escapeHtml(req.trip_code) + '</code></div>'
             : '';
         return '<div class="driver-request-card" data-request-id="' + escapeHtml(String(req.id)) + '">' +
             '<div class="driver-card-top"><div>' +
             '<div class="route">' + escapeHtml(req.route) + '</div>' +
-            '<div class="meta">' + escapeHtml(metaLine) + '</div>' + tripCodeLine + expireHint + '</div>' +
-            '<div class="driver-card-top-aside text-end"><span class="badge bg-warning text-dark">Cuốc mới</span></div></div>' +
+            '<div class="meta">' + escapeHtml(metaLine) + '</div>' + tripCodeLine + passengerHint + expireHint + '</div>' +
+            '<div class="driver-card-top-aside text-end"><span class="status-pill status-pill--accent">Cuốc mới</span></div></div>' +
             '<div class="driver-card-body">' + details + '</div>' +
             '<div class="driver-card-actions d-flex gap-2 flex-wrap justify-content-end">' +
             '<form method="POST" action="' + escapeHtml(req.accept_url) + '">' +

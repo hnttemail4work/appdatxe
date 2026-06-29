@@ -88,6 +88,7 @@ if (! $viewOnly && $driver->isOperational()) {
             'driver' => $driver,
             'driverWallet' => $driverWallet,
             'pendingDeposits' => $pendingDeposits ?? collect(),
+            'walletHistory' => $walletHistory ?? collect(),
         ])
         @include('partials.screen-tab-pane-end')
         @endif
