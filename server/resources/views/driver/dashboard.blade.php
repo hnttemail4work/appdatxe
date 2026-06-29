@@ -146,11 +146,14 @@
             html += '<span class="status-pill status-pill--' + modeBadge + ' ms-1">' + escapeHtml(passenger.booking_mode) + '</span>';
         }
         html += '</div>';
+        if (passenger.pickup_time) {
+            html += '<div class="text-muted small">🕐 Giờ đón: <strong>' + escapeHtml(passenger.pickup_time) + '</strong></div>';
+        }
         if (passenger.pickup) {
-            html += '<div class="text-muted small">📍 Điểm đón cụ thể: <strong>' + escapeHtml(passenger.pickup) + '</strong></div>';
+            html += '<div class="text-muted small">📍 Địa chỉ đón: <strong>' + escapeHtml(passenger.pickup) + '</strong></div>';
         }
         if (passenger.dropoff) {
-            html += '<div class="text-muted small">🏁 Điểm trả cụ thể: <strong>' + escapeHtml(passenger.dropoff) + '</strong></div>';
+            html += '<div class="text-muted small">🏁 Địa chỉ trả: <strong>' + escapeHtml(passenger.dropoff) + '</strong></div>';
         }
         if (passenger.seats_label) {
             html += '<div class="text-muted small">' + escapeHtml(passenger.seats_label) + '</div>';

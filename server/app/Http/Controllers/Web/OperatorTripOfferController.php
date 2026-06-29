@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Controller;
 use App\Models\ScheduleTemplate;
 use App\Services\TripOfferService;
+use App\Services\TripPricingService;
 use App\Support\PageList;
 use App\Support\SouthernProvinces;
 use App\Support\VehicleCapacityOptions;
@@ -15,8 +16,10 @@ use InvalidArgumentException;
 
 class OperatorTripOfferController extends Controller
 {
-    public function __construct(private readonly TripOfferService $offers)
-    {
+    public function __construct(
+        private readonly TripOfferService $offers,
+        private readonly TripPricingService $pricing,
+    ) {
     }
 
     public function create(Request $request)
@@ -68,6 +71,24 @@ class OperatorTripOfferController extends Controller
         return $this->persist($request, $scheduleTemplate);
     }
 
+    public function quote(Request $request)
+    {
+        $request->validate([
+            'departure'   => ['required', 'string', SouthernProvinces::inRule()],
+            'destination' => ['required', 'string', 'different:departure', SouthernProvinces::inRule()],
+            'seats'       => ['required', 'integer', Rule::in(VehicleCapacityOptions::STANDARD)],
+        ]);
+
+        $distance = \App\Support\RouteDistanceCatalog::resolveKm(
+            $request->input('departure'),
+            $request->input('destination'),
+        );
+
+        return response()->json(
+            $this->pricing->suggestOfferPrices($distance, (int) $request->input('seats')),
+        );
+    }
+
     public function destroy(ScheduleTemplate $scheduleTemplate)
     {
         try {
@@ -94,7 +115,7 @@ class OperatorTripOfferController extends Controller
             'departure'             => ['required', 'string', SouthernProvinces::inRule()],
             'destination'           => ['required', 'string', 'different:departure', SouthernProvinces::inRule()],
             'departure_time'        => ['required', 'date_format:H:i'],
-            'expected_arrival_time' => ['required', 'date_format:H:i'],
+            'expected_arrival_time' => ['nullable', 'date_format:H:i'],
             'seats'                 => ['required', 'integer', Rule::in(VehicleCapacityOptions::STANDARD)],
             'whole_car_one_way'     => ['required', 'integer', 'min:10000'],
             'seat_one_way'          => ['required', 'integer', 'min:10000'],
@@ -152,8 +173,9 @@ class OperatorTripOfferController extends Controller
             'formMethod'      => $editingTemplate ? 'PUT' : 'POST',
             'formData'        => $formData ?? [
                 'route'                 => null,
-                'departure_time'        => old('departure_time', ''),
+                'departure_time'        => old('departure_time', '06:00'),
                 'expected_arrival_time' => old('expected_arrival_time', ''),
+                'distance_km'           => old('distance_km', ''),
                 'vehicle'               => [
                     'seats'             => old('seats', ''),
                     'whole_car_one_way' => old('whole_car_one_way', ''),
@@ -168,6 +190,7 @@ class OperatorTripOfferController extends Controller
                 request(),
                 'offers_page',
             ),
+            'quoteUrl'        => route('operator.tripOffers.quote'),
         ];
     }
 
@@ -190,7 +213,6 @@ class OperatorTripOfferController extends Controller
             'destination.required'           => 'Vui lòng chọn điểm đến.',
             'destination.different'          => 'Điểm đến phải khác điểm đi.',
             'departure_time.required'        => 'Vui lòng nhập giờ khởi hành.',
-            'expected_arrival_time.required' => 'Vui lòng nhập giờ dự kiến đến.',
             'seats.required'                 => 'Vui lòng chọn số chỗ.',
             'seats.in'                       => 'Số chỗ không hợp lệ.',
             'whole_car_one_way.required'     => 'Vui lòng nhập giá cả xe một chiều.',

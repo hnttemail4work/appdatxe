@@ -14,7 +14,6 @@
     window.__seatPicks = window.__seatPicks || {};
     var activeTemplateId = null;
     var activeRoute = '';
-    var activeDepartureTime = '';
     var activeSelectedCapacity = 0;
     var activeCapacity = 0;
     var activeOccupied = {};
@@ -248,7 +247,7 @@
         if (!step1 || !window.FormFieldValidation) {
             return true;
         }
-        return FormFieldValidation.validateFirst(step1);
+        return FormFieldValidation.validateFirst(step1) && validatePickupTimeField();
     }
 
     function validateStep2Form() {
@@ -257,6 +256,72 @@
             return true;
         }
         return FormFieldValidation.validateFirst(step2);
+    }
+
+    function parseViTimeTo24h(raw) {
+        var s = String(raw || '').trim();
+        if (s === '') {
+            return '';
+        }
+        var m = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(SA|CH|PM|sáng|sang|chiều|chieu|tối|toi)?\s*$/iu);
+        if (!m) {
+            return normalizeTime24h(s);
+        }
+        var hour = parseInt(m[1], 10);
+        var minute = parseInt(m[2], 10);
+        if (isNaN(hour) || isNaN(minute) || minute > 59 || hour > 23) {
+            return '';
+        }
+        var suffix = (m[3] || 'SA').toLowerCase();
+        if (suffix === 'pm' || suffix === 'ch' || suffix === 'chiều' || suffix === 'chieu') {
+            if (hour < 12) {
+                hour += 12;
+            }
+        } else if (suffix === 'sa' || suffix === 'sáng' || suffix === 'sang') {
+            if (hour === 12) {
+                hour = 0;
+            }
+        } else if (suffix === 'tối' || suffix === 'toi') {
+            if (hour < 12) {
+                hour += 12;
+            }
+            if (hour < 18) {
+                hour += 12;
+            }
+        }
+        if (hour > 23) {
+            return '';
+        }
+        return String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0');
+    }
+
+    function formatViPickupTime(raw) {
+        var clock = parseViTimeTo24h(raw);
+        if (!clock) {
+            return String(raw || '').trim();
+        }
+        var parts = clock.split(':');
+        var hour = parseInt(parts[0], 10);
+        var minute = parts[1];
+        var period = 'SA';
+        var displayHour = hour;
+        if (hour === 0) {
+            displayHour = 12;
+            period = 'SA';
+        } else if (hour < 12) {
+            displayHour = hour;
+            period = 'SA';
+        } else if (hour === 12) {
+            displayHour = 12;
+            period = 'CH';
+        } else if (hour < 18) {
+            displayHour = hour - 12;
+            period = 'CH';
+        } else {
+            displayHour = hour > 12 ? hour - 12 : hour;
+            period = 'Tối';
+        }
+        return String(displayHour).padStart(2, '0') + ':' + minute + ' ' + period;
     }
 
     function normalizeTime24h(raw) {
@@ -278,25 +343,53 @@
         return s;
     }
 
-    function normalizePreferredTimeField() {
-        var input = document.getElementById('modal-preferred-time');
+    function normalizePickupTimeField() {
+        var input = document.getElementById('modal-pickup-time');
         if (!input) {
             return '';
         }
-        var normalized = normalizeTime24h(input.value);
-        if (normalized) {
-            input.value = normalized;
+        var formatted = formatViPickupTime(input.value);
+        if (formatted) {
+            input.value = formatted;
         }
-        return input.value;
+        return parseViTimeTo24h(input.value);
     }
 
-    function setPreferredTimeFromValue(value) {
-        var input = document.getElementById('modal-preferred-time');
+    function setPickupTimeForSubmit() {
+        var input = document.getElementById('modal-pickup-time');
+        if (!input) {
+            return '';
+        }
+        var clock24 = parseViTimeTo24h(input.value);
+        if (clock24) {
+            input.value = clock24;
+        }
+        return clock24;
+    }
+
+    function setDefaultPickupTime() {
+        var input = document.getElementById('modal-pickup-time');
         if (!input) {
             return;
         }
-        var normalized = normalizeTime24h(value);
-        input.value = normalized || String(value || '').trim();
+        input.value = '06:00 SA';
+    }
+
+    function validatePickupTimeField() {
+        var input = document.getElementById('modal-pickup-time');
+        if (!input) {
+            return true;
+        }
+        var pickup = parseViTimeTo24h(input.value);
+        if (!pickup) {
+            if (window.AppDialog) {
+                window.AppDialog.alert('Vui lòng nhập giờ đón hợp lệ (ví dụ: 06:00 SA).');
+            }
+            input.focus();
+            return false;
+        }
+        input.value = formatViPickupTime(pickup);
+        return true;
     }
 
     function focusPassengerNameField() {
@@ -394,8 +487,6 @@
         var locked = getDriverLockedCapacity();
         if (locked > 0 && presetDriver) {
             label = presetDriver.vehicle_label || (locked + ' chỗ');
-        } else if (tpl && tpl.trip_meta_label) {
-            label = tpl.trip_meta_label;
         } else {
             label = vehicleLabelForGuest(activeCapacity, tpl);
         }
@@ -415,7 +506,7 @@
         } else {
             activeCapacity = parseInt(template.capacity, 10) || 0;
             setSelectedCapacity(activeCapacity);
-            activeVehicleLabel = template.trip_meta_label || template.vehicle_label || (activeCapacity + ' chỗ');
+            activeVehicleLabel = template.vehicle_label || (activeCapacity + ' chỗ');
         }
         syncActiveUnitPriceFromTemplate(template);
 
@@ -429,10 +520,7 @@
             priceUnit.textContent = formatMoney(activeUnitPrice);
         }
 
-        if (template.reference_time) {
-            activeDepartureTime = template.reference_time;
-            setPreferredTimeFromValue(template.reference_time);
-        }
+        setDefaultPickupTime();
 
         if (!window.__seatPicks[activeTemplateId]) {
             window.__seatPicks[activeTemplateId] = new Set();
@@ -473,10 +561,6 @@
             template_id: activeTemplateId,
             service_date: dateInput.value,
         });
-        var prefTime = document.getElementById('modal-preferred-time');
-        if (prefTime && prefTime.value) {
-            params.set('preferred_time', prefTime.value);
-        }
         if (presetDriver && presetDriver.code) {
             params.set('driver_code', presetDriver.code);
         }
@@ -630,7 +714,6 @@
 
             var routeText = btn.dataset.route || '';
             activeRoute = routeText;
-            activeDepartureTime = btn.dataset.referenceTime || '';
             var serviceDate = btn.dataset.serviceDate || getFilterServiceDate();
 
             document.getElementById('modal-route').textContent = routeText;
@@ -653,10 +736,8 @@
             var template = findTemplate(id);
             if (template) {
                 applyTemplate(template);
-            }
-
-            if (btn.dataset.referenceTime) {
-                setPreferredTimeFromValue(btn.dataset.referenceTime);
+            } else {
+                setDefaultPickupTime();
             }
 
             startSeatPolling();
@@ -678,19 +759,18 @@
         });
     }
 
-    var prefTimeInput = document.getElementById('modal-preferred-time');
-    if (prefTimeInput) {
-        prefTimeInput.addEventListener('blur', normalizePreferredTimeField);
-        prefTimeInput.addEventListener('change', function () {
-            normalizePreferredTimeField();
+    var pickupTimeInput = document.getElementById('modal-pickup-time');
+    if (pickupTimeInput) {
+        if (pickupTimeInput.value) {
+            pickupTimeInput.value = formatViPickupTime(pickupTimeInput.value);
+        }
+        pickupTimeInput.addEventListener('blur', function () {
+            normalizePickupTimeField();
             onTripContextChange();
         });
-        prefTimeInput.addEventListener('input', function () {
-            var raw = prefTimeInput.value.replace(/[^\d:]/g, '');
-            if (raw.length === 4 && raw.indexOf(':') < 0) {
-                raw = raw.slice(0, 2) + ':' + raw.slice(2);
-            }
-            prefTimeInput.value = raw;
+        pickupTimeInput.addEventListener('change', function () {
+            normalizePickupTimeField();
+            onTripContextChange();
         });
     }
 
@@ -791,8 +871,6 @@
             template_id: activeTemplateId,
             service_date: dateInput.value,
         });
-        var prefTime = document.getElementById('modal-preferred-time');
-        if (prefTime && prefTime.value) params.set('preferred_time', prefTime.value);
         if (presetDriver && presetDriver.code) params.set('driver_code', presetDriver.code);
 
         fetch(seatAvailabilityUrl + '?' + params.toString(), { headers: { Accept: 'application/json' } })
@@ -886,6 +964,7 @@
                 }
 
                 if (submitBtn) submitBtn.textContent = 'Đang gửi...';
+                setPickupTimeForSubmit();
                 allowNativeSubmit = true;
                 if (typeof bookingForm.requestSubmit === 'function') {
                     bookingForm.requestSubmit();
@@ -915,7 +994,6 @@
             whole_car_round_trip_price: trip.whole_car_round_trip_price || null,
             seat_round_trip_price: trip.seat_round_trip_price || null,
             round_trip_price: trip.round_trip_price || trip.price_raw,
-            reference_time: trip.reference_clock || trip.reference_time,
             service_date: trip.service_date,
             pickup_default: trip.pickup_default,
             dropoff_default: trip.dropoff_default,
@@ -942,10 +1020,6 @@
                 thumbWrap.innerHTML = '<img src="' + trip.vehicle_photo_url + '" alt="" class="trip-vehicle-photo" loading="lazy" decoding="async">';
             }
         }
-        var seatsHint = card.querySelector('.trip-seats-hint');
-        if (seatsHint && trip.trip_meta_label) {
-            seatsHint.textContent = trip.trip_meta_label;
-        }
         var priceAmounts = card.querySelectorAll('.trip-price-amount');
         if (priceAmounts.length && trip.price) {
             priceAmounts.forEach(function (el) {
@@ -971,9 +1045,6 @@
             btn.dataset.dateLabel = trip.date_label || btn.dataset.dateLabel;
             btn.dataset.weekday = trip.weekday || btn.dataset.weekday;
             btn.dataset.dateShort = trip.date_short || btn.dataset.dateShort;
-            btn.dataset.referenceTime = trip.reference_clock || trip.reference_time || btn.dataset.referenceTime;
-            btn.dataset.arrivalTime = trip.arrival_time || btn.dataset.arrivalTime;
-            btn.dataset.timeRange = trip.time_range || btn.dataset.timeRange;
             btn.dataset.price = trip.price_raw || btn.dataset.price;
             btn.dataset.oneWayPrice = trip.one_way_price || trip.price_raw || btn.dataset.oneWayPrice;
             btn.dataset.roundTripPrice = trip.round_trip_price || btn.dataset.roundTripPrice;
@@ -990,7 +1061,7 @@
         }
 
         if (activeTemplateId && String(activeTemplateId) === String(trip.id)) {
-            activeVehicleLabel = trip.trip_meta_label || trip.vehicle_label || activeVehicleLabel;
+            activeVehicleLabel = trip.vehicle_label || activeVehicleLabel;
             updateVehicleDisplay();
             if (trip.capacity != null && trip.seats_free != null) {
                 setPartialBookingFromCard(trip.capacity, trip.seats_free);

@@ -46,7 +46,7 @@ class ResetTestTripsSeeder extends Seeder
             ScheduleTemplate::query()->create([
                 'route_id'       => $routes[0]->id,
                 'vehicle_id'     => $vehicle->id,
-                'departure_time' => '07:00:00',
+                'departure_time' => '06:00:00',
                 'driver_id'      => null,
                 'driver_name'    => 'Chờ khách đặt',
                 'status'         => 'active',

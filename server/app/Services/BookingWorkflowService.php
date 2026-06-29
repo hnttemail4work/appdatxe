@@ -28,7 +28,7 @@ class BookingWorkflowService
         string $passengerName,
         array $seatNumbers,
         string $serviceDate,
-        ?string $preferredTime,
+        ?string $pickupTime,
         ?string $pickupAddress,
         ?string $pickupDetail,
         ?string $dropoffAddress,
@@ -42,7 +42,6 @@ class BookingWorkflowService
         $schedule = $this->scheduleLifecycle->resolveScheduleForBooking(
             $template,
             $serviceDate,
-            $preferredTime,
         );
 
         $pickup = $pickupAddress ?: $template->route->departure;
@@ -53,6 +52,7 @@ class BookingWorkflowService
             return $this->refreshPendingBooking(
                 $existing,
                 $passengerName,
+                $pickupTime,
                 $pickup,
                 $pickupDetail,
                 $dropoff,
@@ -75,6 +75,7 @@ class BookingWorkflowService
             $notes,
             $tripType,
             $bookingMode,
+            $pickupTime,
         );
     }
 
@@ -90,8 +91,9 @@ class BookingWorkflowService
         ?string $notes = null,
         string $tripType = 'one_way',
         string $bookingMode = 'shared',
+        ?string $pickupTime = null,
     ): Booking {
-        return DB::transaction(function () use ($schedule, $contactPhone, $passengerName, $seatNumbers, $pickupAddress, $pickupDetail, $dropoffAddress, $dropoffDetail, $notes, $tripType, $bookingMode): Booking {
+        return DB::transaction(function () use ($schedule, $contactPhone, $passengerName, $seatNumbers, $pickupAddress, $pickupDetail, $dropoffAddress, $dropoffDetail, $notes, $tripType, $bookingMode, $pickupTime): Booking {
             $this->scheduleLifecycle->sync();
 
             $schedule = Schedule::query()
@@ -136,6 +138,7 @@ class BookingWorkflowService
                 'booking_status'    => 'pending',
                 'pickup_address'    => $pickupAddress,
                 'pickup_detail'     => $pickupDetail ? trim($pickupDetail) : null,
+                'pickup_time'       => $pickupTime ? \App\Support\DepartureTimeDisplay::storageValue($pickupTime) : null,
                 'dropoff_address'   => $dropoffAddress,
                 'dropoff_detail'    => $dropoffDetail ? trim($dropoffDetail) : null,
                 'notes'             => $notes,
@@ -326,6 +329,7 @@ class BookingWorkflowService
     private function refreshPendingBooking(
         Booking $booking,
         string $passengerName,
+        ?string $pickupTime,
         ?string $pickupAddress,
         ?string $pickupDetail,
         ?string $dropoffAddress,
@@ -349,6 +353,7 @@ class BookingWorkflowService
             'passenger_name'  => trim($passengerName),
             'pickup_address'  => $pickupAddress,
             'pickup_detail'   => $pickupDetail ? trim($pickupDetail) : null,
+            'pickup_time'     => $pickupTime ? \App\Support\DepartureTimeDisplay::storageValue($pickupTime) : null,
             'dropoff_address' => $dropoffAddress,
             'dropoff_detail'  => $dropoffDetail ? trim($dropoffDetail) : null,
             'notes'           => $notes,

@@ -3,7 +3,6 @@
 @section('content')
 @php
 use Carbon\Carbon;
-use App\Support\DepartureTimeDisplay;
 $basePrices = [];
 $hasDriverCode = ($driverCode ?? '') !== '';
 $filterServiceDate = $filters['service_date'] ?? now()->addDay()->toDateString();
@@ -36,13 +35,12 @@ $bookingRestoreModal = $errors->any() && old('template_id')
     : null;
 
 $pricingService = app(\App\Services\TripPricingService::class);
-$tripListingService = app(\App\Services\TripListingService::class);
 
 $offerItems = ($offers instanceof \Illuminate\Contracts\Pagination\Paginator)
     ? collect($offers->items())
     : collect($offers ?? []);
 
-$bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, $pricingService, $tripListingService) {
+$bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, $pricingService) {
     $schedule = $offer->scheduleInfoForDate($filterServiceDate);
     $tripQuote = $pricingService->quote($offer, 'one_way', null, null, 'shared');
     $wholeQuote = $pricingService->quote($offer, 'one_way', null, null, 'whole_car');
@@ -60,18 +58,12 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
         'vehicle_photo' => \App\Support\VehicleDisplay::photoFromVehicle($offer->vehicle),
         'vehicle_type' => $offer->vehicle->type ?? 'sedan',
         'vehicle_label' => \App\Support\VehicleDisplay::labelFromVehicle($offer->vehicle),
-        'trip_meta_label' => $tripListingService->offerMetaLabel(
-            $offer,
-            $filterServiceDate,
-            DepartureTimeDisplay::normalizeForClock($offer->departure_time),
-        ),
         'price' => $tripQuote['shared_seat_price'],
         'one_way_price' => $tripQuote['one_way_seat_price'],
         'whole_car_price' => $wholeQuote['one_way_whole_car_price'],
         'whole_car_round_trip_price' => $offer->whole_car_round_trip_price !== null ? (int) $offer->whole_car_round_trip_price : null,
         'seat_round_trip_price' => $offer->seat_round_trip_price !== null ? (int) $offer->seat_round_trip_price : null,
         'round_trip_price' => $roundQuote['shared_seat_price'],
-        'reference_time' => DepartureTimeDisplay::normalizeForClock($offer->departure_time),
         'service_date' => $schedule['service_date'] ?? $filterServiceDate,
         'pickup_default' => $offer->route->departure,
         'dropoff_default' => $offer->route->destination,
@@ -206,8 +198,7 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
             $seatRange = $pricingService->seatPriceRangeForTemplate($offer);
             $listPriceLabel = $pricingService->formatSeatRange($seatRange['min'], $seatRange['max']);
             $roundPrice = $roundQuote['shared_seat_price'];
-            $departureClock = DepartureTimeDisplay::normalizeForClock($offer->departure_time);
-            $tripMetaLabel = DepartureTimeDisplay::metaLabel($offer->departure_time);
+            $vehicleCapacityLabel = \App\Support\VehicleCapacityOptions::label($capacity);
             $vehiclePhotoUrl = ($hasDriverCode && $driverProfile)
                 ? \App\Support\VehicleDisplay::photoFromDriverProfile($driverProfile)
                 : \App\Support\VehicleDisplay::photoFromVehicle($offer->vehicle);
@@ -236,10 +227,6 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                         <span class="city">{{ $offer->route->destination }}</span>
                     </div>
 
-                    <div class="trip-card-meta">
-                        <span class="trip-meta trip-seats-hint">{{ $tripMetaLabel }}</span>
-                    </div>
-
                     <div class="trip-card-prices trip-card-prices--mobile">
                         <span class="trip-price-inline">
                             <span class="trip-price-amount">{{ $listPriceLabel }}</span><span class="trip-price-unit">/ghế</span>
@@ -260,16 +247,13 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                         data-date-label="{{ $schedule['date_label'] }}"
                         data-weekday="{{ $schedule['weekday'] }}"
                         data-date-short="{{ $schedule['date_short'] }}"
-                        data-reference-time="{{ $departureClock }}"
-                        data-arrival-time="{{ $schedule['arrival_time'] }}"
-                        data-time-range="{{ $schedule['time_range'] }}"
                         data-price="{{ $wholeQuote['one_way_whole_car_price'] }}"
                         data-one-way-price="{{ $tripQuote['one_way_seat_price'] }}"
                         data-whole-car-price="{{ $wholeQuote['one_way_whole_car_price'] }}"
                         data-round-trip-price="{{ $roundPrice }}"
                         data-capacity="{{ $capacity }}"
                         data-vehicle-photo="{{ $vehiclePhotoUrl ?? '' }}"
-                        data-vehicle-label="{{ $tripMetaLabel }}"
+                        data-vehicle-label="{{ $vehicleCapacityLabel }}"
                         data-pickup-default="{{ $offer->route->departure }}"
                         data-dropoff-default="{{ $offer->route->destination }}">
                         Đặt chuyến
@@ -332,19 +316,20 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                                                min="{{ now()->toDateString() }}" value="{{ old('service_date', $filterServiceDate) }}">
                                     </div>
                                     <div class="col-6 col-md-6">
-                                        @include('partials.departure-time-input', [
-                                            'name' => 'preferred_time',
-                                            'id' => 'modal-preferred-time',
-                                            'value' => old('preferred_time', '07:00'),
+                                        @include('partials.vi-pickup-time-input', [
+                                            'name' => 'pickup_time',
+                                            'id' => 'modal-pickup-time',
+                                            'value' => old('pickup_time', '06:00 SA'),
+                                            'label' => 'Giờ đón',
                                         ])
                                     </div>
                                     <input type="hidden" name="pickup_address" id="modal-pickup" value="{{ old('pickup_address') }}">
                                     <input type="hidden" name="dropoff_address" id="modal-dropoff" value="{{ old('dropoff_address') }}">
                                     <div class="col-12">
-                                        <label class="form-label" for="modal-pickup-detail">Điểm đón cụ thể <span class="text-danger">*</span></label>
+                                        <label class="form-label" for="modal-pickup-detail">Địa chỉ đón <span class="text-danger">*</span></label>
                                         <div class="input-group address-map-input-group">
                                             <input type="text" name="pickup_detail" id="modal-pickup-detail" class="form-control" required
-                                                   data-validate-label="Điểm đón cụ thể"
+                                                   data-validate-label="Địa chỉ đón"
                                                    value="{{ old('pickup_detail') }}">
                                             <button type="button" class="btn btn-outline-primary address-map-trigger"
                                                     data-address-map-for="modal-pickup-detail"
@@ -360,7 +345,7 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                                         </div>
                                     </div>
                                     <div class="col-12">
-                                        <label class="form-label" for="modal-dropoff-detail">Điểm trả cụ thể</label>
+                                        <label class="form-label" for="modal-dropoff-detail">Địa chỉ trả</label>
                                         <div class="input-group address-map-input-group">
                                             <input type="text" name="dropoff_detail" id="modal-dropoff-detail" class="form-control"
                                                    value="{{ old('dropoff_detail') }}">

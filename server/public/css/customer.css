@@ -150,7 +150,6 @@ body:has(.customer-page) {
     font-weight: 700;
     font-size: 1.1rem;
 }
-.trip-meta { font-size: .82rem; color: var(--app-text-secondary, #c8c8c8); }
 
 .vehicle-badge {
     display: inline-flex;
@@ -924,18 +923,7 @@ body.modal-open .modal-backdrop.show {
     font-weight: 600;
     color: #334155;
 }
-.trip-time-range {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
 .trip-schedule-icon { font-size: .9rem; line-height: 1; }
-.trip-card-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .5rem;
-    align-items: center;
-}
 .trip-card-side {
     min-width: 9.5rem;
     text-align: right;
@@ -1103,16 +1091,6 @@ body.modal-open .modal-backdrop.show {
     .trip-route-line .arrow {
         font-size: .85rem;
         flex-shrink: 0;
-    }
-
-    .trip-card-meta {
-        margin-top: .15rem !important;
-    }
-
-    .trip-meta {
-        font-size: .72rem;
-        line-height: 1.35;
-        display: block;
     }
 
     .trip-card-side .btn-book {

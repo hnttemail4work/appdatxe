@@ -9,6 +9,7 @@ use App\Services\BookingWorkflowService;
 use App\Services\ScheduleLifecycleService;
 use App\Services\TripListingService;
 use App\Services\TripPricingService;
+use App\Support\DepartureTimeDisplay;
 use App\Support\PlatformFees;
 use App\Support\PageList;
 use App\Support\SouthernProvinces;
@@ -124,7 +125,6 @@ class GuestBookingController extends Controller
         $validated = $request->validate([
             'template_id'      => ['required', 'exists:schedule_templates,id'],
             'service_date'     => ['required', 'date', 'after_or_equal:today'],
-            'preferred_time'   => ['nullable', 'date_format:H:i'],
             'driver_code'      => ['nullable', 'string', 'max:20'],
             'vehicle_capacity' => ['nullable', 'integer', 'min:1', 'max:50'],
         ]);
@@ -149,7 +149,7 @@ class GuestBookingController extends Controller
             'occupied_map' => $this->tripListing->occupiedSeatMapForDate(
                 $template,
                 $validated['service_date'],
-                $validated['preferred_time'] ?? null,
+                null,
             ),
             'capacity'     => $capacity,
         ]);
@@ -184,7 +184,7 @@ class GuestBookingController extends Controller
         $validated = $request->validate([
             'template_id'     => ['required', 'exists:schedule_templates,id'],
             'service_date'    => ['required', 'date', 'after_or_equal:today'],
-            'preferred_time'  => ['nullable', 'date_format:H:i'],
+            'pickup_time'     => ['required', 'string', 'max:20'],
             'passenger_name'  => ['required', 'string', 'max:255'],
             'contact_phone'   => ['required', 'string', 'max:30'],
             'pickup_address'  => ['required', 'string', 'max:255', SouthernProvinces::inRule()],
@@ -204,14 +204,13 @@ class GuestBookingController extends Controller
             ->with(['route', 'vehicle'])
             ->findOrFail($validated['template_id']);
 
-        $preferredTime = trim((string) ($validated['preferred_time'] ?? ''));
-        $preferredTime = $preferredTime !== '' ? $preferredTime : null;
+        $pickupTime = DepartureTimeDisplay::normalizeForClock($validated['pickup_time']);
 
         $bookingMode = $validated['booking_mode'];
         $occupiedMap = $this->tripListing->occupiedSeatMapForDate(
             $template,
             $validated['service_date'],
-            $preferredTime,
+            null,
         );
         $capacity = $template->capacity();
         $freeSeats = collect(range(1, $capacity))
@@ -252,7 +251,7 @@ class GuestBookingController extends Controller
                 $validated['passenger_name'],
                 $seatNumbers,
                 $validated['service_date'],
-                $preferredTime,
+                $pickupTime,
                 $validated['pickup_address'],
                 $validated['pickup_detail'],
                 $validated['dropoff_address'],

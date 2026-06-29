@@ -27,6 +27,20 @@ class PlatformFees
         return (float) ($setting['value'] ?? 15);
     }
 
+    public static function kmRateUnder100(): int
+    {
+        $setting = PlatformSetting::getValue('pricing_km_rate_under_100', ['value' => 13000]);
+
+        return max((int) ($setting['value'] ?? 13000), 0);
+    }
+
+    public static function kmRateOver100(): int
+    {
+        $setting = PlatformSetting::getValue('pricing_km_rate_over_100', ['value' => 10000]);
+
+        return max((int) ($setting['value'] ?? 10000), 0);
+    }
+
     public static function roundTripMultiplier(): float
     {
         $discount = self::roundTripDiscountPercent();

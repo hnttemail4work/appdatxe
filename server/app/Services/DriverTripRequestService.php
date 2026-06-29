@@ -258,6 +258,7 @@ class DriverTripRequestService
             'passenger_name'   => $booking->passenger_name,
             'booking_mode'     => $booking->bookingModeLabel(),
             'booking_mode_key' => $booking->booking_mode ?? 'shared',
+            'pickup_time'      => $booking->pickupTimeLabel(),
             'pickup'           => $booking->driverPickupDetailLabel(),
             'dropoff'          => $booking->driverDropoffDetailLabel(),
             'notes'            => $booking->notes,

@@ -157,7 +157,7 @@ class DatabaseSeeder extends Seeder
 
         $sampleTemplates = [
             'TP.HCM|Vũng Tàu' => [
-                ['vehicle' => $vehicle7, 'time' => '07:00:00'],
+                ['vehicle' => $vehicle7, 'time' => '06:00:00'],
             ],
             'TP.HCM|Đà Lạt' => [
                 ['vehicle' => $vehicle16, 'time' => '20:00:00'],

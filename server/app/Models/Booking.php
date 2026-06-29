@@ -20,6 +20,7 @@ class Booking extends Model
         'booking_status',
         'pickup_address',
         'pickup_detail',
+        'pickup_time',
         'dropoff_address',
         'dropoff_detail',
         'notes',
@@ -86,6 +87,15 @@ class Booking extends Model
         $city = trim((string) $this->pickup_address);
 
         return $city !== '' ? $city : 'liên hệ khách';
+    }
+
+    public function pickupTimeLabel(): ?string
+    {
+        if (! $this->pickup_time) {
+            return null;
+        }
+
+        return \App\Support\DepartureTimeDisplay::label($this->pickup_time);
     }
 
     /** Chỉ chi tiết trả — nếu trống thì báo liên hệ khách. */

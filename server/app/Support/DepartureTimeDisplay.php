@@ -40,7 +40,7 @@ class DepartureTimeDisplay
         return substr($raw, 0, 5);
     }
 
-    /** Giờ hiển thị cho khách, ví dụ «07:00 sáng». */
+    /** Giờ hiển thị cho khách, ví dụ «06:00 sáng». */
     public static function label(mixed $time): string
     {
         $raw = is_string($time) ? trim($time) : null;
@@ -60,11 +60,6 @@ class DepartureTimeDisplay
         $clock = sprintf('%02d:%02d', $hour, $minute);
 
         return $clock . ' ' . self::periodLabel($hour, $suffix);
-    }
-
-    public static function metaLabel(mixed $time): string
-    {
-        return 'Khởi hành ' . self::label($time);
     }
 
     /** @return string H:i:s cho cột time trong DB */

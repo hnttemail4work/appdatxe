@@ -101,11 +101,6 @@ class ScheduleTemplate extends Model
         return (int) ($this->vehicle?->capacity ?? 0);
     }
 
-    public function referenceTimeLabel(): string
-    {
-        return $this->departureAt(now())->format('H:i');
-    }
-
     /** Thông tin lịch chuyến theo ngày khách chọn. */
     public function scheduleInfoForDate(Carbon|string $serviceDate): array
     {

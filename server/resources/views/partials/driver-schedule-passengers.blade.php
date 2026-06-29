@@ -21,8 +21,9 @@ $phase = $schedule->driverWorkflowPhase();
                 <strong>{{ $booking->passenger_name ?: 'Hành khách' }}</strong>
                 <span class="status-pill status-pill--{{ $modeBadge }} ms-1">{{ $booking->bookingModeLabel() }}</span>
             </div>
-            <div class="text-muted small">📍 Điểm đón cụ thể: <strong>{{ $booking->driverPickupDetailLabel() }}</strong></div>
-            <div class="text-muted small">🏁 Điểm trả cụ thể: <strong>{{ $booking->driverDropoffDetailLabel() }}</strong></div>
+            <div class="text-muted small">🕐 Giờ đón: <strong>{{ $booking->pickupTimeLabel() ?? '—' }}</strong></div>
+            <div class="text-muted small">📍 Địa chỉ đón: <strong>{{ $booking->driverPickupDetailLabel() }}</strong></div>
+            <div class="text-muted small">🏁 Địa chỉ trả: <strong>{{ $booking->driverDropoffDetailLabel() }}</strong></div>
             @if(($booking->booking_mode ?? 'shared') === 'shared' && ($label = $booking->seatCountLabel()))
                 <div class="text-muted small">{{ $label }}</div>
             @endif

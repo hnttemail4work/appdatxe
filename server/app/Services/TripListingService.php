@@ -115,16 +115,6 @@ class TripListingService
         return $ranges;
     }
 
-    public function offerMetaLabel(
-        ScheduleTemplate $template,
-        string $serviceDate,
-        ?string $preferredTime = null,
-    ): string {
-        $time = $preferredTime ?: $template->departure_time;
-
-        return DepartureTimeDisplay::metaLabel($time);
-    }
-
     /** @return array<string, mixed> */
     public function serializeOffer(
         ScheduleTemplate $template,
@@ -147,8 +137,6 @@ class TripListingService
             'id'               => $template->id,
             'departure'        => $template->route->departure,
             'destination'      => $template->route->destination,
-            'reference_time'   => $referenceTime,
-            'reference_clock'  => $referenceTime,
             'service_date'     => $schedule['service_date'],
             'weekday'          => $schedule['weekday'],
             'weekday_short'    => $schedule['weekday_short'],
@@ -156,10 +144,6 @@ class TripListingService
             'date_month'       => $schedule['date_month'],
             'date_short'       => $schedule['date_short'],
             'date_label'       => $schedule['date_label'],
-            'departure_time'   => DepartureTimeDisplay::label($template->departure_time),
-            'departure_clock'  => $referenceTime,
-            'arrival_time'     => $schedule['arrival_time'],
-            'time_range'       => $schedule['time_range'],
             'vehicle_type'     => $template->vehicle->type,
             'license_plate'    => $template->vehicle->license_plate,
             'capacity'         => $capacity,
@@ -186,7 +170,6 @@ class TripListingService
             'rate_per_km'      => $quote['rate_per_km'],
             'route_line'       => $template->route->departure . ' → ' . $template->route->destination,
             'vehicle_label'    => \App\Support\VehicleDisplay::labelFromVehicle($template->vehicle),
-            'trip_meta_label'  => $this->offerMetaLabel($template, $hintDate, $referenceTime),
             'vehicle_photo_url' => \App\Support\VehicleDisplay::photoFromVehicle($template->vehicle),
             'pickup_default'   => $template->route->departure,
             'dropoff_default'  => $template->route->destination,

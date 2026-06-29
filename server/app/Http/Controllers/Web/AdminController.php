@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Models\PlatformSetting;
+use App\Models\TripRoute;
 use App\Models\User;
 use App\Services\RegistrationService;
 use App\Services\ScheduleLifecycleService;
-use App\Support\PlatformFees;
 use App\Support\PageList;
+use App\Support\RouteDistanceCatalog;
+use App\Support\PlatformFees;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -34,9 +36,26 @@ class AdminController extends Controller
         $feeSettings = [
             'app_commission'      => PlatformFees::appCommissionPercent(),
             'round_trip_discount' => PlatformFees::roundTripDiscountPercent(),
+            'km_rate_under_100'   => PlatformFees::kmRateUnder100(),
+            'km_rate_over_100'    => PlatformFees::kmRateOver100(),
         ];
 
-        return view('admin.dashboard', compact('operators', 'feeSettings'));
+        $hubRoutes = TripRoute::query()
+            ->where('departure', RouteDistanceCatalog::HUB)
+            ->orderBy('destination')
+            ->get();
+
+        if ($hubRoutes->isEmpty()) {
+            foreach (RouteDistanceCatalog::hubRouteRows() as $row) {
+                $hubRoutes->push(TripRoute::query()->firstOrCreate(
+                    ['departure' => $row['departure'], 'destination' => $row['destination']],
+                    ['base_price' => 0, 'distance_km' => $row['distance_km'], 'is_active' => true],
+                ));
+            }
+            $hubRoutes = $hubRoutes->sortBy('destination')->values();
+        }
+
+        return view('admin.dashboard', compact('operators', 'feeSettings', 'hubRoutes'));
     }
 
     public function storeOperator(Request $request)
@@ -76,6 +95,8 @@ class AdminController extends Controller
         $validated = $request->validate([
             'app_commission'      => ['required', 'numeric', 'min:0', 'max:100'],
             'round_trip_discount' => ['required', 'numeric', 'min:0', 'max:100'],
+            'km_rate_under_100'   => ['required', 'integer', 'min:0'],
+            'km_rate_over_100'    => ['required', 'integer', 'min:0'],
         ]);
 
         PlatformSetting::setValue('app_commission_percentage', [
@@ -90,7 +111,34 @@ class AdminController extends Controller
             'value' => (float) $validated['round_trip_discount'],
         ], 'finance');
 
+        PlatformSetting::setValue('pricing_km_rate_under_100', [
+            'value' => (int) $validated['km_rate_under_100'],
+        ], 'finance');
+
+        PlatformSetting::setValue('pricing_km_rate_over_100', [
+            'value' => (int) $validated['km_rate_over_100'],
+        ], 'finance');
+
         return redirect()->route('admin.dashboard', ['tab' => 'fees'])
-            ->with('success', 'Đã lưu cài đặt phí.');
+            ->with('success', 'Đã lưu cài đặt phí và bảng giá.');
+    }
+
+    public function updateRouteDistances(Request $request)
+    {
+        $validated = $request->validate([
+            'routes'               => ['required', 'array'],
+            'routes.*.id'          => ['required', 'integer', 'exists:routes,id'],
+            'routes.*.distance_km' => ['required', 'integer', 'min:1', 'max:2000'],
+        ]);
+
+        foreach ($validated['routes'] as $row) {
+            TripRoute::query()
+                ->where('id', $row['id'])
+                ->where('departure', RouteDistanceCatalog::HUB)
+                ->update(['distance_km' => (int) $row['distance_km']]);
+        }
+
+        return redirect()->route('admin.dashboard', ['tab' => 'routes'])
+            ->with('success', 'Đã lưu quãng đường từ TP.HCM.');
     }
 }

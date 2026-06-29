@@ -92,6 +92,7 @@ Route::middleware(['auth', 'role:operator'])->group(function () {
     Route::post('operator/drivers/{driverProfile}/photos', [DriverController::class, 'uploadPhotos'])->name('operator.drivers.photos');
     Route::delete('operator/drivers/{driverProfile}',  [DriverController::class, 'destroy'])->name('operator.drivers.destroy');
 
+    Route::get('operator/dat-chuyen/quote', [OperatorTripOfferController::class, 'quote'])->name('operator.tripOffers.quote');
     Route::get('operator/dat-chuyen', [OperatorTripOfferController::class, 'create'])->name('operator.tripOffers.create');
     Route::post('operator/dat-chuyen', [OperatorTripOfferController::class, 'store'])->name('operator.tripOffers.store');
     Route::get('operator/dat-chuyen/{scheduleTemplate}/chinh-sua', [OperatorTripOfferController::class, 'edit'])->name('operator.tripOffers.edit');
@@ -109,5 +110,6 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::get('admin/dashboard',              [AdminController::class, 'dashboard'])->name('admin.dashboard');
     Route::post('admin/operators',            [AdminController::class, 'storeOperator'])->name('admin.operators.store');
     Route::post('admin/fee-settings',         [AdminController::class, 'updateFeeSettings'])->name('admin.feeSettings.update');
+    Route::post('admin/route-distances',      [AdminController::class, 'updateRouteDistances'])->name('admin.routeDistances.update');
     Route::patch('admin/users/{user}/status',  [AdminController::class, 'updateUserStatus'])->name('admin.users.status');
 });

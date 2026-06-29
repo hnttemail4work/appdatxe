@@ -10,8 +10,6 @@ $vehicle = $formData['vehicle'] ?? [];
 @include('partials.console-hero', [
     'title' => $isEditing ? 'Sửa chuyến đặt vé' : 'Tạo chuyến đặt vé',
     'subtitle' => 'Mỗi lần lưu một loại xe — khách thấy ngay trên trang đặt vé.',
-    'backHref' => route('operator.dashboard'),
-    'backLabel' => 'Trang quản lý',
     'actions' => '<a href="' . route('home') . '" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm">Xem trang khách</a>',
 ])
 
@@ -115,7 +113,7 @@ $vehicle = $formData['vehicle'] ?? [];
                     @include('partials.departure-time-input', [
                         'name' => 'departure_time',
                         'id' => 'offer-departure-time',
-                        'value' => old('departure_time', $formData['departure_time'] ?? ''),
+                        'value' => old('departure_time', $formData['departure_time'] ?? '06:00'),
                         'label' => 'Giờ khởi hành',
                         'required' => true,
                     ])
@@ -124,10 +122,17 @@ $vehicle = $formData['vehicle'] ?? [];
                     @include('partials.departure-time-input', [
                         'name' => 'expected_arrival_time',
                         'id' => 'offer-arrival-time',
-                        'label' => 'Giờ dự kiến đến',
+                        'label' => 'Giờ dự kiến đến (tuỳ chọn)',
                         'value' => old('expected_arrival_time', $formData['expected_arrival_time'] ?? ''),
-                        'required' => true,
+                        'required' => false,
                     ])
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="offer-distance-km">Quãng đường (km)</label>
+                    <input type="number" id="offer-distance-km" class="form-control" readonly
+                           value="{{ old('distance_km', $formData['distance_km'] ?? '') }}"
+                           placeholder="Chọn điểm đi & điểm đến">
+                    <div class="form-text" id="offer-rate-hint"></div>
                 </div>
             </div>
 
@@ -155,6 +160,10 @@ $vehicle = $formData['vehicle'] ?? [];
 @endsection
 
 @push('scripts')
+<script>
+    window.tripOfferQuoteUrl = @json($quoteUrl ?? route('operator.tripOffers.quote'));
+</script>
+<script src="{{ asset('js/trip-offer-pricing.js') }}"></script>
 <script>
 (function () {
     if (window.location.hash === '#trip-offer-form') {

@@ -14,23 +14,17 @@ use App\Models\TripRoute;
 
 use App\Support\PlatformFees;
 
+use App\Support\RouteDistanceCatalog;
+
 use App\Support\SouthernProvinces;
 
 
 
-/** Giá vé: cả xe theo số chỗ (mốc 7 chỗ = 1tr), ghép = 15% giá cả xe / ghế. */
+/** Giá vé theo km (admin) và giá cấu hình trên từng chuyến. */
 
 class TripPricingService
-
 {
-
-    /** @deprecated Dùng PlatformFees::roundTripDiscountPercent() */
-
-    public const ROUND_TRIP_DISCOUNT_PERCENT = 15;
-
-
-
-    /** Giá cả xe mốc cho xe 7 chỗ (một chiều). */
+    /** Giá cả xe mốc cho xe 7 chỗ (một chiều) — fallback khi chưa cấu hình giá. */
 
     public const REFERENCE_WHOLE_CAR = 1_000_000;
 
@@ -246,7 +240,15 @@ class TripPricingService
 
         $distance = $this->resolveDistanceKm($route, $pickup, $dropoff);
 
-        $fromDistance = $distance > 0 ? $this->oneWayFromDistance($distance) : 0;
+        $wholeFromDistance = $distance > 0 ? $this->wholeCarOneWayFromDistance($distance) : 0;
+
+        $entity->loadMissing('vehicle');
+
+        $fromDistance = $wholeFromDistance > 0
+
+            ? $this->roundToThousand((int) round($wholeFromDistance / max($entity->capacity(), 1)))
+
+            : 0;
 
         $routeBase = (int) round((float) ($route->base_price ?? 0));
 
@@ -366,15 +368,15 @@ class TripPricingService
 
 
 
-        return SouthernProvinces::distanceBetween($route->departure, $route->destination);
+        return RouteDistanceCatalog::resolveKm($route->departure, $route->destination);
 
     }
 
 
 
-    /** Đơn giá một chiều theo km — càng xa càng rẻ/km. */
+    /** Giá cả xe một chiều theo km và bảng giá admin. */
 
-    public function oneWayFromDistance(int $distanceKm): int
+    public function wholeCarOneWayFromDistance(int $distanceKm): int
 
     {
 
@@ -386,25 +388,71 @@ class TripPricingService
 
 
 
-        $rate = match (true) {
+        $rate = $distanceKm > 100
 
-            $distanceKm <= 40  => 4500,
+            ? PlatformFees::kmRateOver100()
 
-            $distanceKm <= 100 => 2100,
-
-            $distanceKm <= 200 => 1800,
-
-            default            => 1150,
-
-        };
+            : PlatformFees::kmRateUnder100();
 
 
 
-        $raw = (int) round($distanceKm * $rate);
+        return $this->roundToThousand((int) round($distanceKm * $rate));
+
+    }
 
 
 
-        return max($this->roundToThousand($raw), 80_000);
+    /**
+     * Gợi ý giá khi quản lý tạo chuyến — chia ghế từ giá cả xe.
+     *
+     * @return array{
+     *   distance_km: int,
+     *   rate_per_km: int,
+     *   whole_car_one_way: int,
+     *   seat_one_way: int,
+     *   whole_car_round: int,
+     *   seat_round: int,
+     * }
+     */
+    public function suggestOfferPrices(int $distanceKm, int $seats): array
+
+    {
+
+        $seats = max($seats, 1);
+
+        $rate = $distanceKm > 100
+
+            ? PlatformFees::kmRateOver100()
+
+            : PlatformFees::kmRateUnder100();
+
+        $wholeOneWay = $this->wholeCarOneWayFromDistance($distanceKm);
+
+        $seatOneWay = $this->roundToThousand((int) round($wholeOneWay / $seats));
+
+        $multiplier = PlatformFees::roundTripMultiplier();
+
+        $wholeRound = $this->roundToThousand((int) round($wholeOneWay * $multiplier));
+
+        $seatRound = $this->roundToThousand((int) round($seatOneWay * $multiplier));
+
+
+
+        return [
+
+            'distance_km'       => $distanceKm,
+
+            'rate_per_km'       => $rate,
+
+            'whole_car_one_way' => $wholeOneWay,
+
+            'seat_one_way'      => $seatOneWay,
+
+            'whole_car_round'   => $wholeRound,
+
+            'seat_round'        => $seatRound,
+
+        ];
 
     }
 

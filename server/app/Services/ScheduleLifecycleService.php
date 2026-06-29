@@ -29,14 +29,11 @@ class ScheduleLifecycleService
     public function resolveScheduleForBooking(
         ScheduleTemplate $template,
         string $serviceDate,
-        ?string $preferredTime = null,
     ): Schedule {
         $template->loadMissing(['vehicle', 'route']);
         $date = Carbon::parse($serviceDate)->startOfDay();
 
-        $departure = $preferredTime
-            ? Carbon::parse($serviceDate . ' ' . $preferredTime, config('app.timezone'))
-            : $template->departureAt($date);
+        $departure = $template->departureAt($date);
 
         if ($departure <= now()) {
             abort(422, 'Thời gian khởi hành phải ở tương lai.');

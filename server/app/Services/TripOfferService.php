@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ScheduleTemplate;
 use App\Models\TripRoute;
 use App\Models\Vehicle;
+use App\Support\RouteDistanceCatalog;
 use App\Support\SouthernProvinces;
 use App\Support\VehicleCapacityOptions;
 use App\Support\VehicleDisplay;
@@ -56,6 +57,12 @@ class TripOfferService
             'expected_arrival_time'  => $template->expected_arrival_time
                 ? substr((string) $template->expected_arrival_time, 0, 5)
                 : null,
+            'distance_km'            => $template->route
+                ? \App\Support\RouteDistanceCatalog::resolveKm(
+                    $template->route->departure,
+                    $template->route->destination,
+                )
+                : null,
             'vehicle'                => [
                 'seats'             => (int) $template->vehicle->capacity,
                 'whole_car_one_way' => $template->whole_car_price !== null ? (int) $template->whole_car_price : '',
@@ -90,14 +97,11 @@ class TripOfferService
         }
 
         $arrivalTime = isset($data['expected_arrival_time']) ? trim((string) $data['expected_arrival_time']) : '';
-        if ($arrivalTime === '') {
-            throw new InvalidArgumentException('Vui lòng nhập giờ dự kiến đến.');
-        }
 
         return DB::transaction(function () use ($operatorId, $data, $seats, $editingFrom, $arrivalTime): array {
             $departure = trim($data['departure']);
             $destination = trim($data['destination']);
-            $distance = SouthernProvinces::distanceBetween($departure, $destination);
+            $distance = RouteDistanceCatalog::resolveKm($departure, $destination);
 
             $route = TripRoute::query()->updateOrCreate(
                 ['departure' => $departure, 'destination' => $destination],
@@ -109,7 +113,7 @@ class TripOfferService
             );
 
             $departureTime = $this->normalizeTime($data['departure_time']);
-            $arrivalTime = $this->normalizeTime($arrivalTime);
+            $arrivalStored = $arrivalTime !== '' ? $this->normalizeTime($arrivalTime) : null;
 
             $vehicle = $this->resolveVehicle($operatorId, $seats, $data['photo'] ?? null, $editingFrom);
 
@@ -136,7 +140,7 @@ class TripOfferService
                     'seat_price'                 => (int) $data['seat_one_way'],
                     'whole_car_round_trip_price' => (int) $data['whole_car_round'],
                     'seat_round_trip_price'      => (int) $data['seat_round'],
-                    'expected_arrival_time'      => $arrivalTime,
+                    'expected_arrival_time'      => $arrivalStored,
                     'status'                     => 'active',
                 ],
             );

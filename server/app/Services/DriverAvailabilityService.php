@@ -98,16 +98,11 @@ class DriverAvailabilityService
     public function resolveDepartureTime(
         ScheduleTemplate $template,
         string $serviceDate,
-        ?string $preferredTime,
+        ?string $preferredTime = null,
     ): Carbon {
         $template->loadMissing('route');
 
-        return $preferredTime
-            ? Carbon::parse(
-                $serviceDate . ' ' . \App\Support\DepartureTimeDisplay::normalizeForClock($preferredTime) . ':00',
-                config('app.timezone'),
-            )
-            : $template->departureAt(Carbon::parse($serviceDate)->startOfDay());
+        return $template->departureAt(Carbon::parse($serviceDate)->startOfDay());
     }
 
     public function assertDriverSelectable(
