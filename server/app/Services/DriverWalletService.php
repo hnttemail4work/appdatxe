@@ -276,6 +276,18 @@ class DriverWalletService
         return $this->shouldShowTopUpBanner($profile);
     }
 
+    /** Chưa từng kết chuyến hoặc chưa có chuyến doanh thu ≥ ngưỡng 100k (chưa bật cổng ví). */
+    public function isPreRevenueThreshold(DriverProfile $profile): bool
+    {
+        $wallet = $this->walletFor($profile);
+
+        if ((int) $wallet->completed_settlements_count === 0) {
+            return true;
+        }
+
+        return ! (bool) $wallet->wallet_gate_enabled;
+    }
+
     /** Banner nạp ví — ẩn khi chưa từng có chuyến ≥ ngưỡng, đã nạp đủ, hoặc chưa bật cổng ví. */
     public function shouldShowTopUpBanner(DriverProfile $profile): bool
     {

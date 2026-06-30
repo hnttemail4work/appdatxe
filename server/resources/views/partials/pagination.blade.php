@@ -31,9 +31,5 @@
             </li>
         @endif
     </ul>
-    <p class="app-pagination-meta text-center text-muted small mb-0 mt-2">
-        Trang {{ $paginator->currentPage() }}/{{ $paginator->lastPage() }}
-        — {{ number_format($paginator->total(), 0, ',', '.') }} mục
-    </p>
 </nav>
 @endif

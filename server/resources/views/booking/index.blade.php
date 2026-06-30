@@ -2,11 +2,12 @@
 
 @section('content')
 @php
-use Carbon\Carbon;
+use App\Support\ServiceDate;
 $basePrices = [];
-$filterServiceDate = $filters['service_date'] ?? now()->addDay()->toDateString();
-$filterDateLabel = Carbon::parse($filterServiceDate)->format('d/m/Y');
-$filterWeekday = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][(int) Carbon::parse($filterServiceDate)->dayOfWeek];
+$filterServiceDate = $filters['service_date'] ?? ServiceDate::today();
+$filterDateCarbon = ServiceDate::parse($filterServiceDate);
+$filterDateLabel = $filterDateCarbon->format('d/m/Y');
+$filterWeekday = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][(int) $filterDateCarbon->dayOfWeek];
 $filterQuery = array_filter([
     'departure' => $filters['departure'] ?? null,
     'destination' => $filters['destination'] ?? null,
@@ -84,7 +85,9 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                 </p>
                 @endif
                 <p class="mb-0 small booking-flash-note">
-                    @if(! empty($bookingSuccess['awaiting_operator']))
+                    @if(! empty($bookingSuccess['driver_assigned']))
+                        Tài xế đã nhận chuyến — sẽ gọi xác nhận
+                    @elseif(! empty($bookingSuccess['awaiting_operator']))
                         Quản lý sẽ gọi xác nhận trong thời gian sớm nhất
                     @else
                         Tài xế sẽ gọi sau khi nhận chuyến
@@ -101,11 +104,9 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
     @if($errors->any())
     <div class="alert alert-danger mb-3 booking-flash booking-flash-error app-flash" id="booking-form-errors" role="alert">
         <strong>Không thể đặt vé:</strong>
-        <ul class="mb-0 ps-3 small">
-            @foreach($errors->all() as $error)
-                <li>{{ $error }}</li>
-            @endforeach
-        </ul>
+        @foreach($errors->all() as $error)
+            <div class="small @if(! $loop->last) mb-1 @endif">{{ $error }}</div>
+        @endforeach
         @include('partials.flash-close')
     </div>
     @endif
@@ -229,7 +230,7 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                         <span class="city">{{ $offer->route->destination }}</span>
                     </div>
 
-                    <div class="trip-card-prices trip-card-prices--mobile">
+                    <div class="trip-card-prices">
                         <span class="trip-price-inline">
                             <span class="trip-price-amount">{{ $listPriceLabel }}</span><span class="trip-price-unit">/ghế</span>
                         </span>
@@ -237,11 +238,7 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                 </div>
 
                 <div class="trip-card-side">
-                    <div class="price-tag trip-price-label trip-card-prices--desktop text-md-end">
-                        <span class="trip-price-amount">{{ $listPriceLabel }}</span>
-                        <small class="trip-price-unit-hint">/ghế</small>
-                    </div>
-                    <button type="button" class="btn btn-outline-primary btn-book fw-semibold w-100 mt-2"
+                    <button type="button" class="btn btn-outline-primary btn-book fw-semibold"
                         data-open-booking
                         data-template-id="{{ $offer->id }}"
                         data-route="{{ $offer->route->departure }} → {{ $offer->route->destination }}"
@@ -265,7 +262,6 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
         </article>
         @empty
         <div class="booking-empty-state" id="no-trips-msg">
-            <div class="booking-empty-icon">🔍</div>
             <h3 class="h6 fw-bold">Không có chuyến phù hợp</h3>
             <p class="text-muted small mb-3">Đổi ngày hoặc bộ lọc.</p>
             <a href="{{ route('home') }}" class="btn btn-sm btn-outline-primary">Xem tất cả chuyến</a>
@@ -310,9 +306,11 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                                 <div class="row g-3">
                                     <div class="col-6 col-md-6">
                                         <label class="form-label" for="modal-service-date">Ngày đi</label>
-                                        <input type="date" name="service_date" id="modal-service-date" class="form-control" required
+                                        <input type="date" name="service_date" id="modal-service-date"
+                                               class="form-control @error('service_date') is-invalid @enderror" required
                                                data-validate-label="Ngày đi"
                                                min="{{ now()->toDateString() }}" value="{{ old('service_date', $filterServiceDate) }}">
+                                        @error('service_date')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
                                     </div>
                                     <div class="col-6 col-md-6">
                                         @include('partials.vi-pickup-time-input', [
@@ -485,7 +483,7 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                                     <div class="col-md-6">
                                         <label class="form-label" for="modal-passenger-age">Tuổi</label>
                                         <input type="number" name="passenger_age" id="modal-passenger-age" class="form-control"
-                                               min="1" max="120" inputmode="numeric" placeholder="Không bắt buộc"
+                                               min="1" max="120" inputmode="numeric"
                                                value="{{ old('passenger_age') }}">
                                     </div>
                                     <div class="col-12">

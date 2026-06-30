@@ -53,6 +53,7 @@ class BookingWorkflowService
         $schedule = $this->scheduleLifecycle->resolveScheduleForBooking(
             $template,
             $serviceDate,
+            $pickupTime,
         );
 
         $pickup = $pickupAddress ?: $template->route->departure;
@@ -195,7 +196,7 @@ class BookingWorkflowService
             return $booking;
         });
 
-        $this->driverRequests->autoAssignForBooking($booking);
+        $this->driverRequests->directAssignForBooking($booking->fresh(['schedule.route', 'schedule.vehicle']));
 
         return $booking;
     }
@@ -499,7 +500,7 @@ class BookingWorkflowService
         $this->referralCodes->ensureForBooking($booking);
 
         $booking = $booking->fresh(['schedule']);
-        $this->driverRequests->autoAssignForBooking($booking);
+        $this->driverRequests->directAssignForBooking($booking->fresh(['schedule.route', 'schedule.vehicle']));
 
         return $booking;
     }

@@ -76,6 +76,6 @@
     <div class="driver-wizard-nav d-flex justify-content-between gap-2 mt-4">
         <button type="button" class="btn btn-outline-secondary" data-wizard-prev disabled>← Quay lại</button>
         <button type="button" class="btn btn-primary" data-wizard-next>Tiếp theo →</button>
-        <button type="submit" class="btn btn-primary d-none" data-wizard-submit>Gửi hồ sơ đăng ký tài xế</button>
+        <button type="submit" class="btn btn-primary d-none" data-wizard-submit>Đăng ký</button>
     </div>
 </div>

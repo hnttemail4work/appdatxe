@@ -9,6 +9,26 @@ use Illuminate\Support\Facades\Http;
 
 class GeocodeController extends Controller
 {
+    /** Tên gửi Nominatim khi search (TP.HCM → tên đầy đủ). */
+    private const PROVINCE_SEARCH_LABELS = [
+        'TP.HCM' => 'Thành phố Hồ Chí Minh',
+        'Bình Dương' => 'Bình Dương',
+        'Đồng Nai' => 'Đồng Nai',
+        'Long An' => 'Long An',
+        'Tây Ninh' => 'Tây Ninh',
+        'Vũng Tàu' => 'Vũng Tàu',
+        'Bà Rịa' => 'Bà Rịa',
+        'Phan Thiết' => 'Phan Thiết',
+        'Mũi Né' => 'Mũi Né',
+        'Đà Lạt' => 'Đà Lạt',
+        'Mỹ Tho' => 'Mỹ Tho',
+        'Bến Tre' => 'Bến Tre',
+        'Vĩnh Long' => 'Vĩnh Long',
+        'Cần Thơ' => 'Cần Thơ',
+        'Long Xuyên' => 'Long Xuyên',
+        'Châu Đốc' => 'Châu Đốc',
+    ];
+
     /** @var array<string, string> minLon,maxLat,maxLon,minLat */
     private const PROVINCE_VIEWBOXES = [
         'TP.HCM' => '106.30,11.00,107.05,10.30',
@@ -29,6 +49,8 @@ class GeocodeController extends Controller
         'Châu Đốc' => '104.90,10.80,105.20,10.50',
     ];
 
+    private const HCM_CITY_LABEL = 'Thành phố Hồ Chí Minh';
+
     private function nominatimHeaders(): array
     {
         return [
@@ -47,20 +69,31 @@ class GeocodeController extends Controller
         return $client;
     }
 
-    private function formatAddress(array $data): string
+    private function formatAddress(array $data, ?float $lat = null, ?float $lon = null): string
     {
+        if ($lat === null && isset($data['lat'])) {
+            $lat = (float) $data['lat'];
+        }
+        if ($lon === null && isset($data['lon'])) {
+            $lon = (float) $data['lon'];
+        }
+
         $addr = $data['address'] ?? [];
         if (is_array($addr) && $addr !== []) {
-            $built = $this->buildAddressFromParts($addr);
+            $built = $this->buildAddressFromParts($addr, $lat, $lon);
             if ($built !== '') {
                 return $built;
             }
         }
 
-        return $this->shortenDisplayName(trim((string) ($data['display_name'] ?? '')));
+        return $this->sanitizeDisplayName(
+            $this->shortenDisplayName(trim((string) ($data['display_name'] ?? ''))),
+            $lat,
+            $lon,
+        );
     }
 
-    private function buildAddressFromParts(array $addr): string
+    private function buildAddressFromParts(array $addr, ?float $lat = null, ?float $lon = null): string
     {
         $streetParts = array_filter([
             $addr['house_number'] ?? null,
@@ -86,14 +119,66 @@ class GeocodeController extends Controller
             }
         }
 
-        foreach (['city', 'town', 'village', 'municipality'] as $key) {
-            if (! empty($addr[$key]) && is_string($addr[$key])) {
-                $parts[] = trim($addr[$key]);
-                break;
-            }
+        $cityLabel = $this->cityLabelForAddress($addr, $lat, $lon);
+        if ($cityLabel !== '') {
+            $parts[] = $cityLabel;
         }
 
         return implode(', ', array_values(array_unique(array_filter($parts))));
+    }
+
+    private function cityLabelForAddress(array $addr, ?float $lat, ?float $lon): string
+    {
+        if ($lat !== null && $lon !== null && $this->isInViewbox($lat, $lon, self::PROVINCE_VIEWBOXES['TP.HCM'])) {
+            return self::HCM_CITY_LABEL;
+        }
+
+        foreach (['city', 'town', 'village', 'municipality'] as $key) {
+            if (! empty($addr[$key]) && is_string($addr[$key])) {
+                return trim($addr[$key]);
+            }
+        }
+
+        return '';
+    }
+
+    private function sanitizeDisplayName(string $display, ?float $lat, ?float $lon): string
+    {
+        if ($display === '') {
+            return '';
+        }
+
+        if ($lat !== null && $lon !== null && $this->isInViewbox($lat, $lon, self::PROVINCE_VIEWBOXES['TP.HCM'])) {
+            $display = preg_replace(
+                '/,?\s*Thành phố Thủ Đức\s*$/u',
+                ', ' . self::HCM_CITY_LABEL,
+                $display,
+            ) ?? $display;
+            $display = preg_replace(
+                '/,?\s*Thủ Đức\s*$/u',
+                ', ' . self::HCM_CITY_LABEL,
+                $display,
+            ) ?? $display;
+
+            if (! str_contains(mb_strtolower($display), 'hồ chí minh')
+                && ! str_contains(mb_strtolower($display), 'ho chi minh')) {
+                $display .= ', ' . self::HCM_CITY_LABEL;
+            }
+        }
+
+        return $display;
+    }
+
+    private function isInViewbox(float $lat, float $lon, string $viewbox): bool
+    {
+        $parts = array_map('floatval', explode(',', $viewbox));
+        if (count($parts) !== 4) {
+            return false;
+        }
+
+        [$minLon, $maxLat, $maxLon, $minLat] = $parts;
+
+        return $lon >= $minLon && $lon <= $maxLon && $lat >= $minLat && $lat <= $maxLat;
     }
 
     private function shortenDisplayName(string $display): string
@@ -112,8 +197,14 @@ class GeocodeController extends Controller
         $text = trim($query);
         $lower = mb_strtolower($text);
 
-        if ($province !== '' && ! str_contains($lower, mb_strtolower($province))) {
-            $text .= ', ' . $province;
+        if ($province !== '') {
+            $label = self::PROVINCE_SEARCH_LABELS[$province] ?? $province;
+            $labelLower = mb_strtolower($label);
+
+            if (! str_contains($lower, $labelLower)
+                && ! ($province === 'TP.HCM' && (str_contains($lower, 'ho chi minh') || str_contains($lower, 'hồ chí minh') || str_contains($lower, 'sài gòn') || str_contains($lower, 'sai gon')))) {
+                $text .= ', ' . $label;
+            }
         }
 
         if (! str_contains($lower, 'việt nam') && ! str_contains($lower, 'vietnam')) {
@@ -148,7 +239,11 @@ class GeocodeController extends Controller
         }
 
         $data = $response->json();
-        $address = $this->formatAddress(is_array($data) ? $data : []);
+        $address = $this->formatAddress(
+            is_array($data) ? $data : [],
+            (float) $validated['lat'],
+            (float) $validated['lon'],
+        );
 
         if ($address === '') {
             return response()->json(['message' => 'Không đọc được địa chỉ tại vị trí này.'], 404);

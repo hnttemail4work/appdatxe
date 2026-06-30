@@ -12,7 +12,7 @@ class DriverProfile extends Model
         'license_number', 'license_class', 'license_expiry', 'experience_years',
         'status', 'approval_status', 'availability_status', 'notes',
         'preference_likes', 'preference_dislikes',
-        'last_lat', 'last_lng', 'last_location_at',
+        'last_lat', 'last_lng', 'last_location_at', 'last_province', 'last_address',
         'missed_trip_strikes', 'missed_trip_locked_at',
         'bank_name', 'bank_account',
         'vehicle_license_plate', 'vehicle_type', 'vehicle_brand', 'vehicle_model', 'vehicle_color', 'vehicle_seats',
@@ -186,6 +186,25 @@ class DriverProfile extends Model
         return $this->user
             && $this->user->role === 'driver'
             && $this->approval_status === 'pending';
+    }
+
+    public function isApproved(): bool
+    {
+        return $this->approval_status === 'approved';
+    }
+
+    /** Khóa họ tên / SĐT sau duyệt — giống mã tài xế, chỉ xem không sửa. */
+    public function contactFieldsLocked(): bool
+    {
+        if ($this->isPendingApproval() || $this->isRejected()) {
+            return false;
+        }
+
+        if ($this->isApproved()) {
+            return true;
+        }
+
+        return in_array($this->status, ['active', 'suspended'], true);
     }
 
     public function scopePendingApproval($query)

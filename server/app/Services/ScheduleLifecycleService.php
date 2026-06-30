@@ -9,7 +9,10 @@ use App\Models\DriverTripRequest;
 use App\Services\DriverMissedTripService;
 use App\Services\DriverTripRequestService;
 use App\Support\TripCode;
+use App\Support\ServiceDate;
 use Carbon\Carbon;
+use Illuminate\Database\UniqueConstraintViolationException;
+use InvalidArgumentException;
 
 class ScheduleLifecycleService
 {
@@ -23,6 +26,8 @@ class ScheduleLifecycleService
         $this->expireStaleDriverRequests();
         $this->backfillExpectedArrivals();
         $this->cancelEmptyStaleSchedules($now);
+        $this->purgeEmptyExpiredDaySchedules($now);
+        $this->deactivateStaleEmptyOffers($now);
         $this->advanceStatuses($now);
     }
 
@@ -30,43 +35,70 @@ class ScheduleLifecycleService
     public function resolveScheduleForBooking(
         ScheduleTemplate $template,
         string $serviceDate,
+        ?string $pickupTime = null,
     ): Schedule {
         $template->loadMissing(['vehicle', 'route']);
-        $date = Carbon::parse($serviceDate)->startOfDay();
+        $date = ServiceDate::parse($serviceDate);
+        $availability = app(DriverAvailabilityService::class);
 
-        $departure = $template->departureAt($date);
+        $availability->assertPickupTimeAvailable($serviceDate, $pickupTime);
 
-        if ($departure <= now()) {
-            abort(422, 'Thời gian khởi hành phải ở tương lai.');
-        }
+        $departure = $availability->resolveDepartureTime($template, $serviceDate, $pickupTime);
 
         $schedule = Schedule::query()
             ->where('template_id', $template->id)
             ->whereDate('service_date', $serviceDate)
             ->where('departure_time', $departure)
             ->where('status', 'scheduled')
-            ->where('departure_time', '>', now())
             ->first();
 
         if ($schedule) {
             return $schedule;
         }
 
-        return Schedule::query()->create([
-            'template_id'         => $template->id,
-            'route_id'            => $template->route_id,
-            'vehicle_id'          => $template->vehicle_id,
-            'driver_id'           => null,
-            'driver_name'         => 'Chờ phân bổ',
-            'departure_time'      => $departure,
-            'expected_arrival_at' => $template->expectedArrivalAt($date),
-            'seat_price'          => $template->seat_price,
-            'whole_car_price'     => $template->whole_car_price,
-            'service_date'        => $serviceDate,
-            'available_seats'     => $template->vehicle->capacity,
-            'status'              => 'scheduled',
-            'trip_code'           => TripCode::generate(),
-        ]);
+        try {
+            return Schedule::query()->create([
+                'template_id'         => $template->id,
+                'route_id'            => $template->route_id,
+                'vehicle_id'          => $template->vehicle_id,
+                'driver_id'           => null,
+                'driver_name'         => 'Chờ phân bổ',
+                'departure_time'      => $departure,
+                'expected_arrival_at' => $this->expectedArrivalFrom($template, $departure, $date),
+                'seat_price'          => $template->seat_price,
+                'whole_car_price'     => $template->whole_car_price,
+                'service_date'        => $serviceDate,
+                'available_seats'     => $template->vehicle->capacity,
+                'status'              => 'scheduled',
+                'trip_code'           => TripCode::generate(),
+            ]);
+        } catch (UniqueConstraintViolationException) {
+            $existing = Schedule::query()
+                ->where('template_id', $template->id)
+                ->whereDate('service_date', $serviceDate)
+                ->where('departure_time', $departure)
+                ->where('status', 'scheduled')
+                ->first();
+
+            if ($existing) {
+                return $existing;
+            }
+
+            throw new InvalidArgumentException('Không tạo được chuyến cho khung giờ này. Vui lòng thử lại.');
+        }
+    }
+
+    private function expectedArrivalFrom(ScheduleTemplate $template, Carbon $departure, Carbon $serviceDate): Carbon
+    {
+        $templateDeparture = $template->departureAt($serviceDate);
+        $templateArrival = $template->expectedArrivalAt($serviceDate);
+        $offsetMinutes = $templateDeparture->diffInMinutes($templateArrival, false);
+
+        if ($offsetMinutes <= 0) {
+            $offsetMinutes = (int) ($template->duration_minutes ?? 720);
+        }
+
+        return $departure->copy()->addMinutes($offsetMinutes);
     }
 
     private function backfillExpectedArrivals(): void
@@ -106,14 +138,41 @@ class ScheduleLifecycleService
             });
     }
 
-    /** Hủy chuyến tạo theo nhu cầu nhưng không còn vé hợp lệ. */
+    /** Hủy chuyến không có vé — giữ đến hết ngày chạy (service_date), không hủy ngay khi qua giờ khởi hành. */
     private function cancelEmptyStaleSchedules(Carbon $now): void
     {
         Schedule::query()
+            ->whereNull('service_date')
             ->where('status', 'scheduled')
             ->whereDoesntHave('bookings', fn ($q) => $q->whereNotIn('booking_status', ['cancelled', 'rejected']))
             ->where('departure_time', '<', $now)
             ->update(['status' => 'cancelled']);
+    }
+
+    /** Xóa chuyến theo ngày đã qua (sau 0h) nếu không có khách đặt. */
+    private function purgeEmptyExpiredDaySchedules(Carbon $now): void
+    {
+        $today = $now->toDateString();
+
+        Schedule::query()
+            ->whereNotNull('service_date')
+            ->where('service_date', '<', $today)
+            ->whereIn('status', ['scheduled', 'cancelled', 'draft'])
+            ->whereDoesntHave('bookings', fn ($q) => $q->validForTrip())
+            ->each(fn (Schedule $schedule) => $schedule->delete());
+    }
+
+    /** Ẩn tuyến đặt vé (template) nếu chỉ còn chuyến ngày cũ và không có vé hợp lệ. */
+    private function deactivateStaleEmptyOffers(Carbon $now): void
+    {
+        $today = $now->toDateString();
+
+        ScheduleTemplate::query()
+            ->where('status', 'active')
+            ->whereHas('schedules', fn ($q) => $q->whereNotNull('service_date'))
+            ->whereDoesntHave('schedules', fn ($q) => $q->whereNotNull('service_date')->where('service_date', '>=', $today))
+            ->whereDoesntHave('schedules.bookings', fn ($q) => $q->validForTrip())
+            ->each(fn (ScheduleTemplate $template) => $template->update(['status' => 'inactive']));
     }
 
     private function expireStaleHolds(): void

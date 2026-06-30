@@ -178,11 +178,28 @@ body:has(.customer-page) {
     font-size: .7rem;
     font-weight: 500;
     color: var(--tl-text-muted);
-    display: block;
 }
 
-.trip-card-prices--mobile {
-    display: none;
+
+.trip-card-prices {
+    font-size: .9375rem;
+    font-weight: 700;
+    color: var(--tl-primary);
+    line-height: 1.25;
+}
+
+.trip-card-prices .trip-price-unit {
+    font-size: .75rem;
+    font-weight: 500;
+    color: var(--tl-text-muted);
+}
+
+.trip-price-inline {
+    display: inline-flex;
+    align-items: baseline;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+    gap: .12rem;
 }
 
 .trip-price-unit {
@@ -850,6 +867,10 @@ body.modal-open .modal-backdrop.show {
 }
 .trip-card-body {
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: .35rem;
 }
 .trip-vehicle-thumb {
     flex-shrink: 0;
@@ -925,8 +946,20 @@ body.modal-open .modal-backdrop.show {
 }
 .trip-schedule-icon { font-size: .9rem; line-height: 1; }
 .trip-card-side {
-    min-width: 9.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    flex-shrink: 0;
+    min-width: 0;
     text-align: right;
+}
+.trip-card-side .btn-book {
+    width: 7.25rem;
+    min-width: 7.25rem;
+    max-width: 7.25rem;
+    padding-left: .5rem;
+    padding-right: .5rem;
+    white-space: nowrap;
 }
 .booking-list-head {
     display: flex;
@@ -1023,24 +1056,46 @@ body.modal-open .modal-backdrop.show {
     .trip-card-layout {
         display: grid;
         grid-template-columns: 3.25rem minmax(0, 1fr) auto;
-        grid-template-areas: "thumb body action";
-        gap: .45rem .5rem;
+        column-gap: .5rem;
+        row-gap: .25rem;
         align-items: start;
     }
 
     .trip-vehicle-thumb {
-        grid-area: thumb;
+        grid-column: 1;
+        grid-row: 1 / span 2;
         width: 3.25rem;
         height: 3.25rem;
+        align-self: start;
     }
 
     .trip-card-body {
-        grid-area: body;
+        display: contents;
+    }
+
+    .trip-route-line {
+        grid-column: 2;
+        grid-row: 1;
         min-width: 0;
+        gap: .25rem;
+        flex-wrap: nowrap;
+        margin-bottom: 0;
+    }
+
+    .trip-card-prices {
+        grid-column: 2;
+        grid-row: 2;
+        display: block;
+        margin-top: 0;
+        font-size: .8125rem;
+        font-weight: 700;
+        color: var(--tl-primary-light);
+        line-height: 1.25;
     }
 
     .trip-card-side {
-        grid-area: action;
+        grid-column: 3;
+        grid-row: 1;
         display: flex;
         align-items: flex-start;
         justify-content: flex-end;
@@ -1048,28 +1103,6 @@ body.modal-open .modal-backdrop.show {
         min-width: 0;
         width: auto;
         text-align: right;
-    }
-
-    .trip-card-prices--desktop {
-        display: none !important;
-    }
-
-    .trip-card-prices--mobile {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: baseline;
-        gap: .35rem .5rem;
-        margin-top: .3rem;
-        font-size: .78rem;
-        font-weight: 700;
-        color: var(--tl-primary-light);
-        line-height: 1.35;
-    }
-
-    .trip-route-line {
-        gap: .25rem;
-        flex-wrap: nowrap;
-        margin-bottom: 0;
     }
 
     .trip-route-line .city {
@@ -1087,6 +1120,8 @@ body.modal-open .modal-backdrop.show {
 
     .trip-card-side .btn-book {
         width: auto !important;
+        min-width: 0;
+        max-width: none;
         flex-shrink: 0;
         margin-top: 0 !important;
         padding: .38rem .65rem;
@@ -1118,12 +1153,6 @@ body.modal-open .modal-backdrop.show {
     .trip-date-weekday { font-size: .65rem; }
     .trip-date-num { font-size: .95rem; }
     .trip-date-month { font-size: .65rem; }
-}
-
-@media (min-width: 768px) {
-    .trip-card-prices--mobile {
-        display: none !important;
-    }
 }
 
 /* Booking result flash */
@@ -1224,6 +1253,20 @@ body.modal-open .modal-backdrop.show {
     width: 1.15em;
     height: 1.15em;
     cursor: pointer;
+    background-color: #0a0a0a;
+    border: 2px solid var(--app-gold, #d4af37);
+    border-radius: .25rem;
+}
+
+.register-terms-check .register-terms-input:checked {
+    background-color: #0a0a0a;
+    border-color: var(--app-gold, #d4af37);
+    --bs-form-check-bg-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23d4af37' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='m6 10 3 3 6-6'/%3e%3c/svg%3e");
+}
+
+.register-terms-check .register-terms-input:focus {
+    border-color: var(--app-gold-light, #e8c547);
+    box-shadow: 0 0 0 .2rem rgba(212, 175, 55, .25);
 }
 
 .register-terms-check .register-terms-input.is-invalid {
@@ -1231,15 +1274,6 @@ body.modal-open .modal-backdrop.show {
 }
 
 .section-icon { font-size: 1rem; }
-
-.driver-completeness-card .check-icon {
-    width: 1.1rem;
-    text-align: center;
-    font-weight: 700;
-}
-.driver-completeness-card .check-icon.done { color: var(--tl-success); }
-.driver-completeness-card .check-icon.partial { color: #e6a817; }
-.driver-completeness-card .check-icon.pending { color: var(--tl-text-muted); }
 
 .driver-review-summary dt { font-weight: 500; }
 

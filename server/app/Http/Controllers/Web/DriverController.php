@@ -128,29 +128,30 @@ class DriverController extends Controller
         return redirect()->route('driver.dashboard')->with('success', 'Đã từ chối yêu cầu nhận chuyến.');
     }
 
-    public function myProfile()
-    {
-        $user    = Auth::user();
-        $profile = DriverProfile::query()->where('user_id', $user->id)->with('operator')->first();
-
-        return view('driver.profile', compact('user', 'profile'));
-    }
-
     public function updateLocation(Request $request)
     {
         $validated = $request->validate([
-            'lat' => ['required', 'numeric', 'between:-90,90'],
-            'lng' => ['required', 'numeric', 'between:-180,180'],
+            'lat'     => ['required', 'numeric', 'between:-90,90'],
+            'lng'     => ['required', 'numeric', 'between:-180,180'],
+            'address' => ['nullable', 'string', 'max:500'],
         ]);
 
         $profile = DriverProfile::query()->where('user_id', Auth::id())->firstOrFail();
+
+        $address = trim((string) ($validated['address'] ?? ''));
+
         $profile->update([
             'last_lat'         => $validated['lat'],
             'last_lng'         => $validated['lng'],
             'last_location_at' => now(),
+            'last_address'     => $address !== '' ? $address : null,
         ]);
 
-        return response()->json(['ok' => true]);
+        return response()->json([
+            'ok'         => true,
+            'address'    => $address !== '' ? $address : null,
+            'updated_at' => $profile->last_location_at?->format('H:i, d/m/Y'),
+        ]);
     }
 
     public function updateAvailability(Request $request)
@@ -163,32 +164,6 @@ class DriverController extends Controller
         $profile->update($validated);
 
         return redirect()->route('driver.dashboard')->with('success', 'Đã cập nhật trạng thái hoạt động.');
-    }
-
-    public function updateMyProfile(Request $request)
-    {
-        $user = Auth::user();
-        $profile = DriverProfile::query()->where('user_id', $user->id)->firstOrFail();
-
-        $validated = $request->validate(DriverFieldRules::selfUpdateRules($user->id, $profile->id));
-
-        $this->profileSync->fillUserFromValidated($profile, $validated);
-        $this->profileSync->fillProfileFromValidated($profile, $validated);
-
-        return redirect()->route('driver.profile')->with('success', 'Đã cập nhật hồ sơ tài xế.');
-    }
-
-    public function uploadMyPhotos(Request $request)
-    {
-        $profile = DriverProfile::query()->where('user_id', Auth::id())->firstOrFail();
-
-        try {
-            $this->photoService->syncPhotos($profile, $request, $profile->identityPhotosLocked());
-        } catch (InvalidArgumentException $e) {
-            return back()->withErrors(['photos' => $e->getMessage()])->withInput();
-        }
-
-        return redirect()->route('driver.profile')->with('success', 'Đã lưu ảnh thành công.');
     }
 
     /** Tài xế báo hoàn thành chuyến — tất cả vé trên cùng chuyến xe. */
@@ -285,8 +260,16 @@ class DriverController extends Controller
         }
 
         $validated = $request->validate(
-            DriverFieldRules::operatorUpdateRules($driverProfile->user_id, $driverProfile->id),
+            DriverFieldRules::operatorUpdateRules(
+                $driverProfile->user_id,
+                $driverProfile->id,
+                $driverProfile->contactFieldsLocked(),
+            ),
         );
+
+        if ($driverProfile->contactFieldsLocked()) {
+            unset($validated['name'], $validated['phone']);
+        }
 
         $this->profileSync->fillProfileFromValidated($driverProfile, $validated);
         $this->profileSync->fillUserFromValidated($driverProfile, $validated);

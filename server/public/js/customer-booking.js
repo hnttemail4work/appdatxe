@@ -266,7 +266,23 @@
         if (!step2 || !window.FormFieldValidation) {
             return true;
         }
-        return FormFieldValidation.validateFirst(step2);
+        if (!FormFieldValidation.validateFirst(step2)) {
+            return false;
+        }
+
+        var latEl = document.getElementById('modal-pickup-lat');
+        var lngEl = document.getElementById('modal-pickup-lng');
+        var detailEl = document.getElementById('modal-pickup-detail');
+        if (!latEl || !lngEl || !latEl.value || !lngEl.value) {
+            if (detailEl && window.FormFieldValidation.markInvalid) {
+                FormFieldValidation.markInvalid(detailEl, 'Chọn điểm đón trên bản đồ hoặc tìm địa chỉ để lấy tọa độ.');
+            } else if (window.AppDialog) {
+                window.AppDialog.alert('Chọn điểm đón trên bản đồ hoặc tìm địa chỉ để lấy tọa độ.');
+            }
+            return false;
+        }
+
+        return true;
     }
 
     function parseViTimeTo24h(raw) {
@@ -400,6 +416,36 @@
             return false;
         }
         input.value = formatViPickupTime(pickup);
+
+        var dateInput = document.getElementById('modal-service-date');
+        var serviceDate = dateInput ? String(dateInput.value || '').trim() : '';
+        var now = new Date();
+        var todayStr = now.getFullYear() + '-'
+            + String(now.getMonth() + 1).padStart(2, '0') + '-'
+            + String(now.getDate()).padStart(2, '0');
+
+        if (serviceDate === todayStr) {
+            var timeParts = pickup.split(':');
+            var pickupAt = new Date(
+                now.getFullYear(),
+                now.getMonth(),
+                now.getDate(),
+                parseInt(timeParts[0], 10),
+                parseInt(timeParts[1], 10),
+                0,
+            );
+            if (pickupAt <= now) {
+                var pastMsg = 'Giờ đón phải sau thời gian hiện tại.';
+                if (window.FormFieldValidation && window.FormFieldValidation.markInvalid) {
+                    FormFieldValidation.markInvalid(input, pastMsg);
+                } else if (window.AppDialog) {
+                    window.AppDialog.alert(pastMsg);
+                }
+                input.focus();
+                return false;
+            }
+        }
+
         return true;
     }
 

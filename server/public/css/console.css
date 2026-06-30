@@ -83,9 +83,46 @@
     display: block;
 }
 
+.booking-qr-open-btn {
+    padding: 0.2rem !important;
+    line-height: 0;
+}
+
+.booking-qr-open-btn__canvas {
+    display: inline-block;
+    padding: 2px;
+    background: #fff;
+    border-radius: 0.35rem;
+    line-height: 0;
+}
+
+.booking-qr-open-btn__canvas img,
+.booking-qr-open-btn__canvas canvas {
+    display: block;
+    width: 44px !important;
+    height: 44px !important;
+    pointer-events: none;
+}
+
 .console-table-actions form {
     display: inline;
     margin: 0;
+}
+
+.console-table .col-check {
+    width: 2.75rem;
+    text-align: center;
+    vertical-align: middle;
+    padding-left: .75rem;
+    padding-right: .35rem;
+}
+
+.console-table .col-check .form-check-input {
+    width: 1.05rem;
+    height: 1.05rem;
+    margin: 0;
+    cursor: pointer;
+    float: none;
 }
 
 .console-table-sm th,

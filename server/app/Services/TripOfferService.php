@@ -5,18 +5,22 @@ namespace App\Services;
 use App\Models\ScheduleTemplate;
 use App\Models\TripRoute;
 use App\Models\Vehicle;
+use App\Support\LocationCatalog;
 use App\Support\RouteDistanceCatalog;
+use App\Support\ServiceDate;
 use App\Support\VehicleCapacityOptions;
 use App\Support\VehicleDisplay;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
+use Carbon\Carbon;
 
 class TripOfferService
 {
     public function __construct(
         private readonly VehiclePhotoService $vehiclePhotos,
+        private readonly TripPricingService $pricing,
     ) {
     }
 
@@ -164,6 +168,229 @@ class TripOfferService
         return $template;
     }
 
+    /** @param  list<int>  $templateIds */
+    public function deleteOffers(array $templateIds, int $operatorId): int
+    {
+        $deleted = 0;
+
+        foreach (array_unique($templateIds) as $templateId) {
+            $template = ScheduleTemplate::query()->find($templateId);
+            if (! $template) {
+                continue;
+            }
+
+            $this->deleteOffer($template, $operatorId);
+            $deleted++;
+        }
+
+        if ($deleted === 0) {
+            throw new InvalidArgumentException('Không có tuyến nào được xóa.');
+        }
+
+        return $deleted;
+    }
+
+    /**
+     * Tạo nhanh tất cả tuyến từ một điểm đi — giá/km lấy từ cấu hình admin.
+     *
+     * @param  array{
+     *   departure: string,
+     *   service_date: string,
+     *   departure_time: string,
+     *   expected_arrival_time?: string|null,
+     *   seats: int,
+     *   photo?: \Illuminate\Http\UploadedFile|null,
+     * }  $data
+     * @return array{
+     *   created: int,
+     *   updated: int,
+     *   skipped: int,
+     *   service_date: string,
+     *   service_date_label: string,
+     *   destinations: list<string>,
+     *   schedules_opened: int,
+     * }
+     */
+    public function bulkCreateFromDeparture(int $operatorId, array $data): array
+    {
+        $seats = (int) ($data['seats'] ?? 0);
+        if (! VehicleCapacityOptions::isAllowed($seats)) {
+            throw new InvalidArgumentException('Vui lòng chọn số chỗ hợp lệ.');
+        }
+
+        $departure = trim((string) $data['departure']);
+        if ($departure === '') {
+            throw new InvalidArgumentException('Vui lòng chọn điểm đi.');
+        }
+
+        if (! LocationCatalog::isAllowed($departure)) {
+            throw new InvalidArgumentException('Điểm đi không hợp lệ.');
+        }
+
+        $photo = ($data['photo'] ?? null) instanceof UploadedFile ? $data['photo'] : null;
+        $vehicle = $this->resolveVehicle($operatorId, $seats, $photo);
+
+        $departureTime = $this->normalizeTime($data['departure_time']);
+        $arrivalTime = isset($data['expected_arrival_time']) ? trim((string) $data['expected_arrival_time']) : '';
+        $arrivalStored = $arrivalTime !== '' ? $this->normalizeTime($arrivalTime) : null;
+        $serviceDateString = trim((string) ($data['service_date'] ?? ''));
+        $serviceDate = $this->resolveServiceDate($serviceDateString);
+        $destinations = $this->destinationsForDeparture($departure);
+
+        $created = 0;
+        $updated = 0;
+        $skipped = 0;
+        $schedulesOpened = 0;
+        $templates = [];
+
+        DB::transaction(function () use (
+            $departure,
+            $departureTime,
+            $arrivalStored,
+            $seats,
+            $vehicle,
+            $destinations,
+            &$created,
+            &$updated,
+            &$skipped,
+            &$templates,
+        ): void {
+            foreach ($destinations as $destination) {
+                $destination = trim((string) $destination);
+                if ($destination === '' || $destination === $departure) {
+                    $skipped++;
+
+                    continue;
+                }
+
+                $distance = RouteDistanceCatalog::resolveKm($departure, $destination);
+                if ($distance <= 0) {
+                    $skipped++;
+
+                    continue;
+                }
+
+                $prices = $this->pricing->suggestOfferPrices($distance, $seats);
+
+                $route = TripRoute::query()->updateOrCreate(
+                    ['departure' => $departure, 'destination' => $destination],
+                    [
+                        'base_price'  => $prices['seat_one_way'],
+                        'distance_km' => $distance,
+                        'is_active'   => true,
+                    ],
+                );
+
+                $existing = ScheduleTemplate::query()
+                    ->where('route_id', $route->id)
+                    ->where('vehicle_id', $vehicle->id)
+                    ->where('departure_time', $departureTime)
+                    ->first();
+
+                $template = ScheduleTemplate::query()->updateOrCreate(
+                    [
+                        'route_id'       => $route->id,
+                        'vehicle_id'     => $vehicle->id,
+                        'departure_time' => $departureTime,
+                    ],
+                    [
+                        'driver_id'                  => null,
+                        'driver_name'                => 'Chờ khách đặt',
+                        'whole_car_price'            => $prices['whole_car_one_way'],
+                        'seat_price'                 => $prices['seat_one_way'],
+                        'whole_car_round_trip_price' => $prices['whole_car_round'],
+                        'seat_round_trip_price'      => $prices['seat_round'],
+                        'expected_arrival_time'      => $arrivalStored,
+                        'status'                     => 'active',
+                    ],
+                );
+
+                if ($existing) {
+                    $updated++;
+                } else {
+                    $created++;
+                }
+
+                $templates[] = $template->fresh(['route', 'vehicle']);
+            }
+        });
+
+        $lifecycle = app(ScheduleLifecycleService::class);
+
+        foreach ($templates as $template) {
+            $departureAt = $template->departureAt($serviceDate->copy());
+            if ($departureAt <= now()) {
+                continue;
+            }
+
+            try {
+                $lifecycle->resolveScheduleForBooking($template, $serviceDateString);
+                $schedulesOpened++;
+            } catch (\Throwable) {
+                // Bỏ qua tuyến có giờ khởi hành đã qua.
+            }
+        }
+
+        return [
+            'created'            => $created,
+            'updated'            => $updated,
+            'skipped'            => $skipped,
+            'service_date'       => $serviceDateString,
+            'service_date_label' => $serviceDate->format('d/m/Y'),
+            'destinations'       => $destinations,
+            'schedules_opened'   => $schedulesOpened,
+        ];
+    }
+
+    /** @return array<int, string> capacity => photo URL */
+    public function vehiclePhotoUrlsForOperator(int $operatorId): array
+    {
+        $urls = [];
+
+        Vehicle::query()
+            ->where('operator_id', $operatorId)
+            ->where('status', 'active')
+            ->orderBy('id')
+            ->get()
+            ->each(function (Vehicle $vehicle) use (&$urls): void {
+                $url = $vehicle->photoUrl();
+                if ($url && ! isset($urls[(int) $vehicle->capacity])) {
+                    $urls[(int) $vehicle->capacity] = $url;
+                }
+            });
+
+        return $urls;
+    }
+
+    public function operatorHasVehiclePhoto(int $operatorId, int $capacity): bool
+    {
+        return $this->findVehicleWithPhoto($operatorId, $capacity) !== null;
+    }
+
+    /** @return list<string> */
+    private function destinationsForDeparture(string $departure): array
+    {
+        if ($departure === LocationCatalog::hub()) {
+            return LocationCatalog::hubDestinations();
+        }
+
+        return collect(LocationCatalog::all())
+            ->reject(fn (string $name): bool => $name === $departure)
+            ->values()
+            ->all();
+    }
+
+    private function findVehicleWithPhoto(int $operatorId, int $capacity): ?Vehicle
+    {
+        return Vehicle::query()
+            ->where('operator_id', $operatorId)
+            ->where('capacity', $capacity)
+            ->where('status', 'active')
+            ->orderBy('id')
+            ->get()
+            ->first(fn (Vehicle $vehicle): bool => (bool) $vehicle->photoUrl());
+    }
+
     private function resolveVehicle(
         int $operatorId,
         int $capacity,
@@ -202,5 +429,20 @@ class TripOfferService
     private function normalizeTime(string $time): string
     {
         return \App\Support\DepartureTimeDisplay::storageValue($time);
+    }
+
+    private function resolveServiceDate(mixed $value): Carbon
+    {
+        $raw = trim((string) $value);
+        if ($raw === '') {
+            throw new InvalidArgumentException('Vui lòng chọn ngày chạy.');
+        }
+
+        $date = ServiceDate::parse($raw);
+        if ($date->toDateString() < ServiceDate::today()) {
+            throw new InvalidArgumentException('Ngày chạy phải từ hôm nay trở đi.');
+        }
+
+        return $date;
     }
 }

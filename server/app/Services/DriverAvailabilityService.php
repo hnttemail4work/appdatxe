@@ -5,8 +5,11 @@ namespace App\Services;
 use App\Models\DriverProfile;
 use App\Models\Schedule;
 use App\Models\ScheduleTemplate;
+use App\Support\DepartureTimeDisplay;
+use App\Support\ServiceDate;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use InvalidArgumentException;
 
 class DriverAvailabilityService
 {
@@ -49,7 +52,6 @@ class DriverAvailabilityService
         $query = DriverProfile::query()
             ->operational()
             ->with(['user', 'operator'])
-            ->when($template->vehicle?->operator_id, fn ($q, $opId) => $q->where('operator_id', $opId))
             ->orderByRaw("FIELD(availability_status, 'available', 'off_duty', 'on_trip')")
             ->orderByDesc('experience_years');
 
@@ -101,8 +103,39 @@ class DriverAvailabilityService
         ?string $preferredTime = null,
     ): Carbon {
         $template->loadMissing('route');
+        $date = ServiceDate::parse($serviceDate);
 
-        return $template->departureAt(Carbon::parse($serviceDate)->startOfDay());
+        if (is_string($preferredTime) && trim($preferredTime) !== '') {
+            $departure = $this->clockOnDate($date, DepartureTimeDisplay::normalizeForClock($preferredTime));
+        } else {
+            $departure = $template->departureAt($date);
+        }
+
+        return $departure->copy()->startOfMinute();
+    }
+
+    public function assertPickupTimeAvailable(string $serviceDate, ?string $pickupTime): void
+    {
+        if (! is_string($pickupTime) || trim($pickupTime) === '') {
+            throw new InvalidArgumentException('Vui lòng chọn giờ đón.');
+        }
+
+        $departure = $this->clockOnDate(
+            ServiceDate::parse($serviceDate),
+            DepartureTimeDisplay::normalizeForClock($pickupTime),
+        );
+
+        if ($departure <= now()) {
+            throw new InvalidArgumentException('Giờ đón phải sau thời gian hiện tại.');
+        }
+    }
+
+    private function clockOnDate(Carbon $serviceDate, string $clock): Carbon
+    {
+        return Carbon::parse(
+            $serviceDate->toDateString() . ' ' . $clock . ':00',
+            config('app.timezone'),
+        );
     }
 
     public function assertDriverSelectable(

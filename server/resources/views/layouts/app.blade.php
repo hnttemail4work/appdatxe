@@ -54,7 +54,7 @@
     <link rel="stylesheet" href="{{ asset('css/app-dialog.css') }}?v={{ filemtime(public_path('css/app-dialog.css')) }}">
     @stack('styles')
 </head>
-<body class="app-shell">
+<body class="app-shell @if(request()->routeIs('login', 'register')) app-shell--auth @endif">
 @php
     $isGuestBookingPage = request()->routeIs('home');
     $hidePublicNav = $isGuestBookingPage || request()->routeIs('admin.*');
@@ -80,7 +80,7 @@
                     <div class="navbar-console-name">{{ auth()->user()->name }}</div>
                 </div>
                 @if(request()->routeIs('operator.tripOffers.*'))
-                    <a href="{{ route('operator.dashboard') }}" class="btn btn-sm btn-outline-primary">← Trang quản lý</a>
+                    <a href="{{ route('operator.dashboard') }}" class="btn btn-sm btn-outline-primary">Quản lý</a>
                 @else
                     <a href="{{ route('operator.tripOffers.create') }}" class="btn btn-sm btn-outline-primary">Tạo chuyến</a>
                 @endif
@@ -97,7 +97,7 @@
         <div class="app-navbar-mobile d-flex d-lg-none ms-auto align-items-center gap-2">
             @if(auth()->user()->role === 'operator')
                 @if(request()->routeIs('operator.tripOffers.*'))
-                    <a href="{{ route('operator.dashboard') }}" class="btn btn-sm btn-outline-primary">← Quản lý</a>
+                    <a href="{{ route('operator.dashboard') }}" class="btn btn-sm btn-outline-primary">Quản lý</a>
                 @else
                     <a href="{{ route('operator.tripOffers.create') }}" class="btn btn-sm btn-outline-primary">Tạo chuyến</a>
                 @endif
@@ -121,12 +121,15 @@
                         <a class="btn btn-sm btn-outline-primary {{ request()->routeIs('home') ? 'active' : '' }}"
                            href="{{ route('home') }}">Đặt vé</a>
                     </li>
+                    @if(request()->routeIs('register'))
                     <li class="nav-item ms-1">
-                        <a class="btn btn-sm btn-outline-primary" href="{{ route('login') }}">Đăng nhập</a>
+                        <a class="btn btn-sm btn-primary" href="{{ route('login') }}">Đăng nhập</a>
                     </li>
+                    @elseif(! request()->routeIs('login'))
                     <li class="nav-item ms-1">
                         <a class="btn btn-sm btn-primary" href="{{ route('register') }}">Đăng ký tài xế</a>
                     </li>
+                    @endif
                 @endauth
             </ul>
         </div>
@@ -172,7 +175,7 @@
             <div class="col-md-6">
                 <h6 class="text-white fw-bold mb-1">Liên hệ</h6>
                 <p class="small mb-0 app-footer-text">Tổng đài: {{ config('app.contact_phone') }}</p>
-                <p class="small mb-0 app-footer-text">Thư điện tử: {{ config('app.contact_email') }}</p>
+                <p class="small mb-0 app-footer-text">Email: {{ config('app.contact_email') }}</p>
             </div>
         </div>
         <hr class="border-secondary app-footer-divider">

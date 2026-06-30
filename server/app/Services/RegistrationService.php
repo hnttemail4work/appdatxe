@@ -38,10 +38,9 @@ class RegistrationService
     public function registerOperator(array $validated, int $approvedBy): User
     {
         return DB::transaction(function () use ($validated, $approvedBy): User {
-            $phoneDigits = preg_replace('/\D/', '', $validated['phone']);
             $email = filled($validated['email'] ?? null)
-                ? $validated['email']
-                : $this->placeholderEmail($phoneDigits);
+                ? trim((string) $validated['email'])
+                : null;
 
             $user = User::query()->create([
                 'name'     => $validated['name'],
@@ -67,15 +66,14 @@ class RegistrationService
     public function registerDriver(array $validated, Request $request): User
     {
         return DB::transaction(function () use ($validated, $request): User {
-            $phoneDigits = preg_replace('/\D/', '', $validated['phone']);
             $email = filled($validated['email'] ?? null)
-                ? $validated['email']
-                : $this->placeholderEmail($phoneDigits);
+                ? trim((string) $validated['email'])
+                : null;
 
             $user = User::query()->create([
                 'name'          => $validated['name'],
                 'email'         => $email,
-                'password'      => Hash::make(Str::password(16)),
+                'password'      => Hash::make($validated['password']),
                 'phone'         => $validated['phone'],
                 'id_number'     => $validated['id_number'] ?? null,
                 'date_of_birth' => $validated['date_of_birth'] ?? null,
@@ -84,7 +82,7 @@ class RegistrationService
                 'status'        => 'inactive',
             ]);
 
-            $licenseNumber = $this->resolveLicenseNumber($phoneDigits);
+            $licenseNumber = $this->resolveLicenseNumber(preg_replace('/\D/', '', $validated['phone']));
             $licenseClass = 'B2';
             $licenseExpiry = now()->addYears(10)->toDateString();
 
@@ -113,20 +111,6 @@ class RegistrationService
 
             return $user;
         });
-    }
-
-    private function placeholderEmail(string $phoneDigits): string
-    {
-        $base = 'tx.' . ($phoneDigits !== '' ? $phoneDigits : Str::lower(Str::random(8)));
-        $email = $base . '@noemail.local';
-        $suffix = 0;
-
-        while (User::query()->where('email', $email)->exists()) {
-            $suffix++;
-            $email = $base . '.' . $suffix . '@noemail.local';
-        }
-
-        return $email;
     }
 
     private function resolveLicenseNumber(string $phoneDigits): string

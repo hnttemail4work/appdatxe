@@ -2,8 +2,13 @@
 
 @section('console')
 @php
-$adminDefaultTab = request('tab');
-if (! in_array($adminDefaultTab, ['create', 'list', 'referrals', 'fees', 'bank', 'revenue', 'routes'], true)) {
+$allowedAdminTabs = ['create', 'list', 'referrals', 'fees', 'bank', 'revenue', 'routes'];
+$tabFromRequest = request('tab');
+$tabFromCookie = request()->cookie('admin-main_tab');
+$adminDefaultTab = in_array($tabFromRequest, $allowedAdminTabs, true)
+    ? $tabFromRequest
+    : (in_array($tabFromCookie, $allowedAdminTabs, true) ? $tabFromCookie : null);
+if ($adminDefaultTab === null) {
     $adminDefaultTab = ($errors->has('name') || $errors->has('phone')) && ! $errors->has('email')
         ? 'referrals'
         : (($errors->has('bank_name') || $errors->has('bank_bin')) ? 'bank' : 'create');
@@ -42,7 +47,7 @@ if (! in_array($adminDefaultTab, ['create', 'list', 'referrals', 'fees', 'bank',
                             @error('name')<div class="invalid-feedback">{{ $message }}</div>@enderror
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label" for="operator-email">Email</label>
+                            <label class="form-label" for="operator-email">Email <span class="text-muted fw-normal">(tuỳ chọn)</span></label>
                             <input type="email" name="email" id="operator-email" class="form-control @error('email') is-invalid @enderror"
                                    value="{{ old('email') }}" autocomplete="email">
                             @error('email')<div class="invalid-feedback">{{ $message }}</div>@enderror
@@ -81,7 +86,7 @@ if (! in_array($adminDefaultTab, ['create', 'list', 'referrals', 'fees', 'bank',
                             <thead>
                                 <tr>
                                     <th>Họ tên</th>
-                                    <th>Thư điện tử</th>
+                                    <th>Email</th>
                                     <th>SĐT</th>
                                     <th>Trạng thái</th>
                                 </tr>
@@ -90,15 +95,21 @@ if (! in_array($adminDefaultTab, ['create', 'list', 'referrals', 'fees', 'bank',
                                 @foreach($operators as $op)
                                 <tr>
                                     <td class="cell-primary">{{ $op->name }}</td>
-                                    <td class="cell-muted">{{ $op->email }}</td>
+                                    <td class="cell-muted">
+                                        @if(filled($op->email) && ! str_ends_with($op->email, '@noemail.local'))
+                                            {{ $op->email }}
+                                        @else
+                                            —
+                                        @endif
+                                    </td>
                                     <td class="cell-muted">{{ $op->phone ?? '—' }}</td>
                                     <td>
                                         <form method="POST" action="{{ route('admin.users.status', $op) }}" class="d-flex gap-1 align-items-center">
                                             @csrf @method('PATCH')
                                             <select name="status" class="form-select form-select-sm" style="width:130px">
-                                                @foreach(['active','inactive','suspended'] as $st)
-                                                    <option value="{{ $st }}" {{ $op->status === $st ? 'selected' : '' }}>
-                                                        {{ match($st){ 'active'=>'Hoạt động','inactive'=>'Vô hiệu','suspended'=>'Tạm ngưng' } }}
+                                                @foreach(['active', 'suspended'] as $st)
+                                                    <option value="{{ $st }}" {{ ($op->status === $st || ($st === 'suspended' && $op->status === 'inactive')) ? 'selected' : '' }}>
+                                                        {{ $st === 'active' ? 'Hoạt động' : 'Tạm ngưng' }}
                                                     </option>
                                                 @endforeach
                                             </select>
@@ -115,11 +126,6 @@ if (! in_array($adminDefaultTab, ['create', 'list', 'referrals', 'fees', 'bank',
                 @include('partials.screen-tab-pane-end')
 
                 @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'referrals', 'active' => $adminDefaultTab === 'referrals'])
-                <p class="text-muted small mb-3">
-                    Mã <strong>người giới thiệu</strong> (admin tạo): hoa hồng {{ number_format(\App\Support\PlatformFees::referralCommissionFirstPercent(), 1) }}% vào doanh thu — <strong>không giảm giá vé</strong>.
-                    Mã <strong>từ đặt vé</strong>: khách quét QR được giảm {{ number_format(\App\Support\PlatformFees::referralCommissionRepeatPercent(), 1) }}% (mỗi SĐT một lần); tự tạo khi đặt chuyến,
-                    đang chờ đến khi chuyến hoàn tất mới dùng được — hủy/không đi thì mã bị xóa.
-                </p>
                 <form method="POST" action="{{ route('admin.referrers.store') }}" class="console-form mb-4">
                     @csrf
                     <div class="row g-3 align-items-end">

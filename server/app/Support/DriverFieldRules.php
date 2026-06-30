@@ -11,11 +11,12 @@ class DriverFieldRules
     public static function requiredFieldsFor(string $context): array
     {
         $contact = ['name', 'phone'];
+        $account = $context === 'register' ? ['password', 'password_confirmation'] : [];
         $vehicle = ['vehicle_license_plate', 'vehicle_type', 'vehicle_seats'];
 
         return match ($context) {
-            'register', 'profile' => array_merge($contact, $vehicle),
-            default               => [],
+            'register' => array_merge($contact, $account, $vehicle),
+            default    => [],
         };
     }
 
@@ -52,9 +53,7 @@ class DriverFieldRules
         $req = fn (string $field) => self::isRequired($context, $field) ? 'required' : 'nullable';
 
         $emailRules = ['nullable', 'email', 'max:255', $emailUnique];
-        if ($context === 'register' || $context === 'profile') {
-            $emailRules[0] = 'nullable';
-        } elseif (self::isRequired($context, 'email')) {
+        if (self::isRequired($context, 'email')) {
             $emailRules[0] = 'required';
         }
 
@@ -63,12 +62,20 @@ class DriverFieldRules
             $phoneRules[] = $phoneUnique;
         }
 
+        $passwordRules = $context === 'register'
+            ? ['required', 'string', 'min:8', 'confirmed']
+            : ['nullable', 'string', 'min:8'];
+
+        $passwordConfirmRules = $context === 'register'
+            ? ['required', 'string', 'min:8']
+            : ['nullable'];
+
         return [
             'name'          => [$req('name'), 'string', 'max:255'],
             'email'         => $emailRules,
             'phone'         => $phoneRules,
-            'password'      => ['nullable', 'string', 'min:8'],
-            'password_confirmation' => ['nullable'],
+            'password'      => $passwordRules,
+            'password_confirmation' => $passwordConfirmRules,
             'id_number'     => ['nullable', 'string', 'max:20'],
             'date_of_birth' => ['nullable', 'date', 'before:today'],
             'address'       => ['nullable', 'string', 'max:255'],
@@ -129,21 +136,19 @@ class DriverFieldRules
         );
     }
 
-    /** @return array<string, mixed> */
-    public static function selfUpdateRules(int $userId, int $profileId): array
-    {
-        return array_merge(
-            self::userFields($userId, 'profile'),
-            self::profileFields($profileId, 'profile'),
-        );
-    }
-
     /** @return array<string, mixed> — admin/QL sửa tài xế, không bắt buộc đủ mọi field */
-    public static function operatorUpdateRules(int $userId, int $profileId): array
+    public static function operatorUpdateRules(int $userId, int $profileId, bool $contactLocked = false): array
     {
-        return array_merge(
+        $rules = array_merge(
             self::userFields($userId, 'optional'),
             self::profileFields($profileId, 'optional'),
         );
+
+        if ($contactLocked) {
+            $rules['name'] = ['nullable', 'string', 'max:255'];
+            $rules['phone'] = ['nullable', 'string', 'max:30', Rule::unique('users', 'phone')->ignore($userId)];
+        }
+
+        return $rules;
     }
 }

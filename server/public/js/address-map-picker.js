@@ -42,6 +42,7 @@
     var marker = null;
     var targetInputId = null;
     var provinceInputId = null;
+    var defaultProvince = '';
     var latInputId = null;
     var lngInputId = null;
     var pendingLat = null;
@@ -104,11 +105,26 @@
 
     function provinceName() {
         var provinceEl = provinceInputId ? document.getElementById(provinceInputId) : null;
-        return provinceEl ? String(provinceEl.value || '').trim() : '';
+        var fromInput = provinceEl ? String(provinceEl.value || '').trim() : '';
+        return fromInput || defaultProvince || '';
     }
 
     function provinceCenter() {
         return PROVINCE_CENTERS[provinceName()] || PROVINCE_CENTERS['TP.HCM'];
+    }
+
+    function mapCenter() {
+        var latEl = latInputId ? document.getElementById(latInputId) : null;
+        var lngEl = lngInputId ? document.getElementById(lngInputId) : null;
+        if (latEl && lngEl) {
+            var lat = parseFloat(latEl.value);
+            var lng = parseFloat(lngEl.value);
+            if (!isNaN(lat) && !isNaN(lng)) {
+                return [lat, lng];
+            }
+        }
+
+        return provinceCenter();
     }
 
     function setPreview(text, loading) {
@@ -154,6 +170,7 @@
         isResolving = false;
         targetInputId = null;
         provinceInputId = null;
+        defaultProvince = '';
         latInputId = null;
         lngInputId = null;
         pendingLat = null;
@@ -162,17 +179,16 @@
     }
 
     function applyCoords(lat, lng) {
-        if (latInputId) {
-            var latEl = document.getElementById(latInputId);
-            if (latEl) {
-                latEl.value = String(lat);
-            }
+        var latEl = latInputId ? document.getElementById(latInputId) : null;
+        var lngEl = lngInputId ? document.getElementById(lngInputId) : null;
+        if (latEl) {
+            latEl.value = String(lat);
         }
-        if (lngInputId) {
-            var lngEl = document.getElementById(lngInputId);
-            if (lngEl) {
-                lngEl.value = String(lng);
-            }
+        if (lngEl) {
+            lngEl.value = String(lng);
+            lngEl.dispatchEvent(new Event('change', { bubbles: true }));
+        } else if (latEl) {
+            latEl.dispatchEvent(new Event('change', { bubbles: true }));
         }
     }
 
@@ -199,10 +215,22 @@
     }
 
     function finishWithAddress(address) {
-        applyAddress(address);
+        var text = String(address || '').trim();
         if (latInputId && pendingLat !== null && pendingLng !== null) {
             applyCoords(pendingLat, pendingLng);
         }
+        applyAddress(text);
+        document.dispatchEvent(new CustomEvent('addressmap:applied', {
+            bubbles: true,
+            detail: {
+                targetInputId: targetInputId,
+                latInputId: latInputId,
+                lngInputId: lngInputId,
+                lat: pendingLat,
+                lng: pendingLng,
+                address: text,
+            },
+        }));
         closePicker();
     }
 
@@ -292,6 +320,10 @@
             btn.textContent = item.address;
             btn.addEventListener('click', function () {
                 if (isResolving) return;
+                if (item.lat != null && item.lon != null) {
+                    pendingLat = item.lat;
+                    pendingLng = item.lon;
+                }
                 finishWithAddress(item.address);
             });
             searchResultsEl.appendChild(btn);
@@ -335,7 +367,7 @@
             return;
         }
 
-        var center = provinceCenter();
+        var center = mapCenter();
         mapInstance = window.L.map(canvasEl, {
             zoomControl: true,
             attributionControl: true,
@@ -349,11 +381,31 @@
         mapInstance.on('click', function (e) {
             placeMarker(e.latlng.lat, e.latlng.lng, false);
         });
+
+        if (latInputId && lngInputId) {
+            var latEl = document.getElementById(latInputId);
+            var lngEl = document.getElementById(lngInputId);
+            if (latEl && lngEl && latEl.value && lngEl.value) {
+                var existingLat = parseFloat(latEl.value);
+                var existingLng = parseFloat(lngEl.value);
+                if (!isNaN(existingLat) && !isNaN(existingLng)) {
+                    pendingLat = existingLat;
+                    pendingLng = existingLng;
+                    marker = window.L.marker([existingLat, existingLng], { draggable: true }).addTo(mapInstance);
+                    marker.on('dragend', function () {
+                        if (isResolving) return;
+                        var pos = marker.getLatLng();
+                        resolveLocation(pos.lat, pos.lng);
+                    });
+                }
+            }
+        }
     }
 
     function openPicker(btn) {
         targetInputId = btn.getAttribute('data-address-map-for') || '';
         provinceInputId = btn.getAttribute('data-address-map-province') || '';
+        defaultProvince = btn.getAttribute('data-address-map-default-province') || '';
         latInputId = btn.getAttribute('data-address-map-lat') || '';
         lngInputId = btn.getAttribute('data-address-map-lng') || '';
         if (!targetInputId) {

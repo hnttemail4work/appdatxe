@@ -51,6 +51,7 @@ Route::get('available-drivers', [GuestBookingController::class, 'availableDriver
 Route::get('seat-availability', [GuestBookingController::class, 'seatAvailability'])->name('booking.seatAvailability');
 Route::get('quote-price', [GuestBookingController::class, 'quotePrice'])->name('booking.quotePrice');
 Route::post('bookings', [GuestBookingController::class, 'store'])->name('booking.store');
+Route::get('bookings', fn () => redirect()->route('home'));
 Route::get('guest/trip-watch', [GuestTripWatchController::class, 'index'])->name('guest.tripWatch');
 Route::post('guest/trip-reviews', [GuestTripWatchController::class, 'store'])->middleware('throttle:12,1')->name('guest.tripReviews.store');
 Route::post('guest/bookings/cancel', [GuestTripWatchController::class, 'cancelBooking'])->middleware('throttle:12,1')->name('guest.bookings.cancel');
@@ -71,10 +72,8 @@ Route::middleware(['auth', 'role:driver'])->group(function () {
     Route::get('driver/live-sync', [LiveSyncController::class, 'driver'])->name('driver.liveSync');
     Route::post('driver/trip-requests/{driverTripRequest}/accept', [DriverController::class, 'acceptTripRequest'])->name('driver.tripRequests.accept');
     Route::post('driver/trip-requests/{driverTripRequest}/reject', [DriverController::class, 'rejectTripRequest'])->name('driver.tripRequests.reject');
-    Route::get('driver/profile', [DriverController::class, 'myProfile'])->name('driver.profile');
+    Route::redirect('driver/profile', '/driver/dashboard');
     Route::patch('driver/availability', [DriverController::class, 'updateAvailability'])->name('driver.availability.update');
-    Route::patch('driver/profile', [DriverController::class, 'updateMyProfile'])->name('driver.profile.update');
-    Route::post('driver/photos', [DriverController::class, 'uploadMyPhotos'])->name('driver.photos.upload');
     Route::post('driver/bookings/{booking}/complete', [DriverController::class, 'completeTrip'])->name('driver.bookings.complete');
     Route::post('driver/schedules/{schedule}/complete', [DriverController::class, 'completeSchedule'])->name('driver.schedules.complete');
     Route::post('driver/schedules/{schedule}/cancel', [DriverController::class, 'cancelSchedule'])->name('driver.schedules.cancel');
@@ -100,9 +99,11 @@ Route::middleware(['auth', 'role:operator'])->group(function () {
 
     Route::get('operator/dat-chuyen/quote', [OperatorTripOfferController::class, 'quote'])->name('operator.tripOffers.quote');
     Route::get('operator/dat-chuyen', [OperatorTripOfferController::class, 'create'])->name('operator.tripOffers.create');
+    Route::post('operator/dat-chuyen/nhanh', [OperatorTripOfferController::class, 'bulkQuickCreate'])->name('operator.tripOffers.bulkQuick');
     Route::post('operator/dat-chuyen', [OperatorTripOfferController::class, 'store'])->name('operator.tripOffers.store');
     Route::get('operator/dat-chuyen/{scheduleTemplate}/chinh-sua', [OperatorTripOfferController::class, 'edit'])->name('operator.tripOffers.edit');
     Route::put('operator/dat-chuyen/{scheduleTemplate}', [OperatorTripOfferController::class, 'update'])->name('operator.tripOffers.update');
+    Route::delete('operator/dat-chuyen/lo', [OperatorTripOfferController::class, 'bulkDestroy'])->name('operator.tripOffers.bulkDestroy');
     Route::delete('operator/dat-chuyen/{scheduleTemplate}', [OperatorTripOfferController::class, 'destroy'])->name('operator.tripOffers.destroy');
 
     Route::get('operator/driver-wallet', [OperatorController::class, 'driverWallet'])->name('operator.driverWallet');

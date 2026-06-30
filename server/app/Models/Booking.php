@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 
 class Booking extends Model
 {
@@ -187,6 +188,14 @@ class Booking extends Model
     public function schedule()
     {
         return $this->belongsTo(Schedule::class);
+    }
+
+    /** Vé còn được tính là có khách trên chuyến (không hủy / hết hạn). */
+    public function scopeValidForTrip(Builder $query): Builder
+    {
+        return $query
+            ->whereNotIn('booking_status', ['cancelled', 'rejected'])
+            ->whereNull('expired_at');
     }
 
     public function tripReview()

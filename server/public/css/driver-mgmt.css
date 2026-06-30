@@ -131,6 +131,52 @@
     padding-top: 1rem;
 }
 
+.driver-edit-panel .form-control,
+.driver-edit-panel .form-select {
+    background-color: var(--app-surface-raised, #1a1a1a);
+    color: var(--app-text, #f5f5f5);
+    border-color: var(--app-border, #404040);
+}
+
+.driver-edit-panel .form-control:disabled,
+.driver-edit-panel .form-control[readonly],
+.driver-edit-panel .form-select:disabled,
+.driver-edit-panel .driver-field-locked,
+.driver-edit-panel .driver-field-locked:disabled,
+.driver-edit-panel .driver-field-locked[readonly] {
+    background-color: #141414 !important;
+    color: #d4d4d4 !important;
+    border-color: #333 !important;
+    opacity: 1;
+    cursor: not-allowed;
+    box-shadow: none;
+    pointer-events: none;
+}
+.driver-edit-panel .driver-field-locked:focus {
+    border-color: #333 !important;
+    box-shadow: none !important;
+}
+
+.driver-edit-panel .driver-photo-manager .photo-slot {
+    background: var(--app-surface-raised, #1a1a1a);
+    border-color: var(--app-border, #404040);
+}
+
+.driver-edit-panel .driver-photo-manager .photo-slot-title {
+    color: var(--app-text-secondary, #d4d4d4);
+}
+
+.driver-edit-panel .driver-photo-manager .photo-placeholder {
+    background: var(--app-black, #0a0a0a);
+    border-color: var(--app-border, #404040);
+    color: var(--app-text-muted, #d1d5db);
+}
+
+.driver-edit-panel .photo-vehicles-block h6,
+.driver-edit-panel .driver-photo-manager h6 {
+    color: var(--app-text, #f5f5f5);
+}
+
 /* Gallery giấy tờ — lưới gọn khi xem/duyệt */
 .driver-photo-gallery-grid {
     display: grid;

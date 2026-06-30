@@ -2,6 +2,7 @@
 
 @push('styles')
 <link rel="stylesheet" href="{{ asset('css/driver.css') }}?v={{ filemtime(public_path('css/driver.css')) }}">
+<link rel="stylesheet" href="{{ asset('css/address-map-picker.css') }}?v={{ filemtime(public_path('css/address-map-picker.css')) }}">
 @endpush
 
 @section('content')
@@ -19,6 +20,10 @@
     if (! in_array($driverDefaultTab, ['requests', 'trips', 'deposit'], true)) {
         $driverDefaultTab = 'requests';
     }
+
+    $driverLocationAddress = $profile?->last_address;
+    $driverLocationUpdated = ($profile?->last_location_at ?? null)?->format('H:i, d/m/Y');
+    $driverLocationReady = $profile && $profile->hasFreshLocation();
 @endphp
 
 <div class="driver-page">
@@ -29,6 +34,52 @@
             <span class="driver-meta-code ms-1">{{ $profile->driver_code }}</span>
         @endif
     </div>
+    <section class="driver-location-card mb-3" id="driver-location-bar" aria-label="Vị trí hiện tại">
+        <div class="driver-location-card-top">
+            <div class="driver-location-card-icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                    <circle cx="12" cy="10" r="3"/>
+                </svg>
+            </div>
+            <div class="driver-location-card-body">
+                <div class="driver-location-card-head">
+                    <span class="driver-location-card-label">Vị trí hiện tại</span>
+                    <span class="driver-location-status driver-location-status--{{ $driverLocationReady ? 'ok' : 'idle' }}"
+                          id="driver-location-status">{{ $driverLocationReady ? 'Sẵn sàng gán cuốc' : 'Chưa có vị trí' }}</span>
+                </div>
+                <strong class="driver-location-address {{ $driverLocationAddress ? '' : 'text-muted' }}" id="driver-location-address">{{ $driverLocationAddress ?: 'Chưa chọn trên bản đồ' }}</strong>
+                <p class="driver-location-meta" id="driver-location-meta">
+                    @if($driverLocationUpdated)
+                        Cập nhật {{ $driverLocationUpdated }}
+                    @endif
+                </p>
+            </div>
+        </div>
+        <div class="driver-location-card-actions">
+            <div class="input-group address-map-input-group">
+                <input type="text" id="driver-location-detail" class="form-control form-control-sm"
+                       value="{{ $driverLocationAddress ?? '' }}"
+                       placeholder="Nhập địa chỉ hoặc bấm bản đồ" autocomplete="off">
+                <button type="button" class="btn btn-outline-primary btn-sm address-map-trigger"
+                        data-address-map-for="driver-location-detail"
+                        data-address-map-lat="driver-location-lat"
+                        data-address-map-lng="driver-location-lng"
+                        data-address-map-default-province="TP.HCM"
+                        data-address-map-label="Chọn vị trí trên bản đồ"
+                        aria-label="Chọn vị trí trên bản đồ" title="Ghim trên bản đồ">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                        <circle cx="12" cy="10" r="3"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <input type="hidden" id="driver-location-lat" value="{{ $profile->last_lat ?? '' }}">
+        <input type="hidden" id="driver-location-lng" value="{{ $profile->last_lng ?? '' }}">
+    </section>
     @endif
 
     @if(($profile && $profile->isMissedTripLocked()) || ($showTopUpBanner ?? false) || ($settlementBlockReason ?? null))
@@ -123,11 +174,18 @@
 
     @include('partials.screen-tabs-end')
 </div>
+
+@include('partials.address-map-picker-modal')
 @endsection
 
 @push('scripts')
-<script>window.__driverLocationUrl = @json(route('driver.location.update'));</script>
-<script src="{{ asset('js/driver-location.js') }}?v={{ filemtime(public_path('js/driver-location.js')) }}"></script>
+<script>
+window.__driverLocationUrl = @json(route('driver.location.update'));
+window.__geocodeReverseUrl = @json(route('geocode.reverse'));
+window.__geocodeSearchUrl = @json(route('geocode.search'));
+</script>
+<script src="{{ asset('js/address-map-picker.js') }}?v={{ filemtime(public_path('js/address-map-picker.js')) }}"></script>
+<script src="{{ asset('js/driver-location-save.js') }}?v={{ filemtime(public_path('js/driver-location-save.js')) }}"></script>
 <script src="{{ asset('js/driver-transfer-form.js') }}?v={{ filemtime(public_path('js/driver-transfer-form.js')) }}"></script>
 <script src="{{ asset('js/driver-wallet-deposit.js') }}?v={{ filemtime(public_path('js/driver-wallet-deposit.js')) }}"></script>
 <script>

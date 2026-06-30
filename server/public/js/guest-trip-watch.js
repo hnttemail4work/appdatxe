@@ -129,11 +129,22 @@
         var cancelBtn = card.querySelector('.guest-trip-cancel-btn');
         if (cancelBtn && cancelUrl) {
             cancelBtn.addEventListener('click', function () {
-                if (!window.confirm('Bạn chắc chắn muốn hủy chuyến này?')) {
-                    return;
-                }
-                cancelBtn.disabled = true;
-                fetch(cancelUrl, {
+                var confirmCancel = window.AppDialog && window.AppDialog.confirm
+                    ? window.AppDialog.confirm({
+                        title: 'Hủy chuyến',
+                        message: 'Bạn chắc chắn muốn hủy chuyến này?',
+                        confirmText: 'Hủy chuyến',
+                        cancelText: 'Không',
+                        variant: 'danger',
+                    })
+                    : Promise.resolve(window.confirm('Bạn chắc chắn muốn hủy chuyến này?'));
+
+                confirmCancel.then(function (ok) {
+                    if (!ok) {
+                        return;
+                    }
+                    cancelBtn.disabled = true;
+                    fetch(cancelUrl, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -164,9 +175,14 @@
                         }, 400);
                     })
                     .catch(function (err) {
-                        window.alert(err.message || 'Không hủy được chuyến.');
+                        if (window.AppDialog && window.AppDialog.alert) {
+                            window.AppDialog.alert(err.message || 'Không hủy được chuyến.', { variant: 'danger' });
+                        } else {
+                            window.alert(err.message || 'Không hủy được chuyến.');
+                        }
                         cancelBtn.disabled = false;
                     });
+                });
             });
         }
     }

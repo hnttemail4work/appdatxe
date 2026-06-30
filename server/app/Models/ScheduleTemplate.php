@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\DepartureTimeDisplay;
+use App\Support\ServiceDate;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 
@@ -106,7 +107,7 @@ class ScheduleTemplate extends Model
     {
         $date = $serviceDate instanceof Carbon
             ? $serviceDate->copy()->startOfDay()
-            : Carbon::parse($serviceDate)->startOfDay();
+            : ServiceDate::parse($serviceDate);
 
         $departure = $this->departureAt($date);
         $arrival = $this->expectedArrivalAt($date);

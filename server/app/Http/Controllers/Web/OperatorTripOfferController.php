@@ -121,18 +121,86 @@ class OperatorTripOfferController extends Controller
     public function destroy(ScheduleTemplate $scheduleTemplate)
     {
         try {
-            $template = $this->offers->deleteOffer($scheduleTemplate, Auth::id());
-            $template->loadMissing('route');
+            $this->offers->deleteOffer($scheduleTemplate, Auth::id());
         } catch (InvalidArgumentException) {
             abort(403);
         }
 
+        return redirect()->route('operator.tripOffers.create');
+    }
+
+    public function bulkDestroy(Request $request)
+    {
+        $validated = $request->validate([
+            'template_ids'   => ['required', 'array', 'min:1'],
+            'template_ids.*' => ['integer', 'distinct'],
+        ], [
+            'template_ids.required' => 'Vui lòng chọn ít nhất một tuyến.',
+            'template_ids.min'      => 'Vui lòng chọn ít nhất một tuyến.',
+        ]);
+
+        try {
+            $this->offers->deleteOffers(
+                array_map('intval', $validated['template_ids']),
+                Auth::id(),
+            );
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['template_ids' => $e->getMessage()]);
+        }
+
+        return redirect()->route('operator.tripOffers.create');
+    }
+
+    public function bulkQuickCreate(Request $request)
+    {
+        $seats = (int) $request->input('seats', 0);
+        $hasVehiclePhoto = $this->offers->operatorHasVehiclePhoto(Auth::id(), $seats);
+
+        $request->validate([
+            'departure'             => ['required', 'string', LocationCatalog::inRule()],
+            'service_date'          => ['required', 'date', 'after_or_equal:today'],
+            'departure_time'        => ['required', 'date_format:H:i'],
+            'expected_arrival_time' => ['nullable', 'date_format:H:i'],
+            'seats'                 => ['required', 'integer', Rule::in(VehicleCapacityOptions::STANDARD)],
+            'vehicle_photo'         => $hasVehiclePhoto
+                ? ['nullable', 'image', 'max:5120']
+                : ['required', 'image', 'max:5120'],
+        ], [
+            'departure.required'        => 'Vui lòng chọn điểm đi.',
+            'service_date.required'     => 'Vui lòng chọn ngày chạy.',
+            'service_date.after_or_equal' => 'Ngày chạy phải từ hôm nay trở đi.',
+            'departure_time.required'   => 'Vui lòng nhập giờ khởi hành.',
+            'seats.required'            => 'Vui lòng chọn số chỗ.',
+            'seats.in'                  => 'Số chỗ không hợp lệ.',
+            'vehicle_photo.required'    => 'Vui lòng tải ảnh xe.',
+            'vehicle_photo.image'       => 'Ảnh xe phải là file hình ảnh.',
+        ]);
+
+        try {
+            $result = $this->offers->bulkCreateFromDeparture(Auth::id(), [
+                'departure'             => $request->input('departure'),
+                'service_date'          => $request->input('service_date'),
+                'departure_time'        => $request->input('departure_time'),
+                'expected_arrival_time' => $request->input('expected_arrival_time'),
+                'seats'                 => $seats,
+                'photo'                 => $request->file('vehicle_photo'),
+            ]);
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['quick_trip' => $e->getMessage()])->withInput();
+        }
+
+        $total = $result['created'] + $result['updated'];
+
         return redirect()
             ->route('operator.tripOffers.create')
             ->with('success', sprintf(
-                'Đã xóa tuyến %s → %s khỏi trang đặt vé.',
-                $template->route->departure,
-                $template->route->destination,
+                'Đã tạo nhanh %d tuyến từ %s (ngày chạy %s): %d mới, %d cập nhật%s.',
+                $total,
+                $request->input('departure'),
+                $result['service_date_label'],
+                $result['created'],
+                $result['updated'],
+                $result['skipped'] > 0 ? ', ' . $result['skipped'] . ' bỏ qua' : '',
             ));
     }
 
@@ -222,6 +290,11 @@ class OperatorTripOfferController extends Controller
                 'offers_page',
             ),
             'quoteUrl'        => route('operator.tripOffers.quote'),
+            'quickTrip'       => [
+                'service_date'       => now()->toDateString(),
+                'default_departure'  => LocationCatalog::hub(),
+                'vehicle_photos'     => $this->offers->vehiclePhotoUrlsForOperator(Auth::id()),
+            ],
         ];
     }
 

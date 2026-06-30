@@ -33,7 +33,7 @@ class AuthController extends Controller
 
         if (! $user) {
             return back()
-                ->withErrors(['phone' => 'Số điện thoại hoặc mật khẩu không đúng'])
+                ->withErrors(['login' => 'Số điện thoại hoặc mật khẩu không đúng'])
                 ->withInput();
         }
 
@@ -43,8 +43,12 @@ class AuthController extends Controller
         if ($user->status !== 'active') {
             Auth::logout();
 
+            $message = $user->status === 'suspended'
+                ? 'Tài khoản của bạn bị tạm ngưng.'
+                : 'Tài khoản của bạn chưa được kích hoạt.';
+
             return back()
-                ->withErrors(['phone' => 'Tài khoản của bạn chưa được kích hoạt hoặc đã bị tạm ngưng.'])
+                ->withErrors(['login' => $message])
                 ->withInput();
         }
 

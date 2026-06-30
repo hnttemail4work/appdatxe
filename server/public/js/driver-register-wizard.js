@@ -75,6 +75,18 @@
             });
         }
 
+        if (step === 2) {
+            var pwd = form.querySelector('[name="password"]');
+            var pwd2 = form.querySelector('[name="password_confirmation"]');
+            if (pwd && pwd2 && pwd.value !== pwd2.value) {
+                pwd2.classList.add('is-invalid');
+                pwd2.setCustomValidity('Mật khẩu không khớp');
+                if (!firstInvalid) firstInvalid = pwd2;
+            } else if (pwd2) {
+                pwd2.setCustomValidity('');
+            }
+        }
+
         if (firstInvalid) {
             firstInvalid.focus();
             if (firstInvalid.type === 'file') {

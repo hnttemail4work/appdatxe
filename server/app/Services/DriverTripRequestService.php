@@ -57,10 +57,6 @@ class DriverTripRequestService
             ->with(['user', 'operator'])
             ->orderByDesc('experience_years');
 
-        if ($schedule?->vehicle?->operator_id) {
-            $query->where('operator_id', $schedule->vehicle->operator_id);
-        }
-
         return $query->get();
     }
 
@@ -167,6 +163,51 @@ class DriverTripRequestService
         ]);
     }
 
+    /** Gán thẳng tài xế vào chuyến khi khách đặt xe (gần điểm đón nhất). */
+    public function directAssignForBooking(Booking $booking): bool
+    {
+        $this->expireStale();
+
+        $booking->loadMissing(['schedule.route', 'schedule.vehicle']);
+        $schedule = Schedule::query()->find($booking->schedule_id);
+
+        if (! $schedule
+            || $schedule->driver_id
+            || in_array($booking->booking_status, ['cancelled', 'rejected'], true)) {
+            return false;
+        }
+
+        if ($this->proximity->pickupCoordinates($booking) === null) {
+            return false;
+        }
+
+        $tried = collect();
+
+        for ($attempt = 0; $attempt < 15; $attempt++) {
+            $driver = $this->proximity->pickBest($schedule, $booking, $tried, true);
+
+            if (! $driver?->user_id) {
+                return false;
+            }
+
+            if ($this->wallets->acceptBlockReason($driver)) {
+                $tried->push((int) $driver->user_id);
+
+                continue;
+            }
+
+            try {
+                $this->assignDriverToSchedule($schedule, $driver);
+
+                return true;
+            } catch (InvalidArgumentException) {
+                $tried->push((int) $driver->user_id);
+            }
+        }
+
+        return false;
+    }
+
     public function autoAssignForBooking(Booking $booking): ?DriverTripRequest
     {
         $this->expireStale();
@@ -252,6 +293,29 @@ class DriverTripRequestService
                     'status'       => 'accepted',
                     'responded_at' => now(),
                 ]);
+
+            $this->anchorAllBookingsForAcceptedSchedule($schedule->fresh());
+        });
+    }
+
+    private function assignDriverToSchedule(Schedule $schedule, DriverProfile $driver): void
+    {
+        DB::transaction(function () use ($schedule, $driver): void {
+            $schedule = Schedule::query()->lockForUpdate()->findOrFail($schedule->id);
+
+            if ($schedule->driver_id && (int) $schedule->driver_id !== (int) $driver->user_id) {
+                throw new InvalidArgumentException('Chuyến đã được tài xế khác nhận.');
+            }
+
+            if ($schedule->driver_id) {
+                return;
+            }
+
+            $driver->loadMissing('user');
+            $schedule->update([
+                'driver_id'   => $driver->user_id,
+                'driver_name' => $driver->user->name,
+            ]);
 
             $this->anchorAllBookingsForAcceptedSchedule($schedule->fresh());
         });
@@ -415,7 +479,6 @@ class DriverTripRequestService
 
         $profile = DriverProfile::query()
             ->operational()
-            ->where('operator_id', $operatorUserId)
             ->where('driver_code', strtoupper(trim($newDriverCode)))
             ->with('user')
             ->first();

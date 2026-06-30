@@ -115,13 +115,30 @@ class DriverProfileSyncService
     /** @param  array<string, mixed>  $validated */
     public function fillUserFromValidated(DriverProfile $profile, array $validated): void
     {
-        $userData = collect($validated)
-            ->only(['name', 'email', 'phone', 'address', 'id_number', 'date_of_birth', 'password'])
-            ->filter(fn ($v) => $v !== null && $v !== '')
-            ->all();
+        $userData = [];
 
-        if (isset($userData['password'])) {
-            $userData['password'] = Hash::make($userData['password']);
+        if (array_key_exists('name', $validated) && $validated['name'] !== null && $validated['name'] !== '') {
+            $userData['name'] = $validated['name'];
+        }
+
+        if (array_key_exists('phone', $validated) && $validated['phone'] !== null && $validated['phone'] !== '') {
+            $userData['phone'] = $validated['phone'];
+        }
+
+        if (array_key_exists('email', $validated)) {
+            $userData['email'] = filled($validated['email'])
+                ? trim((string) $validated['email'])
+                : null;
+        }
+
+        foreach (['address', 'id_number', 'date_of_birth'] as $field) {
+            if (array_key_exists($field, $validated) && $validated[$field] !== null && $validated[$field] !== '') {
+                $userData[$field] = $validated[$field];
+            }
+        }
+
+        if (! empty($validated['password'])) {
+            $userData['password'] = Hash::make($validated['password']);
         }
 
         if ($userData !== []) {

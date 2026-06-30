@@ -1,8 +1,8 @@
-{{-- Trường thông tin tài xế: đăng ký / hồ sơ tài xế. $context: register|profile --}}
+{{-- Trường thông tin tài xế — wizard đăng ký --}}
 @php
     use App\Support\DriverFieldRules;
 
-    $context = $context ?? 'profile';
+    $context = 'register';
     $user = $user ?? null;
     $profile = $profile ?? null;
     $sections = $sections ?? ['contact', 'vehicle', 'bank'];
@@ -11,11 +11,12 @@
     $star = fn (string $field) => in_array($field, $requiredFields, true)
         ? '<span class="text-danger">*</span>' : '';
     $req = fn (string $field) => in_array($field, $requiredFields, true) ? 'required' : '';
+    $profileEmail = old('email', '');
 @endphp
 
 @if(in_array('account', $sections, true) || in_array('contact', $sections, true))
 <div class="register-section" data-field-section="account">
-    <div class="register-section-title"><span class="section-icon">👤</span> Liên hệ</div>
+    <div class="register-section-title"><span class="section-icon">👤</span> Tài khoản</div>
     <div class="row g-3">
         <div class="col-md-6">
             <label class="form-label">Họ và tên {!! $star('name') !!}</label>
@@ -31,9 +32,23 @@
             @error('phone')<div class="invalid-feedback">{{ $message }}</div>@enderror
         </div>
         <div class="col-md-6">
+            <label class="form-label">Mật khẩu {!! $star('password') !!}</label>
+            <input type="password" name="password"
+                   class="form-control @error('password') is-invalid @enderror" {{ $req('password') }}
+                   minlength="8" autocomplete="off" spellcheck="false">
+            @error('password')<div class="invalid-feedback">{{ $message }}</div>@enderror
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">Nhập lại mật khẩu {!! $star('password_confirmation') !!}</label>
+            <input type="password" name="password_confirmation"
+                   class="form-control @error('password_confirmation') is-invalid @enderror" {{ $req('password_confirmation') }}
+                   minlength="8" autocomplete="off" spellcheck="false">
+            @error('password_confirmation')<div class="invalid-feedback">{{ $message }}</div>@enderror
+        </div>
+        <div class="col-12">
             <label class="form-label">Email <span class="text-muted fw-normal">(tùy chọn)</span></label>
-            <input type="email" name="email" value="{{ old('email', $user->email ?? '') }}"
-                   class="form-control @error('email') is-invalid @enderror" {{ $req('email') }} autocomplete="email">
+            <input type="email" name="email" value="{{ $profileEmail }}"
+                   class="form-control @error('email') is-invalid @enderror" autocomplete="off">
             @error('email')<div class="invalid-feedback">{{ $message }}</div>@enderror
         </div>
     </div>

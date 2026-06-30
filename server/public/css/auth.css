@@ -1,10 +1,25 @@
 /* Auth — đăng nhập (vàng–đen) */
+.app-shell--auth .app-main {
+    display: flex;
+    flex-direction: column;
+}
+
+.app-shell--auth .app-main > .container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding-top: 1.25rem;
+    padding-bottom: 1.25rem;
+}
+
 .auth-page {
-    min-height: calc(100vh - 8rem);
-    min-height: calc(100dvh - 8rem);
     display: flex;
     align-items: center;
-    padding: 2rem 0;
+    justify-content: center;
+    width: 100%;
+    margin: auto 0;
+    padding: 0;
 }
 
 .auth-card {

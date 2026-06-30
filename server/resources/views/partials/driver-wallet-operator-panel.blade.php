@@ -43,10 +43,13 @@ $pendingDeposits = $pendingDeposits ?? collect();
         @if($pendingDeposits->isNotEmpty())
             <div class="console-alert info mb-3">
                 Có {{ $pendingDeposits->total() }} yêu cầu nạp tiền chờ duyệt.
-                <a href="{{ route('operator.driverWallet', ['tab' => 'deposits']) }}" class="fw-semibold ms-1">Xử lý tại mục Xử lý yêu cầu →</a>
+                <a href="{{ route('operator.driverWallet', ['tab' => 'deposits']) }}" class="fw-semibold ms-1">Mở tab Nạp ví →</a>
             </div>
         @else
-            <p class="text-muted small mb-3">Duyệt nạp ví và cấp mã kết chuyến tại <a href="{{ route('operator.driverWallet') }}">Xử lý yêu cầu</a>.</p>
+            <p class="text-muted small mb-3">
+                Duyệt nạp ví tại <a href="{{ route('operator.driverWallet', ['tab' => 'deposits']) }}">Nạp ví</a>,
+                cấp mã kết chuyến tại <a href="{{ route('operator.driverWallet', ['tab' => 'settlements']) }}">Kết chuyến</a>.
+            </p>
         @endif
 
         @include('partials.driver-wallet-history', ['walletHistory' => $walletHistory ?? collect()])

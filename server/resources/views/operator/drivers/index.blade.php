@@ -5,13 +5,14 @@
 $drivers = $drivers ?? collect();
 @endphp
 
+@include('partials.operator-console-hero')
+
 <div class="console-panel">
     <div class="console-panel-body">
         @include('partials.operator-nav-tabs', ['active' => 'drivers'])
 
 @if($drivers->isEmpty())
         <div class="console-empty py-5">
-            <div class="console-empty-icon">👤</div>
             <p class="mb-0">Chưa có tài xế.</p>
         </div>
 @else

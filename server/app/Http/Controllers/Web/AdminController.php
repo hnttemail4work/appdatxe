@@ -174,18 +174,17 @@ class AdminController extends Controller
         }
 
         $validated = $request->validate([
-            'status' => ['required', Rule::in(['active', 'inactive', 'suspended'])],
+            'status' => ['required', Rule::in(['active', 'suspended'])],
         ]);
 
         $user->update($validated);
 
         $label = match ($validated['status']) {
             'active'    => 'kích hoạt',
-            'inactive'  => 'vô hiệu hóa',
             'suspended' => 'tạm ngưng',
         };
 
-        return redirect()->route('admin.dashboard')
+        return redirect()->route('admin.dashboard', ['tab' => 'list'])
             ->with('success', 'Đã ' . $label . ' tài khoản quản lý ' . $user->name . '.');
     }
 

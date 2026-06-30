@@ -64,6 +64,18 @@ class User extends Authenticatable
         return $this->hasOne(MerchantProfile::class, 'user_id');
     }
 
+    /** Email hiển thị trên form — ẩn placeholder hệ thống @noemail.local */
+    public function emailForForm(): string
+    {
+        $email = trim((string) ($this->email ?? ''));
+
+        if ($email === '' || str_ends_with(strtolower($email), '@noemail.local')) {
+            return '';
+        }
+
+        return $email;
+    }
+
     public function approvedMerchantProfiles()
     {
         return $this->hasMany(MerchantProfile::class, 'approved_by');

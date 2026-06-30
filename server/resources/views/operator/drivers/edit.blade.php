@@ -22,6 +22,8 @@ if (! $viewOnly && $driver->isOperational()) {
 }
 @endphp
 
+@include('partials.operator-console-hero')
+
 <div class="console-panel driver-edit-panel">
     <div class="console-panel-body">
         @include('partials.operator-nav-tabs', ['active' => 'drivers', 'driversSubpage' => true])

@@ -6,6 +6,7 @@ use App\Models\Schedule;
 use App\Models\ScheduleTemplate;
 use App\Support\DepartureTimeDisplay;
 use App\Support\SouthernProvinces;
+use App\Support\ServiceDate;
 use App\Services\TripPricingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -26,9 +27,9 @@ class TripListingService
 
         $serviceDate = $request->input('service_date');
         if (! is_string($serviceDate) || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $serviceDate)) {
-            $serviceDate = now()->addDay()->toDateString();
-        } elseif ($serviceDate < now()->toDateString()) {
-            $serviceDate = now()->toDateString();
+            $serviceDate = ServiceDate::today();
+        } elseif ($serviceDate < ServiceDate::today()) {
+            $serviceDate = ServiceDate::today();
         }
 
         return [
@@ -124,7 +125,7 @@ class TripListingService
         $quote = $this->pricing->quote($template, 'one_way', null, null, 'shared');
         $wholeQuote = $this->pricing->quote($template, 'one_way', null, null, 'whole_car');
         $roundQuote = $this->pricing->quote($template, 'round_trip', null, null, 'shared');
-        $hintDate = $serviceDate ?? now()->addDay()->toDateString();
+        $hintDate = $serviceDate ?? ServiceDate::today();
         $schedule = $template->scheduleInfoForDate($hintDate);
         $referenceTime = DepartureTimeDisplay::normalizeForClock($template->departure_time);
         $occupied = $this->occupiedSeatMapForDate($template, $hintDate, $referenceTime);

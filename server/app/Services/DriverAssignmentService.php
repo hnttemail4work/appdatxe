@@ -38,15 +38,9 @@ class DriverAssignmentService
 
     public function pickDriver(Schedule $schedule): ?DriverProfile
     {
-        $operatorId = $schedule->vehicle?->operator_id;
-        if (! $operatorId) {
-            return null;
-        }
-
         return DriverProfile::query()
             ->with('user')
             ->operational()
-            ->where('operator_id', $operatorId)
             ->where('availability_status', 'available')
             ->orderByDesc('experience_years')
             ->first();

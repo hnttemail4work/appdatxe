@@ -2,14 +2,15 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content booking-referral-success-content">
             <div class="modal-header border-0 pb-0">
-                <h5 class="modal-title" id="booking-referral-success-title">Mã giới thiệu của bạn</h5>
+                <h5 class="modal-title" id="booking-referral-success-title">Mã giới thiệu GT của bạn</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
             </div>
             <div class="modal-body text-center pt-2">
                 <p class="small text-muted mb-3">
-                    Chia sẻ mã này sau khi bạn <strong>hoàn tất chuyến</strong>.
-                    Mã chuyển sang <strong>Sử dụng</strong> trên hệ thống — lúc đó bạn bè quét QR sẽ được giảm
-                    <strong id="booking-referral-success-percent">2</strong>% (mỗi SĐT chỉ hưởng một lần).
+                    Mã <strong>GT tạm</strong> — chưa dùng được ngay. Sau khi bạn <strong>hoàn tất chuyến</strong>,
+                    mã chuyển sang trạng thái <strong>Sử dụng</strong> trên hệ thống.
+                    Khi đó bạn bè đặt bằng SĐT <strong>khác</strong> số của bạn sẽ được giảm
+                    <strong id="booking-referral-success-percent">2</strong>% trên một chuyến (mỗi SĐT chỉ hưởng một lần).
                 </p>
                 <div id="booking-referral-success-qr" class="booking-referral-success-qr mx-auto mb-3"></div>
                 <p class="mb-2"><code class="fs-5" id="booking-referral-success-code">—</code></p>

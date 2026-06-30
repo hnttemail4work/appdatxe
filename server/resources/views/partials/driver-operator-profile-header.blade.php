@@ -24,7 +24,6 @@
 
     @if($driver->isPendingApproval())
         <div class="driver-edit-actions">
-            <p class="text-muted small mb-2 mb-md-0">Kiểm tra giấy tờ và thông tin bên dưới.</p>
             @include('partials.driver-approval-actions', ['driver' => $driver, 'compact' => true])
         </div>
     @elseif($driver->isRejected())

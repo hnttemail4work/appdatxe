@@ -17,7 +17,9 @@ use App\Support\DepartureTimeDisplay;
 use App\Support\PlatformFees;
 use App\Support\PageList;
 use App\Support\SouthernProvinces;
+use App\Support\ServiceDate;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 use InvalidArgumentException;
 
 class GuestBookingController extends Controller
@@ -121,7 +123,10 @@ class GuestBookingController extends Controller
         );
 
         if ($departureTime <= now()) {
-            return response()->json(['drivers' => [], 'message' => 'Khung giờ đã qua.'], 422);
+            return response()->json([
+                'drivers' => [],
+                'message' => 'Giờ đón phải sau thời gian hiện tại.',
+            ], 422);
         }
 
         $schedule = \App\Models\Schedule::query()
@@ -224,7 +229,7 @@ class GuestBookingController extends Controller
 
     public function store(Request $request)
     {
-        $validated = $request->validate([
+        $validator = Validator::make($request->all(), [
             'template_id'     => ['required', 'exists:schedule_templates,id'],
             'service_date'    => ['required', 'date', 'after_or_equal:today'],
             'pickup_time'     => ['required', 'string', 'max:20'],
@@ -234,8 +239,8 @@ class GuestBookingController extends Controller
             'contact_phone'   => ['required', 'string', 'max:30'],
             'pickup_address'  => ['required', 'string', 'max:255', SouthernProvinces::inRule()],
             'pickup_detail'   => ['required', 'string', 'max:500'],
-            'pickup_lat'      => ['nullable', 'numeric', 'between:-90,90'],
-            'pickup_lng'      => ['nullable', 'numeric', 'between:-180,180'],
+            'pickup_lat'      => ['required', 'numeric', 'between:-90,90'],
+            'pickup_lng'      => ['required', 'numeric', 'between:-180,180'],
             'dropoff_address' => ['required', 'string', 'max:255', SouthernProvinces::inRule()],
             'dropoff_detail'  => ['nullable', 'string', 'max:500'],
             'notes'           => ['nullable', 'string', 'max:500'],
@@ -245,6 +250,14 @@ class GuestBookingController extends Controller
             'vehicle_capacity' => ['nullable', 'integer', 'min:1', 'max:50'],
         ]);
 
+        if ($validator->fails()) {
+            return $this->bookingFormRedirect()
+                ->withErrors($validator)
+                ->withInput();
+        }
+
+        $validated = $validator->validated();
+
         $template = ScheduleTemplate::query()
             ->where('status', 'active')
             ->with(['route', 'vehicle'])
@@ -252,11 +265,17 @@ class GuestBookingController extends Controller
 
         $pickupTime = DepartureTimeDisplay::normalizeForClock($validated['pickup_time']);
 
+        try {
+            $this->driverAvailability->assertPickupTimeAvailable($validated['service_date'], $pickupTime);
+        } catch (InvalidArgumentException $e) {
+            return $this->bookingFormError($e);
+        }
+
         $bookingMode = $validated['booking_mode'];
         $occupiedMap = $this->tripListing->occupiedSeatMapForDate(
             $template,
             $validated['service_date'],
-            null,
+            $pickupTime,
         );
         $capacity = $template->capacity();
         $freeSeats = collect(range(1, $capacity))
@@ -267,14 +286,14 @@ class GuestBookingController extends Controller
 
         if ($bookingMode === 'whole_car') {
             if (count($freeSeats) !== $capacity) {
-                return back()
+                return $this->bookingFormRedirect()
                     ->withErrors(['booking_mode' => 'Đặt cả xe chỉ khả dụng khi chuyến còn trống toàn bộ.'])
                     ->withInput();
             }
             $seatNumbers = $freeSeats;
         } else {
             if ($freeSeats === []) {
-                return back()
+                return $this->bookingFormRedirect()
                     ->withErrors(['booking_mode' => 'Hết chỗ trên chuyến này — vui lòng chọn chuyến khác.'])
                     ->withInput();
             }
@@ -283,7 +302,7 @@ class GuestBookingController extends Controller
                 $seatCount = 1;
             }
             if ($seatCount > count($freeSeats)) {
-                return back()
+                return $this->bookingFormRedirect()
                     ->withErrors(['seat_count' => 'Chỉ còn ' . count($freeSeats) . ' ghế trống trên chuyến này.'])
                     ->withInput();
             }
@@ -295,8 +314,8 @@ class GuestBookingController extends Controller
 
         $passengerGender = ($validated['passenger_gender'] ?? 'male') === 'female' ? 'female' : 'male';
         $passengerAge = isset($validated['passenger_age']) ? (int) $validated['passenger_age'] : null;
-        $pickupLat = isset($validated['pickup_lat']) ? (float) $validated['pickup_lat'] : null;
-        $pickupLng = isset($validated['pickup_lng']) ? (float) $validated['pickup_lng'] : null;
+        $pickupLat = (float) $validated['pickup_lat'];
+        $pickupLng = (float) $validated['pickup_lng'];
 
         try {
             $booking = $this->workflow->createBookingFromTemplate(
@@ -320,7 +339,7 @@ class GuestBookingController extends Controller
                 $pickupLng,
             );
         } catch (InvalidArgumentException $e) {
-            return back()->withErrors(['seat_numbers' => $e->getMessage()])->withInput();
+            return $this->bookingFormError($e);
         }
 
         session()->forget('guest_referral_code');
@@ -329,6 +348,7 @@ class GuestBookingController extends Controller
 
         $booking->loadMissing(['schedule', 'referralCode', 'appliedReferralCode']);
         $issuedReferral = $booking->referralCode;
+        $driverAssigned = (int) ($booking->schedule->driver_id ?? 0) > 0;
 
         return redirect()->route('home')->with('booking_success', [
             'trip_code'         => $booking->schedule->shortTripCode(),
@@ -338,7 +358,29 @@ class GuestBookingController extends Controller
             'referral_url'      => $issuedReferral ? $issuedReferral->landingUrl() : null,
             'referral_pending'  => true,
             'referral_discount_percent' => PlatformFees::referralCommissionRepeatPercent(),
-            'awaiting_operator' => true,
+            'awaiting_operator' => ! $driverAssigned,
+            'driver_assigned'   => $driverAssigned,
         ]);
+    }
+
+    private function bookingFormRedirect(): \Illuminate\Http\RedirectResponse
+    {
+        return redirect()->route('home');
+    }
+
+    private function bookingFormError(InvalidArgumentException $e): \Illuminate\Http\RedirectResponse
+    {
+        $message = $e->getMessage();
+        $field = 'booking';
+
+        if (str_contains($message, 'Giờ đón') || str_contains($message, 'giờ đón')) {
+            $field = 'pickup_time';
+        } elseif (str_contains($message, 'khởi hành')) {
+            $field = 'service_date';
+        } elseif (str_contains($message, 'ghế') || str_contains($message, 'Chuyến không') || str_contains($message, 'Chuyến đã')) {
+            $field = 'seat_numbers';
+        }
+
+        return $this->bookingFormRedirect()->withErrors([$field => $message])->withInput();
     }
 }

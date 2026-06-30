@@ -8,7 +8,7 @@
         </div>
         <div class="card-body p-4 pt-3">
             <form method="POST" action="{{ route('register') }}"
-                  id="driver-register-form" enctype="multipart/form-data" novalidate>
+                  id="driver-register-form" enctype="multipart/form-data" novalidate autocomplete="off">
                 @csrf
                 <input type="hidden" name="register_mode" value="driver">
                 @include('auth.partials.register-driver')

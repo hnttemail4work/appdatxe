@@ -155,6 +155,7 @@ body:has(.driver-page) {
     justify-content: center;
     margin: 0;
 }
+
 .driver-section-head {
     display: flex;
     align-items: center;
@@ -569,4 +570,119 @@ body:has(.driver-page) {
     font-size: .75rem;
     color: var(--drv-muted);
     margin-top: .15rem;
+}
+
+.driver-location-card {
+    border: 1px solid rgba(212, 175, 55, .28);
+    border-radius: .875rem;
+    background: linear-gradient(145deg, rgba(255, 255, 255, .04) 0%, rgba(212, 175, 55, .06) 100%);
+    overflow: hidden;
+}
+.driver-location-card-top {
+    display: flex;
+    gap: .85rem;
+    padding: .9rem 1rem .75rem;
+    border-bottom: 1px solid rgba(255, 255, 255, .06);
+}
+.driver-location-card-icon {
+    flex-shrink: 0;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: .65rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(212, 175, 55, .14);
+    color: var(--drv-primary);
+}
+.driver-location-card-body {
+    min-width: 0;
+    flex: 1;
+}
+.driver-location-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    margin-bottom: .2rem;
+}
+.driver-location-card-label {
+    font-size: .68rem;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--drv-muted);
+}
+.driver-location-status {
+    font-size: .68rem;
+    font-weight: 700;
+    padding: .15rem .45rem;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+.driver-location-status--idle {
+    background: rgba(255, 255, 255, .08);
+    color: #bdbdbd;
+}
+.driver-location-status--pending {
+    background: rgba(251, 191, 36, .18);
+    color: #fcd34d;
+}
+.driver-location-status--ok {
+    background: rgba(34, 197, 94, .16);
+    color: #86efac;
+}
+.driver-location-status--warn {
+    background: rgba(248, 113, 113, .16);
+    color: #fca5a5;
+}
+.driver-location-province {
+    display: block;
+    font-size: 1.15rem;
+    line-height: 1.25;
+    color: #fff;
+    margin-bottom: .15rem;
+}
+.driver-location-address {
+    font-size: .82rem;
+    color: #d4d4d4;
+    margin-bottom: .2rem;
+    line-height: 1.35;
+}
+.driver-location-meta {
+    font-size: .75rem;
+    color: var(--drv-muted);
+    margin: 0;
+    line-height: 1.45;
+}
+.driver-location-meta:empty {
+    display: none;
+}
+.driver-location-card-actions {
+    padding: .75rem 1rem .9rem;
+}
+.driver-location-field-label {
+    display: block;
+    font-size: .72rem;
+    color: var(--drv-muted);
+    margin-bottom: .35rem;
+}
+.driver-location-picker-row {
+    display: flex;
+    align-items: stretch;
+    gap: .5rem;
+}
+.driver-province-select {
+    flex: 1;
+    min-width: 0;
+    background: #141414;
+    border-color: #444;
+    color: #f5f5f5;
+}
+.driver-location-map-trigger {
+    flex-shrink: 0;
+    width: 2.35rem;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
