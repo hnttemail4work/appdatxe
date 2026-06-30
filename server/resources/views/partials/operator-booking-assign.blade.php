@@ -1,9 +1,8 @@
 @php
-    $needsConfirm = $booking->needsOperatorConfirmation();
-    $awaitingDriver = ! $needsConfirm && ! $booking->hasDriverAccepted()
-        && ! in_array($booking->booking_status, ['cancelled', 'rejected'], true)
-        && ! $booking->isExpired();
-    $canReassign = $booking->hasDriverAccepted()
+    $bookingList = $bookingList ?? 'active';
+    $inPendingQueue = $booking->isInOperatorPendingQueue();
+    $canReassign = $bookingList === 'active'
+        && $booking->hasDriverAccepted()
         && $booking->schedule->departure_time > now()
         && ! in_array($booking->booking_status, ['cancelled', 'rejected'], true)
         && $booking->trip_status !== 'completed';
@@ -17,7 +16,7 @@
     $currentDriverId = (int) ($schedule->driver_id ?? 0);
 @endphp
 
-@if($needsConfirm || $awaitingDriver)
+@if($bookingList === 'pending' && $inPendingQueue && ! $booking->isTripOverdueStuck())
     @if($ownPending)
         <span class="small text-muted">Chờ {{ $ownPending->driver?->name ?? 'tài xế' }} phản hồi</span>
     @else
@@ -39,9 +38,7 @@
                 @endforeach
             </select>
         @endif
-        <button type="submit" class="btn btn-primary btn-sm text-nowrap">
-            {{ $needsConfirm ? 'Xác nhận' : 'Giao lại' }}
-        </button>
+        <button type="submit" class="btn btn-primary btn-sm text-nowrap">Gán tài xế</button>
     </form>
     @endif
 @elseif($canReassign)

@@ -13,9 +13,11 @@ class DriverFieldRules
         $contact = ['name', 'phone'];
         $account = $context === 'register' ? ['password', 'password_confirmation'] : [];
         $vehicle = ['vehicle_license_plate', 'vehicle_type', 'vehicle_seats'];
+        $bank = ['bank_name', 'bank_account'];
 
         return match ($context) {
-            'register' => array_merge($contact, $account, $vehicle),
+            'register' => array_merge($contact, $account, $vehicle, $bank),
+            'operator' => $bank,
             default    => [],
         };
     }
@@ -141,7 +143,7 @@ class DriverFieldRules
     {
         $rules = array_merge(
             self::userFields($userId, 'optional'),
-            self::profileFields($profileId, 'optional'),
+            self::profileFields($profileId, 'operator'),
         );
 
         if ($contactLocked) {

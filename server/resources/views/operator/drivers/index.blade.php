@@ -3,6 +3,13 @@
 @section('console')
 @php
 $drivers = $drivers ?? collect();
+$filter = $filter ?? 'all';
+$pendingCount = $pendingCount ?? 0;
+$driverTabs = [
+    ['key' => 'all', 'label' => 'Tất cả', 'href' => route('operator.drivers')],
+    ['key' => 'pending', 'label' => 'Chờ duyệt', 'href' => route('operator.drivers', ['filter' => 'pending']), 'badge' => $pendingCount, 'hot' => $pendingCount > 0],
+    ['key' => 'rejected', 'label' => 'Đã từ chối', 'href' => route('operator.drivers', ['filter' => 'rejected'])],
+];
 @endphp
 
 @include('partials.operator-console-hero')
@@ -11,9 +18,32 @@ $drivers = $drivers ?? collect();
     <div class="console-panel-body">
         @include('partials.operator-nav-tabs', ['active' => 'drivers'])
 
+        <div class="screen-tabs-wrap mb-3">
+            <ul class="nav nav-tabs screen-tabs">
+                @foreach($driverTabs as $tab)
+                <li class="nav-item">
+                    <a href="{{ $tab['href'] }}" class="nav-link {{ $filter === $tab['key'] ? 'active' : '' }}">
+                        {{ $tab['label'] }}
+                        @if(! empty($tab['badge']))
+                            <span class="status-pill status-pill--{{ ! empty($tab['hot']) ? 'accent' : 'neutral' }} ms-1">{{ $tab['badge'] }}</span>
+                        @endif
+                    </a>
+                </li>
+                @endforeach
+            </ul>
+        </div>
+
 @if($drivers->isEmpty())
         <div class="console-empty py-5">
-            <p class="mb-0">Chưa có tài xế.</p>
+            <p class="mb-0">
+                @if($filter === 'pending')
+                    Không có hồ sơ chờ duyệt.
+                @elseif($filter === 'rejected')
+                    Chưa có hồ sơ bị từ chối.
+                @else
+                    Chưa có tài xế.
+                @endif
+            </p>
         </div>
 @else
         <p class="text-muted small mb-3">Lượt thích / không thích tự cập nhật khi khách đánh giá sau chuyến.</p>
@@ -76,6 +106,9 @@ $drivers = $drivers ?? collect();
                             @if($d->missedTripStrikeLabel() && ! $d->isMissedTripLocked() && ! $d->isPendingApproval() && ! $d->isRejected())
                                 <div class="mt-1"><span class="status-pill status-pill--pending">{{ $d->missedTripStrikeLabel() }}</span></div>
                             @endif
+                            @if($d->hasRejectionNote())
+                                <div class="cell-muted small mt-1 text-danger">{{ \Illuminate\Support\Str::limit($d->rejection_reason, 80) }}</div>
+                            @endif
                         </td>
                         <td class="text-end">
                             <div class="d-flex flex-wrap gap-1 justify-content-end">
@@ -99,4 +132,8 @@ $drivers = $drivers ?? collect();
 
 @push('styles')
 <link rel="stylesheet" href="{{ asset('css/driver-mgmt.css') }}">
+@endpush
+
+@push('scripts')
+<script src="{{ asset('js/driver-approval-actions.js') }}"></script>
 @endpush

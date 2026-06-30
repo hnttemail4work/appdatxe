@@ -119,8 +119,8 @@
     <div class="register-section-title"><span class="section-icon">🏦</span> Thông tin ngân hàng</div>
     <div class="row g-3">
         <div class="col-md-6">
-            <label class="form-label">Tên ngân hàng</label>
-            <select name="bank_name" class="form-select register-bank-select @error('bank_name') is-invalid @enderror">
+            <label class="form-label">Tên ngân hàng {!! $star('bank_name') !!}</label>
+            <select name="bank_name" class="form-select register-bank-select @error('bank_name') is-invalid @enderror" {{ $req('bank_name') }}>
                 <option value="">-- Chọn ngân hàng --</option>
                 @foreach($bankOptions as $bank)
                     <option value="{{ $bank }}" {{ $currentBank === $bank ? 'selected' : '' }}>{{ $bank }}</option>
@@ -132,10 +132,10 @@
             @error('bank_name')<div class="invalid-feedback">{{ $message }}</div>@enderror
         </div>
         <div class="col-md-6">
-            <label class="form-label">Số tài khoản</label>
+            <label class="form-label">Số tài khoản {!! $star('bank_account') !!}</label>
             <input type="text" name="bank_account" value="{{ old('bank_account', $profile->bank_account ?? '') }}"
                    class="form-control @error('bank_account') is-invalid @enderror"
-                   inputmode="numeric">
+                   inputmode="numeric" {{ $req('bank_account') }}>
             @error('bank_account')<div class="invalid-feedback">{{ $message }}</div>@enderror
         </div>
     </div>

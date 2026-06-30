@@ -12,30 +12,71 @@
 
     var csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
     var pollTimer = null;
-    var POLL_MS = 90000;
+    var reloadTimer = null;
+    var REFRESH_MS = Number(window.__guestTripReloadMs) > 0 ? Number(window.__guestTripReloadMs) : 180000;
 
-    function escapeHtml(s) {
-        if (!s) return '';
-        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    function hasSearchingTrip(trips) {
+        return trips.some(function (trip) {
+            return trip.progress === 'searching_driver' || trip.driver_pending === true;
+        });
+    }
+
+    function clearReloadTimer() {
+        if (reloadTimer) {
+            window.clearInterval(reloadTimer);
+            reloadTimer = null;
+        }
+    }
+
+    function clearPollTimer() {
+        if (pollTimer) {
+            window.clearInterval(pollTimer);
+            pollTimer = null;
+        }
+    }
+
+    function startReloadLoop() {
+        clearReloadTimer();
+        reloadTimer = window.setInterval(function () {
+            window.location.reload();
+        }, REFRESH_MS);
+    }
+
+    function syncAutoRefresh(trips) {
+        clearReloadTimer();
+        clearPollTimer();
+
+        if (!trips.length) {
+            return;
+        }
+
+        if (hasSearchingTrip(trips)) {
+            startReloadLoop();
+            return;
+        }
+
+        pollTimer = window.setInterval(loadTrips, REFRESH_MS);
     }
 
     function progressHtml(activeKey) {
         var steps = [
             { key: 'booked', label: 'Đã đặt' },
+            { key: 'searching_driver', label: 'Đang tìm tài xế' },
+            { key: 'driver_assigned', label: 'Đã có tài xế' },
             { key: 'running', label: 'Đang chạy' },
             { key: 'completed', label: 'Hoàn thành' },
         ];
-        var order = { booked: 0, running: 1, completed: 2 };
+        var order = { booked: 0, searching_driver: 1, driver_assigned: 2, running: 3, completed: 4 };
         var activeIdx = order[activeKey] ?? 0;
         var html = '<div class="guest-trip-progress-track">';
         steps.forEach(function (step, idx) {
             var state = idx < activeIdx ? 'done' : (idx === activeIdx ? 'active' : 'pending');
             html += '<div class="guest-trip-progress-step guest-trip-progress-step--' + state + '">';
-            html += '<span class="guest-trip-progress-dot"></span>';
+            html += '<span class="guest-trip-progress-dot" aria-hidden="true"></span>';
             html += '<span class="guest-trip-progress-label">' + step.label + '</span>';
             html += '</div>';
             if (idx < steps.length - 1) {
-                html += '<div class="guest-trip-progress-line guest-trip-progress-line--' + (idx < activeIdx ? 'done' : 'pending') + '"></div>';
+                html += '<div class="guest-trip-progress-line guest-trip-progress-line--' + (idx < activeIdx ? 'done' : 'pending') + '" aria-hidden="true"></div>';
             }
         });
         html += '</div>';
@@ -110,9 +151,7 @@
                             card.classList.add('guest-trip-card--fade-out');
                             window.setTimeout(function () {
                                 card.remove();
-                                if (!listEl.children.length) {
-                                    root.classList.add('d-none');
-                                }
+                                loadTrips();
                             }, 400);
                         }, 2500);
                     })
@@ -143,45 +182,79 @@
                     if (!ok) {
                         return;
                     }
-                    cancelBtn.disabled = true;
-                    fetch(cancelUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': csrf,
-                        'X-Requested-With': 'XMLHttpRequest',
-                    },
-                    body: JSON.stringify({
-                        booking_ref: trip.booking_ref,
-                        contact_phone: trip.contact_phone,
-                    }),
-                })
-                    .then(function (res) {
-                        return res.json().then(function (data) {
-                            return { ok: res.ok, data: data };
-                        });
-                    })
-                    .then(function (result) {
-                        if (!result.ok) {
-                            throw new Error(result.data?.message || 'Không hủy được chuyến.');
+
+                    function submitCancel(reasonId) {
+                        cancelBtn.disabled = true;
+                        var payload = {
+                            booking_ref: trip.booking_ref,
+                            contact_phone: trip.contact_phone,
+                        };
+                        if (reasonId) {
+                            payload.cancellation_reason_id = reasonId;
                         }
-                        card.classList.add('guest-trip-card--fade-out');
-                        window.setTimeout(function () {
-                            card.remove();
-                            if (!listEl.children.length) {
-                                root.classList.add('d-none');
+                        fetch(cancelUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': csrf,
+                                'X-Requested-With': 'XMLHttpRequest',
+                            },
+                            body: JSON.stringify(payload),
+                        })
+                            .then(function (res) {
+                                return res.json().then(function (data) {
+                                    return { ok: res.ok, data: data };
+                                });
+                            })
+                            .then(function (result) {
+                                if (!result.ok) {
+                                    throw new Error(result.data?.message || 'Không hủy được chuyến.');
+                                }
+                                if (window.CancellationReasonModal && window.CancellationReasonModal.clearCache) {
+                                    window.CancellationReasonModal.clearCache();
+                                }
+                                card.classList.add('guest-trip-card--fade-out');
+                                window.setTimeout(function () {
+                                    card.remove();
+                                    loadTrips();
+                                }, 400);
+                            })
+                            .catch(function (err) {
+                                if (window.AppDialog && window.AppDialog.alert) {
+                                    window.AppDialog.alert(err.message || 'Không hủy được chuyến.', { variant: 'danger' });
+                                } else {
+                                    window.alert(err.message || 'Không hủy được chuyến.');
+                                }
+                                cancelBtn.disabled = false;
+                            });
+                    }
+
+                    if (window.CancellationReasonModal && window.CancellationReasonModal.pick) {
+                        window.CancellationReasonModal.pick({
+                            audience: 'customer',
+                            contactPhone: trip.contact_phone,
+                            title: 'Lý do hủy chuyến',
+                            hint: trip.requires_cancel_reason
+                                ? 'Bạn đã hủy nhiều lần — vui lòng chọn lý do trước khi hủy.'
+                                : 'Vui lòng chọn lý do hủy chuyến.',
+                        }).then(function (reasonResult) {
+                            if (!reasonResult) {
+                                return;
                             }
-                        }, 400);
-                    })
-                    .catch(function (err) {
-                        if (window.AppDialog && window.AppDialog.alert) {
-                            window.AppDialog.alert(err.message || 'Không hủy được chuyến.', { variant: 'danger' });
-                        } else {
-                            window.alert(err.message || 'Không hủy được chuyến.');
-                        }
-                        cancelBtn.disabled = false;
-                    });
+                            if (reasonResult.skipped) {
+                                submitCancel(null);
+                                return;
+                            }
+                            submitCancel(reasonResult.reasonId);
+                        }).catch(function (err) {
+                            if (window.AppDialog && window.AppDialog.alert) {
+                                window.AppDialog.alert(err.message || 'Không tải được lý do hủy.', { variant: 'danger' });
+                            }
+                        });
+                    } else {
+                        submitCancel(null);
+                    }
                 });
             });
         }
@@ -197,11 +270,27 @@
         card.querySelector('[data-field="service_date"]').textContent = trip.service_date ? 'Khởi hành: ' + trip.service_date : '';
 
         var driverEl = card.querySelector('[data-field="driver_name"]');
+        var vehicleEl = card.querySelector('[data-field="vehicle_info"]');
         if (trip.driver_pending) {
-            driverEl.textContent = 'Đang xếp tài';
+            driverEl.textContent = 'Đang tìm kiếm tài xế';
             driverEl.classList.add('text-muted');
+            if (vehicleEl) {
+                vehicleEl.classList.add('d-none');
+                vehicleEl.textContent = '';
+            }
         } else {
             driverEl.textContent = trip.driver_name || '—';
+            driverEl.classList.remove('text-muted');
+            if (vehicleEl && (trip.vehicle_type || trip.vehicle_plate || trip.vehicle_seats)) {
+                var parts = [];
+                if (trip.vehicle_type) parts.push(trip.vehicle_type);
+                if (trip.vehicle_seats) parts.push(trip.vehicle_seats + ' chỗ');
+                if (trip.vehicle_plate) parts.push(trip.vehicle_plate);
+                vehicleEl.textContent = parts.join(' · ');
+                vehicleEl.classList.remove('d-none');
+            } else if (vehicleEl) {
+                vehicleEl.classList.add('d-none');
+            }
         }
 
         card.querySelector('[data-field="progress_steps"]').innerHTML = progressHtml(trip.progress);
@@ -227,6 +316,7 @@
     function loadTrips() {
         fetch(watchUrl, {
             headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            cache: 'no-store',
         })
             .then(function (res) { return res.json(); })
             .then(function (data) {
@@ -234,12 +324,15 @@
                 listEl.innerHTML = '';
                 if (!trips.length) {
                     root.classList.add('d-none');
+                    clearReloadTimer();
+                    clearPollTimer();
                     return;
                 }
                 root.classList.remove('d-none');
                 trips.forEach(function (trip) {
                     listEl.appendChild(renderCard(trip));
                 });
+                syncAutoRefresh(trips);
             })
             .catch(function () {
                 /* Giữ section ẩn nếu lỗi mạng — không ảnh hưởng đặt vé */
@@ -247,7 +340,11 @@
     }
 
     loadTrips();
-    pollTimer = window.setInterval(loadTrips, POLL_MS);
+
+    if (window.__guestTripSearchingReload) {
+        startReloadLoop();
+    }
+
     document.addEventListener('visibilitychange', function () {
         if (!document.hidden) {
             loadTrips();

@@ -55,14 +55,24 @@ class ScheduleTemplate extends Model
         return $this->hasMany(Schedule::class, 'template_id');
     }
 
+    public function hasFixedDepartureTime(): bool
+    {
+        return $this->departure_time !== null && trim((string) $this->departure_time) !== '';
+    }
+
     public function departureAt(Carbon $serviceDate): Carbon
     {
+        if (! $this->hasFixedDepartureTime()) {
+            return app(DriverAvailabilityService::class)
+                ->resolveDepartureTime($this, $serviceDate->toDateString(), null);
+        }
+
         return $this->clockOnDate($serviceDate, $this->departure_time);
     }
 
     public function expectedArrivalAt(Carbon $serviceDate): Carbon
     {
-        if ($this->expected_arrival_time) {
+        if ($this->expected_arrival_time && $this->hasFixedDepartureTime()) {
             $departure = $this->departureAt($serviceDate);
             $arrival = $this->clockOnDate($serviceDate, $this->expected_arrival_time);
 
@@ -111,6 +121,7 @@ class ScheduleTemplate extends Model
 
         $departure = $this->departureAt($date);
         $arrival = $this->expectedArrivalAt($date);
+        $hasFixedDeparture = $this->hasFixedDepartureTime();
 
         $weekdays = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
         $weekdaysShort = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
@@ -123,15 +134,21 @@ class ScheduleTemplate extends Model
             'date_month'         => $date->format('m/Y'),
             'date_short'         => $date->format('d/m/Y'),
             'date_label'         => $weekdays[(int) $date->dayOfWeek] . ', ' . $date->format('d/m/Y'),
-            'departure_time'     => DepartureTimeDisplay::label($this->departure_time),
-            'departure_clock'    => DepartureTimeDisplay::normalizeForClock($this->departure_time),
+            'departure_time'     => $hasFixedDeparture
+                ? DepartureTimeDisplay::label($this->departure_time)
+                : 'Tự chọn',
+            'departure_clock'    => $hasFixedDeparture
+                ? DepartureTimeDisplay::normalizeForClock($this->departure_time)
+                : null,
             'arrival_time'       => $arrival->format('H:i'),
             'arrival_date_short' => $arrival->format('d/m/Y'),
             'same_day'           => $arrival->isSameDay($departure),
-            'time_range'         => $arrival->isSameDay($departure)
-                ? $departure->format('H:i') . ' → ' . $arrival->format('H:i')
-                : $departure->format('H:i') . ', ' . $departure->format('d/m')
-                . ' → ' . $arrival->format('H:i') . ', ' . $arrival->format('d/m/Y'),
+            'time_range'         => $hasFixedDeparture
+                ? ($arrival->isSameDay($departure)
+                    ? $departure->format('H:i') . ' → ' . $arrival->format('H:i')
+                    : $departure->format('H:i') . ', ' . $departure->format('d/m')
+                    . ' → ' . $arrival->format('H:i') . ', ' . $arrival->format('d/m/Y'))
+                : 'Khách chọn giờ đón',
         ];
     }
 

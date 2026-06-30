@@ -6,7 +6,7 @@ use App\Support\DriverWalletConfig;
 
 $action = $action ?? route('driver.wallet.deposit');
 $qrElementId = $qrElementId ?? 'wallet-deposit-qr';
-$minAmount = DriverWalletConfig::MIN_BALANCE;
+$minAmount = DriverWalletConfig::MIN_DEPOSIT;
 $amount = (int) old('amount', $minAmount);
 @endphp
 
@@ -33,5 +33,5 @@ $amount = (int) old('amount', $minAmount);
         <div class="form-text">Chuyển khoản theo QR phía trên, rồi bấm Nạp tiền — quản lý sẽ cộng vào ví.</div>
     </div>
 
-    <button type="submit" class="btn btn-primary btn-sm w-100">Nạp tiền</button>
+    <button type="submit" class="btn btn-primary btn-sm driver-deposit-submit-btn">Nạp tiền</button>
 </form>

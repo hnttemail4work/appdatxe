@@ -13,6 +13,8 @@ use InvalidArgumentException;
 
 class DriverAvailabilityService
 {
+    public const MIN_PICKUP_LEAD_MINUTES = 30;
+
     /**
      * Tài xế bận khung giờ khi đã nhận chuyến (driver_id gán) cùng điểm đi/đến + giờ khởi hành và xe đã full ghế.
      * Yêu cầu chờ xác nhận không làm tài xế bận.
@@ -106,28 +108,53 @@ class DriverAvailabilityService
         $date = ServiceDate::parse($serviceDate);
 
         if (is_string($preferredTime) && trim($preferredTime) !== '') {
-            $departure = $this->clockOnDate($date, DepartureTimeDisplay::normalizeForClock($preferredTime));
-        } else {
-            $departure = $template->departureAt($date);
+            return $this->clockOnDate($date, DepartureTimeDisplay::normalizeForClock($preferredTime))
+                ->copy()
+                ->startOfMinute();
         }
 
-        return $departure->copy()->startOfMinute();
+        if ($template->hasFixedDepartureTime()) {
+            return $template->departureAt($date)->copy()->startOfMinute();
+        }
+
+        return $this->flexibleDepartureDefault($date)->copy()->startOfMinute();
     }
 
     public function assertPickupTimeAvailable(string $serviceDate, ?string $pickupTime): void
     {
         if (! is_string($pickupTime) || trim($pickupTime) === '') {
-            throw new InvalidArgumentException('Vui lòng chọn giờ đón.');
+            return;
         }
 
+        $date = ServiceDate::parse($serviceDate);
         $departure = $this->clockOnDate(
-            ServiceDate::parse($serviceDate),
+            $date,
             DepartureTimeDisplay::normalizeForClock($pickupTime),
         );
 
-        if ($departure <= now()) {
-            throw new InvalidArgumentException('Giờ đón phải sau thời gian hiện tại.');
+        if ($date->isToday()) {
+            $minAllowed = now()->copy()->addMinutes(self::MIN_PICKUP_LEAD_MINUTES)->startOfMinute();
+            if ($departure < $minAllowed) {
+                throw new InvalidArgumentException(
+                    'Giờ đón phải sau ít nhất ' . self::MIN_PICKUP_LEAD_MINUTES . ' phút so với hiện tại.',
+                );
+            }
+
+            return;
         }
+
+        if ($departure->lt($date->copy()->startOfDay())) {
+            throw new InvalidArgumentException('Giờ đón không hợp lệ.');
+        }
+    }
+
+    private function flexibleDepartureDefault(Carbon $serviceDate): Carbon
+    {
+        if ($serviceDate->isToday()) {
+            return now()->copy()->addMinutes(self::MIN_PICKUP_LEAD_MINUTES)->startOfMinute();
+        }
+
+        return $serviceDate->copy()->startOfDay()->setTime(8, 0);
     }
 
     private function clockOnDate(Carbon $serviceDate, string $clock): Carbon

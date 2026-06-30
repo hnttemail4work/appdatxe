@@ -99,12 +99,12 @@
     <div class="col-12"><hr class="my-1"><h6 class="text-muted mb-0">Thông tin ngân hàng</h6></div>
 
     <div class="col-md-6">
-        <label class="form-label">Tên ngân hàng</label>
+        <label class="form-label">Tên ngân hàng @if(! $readonly)<span class="text-danger">*</span>@endif</label>
         @php
             $bankOptions = ['Vietcombank', 'Techcombank', 'BIDV', 'VietinBank', 'MB Bank', 'ACB', 'Sacombank', 'TPBank', 'VPBank'];
             $currentBank = old('bank_name', $driver?->bank_name ?? '');
         @endphp
-        <select name="bank_name" class="form-select @error('bank_name') is-invalid @enderror" {{ $readonly ? 'disabled' : '' }}>
+        <select name="bank_name" class="form-select @error('bank_name') is-invalid @enderror" {{ $readonly ? 'disabled' : '' }} @if(! $readonly) required @endif>
             <option value="">-- Chọn ngân hàng --</option>
             @foreach($bankOptions as $bank)
                 <option value="{{ $bank }}" {{ $currentBank === $bank ? 'selected' : '' }}>{{ $bank }}</option>
@@ -117,11 +117,11 @@
     </div>
 
     <div class="col-md-6">
-        <label class="form-label">Số tài khoản</label>
+        <label class="form-label">Số tài khoản @if(! $readonly)<span class="text-danger">*</span>@endif</label>
         <input type="text" name="bank_account"
                value="{{ old('bank_account', $driver?->bank_account ?? '') }}"
                class="form-control @error('bank_account') is-invalid @enderror"
-               placeholder="VD: 0123456789" {{ $ro }}>
+               placeholder="VD: 0123456789" {{ $ro }} @if(! $readonly) required @endif>
         @error('bank_account')<div class="invalid-feedback">{{ $message }}</div>@enderror
     </div>
 </div>

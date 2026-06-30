@@ -50,4 +50,10 @@ class TripReview extends Model
     {
         return $this->sentiment === self::SENTIMENT_LIKE ? '👍' : '👎';
     }
+
+    /** Nhãn đồng bộ với tab tài xế (Thích / Không thích). */
+    public function driverPreferenceLabel(): string
+    {
+        return $this->sentiment === self::SENTIMENT_LIKE ? 'Thích' : 'Không thích';
+    }
 }

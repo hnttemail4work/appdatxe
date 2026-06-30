@@ -9,7 +9,7 @@ $walletHistory = $walletHistory ?? collect();
     </div>
     @if($walletHistory->isEmpty())
         <div class="driver-empty py-4">
-            <p class="text-muted small mb-0">Chưa có giao dịch nạp ví hoặc phí nền tảng.</p>
+            <p class="text-muted small mb-0">Chưa có giao dịch ví.</p>
         </div>
     @else
         <div class="driver-wallet-history-list">

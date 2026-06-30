@@ -17,9 +17,11 @@
     $revenueStats = $revenueStats ?? ['day' => 0, 'week' => 0];
 
     $driverDefaultTab = request('tab');
-    if (! in_array($driverDefaultTab, ['requests', 'trips', 'deposit'], true)) {
+    if (! in_array($driverDefaultTab, ['requests', 'trips', 'history', 'deposit'], true)) {
         $driverDefaultTab = 'requests';
     }
+
+    $tripHistory = $tripHistory ?? collect();
 
     $driverLocationAddress = $profile?->last_address;
     $driverLocationUpdated = ($profile?->last_location_at ?? null)?->format('H:i, d/m/Y');
@@ -29,11 +31,34 @@
 <div class="driver-page">
     @if($profile)
     <div class="driver-greeting mb-2">
-        Xin chào <strong>{{ $user->name }}</strong>
+        Xin chào tài xế <strong>{{ $user->name }}</strong>
         @if($profile->driver_code)
             <span class="driver-meta-code ms-1">{{ $profile->driver_code }}</span>
         @endif
     </div>
+
+    @if($profile->isMissedTripLocked() || ($showTopUpBanner ?? false))
+    <div class="driver-notice-stack mb-3">
+        @if($profile->isMissedTripLocked())
+            <div class="driver-notice driver-notice-danger">
+                <strong>Tài khoản tạm khóa</strong> — không nhận chuyến được. Liên hệ quản lý để mở khóa.
+            </div>
+        @endif
+        @if($showTopUpBanner ?? false)
+            <div class="driver-notice driver-notice-warning driver-notice--topup">
+                <span class="driver-notice-topup-text">
+                @if(! $profile->isWalletActivated())
+                    Cần nạp ví tối thiểu {{ \App\Support\DriverWalletConfig::minDepositFormatted() }} để kích hoạt tài khoản.
+                @else
+                    Chưa đủ điều kiện nhận cuốc.
+                @endif
+                </span>
+                <a href="{{ route('driver.dashboard', ['tab' => 'deposit']) }}" class="driver-notice-topup-link">nạp ví ngay →</a>
+            </div>
+        @endif
+    </div>
+    @endif
+
     <section class="driver-location-card mb-3" id="driver-location-bar" aria-label="Vị trí hiện tại">
         <div class="driver-location-card-top">
             <div class="driver-location-card-icon" aria-hidden="true">
@@ -82,33 +107,13 @@
     </section>
     @endif
 
-    @if(($profile && $profile->isMissedTripLocked()) || ($showTopUpBanner ?? false) || ($settlementBlockReason ?? null))
-    <div class="driver-notice-stack">
-        @if($profile && $profile->isMissedTripLocked())
-            <div class="driver-notice driver-notice-danger">
-                <strong>Tài khoản tạm khóa</strong> — không nhận chuyến được. Liên hệ quản lý để mở khóa.
-            </div>
-        @endif
-        @if($showTopUpBanner ?? false)
-            <div class="driver-notice driver-notice-warning">
-                ⚠️ Chưa đủ điều kiện nhận cuốc,
-                <a href="{{ route('driver.dashboard', ['tab' => 'deposit']) }}" class="ms-1 fw-semibold">nạp ví ngay →</a>
-            </div>
-        @endif
-        @if($settlementBlockReason ?? null)
-            <div class="driver-notice driver-notice-warning">
-                {{ $settlementBlockReason }}
-            </div>
-        @endif
-    </div>
-    @endif
-
     @include('partials.screen-tabs-start', [
         'prefix' => 'driver-main',
         'activeKey' => $driverDefaultTab,
         'tabs' => [
             ['key' => 'requests', 'label' => 'Tìm chuyến', 'badge' => $pendingCount, 'hot' => $pendingCount > 0],
             ['key' => 'trips', 'label' => 'Xem chuyến', 'badge' => $tripActionCount, 'hot' => $tripActionCount > 0],
+            ['key' => 'history', 'label' => 'Lịch sử chạy'],
             ['key' => 'deposit', 'label' => 'Ví'],
         ],
     ])
@@ -154,6 +159,24 @@
                 @endforeach
             </div>
             @include('partials.pagination', ['paginator' => $tripSchedules])
+        @endif
+    </section>
+    @include('partials.screen-tab-pane-end')
+
+    @include('partials.screen-tab-pane', ['prefix' => 'driver-main', 'key' => 'history', 'active' => $driverDefaultTab === 'history'])
+    <section class="driver-section" id="driver-section-history">
+        @if($tripHistory->isEmpty())
+            <div class="driver-empty">Chưa có lịch sử chuyến.</div>
+        @else
+            <div class="driver-trips-list">
+                @foreach($tripHistory as $schedule)
+                    @include('partials.driver-schedule-history-card', [
+                        'schedule' => $schedule,
+                        'driverUserId' => $user->id,
+                    ])
+                @endforeach
+            </div>
+            @include('partials.pagination', ['paginator' => $tripHistory])
         @endif
     </section>
     @include('partials.screen-tab-pane-end')

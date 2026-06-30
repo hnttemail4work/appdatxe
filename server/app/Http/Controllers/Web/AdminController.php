@@ -3,11 +3,12 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Models\CancellationReason;
 use App\Models\PlatformSetting;
 use App\Models\ReferralCode;
-use App\Models\TripLedger;
 use App\Models\TripRoute;
 use App\Models\User;
+use App\Services\CancellationReasonService;
 use App\Services\CompanyRevenueService;
 use App\Services\RegistrationService;
 use App\Services\ReferralCodeService;
@@ -28,6 +29,7 @@ class AdminController extends Controller
         private readonly RegistrationService $registration,
         private readonly ReferralCodeService $referralCodes,
         private readonly CompanyRevenueService $revenue,
+        private readonly CancellationReasonService $cancellationReasons,
     ) {
     }
 
@@ -42,6 +44,7 @@ class AdminController extends Controller
             ->withQueryString();
 
         $referralCodes = ReferralCode::query()
+            ->with('booking')
             ->orderByRaw("CASE WHEN type = 'referrer' AND status = 'suspended' THEN 1 ELSE 0 END")
             ->latest()
             ->paginate(PageList::PER_PAGE, ['*'], 'referrals_page')
@@ -79,14 +82,13 @@ class AdminController extends Controller
         $revenueSummary = $this->revenue->summary();
         $revenueMonthFrom = now()->startOfMonth();
         $revenueMonthTo = now();
-        $revenueByDriver = $this->revenue->actorBreakdown(TripLedger::OUTCOME_COMPLETED, $revenueMonthFrom, $revenueMonthTo);
-        $revenueByCustomerCancel = $this->revenue->actorBreakdown(TripLedger::OUTCOME_CANCELLED_CUSTOMER, $revenueMonthFrom, $revenueMonthTo);
-        $revenueByDriverCancel = $this->revenue->actorBreakdown(TripLedger::OUTCOME_CANCELLED_DRIVER, $revenueMonthFrom, $revenueMonthTo);
         $revenueByRoute = $this->revenue->routeBreakdown($revenueMonthFrom, $revenueMonthTo);
-        $tripLedger = TripLedger::query()
-            ->orderByDesc('recorded_at')
-            ->paginate(PageList::PER_PAGE, ['*'], 'trips_page')
-            ->withQueryString();
+        $referralCostTrips = $this->revenue->referralCostTrips($revenueMonthFrom, $revenueMonthTo);
+
+        $cancellationReasonList = CancellationReason::query()
+            ->orderBy('sort_order')
+            ->orderBy('label')
+            ->get();
 
         return view('admin.dashboard', compact(
             'operators',
@@ -96,12 +98,32 @@ class AdminController extends Controller
             'bankSettings',
             'bankQrPreview',
             'revenueSummary',
-            'revenueByDriver',
-            'revenueByCustomerCancel',
-            'revenueByDriverCancel',
             'revenueByRoute',
-            'tripLedger',
+            'referralCostTrips',
+            'cancellationReasonList',
         ));
+    }
+
+    public function storeCancellationReason(Request $request)
+    {
+        $validated = $request->validate([
+            'label'      => ['required', 'string', 'max:200'],
+            'audience'   => ['required', 'in:customer,driver,both'],
+            'sort_order' => ['nullable', 'integer', 'min:0', 'max:9999'],
+        ]);
+
+        $this->cancellationReasons->create($validated);
+
+        return redirect()->route('admin.dashboard', ['tab' => 'cancel-reasons'])
+            ->with('success', 'Đã thêm lý do hủy chuyến.');
+    }
+
+    public function destroyCancellationReason(CancellationReason $cancellationReason)
+    {
+        $this->cancellationReasons->delete($cancellationReason);
+
+        return redirect()->route('admin.dashboard', ['tab' => 'cancel-reasons'])
+            ->with('success', 'Đã xóa lý do hủy chuyến.');
     }
 
     public function storeOperator(Request $request)
@@ -110,7 +132,7 @@ class AdminController extends Controller
 
         $this->registration->registerOperator($validated, Auth::id());
 
-        return redirect()->route('admin.dashboard', ['tab' => 'create'])
+        return redirect()->route('admin.dashboard', ['tab' => 'operators'])
             ->with('success', 'Đã tạo tài khoản quản lý cho ' . $validated['name'] . '. Họ có thể đăng nhập ngay.');
     }
 
@@ -131,6 +153,26 @@ class AdminController extends Controller
             ->with('success', 'Đã tạo mã giới thiệu ' . $referral->code . ' cho ' . $referral->name . '.');
     }
 
+    public function updateReferrer(Request $request, ReferralCode $referralCode)
+    {
+        if ($referralCode->type !== ReferralCode::TYPE_REFERRER) {
+            abort(403);
+        }
+
+        $validated = $request->validate([
+            'commission_percent'         => ['required', 'numeric', 'min:0', 'max:100'],
+            'customer_discount_percent'  => ['required', 'numeric', 'min:0', 'max:100'],
+        ]);
+
+        $referralCode->update([
+            'commission_percent'        => (float) $validated['commission_percent'],
+            'customer_discount_percent' => (float) $validated['customer_discount_percent'],
+        ]);
+
+        return redirect()->route('admin.dashboard', ['tab' => 'referrals'])
+            ->with('success', 'Đã cập nhật mã ' . $referralCode->code . ' — giảm giá ' . number_format($validated['customer_discount_percent'], 1) . '%, hoa hồng ' . number_format($validated['commission_percent'], 1) . '%.');
+    }
+
     public function suspendReferrer(ReferralCode $referralCode)
     {
         $this->referralCodes->suspendReferrer($referralCode);
@@ -145,6 +187,15 @@ class AdminController extends Controller
 
         return redirect()->route('admin.dashboard', ['tab' => 'referrals'])
             ->with('success', 'Mã ' . $referralCode->code . ' đã chuyển sang trạng thái sử dụng.');
+    }
+
+    public function destroyReferralCode(ReferralCode $referralCode)
+    {
+        $code = $referralCode->code;
+        $this->referralCodes->deleteBookingReferralCode($referralCode);
+
+        return redirect()->route('admin.dashboard', ['tab' => 'referrals'])
+            ->with('success', 'Đã xóa mã ' . $code . '.');
     }
 
     public function updateBankSettings(Request $request)
@@ -184,7 +235,7 @@ class AdminController extends Controller
             'suspended' => 'tạm ngưng',
         };
 
-        return redirect()->route('admin.dashboard', ['tab' => 'list'])
+        return redirect()->route('admin.dashboard', ['tab' => 'operators'])
             ->with('success', 'Đã ' . $label . ' tài khoản quản lý ' . $user->name . '.');
     }
 

@@ -33,7 +33,7 @@ class DriverProfileSyncService
             $updates = [
                 'status'              => 'active',
                 'approval_status'     => 'approved',
-                'availability_status' => 'available',
+                'availability_status' => $profile->isWalletActivated() ? 'available' : 'off_duty',
             ];
 
             if ($operatorId !== null && $profile->operator_id === null) {
@@ -45,17 +45,27 @@ class DriverProfileSyncService
         });
     }
 
-    public function reject(DriverProfile $profile): void
+    public function reject(DriverProfile $profile, ?string $reason = null): void
     {
         $profile->loadMissing('user');
 
-        DB::transaction(function () use ($profile): void {
+        DB::transaction(function () use ($profile, $reason): void {
             $profile->update([
-                'status'           => 'inactive',
-                'approval_status'  => 'rejected',
+                'status'              => 'inactive',
+                'approval_status'     => 'rejected',
+                'rejection_reason'    => filled($reason) ? trim($reason) : null,
+                'rejection_reason_at' => filled($reason) ? now() : null,
             ]);
             $profile->user->update(['status' => 'inactive']);
         });
+    }
+
+    public function clearRejectionNote(DriverProfile $profile): void
+    {
+        $profile->update([
+            'rejection_reason'    => null,
+            'rejection_reason_at' => null,
+        ]);
     }
 
     /** @return list<string> */

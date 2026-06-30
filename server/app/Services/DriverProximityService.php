@@ -6,20 +6,25 @@ use App\Models\Booking;
 use App\Models\DriverProfile;
 use App\Models\Schedule;
 use App\Support\ProvinceCenters;
+use App\Support\ProvinceResolver;
 use Illuminate\Support\Collection;
 
 /**
  * Chọn tài xế gần điểm đón nhất (so sánh tọa độ GPS).
  *
  * Lọc: operational, Sẵn sàng, ví đủ, không bận; có tọa độ mới (auto-gán).
- * Ưu tiên: khoảng cách km → tài xế mới/chưa đạt 100k → ít dislike → nhiều like.
+ * Khác tỉnh điểm đón: tối đa 20 km; cùng tỉnh: tối đa 50 km.
+ * Ưu tiên: khoảng cách km → tài xế mới/chưa đạt 200k → ít dislike → nhiều like.
  */
 class DriverProximityService
 {
     public const LOCATION_MAX_AGE_MINUTES = 15;
 
-    /** Tài xế xa hơn ngưỡng này (km) không được auto-gán. */
-    public const MAX_ASSIGN_RADIUS_KM = 50.0;
+    /** Khác tỉnh điểm đón — không gán nếu xa hơn ngưỡng này. */
+    public const MAX_CROSS_PROVINCE_KM = 20.0;
+
+    /** Cùng tỉnh điểm đón — ngưỡng tối đa. */
+    public const MAX_SAME_PROVINCE_KM = 50.0;
 
     public function __construct(
         private readonly DriverAvailabilityService $availability,
@@ -47,7 +52,7 @@ class DriverProximityService
             ->with(['user', 'operator'])
             ->where('availability_status', 'available')
             ->get()
-            ->filter(function (DriverProfile $profile) use ($schedule, $exclude, $requireCoordinates, $pickup): bool {
+            ->filter(function (DriverProfile $profile) use ($schedule, $exclude, $requireCoordinates, $pickup, $booking): bool {
                 if ($exclude->contains((int) $profile->user_id)) {
                     return false;
                 }
@@ -66,15 +71,11 @@ class DriverProximityService
                 }
 
                 if ($requireCoordinates) {
-                    if (! $profile->hasFreshLocation(self::LOCATION_MAX_AGE_MINUTES)) {
+                    if ($pickup === null || ! $profile->hasFreshLocation(self::LOCATION_MAX_AGE_MINUTES)) {
                         return false;
                     }
 
-                    if ($pickup === null) {
-                        return false;
-                    }
-
-                    return $this->distanceKm($profile, $pickup) <= self::MAX_ASSIGN_RADIUS_KM;
+                    return $this->withinAssignRadius($profile, $booking, $pickup);
                 }
 
                 return true;
@@ -108,6 +109,28 @@ class DriverProximityService
             $pickup['lat'],
             $pickup['lng'],
         );
+    }
+
+    /** @param array{lat: float, lng: float} $pickup */
+    public function withinAssignRadius(DriverProfile $profile, Booking $booking, array $pickup): bool
+    {
+        if (! $profile->hasFreshLocation(self::LOCATION_MAX_AGE_MINUTES)) {
+            return false;
+        }
+
+        $distance = $this->distanceKm($profile, $pickup);
+        $pickupProvince = ProvinceResolver::fromBooking($booking);
+        $driverProvince = ProvinceResolver::forDriver(
+            $profile->last_lat !== null ? (float) $profile->last_lat : null,
+            $profile->last_lng !== null ? (float) $profile->last_lng : null,
+            $profile->last_province,
+        );
+
+        if ($pickupProvince && $driverProvince && $pickupProvince !== $driverProvince) {
+            return $distance <= self::MAX_CROSS_PROVINCE_KM;
+        }
+
+        return $distance <= self::MAX_SAME_PROVINCE_KM;
     }
 
     /** @param array{lat: float, lng: float}|null $pickup */

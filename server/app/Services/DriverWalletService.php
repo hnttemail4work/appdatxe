@@ -27,15 +27,11 @@ class DriverWalletService
     {
         $booking->loadMissing('schedule');
 
-        if (! $booking->schedule) {
-            return null;
-        }
-
-        return $this->onScheduleCompleted($booking->schedule);
+        return $booking->schedule ? $this->onScheduleCompleted($booking->schedule) : null;
     }
 
-    /** Một bản ghi kết chuyến cho cả chuyến xe (gom mọi vé). */
-    public function onScheduleCompleted(\App\Models\Schedule $schedule): ?DriverTripSettlement
+    /** Ghi nhận doanh thu chuyến — không còn luồng chuyển phí / kết chuyến. */
+    public function onScheduleCompleted(Schedule $schedule): ?DriverTripSettlement
     {
         $schedule->loadMissing('route');
 
@@ -48,10 +44,7 @@ class DriverWalletService
             return $existing;
         }
 
-        $profile = DriverProfile::query()
-            ->where('user_id', $schedule->driver_id)
-            ->first();
-
+        $profile = DriverProfile::query()->where('user_id', $schedule->driver_id)->first();
         if (! $profile) {
             return null;
         }
@@ -68,97 +61,50 @@ class DriverWalletService
 
         $wallet = $this->walletFor($profile);
         $revenue = (int) $bookings->sum(fn (Booking $b): int => (int) round((float) $b->total_price, 0));
-        $fee = (int) $bookings->sum(fn (Booking $b): int => DriverWalletConfig::platformFee((int) round((float) $b->total_price, 0)));
-        $category = $this->resolveCategory($wallet, $revenue);
 
-        return DriverTripSettlement::query()->create([
-            'driver_wallet_id'    => $wallet->id,
-            'schedule_id'         => $schedule->id,
-            'booking_id'          => $bookings->first()->id,
-            'revenue_amount'      => $revenue,
-            'platform_fee_amount' => $fee,
-            'category'            => $category,
-            'status'              => 'pending_settle',
-        ]);
-    }
+        return DB::transaction(function () use ($wallet, $schedule, $bookings, $revenue): DriverTripSettlement {
+            $locked = DriverWallet::query()->lockForUpdate()->findOrFail($wallet->id);
 
-    /** Tài xế nhập mã kết chuyến do quản lý cấp sau khi đã chuyển phí nền tảng. */
-    public function settleTrip(DriverTripSettlement $settlement, ?string $code): void
-    {
-        if ($settlement->status !== 'pending_driver_code') {
-            throw new InvalidArgumentException(
-                $settlement->status === 'pending_settle'
-                    ? 'Chưa có mã kết chuyến. Chuyển phí nền tảng cho công ty rồi liên hệ quản lý nhận mã.'
-                    : 'Chuyến này không còn ở trạng thái chờ kết.'
-            );
-        }
-
-        $code = strtoupper(trim((string) $code));
-        if ($code === '') {
-            throw new InvalidArgumentException('Vui lòng nhập mã kết chuyến.');
-        }
-
-        if ($settlement->settlementCodeExpired()) {
-            throw new InvalidArgumentException('Mã kết chuyến đã hết hạn (1 ngày). Liên hệ quản lý cấp mã mới.');
-        }
-
-        if (! $settlement->settlementCodeIsValid($code)) {
-            throw new InvalidArgumentException('Mã kết chuyến không đúng.');
-        }
-
-        DB::transaction(function () use ($settlement): void {
-            $wallet = $settlement->wallet()->lockForUpdate()->firstOrFail();
-
-            $settlement->update([
-                'status'            => 'completed',
-                'driver_settled_at' => now(),
+            $settlement = DriverTripSettlement::query()->create([
+                'driver_wallet_id'    => $locked->id,
+                'schedule_id'         => $schedule->id,
+                'booking_id'          => $bookings->first()->id,
+                'revenue_amount'      => $revenue,
+                'platform_fee_amount' => 0,
+                'category'            => 'completed',
+                'status'              => 'completed',
+                'driver_settled_at'   => now(),
             ]);
 
-            $this->finalizeSettlement($settlement->fresh());
-            $this->refreshAcceptBlock($wallet->fresh());
+            $locked->update([
+                'cumulative_revenue'          => $locked->cumulative_revenue + $revenue,
+                'completed_settlements_count' => $locked->completed_settlements_count + 1,
+            ]);
+
+            $locked = $locked->fresh();
+            $this->refreshWalletGate($locked);
+            $this->refreshAcceptBlock($locked);
+
+            return $settlement;
         });
     }
 
-    /** Quản lý cấp mã kết chuyến sau khi đã nhận phí nền tảng từ tài xế. */
+    /** @deprecated Luồng kết chuyến đã bỏ. */
+    public function settleTrip(DriverTripSettlement $settlement, ?string $code): void
+    {
+        throw new InvalidArgumentException('Chức năng kết chuyến đã được gỡ bỏ.');
+    }
+
+    /** @deprecated Luồng kết chuyến đã bỏ. */
     public function issueSettlementCode(DriverTripSettlement $settlement, int $operatorId): string
     {
-        if ($settlement->status !== 'pending_settle') {
-            throw new InvalidArgumentException('Chuyến không ở trạng thái chờ cấp mã.');
-        }
-
-        if (! $settlement->transfer_ref) {
-            throw new InvalidArgumentException('Tài xế chưa xác nhận chuyển phí.');
-        }
-
-        if ($settlement->isUnderThreshold()) {
-            throw new InvalidArgumentException(
-                'Chuyến dưới ' . DriverWalletConfig::revenueThresholdShortLabel() . ' — dùng Xác nhận thay vì cấp mã.'
-            );
-        }
-
-        $settlement->loadMissing('wallet.driverProfile');
-        if ((int) $settlement->wallet->driverProfile->operator_id !== $operatorId) {
-            throw new InvalidArgumentException('Không có quyền cấp mã cho tài xế này.');
-        }
-
-        $code = $this->generateSettlementCode();
-        $expiresAt = now()->addHours(DriverWalletConfig::SETTLEMENT_CODE_TTL_HOURS);
-
-        $settlement->update([
-            'status'                      => 'pending_driver_code',
-            'settlement_code'             => $code,
-            'settlement_code_expires_at'  => $expiresAt,
-            'operator_code_issued_at'     => now(),
-            'operator_code_issued_by'     => $operatorId,
-        ]);
-
-        return $code;
+        throw new InvalidArgumentException('Chức năng cấp mã kết chuyến đã được gỡ bỏ.');
     }
 
     public function requestDeposit(DriverProfile $profile, int $amount): DriverWalletTransaction
     {
-        if ($amount < DriverWalletConfig::MIN_BALANCE) {
-            throw new InvalidArgumentException('Số tiền nạp tối thiểu ' . number_format(DriverWalletConfig::MIN_BALANCE, 0, ',', '.') . ' đ.');
+        if ($amount < DriverWalletConfig::MIN_DEPOSIT) {
+            throw new InvalidArgumentException('Số tiền nạp tối thiểu ' . DriverWalletConfig::minDepositFormatted() . '.');
         }
 
         if (! $profile->operator_id) {
@@ -196,6 +142,7 @@ class DriverWalletService
 
         DB::transaction(function () use ($transaction, $actorId): void {
             $wallet = $transaction->wallet()->lockForUpdate()->firstOrFail();
+            $profile = $wallet->driverProfile()->lockForUpdate()->firstOrFail();
 
             $transaction->update([
                 'status'      => 'approved',
@@ -203,9 +150,24 @@ class DriverWalletService
                 'approved_at' => now(),
             ]);
 
-            $wallet->update([
-                'balance' => $wallet->balance + $transaction->amount,
-            ]);
+            $newBalance = $wallet->balance + $transaction->amount;
+            $newTotalDeposits = (int) $wallet->total_approved_deposits + (int) $transaction->amount;
+
+            $walletUpdates = [
+                'balance'                 => $newBalance,
+                'total_approved_deposits' => $newTotalDeposits,
+            ];
+
+            if ($wallet->wallet_activated_at === null
+                && $newTotalDeposits >= DriverWalletConfig::ACTIVATION_DEPOSIT) {
+                $walletUpdates['wallet_activated_at'] = now();
+            }
+
+            $wallet->update($walletUpdates);
+
+            if ($wallet->fresh()->wallet_activated_at && $profile->isApproved()) {
+                $profile->update(['availability_status' => 'available']);
+            }
 
             $this->refreshAcceptBlock($wallet->fresh());
         });
@@ -217,19 +179,6 @@ class DriverWalletService
             ->where('wallet_gate_enabled', true)
             ->where('balance', '<=', DriverWalletConfig::MIN_BALANCE)
             ->each(fn (DriverWallet $wallet) => $this->refreshAcceptBlock($wallet));
-
-        DriverTripSettlement::query()
-            ->where('status', 'pending_driver_code')
-            ->where('settlement_code_expires_at', '<', now())
-            ->each(function (DriverTripSettlement $settlement): void {
-                $settlement->update([
-                    'status'                     => 'pending_settle',
-                    'settlement_code'            => null,
-                    'settlement_code_expires_at' => null,
-                    'operator_code_issued_at'    => null,
-                    'operator_code_issued_by'    => null,
-                ]);
-            });
     }
 
     public function canAcceptTrips(DriverProfile $profile): bool
@@ -240,32 +189,28 @@ class DriverWalletService
 
         $this->enforceDeadlines();
 
-        $wallet = $this->walletFor($profile);
-        $this->refreshAcceptBlock($wallet);
-
         return $this->acceptBlockReason($profile) === null;
     }
 
     public function acceptBlockReason(DriverProfile $profile): ?string
     {
-        if (! $profile->isOperational()) {
-            return 'Tài khoản chưa hoạt động hoặc đang bị khóa.';
+        if (! $profile->isApproved()) {
+            return 'Hồ sơ chưa được duyệt.';
+        }
+
+        if ($profile->isMissedTripLocked()) {
+            return 'Tài khoản đang bị khóa.';
         }
 
         $wallet = $this->walletFor($profile);
 
-        if ($wallet->pendingSettlements()->where('status', 'pending_settle')->exists()) {
-            return 'Có chuyến đã hoàn thành — cần chuyển phí nền tảng và nhận mã kết chuyến từ quản lý.';
-        }
-
-        if ($wallet->pendingSettlements()->where('status', 'pending_driver_code')->exists()) {
-            return 'Có chuyến chờ nhập mã kết chuyến — hoàn tất trước khi nhận cuốc mới.';
+        if (! $wallet->wallet_activated_at) {
+            return 'Cần nạp ví tối thiểu ' . DriverWalletConfig::minDepositFormatted() . ' để kích hoạt tài khoản.';
         }
 
         if ($wallet->wallet_gate_enabled && $wallet->balance <= DriverWalletConfig::MIN_BALANCE) {
-            return 'Đã có chuyến doanh thu ≥ ' . DriverWalletConfig::revenueThresholdShortLabel()
-                . ' — từ chuyến tiếp theo cần nạp ví trên '
-                . number_format(DriverWalletConfig::MIN_BALANCE, 0, ',', '.') . ' đ.';
+            return 'Doanh thu đã đạt ' . DriverWalletConfig::revenueThresholdShortLabel()
+                . ' — cần giữ số dư trên ' . DriverWalletConfig::minBalanceFormatted() . ' để nhận cuốc.';
         }
 
         return null;
@@ -276,62 +221,53 @@ class DriverWalletService
         return $this->shouldShowTopUpBanner($profile);
     }
 
-    /** Chưa từng kết chuyến hoặc chưa có chuyến doanh thu ≥ ngưỡng 100k (chưa bật cổng ví). */
+    /** Chưa đạt ngưỡng doanh thu 100k — chưa bật cổng ví. */
     public function isPreRevenueThreshold(DriverProfile $profile): bool
     {
         $wallet = $this->walletFor($profile);
 
-        if ((int) $wallet->completed_settlements_count === 0) {
-            return true;
-        }
-
         return ! (bool) $wallet->wallet_gate_enabled;
     }
 
-    /** Banner nạp ví — ẩn khi chưa từng có chuyến ≥ ngưỡng, đã nạp đủ, hoặc chưa bật cổng ví. */
     public function shouldShowTopUpBanner(DriverProfile $profile): bool
     {
         $wallet = $this->walletFor($profile);
+
+        if (! $wallet->wallet_activated_at) {
+            return true;
+        }
 
         if (! $wallet->wallet_gate_enabled) {
             return false;
         }
 
-        if ($wallet->balance > DriverWalletConfig::MIN_BALANCE) {
-            return false;
-        }
-
-        return true;
+        return $wallet->balance <= DriverWalletConfig::MIN_BALANCE;
     }
 
     public function settlementBlockReason(DriverProfile $profile): ?string
     {
-        if (! $profile->isOperational()) {
-            return null;
-        }
-
-        $wallet = $this->walletFor($profile);
-
-        if ($wallet->pendingSettlements()->where('status', 'pending_settle')->exists()) {
-            return 'Có chuyến đã hoàn thành — cần chuyển phí nền tảng và nhận mã kết chuyến từ quản lý.';
-        }
-
-        if ($wallet->pendingSettlements()->where('status', 'pending_driver_code')->exists()) {
-            return 'Có chuyến chờ nhập mã kết chuyến — hoàn tất trước khi nhận cuốc mới.';
-        }
-
         return null;
+    }
+
+    public function isWalletActivated(DriverProfile $profile): bool
+    {
+        return (bool) $this->walletFor($profile)->wallet_activated_at;
     }
 
     public function driverRevenueBetween(DriverProfile $profile, \Carbon\Carbon $start, \Carbon\Carbon $end): float
     {
-        return (float) Schedule::query()
-            ->with('bookings')
-            ->where('driver_id', $profile->user_id)
-            ->whereNot('status', 'cancelled')
-            ->whereBetween('departure_time', [$start, $end])
-            ->get()
-            ->sum(fn (Schedule $schedule) => (float) $schedule->tripRevenueTotal());
+        $query = Booking::query()
+            ->where('trip_status', 'completed')
+            ->whereNotNull('completed_at')
+            ->whereBetween('completed_at', [$start, $end]);
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('bookings', 'assigned_driver_id')) {
+            $query->where('assigned_driver_id', $profile->user_id);
+        } else {
+            $query->whereHas('schedule', fn ($q) => $q->where('driver_id', $profile->user_id));
+        }
+
+        return (float) $query->sum('total_price');
     }
 
     public function driverRevenueStats(DriverProfile $profile): array
@@ -340,40 +276,27 @@ class DriverWalletService
         $weekEnd = now()->endOfWeek(\Carbon\Carbon::SUNDAY)->endOfDay();
 
         return [
-            'day'   => $this->driverRevenueBetween($profile, now()->startOfDay(), now()->endOfDay()),
-            'week'  => $this->driverRevenueBetween($profile, $weekStart, $weekEnd),
+            'day'  => $this->driverRevenueBetween($profile, now()->startOfDay(), now()->endOfDay()),
+            'week' => $this->driverRevenueBetween($profile, $weekStart, $weekEnd),
         ];
     }
 
     /** @return Collection<int, DriverTripSettlement> */
     public function settlementsAwaitingCodeForOperator(int $operatorId): Collection
     {
-        return DriverTripSettlement::query()
-            ->with(['schedule.route', 'schedule.bookings', 'booking.schedule.route', 'wallet.driverProfile.user'])
-            ->where('status', 'pending_settle')
-            ->whereHas('wallet.driverProfile', fn ($q) => $q->managedByOperator($operatorId))
-            ->latest()
-            ->get();
+        return collect();
     }
 
     /** @return Collection<int, DriverTripSettlement> */
     public function codesAwaitingDriverForOperator(int $operatorId): Collection
     {
-        return DriverTripSettlement::query()
-            ->with(['schedule.route', 'schedule.bookings', 'booking.schedule.route', 'wallet.driverProfile.user'])
-            ->where('status', 'pending_driver_code')
-            ->whereHas('wallet.driverProfile', fn ($q) => $q->managedByOperator($operatorId))
-            ->latest()
-            ->get();
+        return collect();
     }
 
     /** @return Collection<int, array{kind: string, amount: int, at: \Carbon\Carbon, label: string, meta: string|null, status: string|null}> */
     public function walletActivityHistory(DriverWallet $wallet): Collection
     {
-        $wallet->loadMissing([
-            'transactions',
-            'settlements.schedule.route',
-        ]);
+        $wallet->loadMissing(['transactions', 'settlements.schedule.route']);
 
         $items = collect();
 
@@ -395,15 +318,12 @@ class DriverWalletService
             $routeMeta = $schedule
                 ? $schedule->route->departure . ' → ' . $schedule->route->destination
                 : null;
-            $confirmedAt = $settlement->operator_approved_at
-                ?? $settlement->driver_settled_at
-                ?? $settlement->updated_at;
 
             $items->push([
-                'kind'   => 'platform_fee',
-                'amount' => (int) $settlement->platform_fee_amount,
-                'at'     => $confirmedAt,
-                'label'  => 'Phí nền tảng',
+                'kind'   => 'trip_revenue',
+                'amount' => (int) $settlement->revenue_amount,
+                'at'     => $settlement->driver_settled_at ?? $settlement->updated_at,
+                'label'  => 'Hoàn thành chuyến',
                 'meta'   => $routeMeta,
                 'status' => 'completed',
             ]);
@@ -430,8 +350,6 @@ class DriverWalletService
 
         foreach ($transactions as $transaction) {
             $profile = $transaction->wallet->driverProfile;
-            $driver = $profile->user;
-
             $items->push([
                 'kind'        => 'deposit',
                 'amount'      => (int) $transaction->amount,
@@ -441,36 +359,6 @@ class DriverWalletService
                     ? 'Duyệt ' . $transaction->approved_at->format('d/m/Y H:i')
                     : 'Gửi ' . $transaction->created_at->format('d/m/Y H:i'),
                 'status'      => $transaction->status,
-                'driver_name' => $driver->name,
-                'driver_code' => $profile->driver_code,
-            ]);
-        }
-
-        $settlements = DriverTripSettlement::query()
-            ->with(['wallet.driverProfile.user', 'schedule.route'])
-            ->where('status', 'completed')
-            ->whereHas('wallet.driverProfile', fn ($q) => $q->managedByOperator($operatorId))
-            ->latest()
-            ->limit($limit)
-            ->get();
-
-        foreach ($settlements as $settlement) {
-            $profile = $settlement->wallet->driverProfile;
-            $schedule = $settlement->schedule;
-            $routeMeta = $schedule
-                ? $schedule->route->departure . ' → ' . $schedule->route->destination
-                : null;
-            $confirmedAt = $settlement->operator_approved_at
-                ?? $settlement->driver_settled_at
-                ?? $settlement->updated_at;
-
-            $items->push([
-                'kind'        => 'platform_fee',
-                'amount'      => (int) $settlement->platform_fee_amount,
-                'at'          => $confirmedAt,
-                'label'       => 'Phí nền tảng',
-                'meta'        => $routeMeta,
-                'status'      => 'completed',
                 'driver_name' => $profile->user->name,
                 'driver_code' => $profile->driver_code,
             ]);
@@ -499,12 +387,11 @@ class DriverWalletService
     public function pendingWalletRequestCounts(int $operatorId): array
     {
         $deposits = $this->pendingDepositsForOperator($operatorId)->count();
-        $settlements = $this->settlementsAwaitingCodeForOperator($operatorId)->count();
 
         return [
             'deposits'    => $deposits,
-            'settlements' => $settlements,
-            'total'       => $deposits + $settlements,
+            'settlements' => 0,
+            'total'       => $deposits,
         ];
     }
 
@@ -521,105 +408,25 @@ class DriverWalletService
             ->get();
     }
 
-    /** Tài xế xác nhận đã chuyển phí nền tảng (chiết khấu / kết chuyến). */
+    /** @deprecated */
     public function confirmSettlementTransfer(DriverTripSettlement $settlement, ?string $transferRef = null): void
     {
-        if ($settlement->status !== 'pending_settle') {
-            throw new InvalidArgumentException('Chuyến này không còn ở bước chuyển phí.');
-        }
-
-        if ($settlement->transfer_ref) {
-            throw new InvalidArgumentException('Đã xác nhận chuyển phí cho chuyến này.');
-        }
-
-        if ($settlement->isUnderThreshold()) {
-            $settlement->update(['transfer_ref' => DriverTripSettlement::DRIVER_TRANSFER_CONFIRMED]);
-
-            return;
-        }
-
-        $transferRef = trim((string) $transferRef);
-        if ($transferRef === '') {
-            throw new InvalidArgumentException('Vui lòng nhập mã tham chiếu chuyển khoản.');
-        }
-
-        $settlement->update(['transfer_ref' => $transferRef]);
+        throw new InvalidArgumentException('Chức năng chuyển phí đã được gỡ bỏ.');
     }
 
-    /** Quản lý xác nhận chuyến doanh thu dưới ngưỡng — không cần mã kết chuyến. */
+    /** @deprecated */
     public function approveUnderThresholdSettlement(DriverTripSettlement $settlement, int $operatorId): void
     {
-        if (! $settlement->isUnderThreshold()) {
-            throw new InvalidArgumentException('Chuyến này cần cấp mã kết chuyến.');
-        }
-
-        if ($settlement->status !== 'pending_settle') {
-            throw new InvalidArgumentException('Chuyến không còn chờ xác nhận.');
-        }
-
-        if (! $settlement->driverConfirmedTransfer()) {
-            throw new InvalidArgumentException('Tài xế chưa xác nhận chuyển phí.');
-        }
-
-        $settlement->loadMissing('wallet.driverProfile');
-        if ((int) $settlement->wallet->driverProfile->operator_id !== $operatorId) {
-            throw new InvalidArgumentException('Không có quyền xác nhận chuyến này.');
-        }
-
-        DB::transaction(function () use ($settlement, $operatorId): void {
-            $wallet = $settlement->wallet()->lockForUpdate()->firstOrFail();
-
-            $settlement->update([
-                'status'               => 'completed',
-                'operator_approved_at' => now(),
-                'operator_approved_by' => $operatorId,
-                'driver_settled_at'    => now(),
-            ]);
-
-            $this->finalizeSettlement($settlement->fresh());
-            $this->refreshAcceptBlock($wallet->fresh());
-        });
+        throw new InvalidArgumentException('Chức năng kết chuyến đã được gỡ bỏ.');
     }
 
-    private function resolveCategory(DriverWallet $wallet, int $revenue): string
-    {
-        if ($revenue < DriverWalletConfig::REVENUE_THRESHOLD) {
-            return 'under_threshold';
-        }
-
-        $hadPriorOverThresholdTrip = $wallet->settlements()
-            ->where('status', 'completed')
-            ->where('revenue_amount', '>=', DriverWalletConfig::REVENUE_THRESHOLD)
-            ->exists();
-
-        if (! $wallet->wallet_gate_enabled && ! $hadPriorOverThresholdTrip) {
-            return 'first_over_threshold';
-        }
-
-        return 'over_threshold';
-    }
-
-    private function finalizeSettlement(DriverTripSettlement $settlement): void
-    {
-        $wallet = $settlement->wallet()->lockForUpdate()->firstOrFail();
-
-        $wallet->update([
-            'cumulative_revenue'            => $wallet->cumulative_revenue + $settlement->revenue_amount,
-            'completed_settlements_count'   => $wallet->completed_settlements_count + 1,
-        ]);
-
-        $wallet = $wallet->fresh();
-        $this->refreshWalletGate($wallet, $settlement);
-        $this->refreshAcceptBlock($wallet);
-    }
-
-    private function refreshWalletGate(DriverWallet $wallet, ?DriverTripSettlement $settlement = null): void
+    private function refreshWalletGate(DriverWallet $wallet): void
     {
         if ($wallet->wallet_gate_enabled) {
             return;
         }
 
-        if ($settlement && $settlement->revenue_amount >= DriverWalletConfig::REVENUE_THRESHOLD) {
+        if ($wallet->cumulative_revenue >= DriverWalletConfig::REVENUE_THRESHOLD) {
             $wallet->update(['wallet_gate_enabled' => true]);
         }
     }
@@ -627,15 +434,25 @@ class DriverWalletService
     private function refreshAcceptBlock(DriverWallet $wallet): void
     {
         $wallet->refresh();
+        $profile = $wallet->driverProfile;
 
-        if ($wallet->pendingSettlements()->whereIn('status', ['pending_settle', 'pending_driver_code'])->exists()) {
+        if (! $profile) {
+            return;
+        }
+
+        if (! $wallet->wallet_activated_at) {
+            $wallet->update([
+                'accept_trips_blocked_at'   => now(),
+                'accept_trips_block_reason' => 'not_activated',
+            ]);
+
             return;
         }
 
         if ($wallet->wallet_gate_enabled && $wallet->balance <= DriverWalletConfig::MIN_BALANCE) {
             $wallet->update([
                 'accept_trips_blocked_at'   => now(),
-                'accept_trips_block_reason'   => 'low_balance',
+                'accept_trips_block_reason' => 'low_balance',
             ]);
 
             return;
@@ -647,19 +464,6 @@ class DriverWalletService
         ]);
     }
 
-    private function generateSettlementCode(): string
-    {
-        do {
-            $code = (string) random_int(100000, 999999);
-        } while (DriverTripSettlement::query()
-            ->where('settlement_code', $code)
-            ->where('settlement_code_expires_at', '>', now())
-            ->exists());
-
-        return $code;
-    }
-
-    /** Tài xế cũ chưa có operator_id — suy ra từ chuyến đã chạy. */
     private function assignOperatorFromTrips(DriverProfile $profile): void
     {
         $operatorId = Schedule::query()

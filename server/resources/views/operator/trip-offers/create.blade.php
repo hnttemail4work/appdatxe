@@ -63,9 +63,9 @@ $quickHasPhoto = ! empty($quickVehiclePhotos[$quickSeats]);
                     @include('partials.departure-time-input', [
                         'name' => 'departure_time',
                         'id' => 'quick-departure-time',
-                        'value' => old('departure_time', '06:00'),
+                        'value' => old('departure_time', ''),
                         'label' => 'Giờ khởi hành',
-                        'required' => true,
+                        'required' => false,
                     ])
                 </div>
                 <div class="col-md-2">
@@ -177,7 +177,7 @@ $quickHasPhoto = ! empty($quickVehiclePhotos[$quickSeats]);
                                 <div class="console-table-actions">
                                     <a href="{{ $editUrl }}" class="btn btn-outline-primary btn-sm">Sửa</a>
                                     <form method="POST" action="{{ route('operator.tripOffers.destroy', $offer) }}"
-                                          data-confirm="Xóa tuyến {{ $offer->route->departure }} → {{ $offer->route->destination }} ({{ substr((string) $offer->departure_time, 0, 5) }}, {{ $offer->vehicle->capacity }} chỗ)? Tuyến sẽ không còn hiển thị trên trang đặt vé."
+                                          data-confirm="Xóa tuyến {{ $offer->route->departure }} → {{ $offer->route->destination }} ({{ $offer->departure_time ? substr((string) $offer->departure_time, 0, 5) : 'tự chọn giờ' }}, {{ $offer->vehicle->capacity }} chỗ)? Tuyến sẽ không còn hiển thị trên trang đặt vé."
                                           data-confirm-title="Xóa tuyến"
                                           data-confirm-variant="danger"
                                           data-confirm-ok="Xóa">
@@ -240,9 +240,9 @@ $quickHasPhoto = ! empty($quickVehiclePhotos[$quickSeats]);
                     @include('partials.departure-time-input', [
                         'name' => 'departure_time',
                         'id' => 'offer-departure-time',
-                        'value' => old('departure_time', $formData['departure_time'] ?? '06:00'),
+                        'value' => old('departure_time', $formData['departure_time'] ?? ''),
                         'label' => 'Giờ khởi hành',
-                        'required' => true,
+                        'required' => false,
                     ])
                 </div>
                 <div class="col-md-6">

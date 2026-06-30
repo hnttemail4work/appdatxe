@@ -399,7 +399,11 @@
         if (!input) {
             return;
         }
-        input.value = '06:00 SA';
+        var pickupAt = new Date();
+        pickupAt.setMinutes(pickupAt.getMinutes() + 30);
+        var clock24 = String(pickupAt.getHours()).padStart(2, '0') + ':'
+            + String(pickupAt.getMinutes()).padStart(2, '0');
+        input.value = formatViPickupTime(clock24);
     }
 
     function validatePickupTimeField() {
@@ -407,7 +411,11 @@
         if (!input) {
             return true;
         }
-        var pickup = parseViTimeTo24h(input.value);
+        var raw = String(input.value || '').trim();
+        if (raw === '') {
+            return true;
+        }
+        var pickup = parseViTimeTo24h(raw);
         if (!pickup) {
             if (window.AppDialog) {
                 window.AppDialog.alert('Vui lòng nhập giờ đón hợp lệ (ví dụ: 06:00 SA).');
@@ -434,12 +442,14 @@
                 parseInt(timeParts[1], 10),
                 0,
             );
-            if (pickupAt <= now) {
-                var pastMsg = 'Giờ đón phải sau thời gian hiện tại.';
+            var minAllowed = new Date(now.getTime());
+            minAllowed.setMinutes(minAllowed.getMinutes() + 30);
+            if (pickupAt < minAllowed) {
+                var leadMsg = 'Giờ đón phải sau ít nhất 30 phút so với hiện tại.';
                 if (window.FormFieldValidation && window.FormFieldValidation.markInvalid) {
-                    FormFieldValidation.markInvalid(input, pastMsg);
+                    FormFieldValidation.markInvalid(input, leadMsg);
                 } else if (window.AppDialog) {
-                    window.AppDialog.alert(pastMsg);
+                    window.AppDialog.alert(leadMsg);
                 }
                 input.focus();
                 return false;

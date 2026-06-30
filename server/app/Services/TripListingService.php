@@ -127,7 +127,9 @@ class TripListingService
         $roundQuote = $this->pricing->quote($template, 'round_trip', null, null, 'shared');
         $hintDate = $serviceDate ?? ServiceDate::today();
         $schedule = $template->scheduleInfoForDate($hintDate);
-        $referenceTime = DepartureTimeDisplay::normalizeForClock($template->departure_time);
+        $referenceTime = $template->hasFixedDepartureTime()
+            ? DepartureTimeDisplay::normalizeForClock($template->departure_time)
+            : null;
         $occupied = $this->occupiedSeatMapForDate($template, $hintDate, $referenceTime);
         $taken = count($occupied);
         $free = max($capacity - $taken, 0);
@@ -181,6 +183,22 @@ class TripListingService
     /** Ghế đã giữ/đặt cho chuyến theo nhu cầu trong ngày. */
     public function occupiedSeatMapForDate(ScheduleTemplate $template, string $serviceDate, ?string $preferredTime = null): array
     {
+        if (! $template->hasFixedDepartureTime()
+            && (! is_string($preferredTime) || trim($preferredTime) === '')) {
+            $schedules = Schedule::query()
+                ->where('template_id', $template->id)
+                ->whereDate('service_date', $serviceDate)
+                ->whereIn('status', ['scheduled', 'running'])
+                ->get();
+
+            $map = [];
+            foreach ($schedules as $schedule) {
+                $map = array_merge($map, $this->scheduleLifecycle->occupiedSeatMap($schedule));
+            }
+
+            return $map;
+        }
+
         $departure = app(DriverAvailabilityService::class)->resolveDepartureTime(
             $template,
             $serviceDate,

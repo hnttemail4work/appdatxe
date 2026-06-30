@@ -235,6 +235,35 @@ body:has(.driver-page) {
 .driver-notice-danger { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
 .driver-notice-warning { background: #fffbeb; border-color: #fde68a; color: #92400e; }
 .driver-notice-info { background: #eff6ff; border-color: #bfdbfe; color: #1e40af; }
+.driver-notice--topup {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: flex-start;
+    gap: .35rem .5rem;
+    text-align: left;
+}
+.driver-notice-topup-text {
+    font-size: .75rem;
+    line-height: 1.35;
+}
+.driver-notice-topup-link {
+    font-size: .7rem;
+    font-weight: 600;
+    color: inherit;
+    text-decoration: underline;
+    white-space: nowrap;
+}
+.driver-wallet-deposit-form {
+    text-align: left;
+}
+.driver-deposit-submit-btn {
+    font-size: .75rem;
+    padding: .2rem .65rem;
+}
+.driver-trip-card--history {
+    opacity: .95;
+}
 
 .driver-request-card,
 .driver-trip-card {

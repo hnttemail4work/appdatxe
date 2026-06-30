@@ -32,6 +32,10 @@ if (! $viewOnly && $driver->isOperational()) {
 
         @include('partials.driver-operator-profile-header', ['driver' => $driver])
 
+        @if($driver->isRejected())
+            @include('partials.driver-rejection-note', ['driver' => $driver])
+        @endif
+
         @include('partials.screen-tabs-start', [
             'prefix' => 'driver-edit',
             'activeKey' => $driverEditDefault,
@@ -103,4 +107,8 @@ if (! $viewOnly && $driver->isOperational()) {
 @push('styles')
 <link rel="stylesheet" href="{{ asset('css/customer.css') }}">
 <link rel="stylesheet" href="{{ asset('css/driver-mgmt.css') }}">
+@endpush
+
+@push('scripts')
+<script src="{{ asset('js/driver-approval-actions.js') }}"></script>
 @endpush

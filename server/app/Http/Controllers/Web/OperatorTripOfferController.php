@@ -159,7 +159,7 @@ class OperatorTripOfferController extends Controller
         $request->validate([
             'departure'             => ['required', 'string', LocationCatalog::inRule()],
             'service_date'          => ['required', 'date', 'after_or_equal:today'],
-            'departure_time'        => ['required', 'date_format:H:i'],
+            'departure_time'        => ['nullable', 'date_format:H:i'],
             'expected_arrival_time' => ['nullable', 'date_format:H:i'],
             'seats'                 => ['required', 'integer', Rule::in(VehicleCapacityOptions::STANDARD)],
             'vehicle_photo'         => $hasVehiclePhoto
@@ -211,7 +211,7 @@ class OperatorTripOfferController extends Controller
         $request->validate([
             'departure'             => ['required', 'string', LocationCatalog::inRule()],
             'destination'           => ['required', 'string', 'different:departure', LocationCatalog::inRule()],
-            'departure_time'        => ['required', 'date_format:H:i'],
+            'departure_time'        => ['nullable', 'date_format:H:i'],
             'expected_arrival_time' => ['nullable', 'date_format:H:i'],
             'seats'                 => ['required', 'integer', Rule::in(VehicleCapacityOptions::STANDARD)],
             'whole_car_one_way'     => ['required', 'integer', 'min:10000'],
@@ -272,7 +272,7 @@ class OperatorTripOfferController extends Controller
             'formMethod'      => $editingTemplate ? 'PUT' : 'POST',
             'formData'        => $formData ?? [
                 'route'                 => null,
-                'departure_time'        => old('departure_time', '06:00'),
+                'departure_time'        => old('departure_time', ''),
                 'expected_arrival_time' => old('expected_arrival_time', ''),
                 'distance_km'           => old('distance_km', ''),
                 'vehicle'               => [

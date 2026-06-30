@@ -5,17 +5,21 @@ namespace App\Services;
 use App\Models\Booking;
 use App\Models\ReferralCode;
 
+use App\Support\PlatformFees;
+
 class ReferralCodeService
 {
     public function createReferrer(string $name, string $phone, int $adminUserId): ReferralCode
     {
         return ReferralCode::query()->create([
-            'type'       => ReferralCode::TYPE_REFERRER,
-            'name'       => trim($name),
-            'phone'      => trim($phone),
-            'status'     => ReferralCode::STATUS_ACTIVE,
-            'created_by' => $adminUserId,
-            'activated_at' => now(),
+            'type'                      => ReferralCode::TYPE_REFERRER,
+            'name'                      => trim($name),
+            'phone'                     => trim($phone),
+            'status'                    => ReferralCode::STATUS_ACTIVE,
+            'commission_percent'        => PlatformFees::referralCommissionFirstPercent(),
+            'customer_discount_percent' => 0,
+            'created_by'                => $adminUserId,
+            'activated_at'              => now(),
         ]);
     }
 
@@ -61,7 +65,17 @@ class ReferralCodeService
             ->update([
                 'status'       => ReferralCode::STATUS_ACTIVE,
                 'activated_at' => now(),
+                'expires_at'   => now()->addDays(ReferralCode::BOOKING_CODE_VALIDITY_DAYS),
             ]);
+    }
+
+    public function deleteBookingReferralCode(ReferralCode $referralCode): void
+    {
+        if ($referralCode->type !== ReferralCode::TYPE_BOOKING_TEMP) {
+            abort(403, 'Chỉ xóa được mã phát sinh từ đặt vé.');
+        }
+
+        $referralCode->delete();
     }
 
     public function suspendReferrer(ReferralCode $referralCode): void
@@ -197,13 +211,36 @@ class ReferralCodeService
         }
 
         if ($referral->type === ReferralCode::TYPE_REFERRER) {
+            $percent = $referral->customerDiscountPercent();
+            if ($percent <= 0) {
+                return [
+                    'percent'          => 0.0,
+                    'eligible'         => false,
+                    'reason'           => null,
+                    'code'             => $referral->code,
+                    'type'             => $referral->type,
+                    'attribution_only' => true,
+                ];
+            }
+
+            if ($contactPhone !== null && $contactPhone !== '' && $this->phoneHasUsedReferralBefore($contactPhone)) {
+                return [
+                    'percent'          => 0.0,
+                    'eligible'         => false,
+                    'reason'           => 'Số điện thoại này đã từng dùng mã giới thiệu.',
+                    'code'             => $referral->code,
+                    'type'             => $referral->type,
+                    'attribution_only' => true,
+                ];
+            }
+
             return [
-                'percent'          => 0.0,
-                'eligible'         => false,
+                'percent'          => $percent,
+                'eligible'         => true,
                 'reason'           => null,
                 'code'             => $referral->code,
                 'type'             => $referral->type,
-                'attribution_only' => true,
+                'attribution_only' => false,
             ];
         }
 

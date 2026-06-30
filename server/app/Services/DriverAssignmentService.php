@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Booking;
 use App\Models\DriverProfile;
 use App\Models\Schedule;
 
@@ -54,6 +55,10 @@ class DriverAssignmentService
             'driver_id'   => $driver->user_id,
             'driver_name' => $driverName,
         ]);
+
+        $schedule->bookings()
+            ->whereNotIn('booking_status', ['cancelled', 'rejected'])
+            ->each(fn (Booking $booking) => $booking->stampAssignedDriver((int) $driver->user_id));
 
         if ($schedule->status === 'running') {
             $driver->update(['availability_status' => 'on_trip']);

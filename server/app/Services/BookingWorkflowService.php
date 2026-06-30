@@ -13,6 +13,7 @@ use App\Models\SeatReservation;
 use App\Models\ReferralCode;
 use App\Services\TripPricingService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 
@@ -25,6 +26,8 @@ class BookingWorkflowService
         private readonly ReferralCodeService $referralCodes,
         private readonly TripLedgerService $tripLedger,
         private readonly DriverTripRequestService $driverRequests,
+        private readonly BookingPhoneGuardService $phoneGuard,
+        private readonly CancellationReasonService $cancellationReasons,
     ) {
     }
 
@@ -132,10 +135,6 @@ class BookingWorkflowService
                 throw new InvalidArgumentException('Chuyến không còn mở đặt vé (đang chạy hoặc đã kết thúc).');
             }
 
-            if ($schedule->departure_time <= now()) {
-                throw new InvalidArgumentException('Chuyến đã đến giờ khởi hành, không thể đặt thêm vé.');
-            }
-
             $seatNumbers = array_map(fn ($seat): string => (string) $seat, $seatNumbers);
 
             $this->scheduleLifecycle->purgeInactiveSeatReservations($schedule, $seatNumbers);
@@ -196,12 +195,12 @@ class BookingWorkflowService
             return $booking;
         });
 
-        $this->driverRequests->directAssignForBooking($booking->fresh(['schedule.route', 'schedule.vehicle']));
+        $this->driverRequests->autoAssignForBooking($booking->fresh(['schedule.route', 'schedule.vehicle']));
 
         return $booking;
     }
 
-    public function cancelByPhone(Booking $booking, string $contactPhone): void
+    public function cancelByPhone(Booking $booking, string $contactPhone, ?int $cancellationReasonId = null): void
     {
         $this->assertContactPhone($booking, $contactPhone);
 
@@ -213,20 +212,44 @@ class BookingWorkflowService
             throw new InvalidArgumentException('Chuyến đã hoàn tất, không thể hủy.');
         }
 
-        DB::transaction(function () use ($booking): void {
-            $before = $booking->toArray();
+        $reason = null;
+        if ($this->phoneGuard->requiresCancelReason($contactPhone)) {
+            if (! $cancellationReasonId) {
+                throw new InvalidArgumentException('Vui lòng chọn lý do hủy chuyến.');
+            }
+            $reason = $this->cancellationReasons->resolveForCancel($cancellationReasonId, 'customer');
+        }
 
-            $booking->update([
-                'booking_status' => 'cancelled',
-                'trip_status'    => 'cancelled',
-                'payment_status' => $booking->payment_status === 'paid' ? 'refunded' : 'unpaid',
-                'cancelled_at'   => now(),
-                'cancelled_by'   => 'customer',
-            ]);
+        DB::transaction(function () use ($booking, $reason): void {
+            $before = $booking->toArray();
+            $schedule = $booking->schedule()->with(['vehicle', 'seatReservations', 'route'])->first();
+
+            $cancelCount = $this->phoneGuard->recordCustomerCancel((string) $booking->contact_phone);
+            $visibility = [];
+            if (Booking::supportsOperatorDismiss()) {
+                $visibility = $cancelCount > BookingPhoneGuardService::MAX_CANCEL_CYCLES
+                    ? (Schema::hasColumn('bookings', 'repeat_cancel_flag') ? ['repeat_cancel_flag' => true] : [])
+                    : ['operator_dismissed_at' => now()];
+            }
+
+            $assignment = [];
+            $assignedDriverId = $booking->resolveAssignedDriverId($schedule);
+            if ($assignedDriverId && Schema::hasColumn('bookings', 'assigned_driver_id')) {
+                $assignment = ['assigned_driver_id' => $assignedDriverId];
+            }
+
+            $booking->update(array_merge([
+                'booking_status'              => 'cancelled',
+                'trip_status'                 => 'cancelled',
+                'payment_status'              => $booking->payment_status === 'paid' ? 'refunded' : 'unpaid',
+                'cancelled_at'                => now(),
+                'cancelled_by'                => 'customer',
+                'cancellation_reason_id'      => $reason?->id,
+                'cancellation_reason_label'   => $reason?->label,
+            ], $visibility, $assignment));
 
             $booking->seatReservations()->delete();
             $booking->paymentTransactions()->where('status', 'pending')->update(['status' => 'failed']);
-            $schedule = $booking->schedule()->with(['vehicle', 'seatReservations', 'route'])->first();
             $this->syncScheduleAvailability($schedule);
             $this->audit($booking, null, 'booking_cancelled', $before, $booking->fresh()->toArray());
 
@@ -245,8 +268,10 @@ class BookingWorkflowService
     }
 
     /** Tài xế hủy chuyến trước khi khách lên xe / trước hoàn thành. */
-    public function cancelScheduleByDriver(Schedule $schedule, int $driverUserId): void
+    public function cancelScheduleByDriver(Schedule $schedule, int $driverUserId, int $cancellationReasonId): void
     {
+        $reason = $this->cancellationReasons->resolveForCancel($cancellationReasonId, 'driver');
+
         $schedule = Schedule::query()
             ->with(['route', 'vehicle', 'seatReservations', 'bookings'])
             ->lockForUpdate()
@@ -272,7 +297,7 @@ class BookingWorkflowService
             throw new InvalidArgumentException('Đã có khách hoàn thành chuyến — không thể hủy.');
         }
 
-        DB::transaction(function () use ($schedule, $activeBookings, $driverUserId): void {
+        DB::transaction(function () use ($schedule, $activeBookings, $driverUserId, $reason): void {
             $profile = DriverProfile::query()->with('user')->where('user_id', $driverUserId)->first();
             $driverLabel = $profile?->user?->name ?? $schedule->driver_name ?? 'Tài xế';
             $driverCode = $profile?->driver_code;
@@ -281,11 +306,13 @@ class BookingWorkflowService
                 $before = $booking->toArray();
 
                 $booking->update([
-                    'booking_status' => 'cancelled',
-                    'trip_status'    => 'cancelled',
-                    'payment_status' => $booking->payment_status === 'paid' ? 'refunded' : 'unpaid',
-                    'cancelled_at'   => now(),
-                    'cancelled_by'   => 'driver',
+                    'booking_status'            => 'cancelled',
+                    'trip_status'               => 'cancelled',
+                    'payment_status'            => $booking->payment_status === 'paid' ? 'refunded' : 'unpaid',
+                    'cancelled_at'              => now(),
+                    'cancelled_by'              => 'driver',
+                    'cancellation_reason_id'    => $reason->id,
+                    'cancellation_reason_label' => $reason->label,
                 ]);
 
                 $booking->seatReservations()->delete();
@@ -386,6 +413,8 @@ class BookingWorkflowService
             'trip_status'  => 'completed',
             'completed_at' => now(),
         ]);
+
+        app(\App\Services\DriverTripRequestService::class)->clearOperatorHelp($booking->fresh());
 
         $this->audit($booking, $driverUserId, 'driver_trip_completed', $before, $booking->fresh()->toArray());
         $this->referralCodes->activateForCompletedBooking($booking);
@@ -500,7 +529,7 @@ class BookingWorkflowService
         $this->referralCodes->ensureForBooking($booking);
 
         $booking = $booking->fresh(['schedule']);
-        $this->driverRequests->directAssignForBooking($booking->fresh(['schedule.route', 'schedule.vehicle']));
+        $this->driverRequests->autoAssignForBooking($booking->fresh(['schedule.route', 'schedule.vehicle']));
 
         return $booking;
     }

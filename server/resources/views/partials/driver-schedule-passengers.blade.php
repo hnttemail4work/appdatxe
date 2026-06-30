@@ -4,7 +4,7 @@
 $bookings = $bookings ?? $schedule->driverRelevantBookings();
 $tripTotal = $tripTotal ?? (float) $bookings->sum(fn (\App\Models\Booking $b) => (float) $b->total_price);
 $showTripTotal = $showTripTotal ?? true;
-$phase = $schedule->driverWorkflowPhase();
+$phase = $phase ?? $schedule->driverWorkflowPhase();
 @endphp
 
 @if($bookings->isEmpty())
@@ -30,6 +30,9 @@ $phase = $schedule->driverWorkflowPhase();
             @endif
             @if($booking->notes)
                 <div class="text-muted small">📝 {{ $booking->notes }}</div>
+            @endif
+            @if($showCancelDetail ?? false)
+                @include('partials.booking-cancel-detail', ['booking' => $booking])
             @endif
         </div>
         @endforeach

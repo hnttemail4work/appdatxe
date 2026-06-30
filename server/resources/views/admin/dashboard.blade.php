@@ -2,7 +2,7 @@
 
 @section('console')
 @php
-$allowedAdminTabs = ['create', 'list', 'referrals', 'fees', 'bank', 'revenue', 'routes'];
+$allowedAdminTabs = ['operators', 'referrals', 'referral-costs', 'fees', 'bank', 'revenue', 'routes', 'cancel-reasons'];
 $tabFromRequest = request('tab');
 $tabFromCookie = request()->cookie('admin-main_tab');
 $adminDefaultTab = in_array($tabFromRequest, $allowedAdminTabs, true)
@@ -10,8 +10,9 @@ $adminDefaultTab = in_array($tabFromRequest, $allowedAdminTabs, true)
     : (in_array($tabFromCookie, $allowedAdminTabs, true) ? $tabFromCookie : null);
 if ($adminDefaultTab === null) {
     $adminDefaultTab = ($errors->has('name') || $errors->has('phone')) && ! $errors->has('email')
-        ? 'referrals'
-        : (($errors->has('bank_name') || $errors->has('bank_bin')) ? 'bank' : 'create');
+        ? (request()->has('commission_percent') ? 'referrals' : 'operators')
+        : (($errors->has('bank_name') || $errors->has('bank_bin')) ? 'bank'
+        : ($errors->has('label') && $errors->has('audience') ? 'cancel-reasons' : 'operators'));
 }
 @endphp
 @include('partials.console-hero', [
@@ -26,18 +27,19 @@ if ($adminDefaultTab === null) {
                     'prefix' => 'admin-main',
                     'activeKey' => $adminDefaultTab,
                     'tabs' => [
-                        ['key' => 'create', 'label' => 'Tạo quản lý'],
-                        ['key' => 'list', 'label' => 'Danh sách', 'badge' => $operators->total()],
+                        ['key' => 'operators', 'label' => 'Quản lý', 'badge' => $operators->total()],
                         ['key' => 'referrals', 'label' => 'Mã giới thiệu', 'badge' => $referralCodes->total()],
+                        ['key' => 'referral-costs', 'label' => 'Chi phí người GT', 'badge' => $referralCostTrips->total() ?: null],
                         ['key' => 'fees', 'label' => 'Phí & giá'],
                         ['key' => 'bank', 'label' => 'Ngân hàng'],
                         ['key' => 'revenue', 'label' => 'Doanh thu'],
                         ['key' => 'routes', 'label' => 'Điểm đến'],
+                        ['key' => 'cancel-reasons', 'label' => 'Lý do hủy', 'badge' => ($cancellationReasonList ?? collect())->count()],
                     ],
                 ])
 
-                @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'create', 'active' => $adminDefaultTab === 'create'])
-                <form method="POST" action="{{ route('admin.operators.store') }}" class="console-form">
+                @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'operators', 'active' => $adminDefaultTab === 'operators'])
+                <form method="POST" action="{{ route('admin.operators.store') }}" class="console-form mb-4 pb-3 border-bottom">
                     @csrf
                     <div class="row g-3">
                         <div class="col-md-12">
@@ -75,9 +77,7 @@ if ($adminDefaultTab === null) {
                     </div>
                     <button class="btn btn-primary px-4 fw-semibold mt-3">Tạo quản lý</button>
                 </form>
-                @include('partials.screen-tab-pane-end')
-
-                @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'list', 'active' => $adminDefaultTab === 'list'])
+                <h6 class="fw-semibold mb-3">Danh sách quản lý</h6>
                 @if($operators->isEmpty())
                     <div class="console-empty py-4"><p class="mb-0">Chưa có quản lý nào.</p></div>
                 @else
@@ -165,6 +165,16 @@ if ($adminDefaultTab === null) {
                                 </form>
                             @endif
                         @endif
+                        @if($ref->type === \App\Models\ReferralCode::TYPE_BOOKING_TEMP)
+                            <form method="POST" action="{{ route('admin.referralCodes.destroy', $ref) }}" id="delete-referral-{{ $ref->id }}"
+                                  data-confirm="Xóa mã {{ $ref->code }} ({{ $ref->name }})?"
+                                  data-confirm-title="Xóa mã giới thiệu"
+                                  data-confirm-variant="danger"
+                                  data-confirm-ok="Xóa">
+                                @csrf
+                                @method('DELETE')
+                            </form>
+                        @endif
                     @endforeach
                     <div class="console-table-wrap">
                         <table class="console-table">
@@ -177,6 +187,8 @@ if ($adminDefaultTab === null) {
                                     <th>SĐT</th>
                                     <th>Trạng thái</th>
                                     <th>Hoa hồng</th>
+                                    <th>Giảm giá KH</th>
+                                    <th>Ngày hết hạn</th>
                                     <th>Ngày tạo</th>
                                     <th class="text-end">Thao tác</th>
                                 </tr>
@@ -208,16 +220,40 @@ if ($adminDefaultTab === null) {
                                         {{ number_format($ref->commissionPercent(), 1) }}%
                                         <span class="d-block small">{{ $ref->commissionTierLabel() }}</span>
                                     </td>
+                                    <td class="cell-muted">
+                                        @if($ref->type === \App\Models\ReferralCode::TYPE_REFERRER)
+                                            {{ number_format($ref->customerDiscountPercent(), 1) }}%
+                                        @else
+                                            {{ number_format($ref->customerDiscountPercent(), 1) }}%
+                                            <span class="d-block small">Từ vé</span>
+                                        @endif
+                                    </td>
+                                    <td class="cell-muted small">
+                                        @if($ref->type === \App\Models\ReferralCode::TYPE_REFERRER)
+                                            <span class="text-muted">—</span>
+                                        @else
+                                            <span class="status-pill status-pill--{{ $ref->expiryColor() }}">{{ $ref->expiryLabel() }}</span>
+                                        @endif
+                                    </td>
                                     <td class="cell-muted small">{{ $ref->created_at->format('d/m/Y H:i') }}</td>
                                     <td class="text-end">
                                         @if($ref->type === \App\Models\ReferralCode::TYPE_REFERRER)
+                                            <form method="POST" action="{{ route('admin.referrers.update', $ref) }}" class="d-inline-flex flex-wrap gap-1 align-items-center justify-content-end mb-1">
+                                                @csrf
+                                                @method('PATCH')
+                                                <input type="number" name="customer_discount_percent" class="form-control form-control-sm" style="width:4.5rem"
+                                                       min="0" max="100" step="0.1" value="{{ number_format($ref->customerDiscountPercent(), 1, '.', '') }}" title="% giảm giá khách" aria-label="Giảm giá %">
+                                                <input type="number" name="commission_percent" class="form-control form-control-sm" style="width:4.5rem"
+                                                       min="0" max="100" step="0.1" value="{{ number_format($ref->commissionPercent(), 1, '.', '') }}" title="% hoa hồng" aria-label="Hoa hồng %">
+                                                <button type="submit" class="btn btn-outline-primary btn-sm">Lưu</button>
+                                            </form>
                                             @if($ref->isSuspended())
                                                 <button type="submit" class="btn btn-outline-primary btn-sm" form="show-referrer-{{ $ref->id }}">Sử dụng</button>
                                             @else
                                                 <button type="submit" class="btn btn-outline-danger btn-sm" form="hide-referrer-{{ $ref->id }}">Tạm ngưng</button>
                                             @endif
                                         @else
-                                            <span class="text-muted small">—</span>
+                                            <button type="submit" class="btn btn-outline-danger btn-sm" form="delete-referral-{{ $ref->id }}">Xóa</button>
                                         @endif
                                     </td>
                                 </tr>
@@ -228,6 +264,46 @@ if ($adminDefaultTab === null) {
                     @include('partials.pagination', ['paginator' => $referralCodes])
                 @endif
                 @include('partials.referral-qr-modal')
+                @include('partials.screen-tab-pane-end')
+
+                @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'referral-costs', 'active' => $adminDefaultTab === 'referral-costs'])
+                <p class="text-muted small mb-3">
+                    Chi phí hoa hồng người giới thiệu theo từng cuốc hoàn thành trong tháng {{ \Carbon\Carbon::parse($revenueSummary['from'])->format('m/Y') }}.
+                    Tổng: <strong>{{ number_format($revenueSummary['referral_cost'], 0, ',', '.') }} đ</strong>.
+                </p>
+                @if($referralCostTrips->isEmpty())
+                    <div class="console-empty py-4"><p class="mb-0">Chưa có cuốc nào ghi nhận chi phí giới thiệu.</p></div>
+                @else
+                    <div class="console-table-wrap">
+                        <table class="console-table">
+                            <thead>
+                                <tr>
+                                    <th>Mã chuyến</th>
+                                    <th>Mã GT</th>
+                                    <th>Người giới thiệu</th>
+                                    <th>Khách</th>
+                                    <th class="text-end">% HH</th>
+                                    <th class="text-end">Chi phí</th>
+                                    <th>Hoàn tất</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($referralCostTrips as $booking)
+                                <tr>
+                                    <td class="cell-primary"><code>{{ $booking->schedule?->shortTripCode() ?? '—' }}</code></td>
+                                    <td><span class="driver-meta-code">{{ $booking->appliedReferralCode?->code ?? '—' }}</span></td>
+                                    <td class="small">{{ $booking->appliedReferralCode?->name ?? '—' }}</td>
+                                    <td class="small cell-muted">{{ $booking->passenger_name }}<br>{{ $booking->contact_phone }}</td>
+                                    <td class="text-end">{{ number_format($booking->appliedReferralCode?->commissionPercent() ?? 0, 1) }}%</td>
+                                    <td class="text-end fw-semibold">{{ number_format($booking->referralCommissionAmount(), 0, ',', '.') }} đ</td>
+                                    <td class="cell-muted small">{{ $booking->completed_at?->format('d/m/Y H:i') ?? '—' }}</td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                    @include('partials.pagination', ['paginator' => $referralCostTrips])
+                @endif
                 @include('partials.screen-tab-pane-end')
 
                 @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'bank', 'active' => $adminDefaultTab === 'bank'])
@@ -250,14 +326,6 @@ if ($adminDefaultTab === null) {
                                    value="{{ old('bank_bin', $bankSettings['bank_bin']) }}" required maxlength="20"
                                    inputmode="numeric" pattern="[0-9]*">
                             @error('bank_bin')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                            <div class="form-text">
-                                Mã định danh ngân hàng trong hệ VietQR (6 chữ số). Ví dụ:
-                                VietinBank <code>970415</code>,
-                                Vietcombank <code>970436</code>,
-                                Techcombank <code>970407</code>,
-                                MB Bank <code>970422</code>.
-                                BIN phải khớp với ngân hàng của số TK thì quét mới đúng.
-                            </div>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label" for="bank-account">Số tài khoản</label>
@@ -291,117 +359,16 @@ if ($adminDefaultTab === null) {
                 </p>
                 <div class="row g-3 mb-4">
                     <div class="col-6 col-md-3">
-                        @include('partials.console-stat', ['icon' => '✓', 'value' => number_format($revenueSummary['trip_count']), 'label' => 'Chạy thành công', 'tone' => 'success'])
+                        @include('partials.console-stat', ['icon' => '₫', 'value' => number_format($revenueSummary['total_revenue'], 0, ',', '.') . ' đ', 'label' => 'Tổng doanh thu', 'tone' => 'primary'])
                     </div>
                     <div class="col-6 col-md-3">
-                        @include('partials.console-stat', ['icon' => '✕', 'value' => number_format($revenueSummary['cancelled_customer']), 'label' => 'Khách hủy', 'tone' => 'warning'])
+                        @include('partials.console-stat', ['icon' => 'GT', 'value' => number_format($revenueSummary['referral_cost'], 0, ',', '.') . ' đ', 'label' => 'Phí giới thiệu', 'tone' => 'warning'])
                     </div>
                     <div class="col-6 col-md-3">
-                        @include('partials.console-stat', ['icon' => 'TX', 'value' => number_format($revenueSummary['cancelled_driver']), 'label' => 'Tài xế hủy', 'tone' => 'danger'])
+                        @include('partials.console-stat', ['icon' => 'TX', 'value' => number_format($revenueSummary['driver_revenue'], 0, ',', '.') . ' đ', 'label' => 'Thu nhập tài xế', 'tone' => 'info'])
                     </div>
                     <div class="col-6 col-md-3">
-                        @include('partials.console-stat', ['icon' => '₫', 'value' => number_format($revenueSummary['gross_revenue'], 0, ',', '.') . ' đ', 'label' => 'Doanh thu gộp', 'tone' => 'primary'])
-                    </div>
-                    <div class="col-6 col-md-3">
-                        @include('partials.console-stat', ['icon' => '%', 'value' => number_format($revenueSummary['platform_fee'], 0, ',', '.') . ' đ', 'label' => 'Phí nền tảng', 'tone' => 'info'])
-                    </div>
-                    <div class="col-6 col-md-3">
-                        @include('partials.console-stat', ['icon' => 'GT', 'value' => number_format($revenueSummary['referral_commission'], 0, ',', '.') . ' đ', 'label' => 'Hoa hồng GT', 'tone' => 'warning'])
-                    </div>
-                    <div class="col-6 col-md-3">
-                        @include('partials.console-stat', ['icon' => '≈', 'value' => number_format($revenueSummary['avg_revenue_per_trip'], 0, ',', '.') . ' đ', 'label' => 'TB / chuyến HT', 'tone' => 'primary'])
-                    </div>
-                    <div class="col-6 col-md-3">
-                        @include('partials.console-stat', ['icon' => '∑', 'value' => number_format($revenueSummary['net_estimate'], 0, ',', '.') . ' đ', 'label' => 'Còn lại (ước tính)', 'tone' => 'primary'])
-                    </div>
-                </div>
-
-                <div class="row g-4 mb-4">
-                    <div class="col-lg-4">
-                        <h6 class="fw-semibold mb-2">Tài xế chạy thành công</h6>
-                        @if($revenueByDriver->isEmpty())
-                            <p class="text-muted small mb-0">Chưa có dữ liệu.</p>
-                        @else
-                            <div class="console-table-wrap">
-                                <table class="console-table console-table-sm">
-                                    <thead>
-                                        <tr>
-                                            <th>Tài xế</th>
-                                            <th class="text-end">Chuyến</th>
-                                            <th class="text-end">Doanh thu</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach($revenueByDriver as $row)
-                                        <tr>
-                                            <td class="small">
-                                                @if($row->actor_code)<code>{{ $row->actor_code }}</code><br>@endif
-                                                {{ $row->actor_label ?? '—' }}
-                                            </td>
-                                            <td class="text-end">{{ $row->trips }}</td>
-                                            <td class="text-end cell-muted small">{{ number_format($row->revenue, 0, ',', '.') }} đ</td>
-                                        </tr>
-                                        @endforeach
-                                    </tbody>
-                                </table>
-                            </div>
-                        @endif
-                    </div>
-                    <div class="col-lg-4">
-                        <h6 class="fw-semibold mb-2">Khách hủy chuyến</h6>
-                        @if($revenueByCustomerCancel->isEmpty())
-                            <p class="text-muted small mb-0">Chưa có dữ liệu.</p>
-                        @else
-                            <div class="console-table-wrap">
-                                <table class="console-table console-table-sm">
-                                    <thead>
-                                        <tr>
-                                            <th>Khách</th>
-                                            <th class="text-end">Lần hủy</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach($revenueByCustomerCancel as $row)
-                                        <tr>
-                                            <td class="small">
-                                                {{ $row->actor_label ?? 'Khách' }}
-                                                @if($row->actor_code)<br><code>{{ $row->actor_code }}</code>@endif
-                                            </td>
-                                            <td class="text-end">{{ $row->trips }}</td>
-                                        </tr>
-                                        @endforeach
-                                    </tbody>
-                                </table>
-                            </div>
-                        @endif
-                    </div>
-                    <div class="col-lg-4">
-                        <h6 class="fw-semibold mb-2">Tài xế từ chối / hủy</h6>
-                        @if($revenueByDriverCancel->isEmpty())
-                            <p class="text-muted small mb-0">Chưa có dữ liệu.</p>
-                        @else
-                            <div class="console-table-wrap">
-                                <table class="console-table console-table-sm">
-                                    <thead>
-                                        <tr>
-                                            <th>Tài xế</th>
-                                            <th class="text-end">Lần</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach($revenueByDriverCancel as $row)
-                                        <tr>
-                                            <td class="small">
-                                                @if($row->actor_code)<code>{{ $row->actor_code }}</code><br>@endif
-                                                {{ $row->actor_label ?? '—' }}
-                                            </td>
-                                            <td class="text-end">{{ $row->trips }}</td>
-                                        </tr>
-                                        @endforeach
-                                    </tbody>
-                                </table>
-                            </div>
-                        @endif
+                        @include('partials.console-stat', ['icon' => '∑', 'value' => number_format($revenueSummary['net_revenue'], 0, ',', '.') . ' đ', 'label' => 'Doanh thu thực tế', 'tone' => 'success'])
                     </div>
                 </div>
 
@@ -429,47 +396,6 @@ if ($adminDefaultTab === null) {
                         </table>
                     </div>
                 </div>
-                @endif
-
-                <h6 class="fw-semibold mb-2">Sổ chuyến chi tiết</h6>
-                @if($tripLedger->isEmpty())
-                    <div class="console-empty py-4"><p class="mb-0">Chưa có chuyến nào được ghi nhận.</p></div>
-                @else
-                    <div class="console-table-wrap">
-                        <table class="console-table">
-                            <thead>
-                                <tr>
-                                    <th>Mã chuyến</th>
-                                    <th>Tuyến</th>
-                                    <th>Trạng thái</th>
-                                    <th>Người liên quan</th>
-                                    <th class="text-end">Doanh thu</th>
-                                    <th>Ngày ghi nhận</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach($tripLedger as $trip)
-                                <tr>
-                                    <td class="cell-primary"><code>{{ $trip->trip_code }}</code></td>
-                                    <td class="cell-muted small">{{ $trip->route_label ?? '—' }}</td>
-                                    <td>
-                                        <span class="status-pill status-pill--{{ $trip->outcomeColor() }}">{{ $trip->outcomeLabel() }}</span>
-                                    </td>
-                                    <td class="small">{{ $trip->actorSummary() }}</td>
-                                    <td class="text-end cell-muted small">
-                                        @if($trip->outcome === \App\Models\TripLedger::OUTCOME_COMPLETED && $trip->amount)
-                                            {{ number_format($trip->amount, 0, ',', '.') }} đ
-                                        @else
-                                            —
-                                        @endif
-                                    </td>
-                                    <td class="cell-muted small">{{ $trip->recorded_at?->format('d/m/Y H:i') ?? '—' }}</td>
-                                </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                    @include('partials.pagination', ['paginator' => $tripLedger])
                 @endif
                 @include('partials.screen-tab-pane-end')
 
@@ -615,6 +541,10 @@ if ($adminDefaultTab === null) {
                     </div>
                     <button class="btn btn-primary px-4 fw-semibold mt-3">Lưu quãng đường</button>
                 </form>
+                @include('partials.screen-tab-pane-end')
+
+                @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'cancel-reasons', 'active' => $adminDefaultTab === 'cancel-reasons'])
+                @include('partials.admin-cancellation-reasons', ['reasons' => $cancellationReasonList ?? collect()])
                 @include('partials.screen-tab-pane-end')
 
                 @include('partials.screen-tabs-end')

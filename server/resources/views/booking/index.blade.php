@@ -87,6 +87,8 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                 <p class="mb-0 small booking-flash-note">
                     @if(! empty($bookingSuccess['driver_assigned']))
                         Tài xế đã nhận chuyến — sẽ gọi xác nhận
+                    @elseif(! empty($bookingSuccess['searching_driver']))
+                        Đang tìm kiếm tài xế phù hợp — vui lòng theo dõi bên dưới
                     @elseif(! empty($bookingSuccess['awaiting_operator']))
                         Quản lý sẽ gọi xác nhận trong thời gian sớm nhất
                     @else
@@ -316,8 +318,9 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                                         @include('partials.vi-pickup-time-input', [
                                             'name' => 'pickup_time',
                                             'id' => 'modal-pickup-time',
-                                            'value' => old('pickup_time', '06:00 SA'),
+                                            'value' => old('pickup_time', ''),
                                             'label' => 'Giờ đón',
+                                            'required' => false,
                                         ])
                                     </div>
                                     <input type="hidden" name="pickup_address" id="modal-pickup" value="{{ old('pickup_address') }}">
@@ -550,8 +553,11 @@ window.__referralHasCode = @json((bool) ($appliedReferral ?? null));
 window.__bookingReferralSuccess = @json($bookingReferralSuccess);
 window.__roundTripMultiplier = @json(\App\Support\PlatformFees::roundTripMultiplier());
 window.__guestTripWatchUrl = @json(route('guest.tripWatch'));
+window.__guestTripReloadMs = @json(\App\Services\GuestTripWatchService::GUEST_PAGE_RELOAD_SECONDS * 1000);
+window.__guestTripSearchingReload = @json(! empty(session('booking_success.searching_driver')));
 window.__guestTripReviewUrl = @json(route('guest.tripReviews.store'));
 window.__guestTripCancelUrl = @json(route('guest.bookings.cancel'));
+window.__cancellationReasonsUrl = @json(route('cancellationReasons.index'));
 </script>
 <script src="{{ asset('js/customer-booking.js') }}"></script>
 <script src="{{ asset('js/guest-trip-watch.js') }}?v={{ filemtime(public_path('js/guest-trip-watch.js')) }}"></script>

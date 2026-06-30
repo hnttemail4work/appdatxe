@@ -56,7 +56,7 @@ class TripOfferService
 
         return [
             'route'                  => $template->route,
-            'departure_time'         => substr((string) $template->departure_time, 0, 5),
+            'departure_time'         => substr((string) $template->departure_time, 0, 5) ?: null,
             'expected_arrival_time'  => $template->expected_arrival_time
                 ? substr((string) $template->expected_arrival_time, 0, 5)
                 : null,
@@ -119,38 +119,43 @@ class TripOfferService
                 ],
             );
 
-            $departureTime = $this->normalizeTime($data['departure_time']);
+            $departureStored = $this->nullableTime($data['departure_time'] ?? null);
             $arrivalStored = $arrivalTime !== '' ? $this->normalizeTime($arrivalTime) : null;
 
             $vehicle = $this->resolveVehicle($operatorId, $seats, $data['photo'] ?? null, $editingFrom);
 
             if ($editingFrom) {
                 $sameSlot = (int) $editingFrom->route_id === (int) $route->id
-                    && substr((string) $editingFrom->departure_time, 0, 5) === substr($departureTime, 0, 5)
-                    && (int) $editingFrom->vehicle_id === (int) $vehicle->id;
+                    && (int) $editingFrom->vehicle_id === (int) $vehicle->id
+                    && $this->sameDepartureSlot($editingFrom->departure_time, $departureStored);
 
                 if (! $sameSlot) {
                     $editingFrom->update(['status' => 'inactive']);
                 }
             }
 
-            $template = ScheduleTemplate::query()->updateOrCreate(
-                [
+            $template = $this->findTemplateSlot((int) $route->id, (int) $vehicle->id, $departureStored);
+
+            $payload = [
+                'driver_id'                  => null,
+                'driver_name'                => 'Chờ khách đặt',
+                'whole_car_price'            => (int) $data['whole_car_one_way'],
+                'seat_price'                 => (int) $data['seat_one_way'],
+                'whole_car_round_trip_price' => (int) $data['whole_car_round'],
+                'seat_round_trip_price'      => (int) $data['seat_round'],
+                'expected_arrival_time'      => $arrivalStored,
+                'status'                     => 'active',
+            ];
+
+            if ($template) {
+                $template->update($payload);
+            } else {
+                $template = ScheduleTemplate::query()->create(array_merge($payload, [
                     'route_id'       => $route->id,
                     'vehicle_id'     => $vehicle->id,
-                    'departure_time' => $departureTime,
-                ],
-                [
-                    'driver_id'                  => null,
-                    'driver_name'                => 'Chờ khách đặt',
-                    'whole_car_price'            => (int) $data['whole_car_one_way'],
-                    'seat_price'                 => (int) $data['seat_one_way'],
-                    'whole_car_round_trip_price' => (int) $data['whole_car_round'],
-                    'seat_round_trip_price'      => (int) $data['seat_round'],
-                    'expected_arrival_time'      => $arrivalStored,
-                    'status'                     => 'active',
-                ],
-            );
+                    'departure_time' => $departureStored,
+                ]));
+            }
 
             return [
                 'route'  => $route->fresh(),
@@ -230,7 +235,7 @@ class TripOfferService
         $photo = ($data['photo'] ?? null) instanceof UploadedFile ? $data['photo'] : null;
         $vehicle = $this->resolveVehicle($operatorId, $seats, $photo);
 
-        $departureTime = $this->normalizeTime($data['departure_time']);
+        $departureStored = $this->nullableTime($data['departure_time'] ?? null);
         $arrivalTime = isset($data['expected_arrival_time']) ? trim((string) $data['expected_arrival_time']) : '';
         $arrivalStored = $arrivalTime !== '' ? $this->normalizeTime($arrivalTime) : null;
         $serviceDateString = trim((string) ($data['service_date'] ?? ''));
@@ -245,7 +250,7 @@ class TripOfferService
 
         DB::transaction(function () use (
             $departure,
-            $departureTime,
+            $departureStored,
             $arrivalStored,
             $seats,
             $vehicle,
@@ -281,33 +286,29 @@ class TripOfferService
                     ],
                 );
 
-                $existing = ScheduleTemplate::query()
-                    ->where('route_id', $route->id)
-                    ->where('vehicle_id', $vehicle->id)
-                    ->where('departure_time', $departureTime)
-                    ->first();
+                $existing = $this->findTemplateSlot((int) $route->id, (int) $vehicle->id, $departureStored);
 
-                $template = ScheduleTemplate::query()->updateOrCreate(
-                    [
-                        'route_id'       => $route->id,
-                        'vehicle_id'     => $vehicle->id,
-                        'departure_time' => $departureTime,
-                    ],
-                    [
-                        'driver_id'                  => null,
-                        'driver_name'                => 'Chờ khách đặt',
-                        'whole_car_price'            => $prices['whole_car_one_way'],
-                        'seat_price'                 => $prices['seat_one_way'],
-                        'whole_car_round_trip_price' => $prices['whole_car_round'],
-                        'seat_round_trip_price'      => $prices['seat_round'],
-                        'expected_arrival_time'      => $arrivalStored,
-                        'status'                     => 'active',
-                    ],
-                );
+                $payload = [
+                    'driver_id'                  => null,
+                    'driver_name'                => 'Chờ khách đặt',
+                    'whole_car_price'            => $prices['whole_car_one_way'],
+                    'seat_price'                 => $prices['seat_one_way'],
+                    'whole_car_round_trip_price' => $prices['whole_car_round'],
+                    'seat_round_trip_price'      => $prices['seat_round'],
+                    'expected_arrival_time'      => $arrivalStored,
+                    'status'                     => 'active',
+                ];
 
                 if ($existing) {
+                    $existing->update($payload);
+                    $template = $existing->fresh();
                     $updated++;
                 } else {
+                    $template = ScheduleTemplate::query()->create(array_merge($payload, [
+                        'route_id'       => $route->id,
+                        'vehicle_id'     => $vehicle->id,
+                        'departure_time' => $departureStored,
+                    ]));
                     $created++;
                 }
 
@@ -318,16 +319,18 @@ class TripOfferService
         $lifecycle = app(ScheduleLifecycleService::class);
 
         foreach ($templates as $template) {
-            $departureAt = $template->departureAt($serviceDate->copy());
-            if ($departureAt <= now()) {
-                continue;
+            if ($departureStored !== null) {
+                $departureAt = $template->departureAt($serviceDate->copy());
+                if ($departureAt <= now()) {
+                    continue;
+                }
             }
 
             try {
                 $lifecycle->resolveScheduleForBooking($template, $serviceDateString);
                 $schedulesOpened++;
             } catch (\Throwable) {
-                // Bỏ qua tuyến có giờ khởi hành đã qua.
+                // Bỏ qua tuyến không mở được lịch ngay lúc tạo nhanh.
             }
         }
 
@@ -429,6 +432,41 @@ class TripOfferService
     private function normalizeTime(string $time): string
     {
         return \App\Support\DepartureTimeDisplay::storageValue($time);
+    }
+
+    private function nullableTime(mixed $time): ?string
+    {
+        $raw = trim((string) $time);
+
+        return $raw === '' ? null : $this->normalizeTime($raw);
+    }
+
+    private function findTemplateSlot(int $routeId, int $vehicleId, ?string $departureTime): ?ScheduleTemplate
+    {
+        $query = ScheduleTemplate::query()
+            ->where('route_id', $routeId)
+            ->where('vehicle_id', $vehicleId);
+
+        if ($departureTime === null) {
+            $query->whereNull('departure_time');
+        } else {
+            $query->where('departure_time', $departureTime);
+        }
+
+        return $query->first();
+    }
+
+    private function sameDepartureSlot(mixed $left, ?string $right): bool
+    {
+        $leftStored = $left === null || trim((string) $left) === ''
+            ? null
+            : substr((string) $left, 0, 8);
+
+        $rightStored = $right === null
+            ? null
+            : substr($right, 0, 8);
+
+        return $leftStored === $rightStored;
     }
 
     private function resolveServiceDate(mixed $value): Carbon

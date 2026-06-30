@@ -10,7 +10,7 @@ class DriverProfile extends Model
     protected $fillable = [
         'user_id', 'operator_id', 'driver_code',
         'license_number', 'license_class', 'license_expiry', 'experience_years',
-        'status', 'approval_status', 'availability_status', 'notes',
+        'status', 'approval_status', 'rejection_reason', 'rejection_reason_at', 'availability_status', 'notes',
         'preference_likes', 'preference_dislikes',
         'last_lat', 'last_lng', 'last_location_at', 'last_province', 'last_address',
         'missed_trip_strikes', 'missed_trip_locked_at',
@@ -81,6 +81,10 @@ class DriverProfile extends Model
             return 'Không hoạt động';
         }
 
+        if ($this->isApproved() && ! $this->isWalletActivated()) {
+            return 'Chờ nạp ví';
+        }
+
         return $this->availabilityLabel();
     }
 
@@ -90,6 +94,7 @@ class DriverProfile extends Model
             'Sẵn sàng'           => \App\Support\StatusBadge::SUCCESS,
             'Đang chạy'          => \App\Support\StatusBadge::GOLD,
             'Nghỉ'               => \App\Support\StatusBadge::NEUTRAL,
+            'Chờ nạp ví'         => \App\Support\StatusBadge::PENDING,
             'Chờ duyệt'          => \App\Support\StatusBadge::PENDING,
             'Tạm khóa', 'Từ chối', 'Tạm ngưng' => \App\Support\StatusBadge::DANGER,
             default              => \App\Support\StatusBadge::NEUTRAL,
@@ -126,6 +131,7 @@ class DriverProfile extends Model
             'last_lat' => 'float',
             'last_lng' => 'float',
             'last_location_at' => 'datetime',
+            'rejection_reason_at' => 'datetime',
         ];
     }
 
@@ -245,7 +251,7 @@ class DriverProfile extends Model
         return (int) self::query()->pendingForOperator($operatorId)->count();
     }
 
-    /** Tài xế đã duyệt và có thể nhận chuyến */
+    /** Tài xế đã duyệt, ví đã kích hoạt và có thể nhận chuyến */
     public function isOperational(): bool
     {
         $this->loadMissing('user');
@@ -253,7 +259,16 @@ class DriverProfile extends Model
         return $this->status === 'active'
             && $this->user
             && $this->user->status === 'active'
-            && $this->missed_trip_locked_at === null;
+            && $this->missed_trip_locked_at === null
+            && $this->isApproved()
+            && $this->isWalletActivated();
+    }
+
+    public function isWalletActivated(): bool
+    {
+        $this->loadMissing('wallet');
+
+        return (bool) ($this->wallet?->wallet_activated_at);
     }
 
     /** Ảnh CCCD, bằng lái, chân dung — khóa sau khi admin/QL duyệt. */
@@ -327,6 +342,8 @@ class DriverProfile extends Model
             ['key' => 'vehicle_license_plate', 'label' => 'Biển số xe', 'ok' => filled($this->vehicle_license_plate), 'group' => 'vehicle', 'required' => true],
             ['key' => 'vehicle_type', 'label' => 'Loại xe', 'ok' => filled($this->vehicle_type), 'group' => 'vehicle', 'required' => true],
             ['key' => 'vehicle_seats', 'label' => 'Số ghế', 'ok' => $this->vehicle_seats !== null && $this->vehicle_seats > 0, 'group' => 'vehicle', 'required' => true],
+            ['key' => 'bank_name', 'label' => 'Tên ngân hàng', 'ok' => filled($this->bank_name), 'group' => 'bank', 'required' => true],
+            ['key' => 'bank_account', 'label' => 'Số tài khoản', 'ok' => filled($this->bank_account), 'group' => 'bank', 'required' => true],
         ];
     }
 
@@ -350,7 +367,8 @@ class DriverProfile extends Model
 
         $groups = [
             'contact' => ['label' => 'Liên hệ'],
-            'vehicle'   => ['label' => 'Thông tin xe'],
+            'vehicle' => ['label' => 'Thông tin xe'],
+            'bank'    => ['label' => 'Ngân hàng'],
         ];
 
         $result = [];
@@ -396,17 +414,12 @@ class DriverProfile extends Model
             'required_total'  => 5,
         ];
 
-        $bankFilled = (int) filled($this->bank_name) + (int) filled($this->bank_account);
-        $result['bank'] = [
-            'state'           => $bankFilled === 2 ? 'complete' : ($bankFilled > 0 ? 'partial' : 'empty'),
-            'filled'          => $bankFilled,
-            'total'           => 2,
-            'required_filled' => $bankFilled,
-            'required_total'  => 2,
-            'optional'        => true,
-        ];
-
         return $result;
+    }
+
+    public function hasRejectionNote(): bool
+    {
+        return filled($this->rejection_reason);
     }
 
     public function hasAnyDocumentPhoto(): bool
@@ -463,13 +476,6 @@ class DriverProfile extends Model
                 fn (array $item) => ! $item['ok'] && ! ($item['required'] ?? true)
             )
         ));
-
-        if (! filled($this->bank_name)) {
-            $missing[] = 'Tên ngân hàng';
-        }
-        if (! filled($this->bank_account)) {
-            $missing[] = 'Số tài khoản';
-        }
 
         return array_values(array_unique($missing));
     }

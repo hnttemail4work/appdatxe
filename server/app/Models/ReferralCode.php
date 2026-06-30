@@ -18,6 +18,9 @@ class ReferralCode extends Model
 
     public const STATUS_SUSPENDED = 'suspended';
 
+    /** Số ngày mã từ đặt vé có hiệu lực sau khi kích hoạt. */
+    public const BOOKING_CODE_VALIDITY_DAYS = 90;
+
     protected $fillable = [
         'code',
         'type',
@@ -25,14 +28,20 @@ class ReferralCode extends Model
         'phone',
         'booking_id',
         'status',
+        'commission_percent',
+        'customer_discount_percent',
         'created_by',
         'activated_at',
+        'expires_at',
     ];
 
     protected function casts(): array
     {
         return [
             'activated_at' => 'datetime',
+            'expires_at'   => 'datetime',
+            'commission_percent' => 'float',
+            'customer_discount_percent' => 'float',
         ];
     }
 
@@ -95,9 +104,13 @@ class ReferralCode extends Model
         };
     }
 
-    /** % hoa hồng cho người giới thiệu (mã admin tạo) — khách đặt qua QR không được giảm giá. */
+    /** % hoa hồng trả người giới thiệu — ưu tiên % admin cấu hình trên từng mã. */
     public function commissionPercent(): float
     {
+        if ($this->commission_percent !== null) {
+            return (float) $this->commission_percent;
+        }
+
         return match ($this->type) {
             self::TYPE_REFERRER => PlatformFees::referralCommissionFirstPercent(),
             self::TYPE_BOOKING_TEMP => PlatformFees::referralCommissionRepeatPercent(),
@@ -108,30 +121,82 @@ class ReferralCode extends Model
     public function commissionTierLabel(): string
     {
         return match ($this->type) {
-            self::TYPE_REFERRER => 'Lần 1',
-            self::TYPE_BOOKING_TEMP => 'Lần 2',
+            self::TYPE_REFERRER => 'Người GT',
+            self::TYPE_BOOKING_TEMP => 'Từ vé',
             default => '—',
         };
     }
 
-    /** % giảm giá vé — chỉ mã phát sinh từ khách đặt chuyến thành công. */
+    /** % giảm giá vé trên trang đặt xe. */
     public function customerDiscountPercent(): float
     {
-        if ($this->type !== self::TYPE_BOOKING_TEMP) {
-            return 0.0;
+        if ($this->customer_discount_percent !== null) {
+            return max(0.0, (float) $this->customer_discount_percent);
         }
 
-        return PlatformFees::referralCommissionRepeatPercent();
+        if ($this->type === self::TYPE_BOOKING_TEMP) {
+            return PlatformFees::referralCommissionRepeatPercent();
+        }
+
+        return 0.0;
     }
 
     public function grantsCustomerDiscount(): bool
     {
-        return $this->type === self::TYPE_BOOKING_TEMP;
+        return $this->customerDiscountPercent() > 0;
     }
 
     public function isUsable(): bool
     {
-        return $this->status === self::STATUS_ACTIVE;
+        if ($this->status !== self::STATUS_ACTIVE) {
+            return false;
+        }
+
+        if ($this->isExpired()) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public function isExpired(): bool
+    {
+        return $this->expires_at !== null && $this->expires_at->isPast();
+    }
+
+    /** Nhãn cột hết hạn trên admin. */
+    public function expiryLabel(): string
+    {
+        if ($this->type === self::TYPE_REFERRER) {
+            return '—';
+        }
+
+        if ($this->status === self::STATUS_PENDING) {
+            return 'Chờ hoàn tất';
+        }
+
+        if (! $this->expires_at) {
+            return '—';
+        }
+
+        if ($this->isExpired()) {
+            return 'Hết hạn ' . $this->expires_at->format('d/m/Y');
+        }
+
+        return $this->expires_at->format('d/m/Y H:i');
+    }
+
+    public function expiryColor(): string
+    {
+        if ($this->type === self::TYPE_REFERRER) {
+            return 'neutral';
+        }
+
+        if ($this->status === self::STATUS_PENDING) {
+            return 'pending';
+        }
+
+        return $this->isExpired() ? 'danger' : 'info';
     }
 
     public function isSuspended(): bool

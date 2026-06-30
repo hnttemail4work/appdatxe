@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Controller;
 use App\Models\ReferralCode;
 use App\Models\ScheduleTemplate;
+use App\Services\BookingPhoneGuardService;
 use App\Services\BookingWorkflowService;
 use App\Services\DriverAvailabilityService;
 use App\Services\DriverTripRequestService;
@@ -33,6 +34,7 @@ class GuestBookingController extends Controller
         private readonly GuestTripWatchService $tripWatch,
         private readonly DriverTripRequestService $driverRequests,
         private readonly DriverAvailabilityService $driverAvailability,
+        private readonly BookingPhoneGuardService $phoneGuard,
     ) {
     }
 
@@ -122,11 +124,18 @@ class GuestBookingController extends Controller
             $validated['preferred_time'] ?? null,
         );
 
-        if ($departureTime <= now()) {
-            return response()->json([
-                'drivers' => [],
-                'message' => 'Giờ đón phải sau thời gian hiện tại.',
-            ], 422);
+        if (is_string($validated['preferred_time'] ?? null) && trim($validated['preferred_time']) !== '') {
+            try {
+                $this->driverAvailability->assertPickupTimeAvailable(
+                    $validated['service_date'],
+                    $validated['preferred_time'],
+                );
+            } catch (InvalidArgumentException $e) {
+                return response()->json([
+                    'drivers' => [],
+                    'message' => $e->getMessage(),
+                ], 422);
+            }
         }
 
         $schedule = \App\Models\Schedule::query()
@@ -232,7 +241,7 @@ class GuestBookingController extends Controller
         $validator = Validator::make($request->all(), [
             'template_id'     => ['required', 'exists:schedule_templates,id'],
             'service_date'    => ['required', 'date', 'after_or_equal:today'],
-            'pickup_time'     => ['required', 'string', 'max:20'],
+            'pickup_time'     => ['nullable', 'string', 'max:20'],
             'passenger_name'  => ['required', 'string', 'max:255'],
             'passenger_gender' => ['nullable', 'in:male,female'],
             'passenger_age'   => ['nullable', 'integer', 'min:1', 'max:120'],
@@ -263,7 +272,10 @@ class GuestBookingController extends Controller
             ->with(['route', 'vehicle'])
             ->findOrFail($validated['template_id']);
 
-        $pickupTime = DepartureTimeDisplay::normalizeForClock($validated['pickup_time']);
+        $pickupTimeRaw = trim((string) ($validated['pickup_time'] ?? ''));
+        $pickupTime = $pickupTimeRaw !== ''
+            ? DepartureTimeDisplay::normalizeForClock($pickupTimeRaw)
+            : null;
 
         try {
             $this->driverAvailability->assertPickupTimeAvailable($validated['service_date'], $pickupTime);
@@ -318,6 +330,31 @@ class GuestBookingController extends Controller
         $pickupLng = (float) $validated['pickup_lng'];
 
         try {
+            $this->phoneGuard->assertCanBook($validated['contact_phone']);
+        } catch (InvalidArgumentException $e) {
+            if ($this->phoneGuard->shouldLogBlockedAttempt($validated['contact_phone'])) {
+                try {
+                    $blockedSchedule = $this->scheduleLifecycle->resolveScheduleForBooking(
+                        $template,
+                        $validated['service_date'],
+                        $pickupTime,
+                    );
+                    $this->phoneGuard->logBlockedAttempt(
+                        $blockedSchedule,
+                        $validated['contact_phone'],
+                        $validated['passenger_name'],
+                        $validated['pickup_address'],
+                        $validated['pickup_detail'],
+                    );
+                } catch (InvalidArgumentException) {
+                    // Bỏ qua nếu không tạo được schedule ghi nhận
+                }
+            }
+
+            return $this->bookingFormError($e);
+        }
+
+        try {
             $booking = $this->workflow->createBookingFromTemplate(
                 $template,
                 $validated['contact_phone'],
@@ -349,6 +386,7 @@ class GuestBookingController extends Controller
         $booking->loadMissing(['schedule', 'referralCode', 'appliedReferralCode']);
         $issuedReferral = $booking->referralCode;
         $driverAssigned = (int) ($booking->schedule->driver_id ?? 0) > 0;
+        $searchingDriver = ! $driverAssigned;
 
         return redirect()->route('home')->with('booking_success', [
             'trip_code'         => $booking->schedule->shortTripCode(),
@@ -358,8 +396,9 @@ class GuestBookingController extends Controller
             'referral_url'      => $issuedReferral ? $issuedReferral->landingUrl() : null,
             'referral_pending'  => true,
             'referral_discount_percent' => PlatformFees::referralCommissionRepeatPercent(),
-            'awaiting_operator' => ! $driverAssigned,
+            'awaiting_operator' => $searchingDriver,
             'driver_assigned'   => $driverAssigned,
+            'searching_driver'  => $searchingDriver,
         ]);
     }
 

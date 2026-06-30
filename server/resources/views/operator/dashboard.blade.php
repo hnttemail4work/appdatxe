@@ -4,6 +4,16 @@
 @php
 $pendingBookings = $pendingBookingsCount ?? 0;
 $pendingSettleCount = $pendingSettleCount ?? 0;
+$bookingList = $bookingList ?? 'active';
+$bookingListCounts = $bookingListCounts ?? ['active' => 0, 'completed' => 0, 'feedback' => 0, 'cancelled' => 0];
+
+$bookingListTabs = [
+    ['key' => 'active', 'label' => 'Đang chạy', 'badge' => $bookingListCounts['active'] ?? 0],
+    ['key' => 'pending', 'label' => 'Cần xử lý', 'badge' => $bookingListCounts['pending'] ?? 0],
+    ['key' => 'completed', 'label' => 'Hoàn thành', 'badge' => $bookingListCounts['completed'] ?? 0],
+    ['key' => 'feedback', 'label' => 'Phản hồi', 'badge' => $bookingListCounts['feedback'] ?? 0],
+    ['key' => 'cancelled', 'label' => 'Đã hủy', 'badge' => $bookingListCounts['cancelled'] ?? 0],
+];
 @endphp
 
 @include('partials.operator-console-hero')
@@ -15,67 +25,32 @@ $pendingSettleCount = $pendingSettleCount ?? 0;
             'pendingBookings' => $pendingBookings,
         ])
 
+        @include('partials.operator-contact-modal')
+
+        <div class="screen-tabs-wrap operator-booking-list-tabs mt-3 mb-0">
+            <ul class="nav nav-tabs screen-tabs">
+                @foreach($bookingListTabs as $tab)
+                    <li class="nav-item">
+                        <a href="{{ route('operator.dashboard', ['list' => $tab['key']]) }}"
+                           class="nav-link {{ $bookingList === $tab['key'] ? 'active' : '' }}">
+                            {{ $tab['label'] }}
+                            @if(($tab['badge'] ?? 0) > 0)
+                                <span class="status-pill status-pill--{{ $bookingList === $tab['key'] ? 'accent' : 'neutral' }} ms-1">{{ $tab['badge'] }}</span>
+                            @endif
+                        </a>
+                    </li>
+                @endforeach
+            </ul>
+        </div>
+
         <div class="pt-3">
-        @if($passengers->isEmpty())
-            <div class="console-empty py-3">
-                <p class="mb-0">Chưa có đơn đặt xe nào.</p>
-            </div>
-        @else
-            <div class="console-table-wrap">
-                <table class="console-table">
-                    <thead>
-                        <tr>
-                            <th>Hành khách</th>
-                            <th>Chuyến</th>
-                            <th>Loại</th>
-                            <th>Ghế</th>
-                            <th>Tổng tiền</th>
-                            <th>Giới thiệu</th>
-                            <th>Trạng thái</th>
-                            <th>Tài xế</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach($passengers as $booking)
-                        <tr>
-                            <td>
-                                @include('partials.admin-booking-customer', ['booking' => $booking])
-                            </td>
-                            <td>
-                                <div>{{ $booking->schedule->route->departure }} → {{ $booking->schedule->route->destination }}</div>
-                                <div class="cell-muted">{{ $booking->schedule->departure_time->format('H:i, d/m/Y') }}</div>
-                                @if($booking->schedule->shortTripCode())
-                                    <div class="cell-muted small">Mã chuyến: {{ $booking->schedule->shortTripCode() }}</div>
-                                @endif
-                            </td>
-                            <td class="small">
-                                <span class="status-pill status-pill--{{ \App\Support\StatusBadge::bookingMode($booking->booking_mode ?? 'shared') }}">{{ $booking->bookingModeLabel() }}</span>
-                            </td>
-                            <td>{{ $booking->booking_mode === 'shared' ? $booking->seatCountLabel() : 'Cả xe' }}</td>
-                            <td class="fw-semibold">{{ number_format($booking->chargedTotal(), 0, ',', '.') }} đ</td>
-                            <td class="small cell-muted">
-                                @if($booking->appliedReferralCode)
-                                    <span class="driver-meta-code">{{ $booking->appliedReferralCode->code }}</span>
-                                    @if($booking->trip_status === 'completed')
-                                        <div>{{ number_format($booking->referralCommissionAmount(), 0, ',', '.') }} đ ({{ number_format($booking->appliedReferralCode->commissionPercent(), 1) }}%)</div>
-                                    @else
-                                        <div class="text-muted">Chờ hoàn tất</div>
-                                    @endif
-                                @else
-                                    —
-                                @endif
-                            </td>
-                            <td>@include('partials.booking-status-operator', ['booking' => $booking])</td>
-                            <td class="small">
-                                @include('partials.operator-booking-assign', ['booking' => $booking, 'drivers' => $drivers])
-                            </td>
-                        </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
-            @include('partials.pagination', ['paginator' => $passengers])
-        @endif
+            @include('partials.operator-booking-list-table', [
+                'bookings' => $passengers,
+                'drivers' => $drivers,
+                'showBulkDelete' => $bookingList === 'cancelled',
+                'bookingList' => $bookingList,
+                'showAssignActions' => $bookingList === 'active',
+            ])
         </div>
     </div>
 </div>
@@ -83,4 +58,39 @@ $pendingSettleCount = $pendingSettleCount ?? 0;
 
 @push('styles')
 <link rel="stylesheet" href="{{ asset('css/driver-mgmt.css') }}">
+@endpush
+
+@push('scripts')
+<script src="{{ asset('js/operator-contact-modal.js') }}"></script>
+@if($bookingList === 'cancelled')
+<script>
+(function () {
+    var bulkForm = document.getElementById('booking-bulk-delete');
+    var bulkBtn = document.getElementById('booking-bulk-delete-btn');
+    if (!bulkForm || !bulkBtn) return;
+
+    var selectAll = document.getElementById('booking-select-all');
+    var boxes = function () { return Array.prototype.slice.call(document.querySelectorAll('.booking-select')); };
+
+    function refresh() {
+        var checked = boxes().filter(function (el) { return el.checked; });
+        bulkBtn.disabled = checked.length < 1;
+        if (selectAll) {
+            var all = boxes();
+            selectAll.checked = all.length > 0 && checked.length === all.length;
+            selectAll.indeterminate = checked.length > 0 && checked.length < all.length;
+        }
+    }
+
+    boxes().forEach(function (el) { el.addEventListener('change', refresh); });
+    if (selectAll) {
+        selectAll.addEventListener('change', function () {
+            boxes().forEach(function (el) { el.checked = selectAll.checked; });
+            refresh();
+        });
+    }
+    refresh();
+})();
+</script>
+@endif
 @endpush

@@ -10,6 +10,7 @@ use App\Models\DriverWalletTransaction;
 use App\Models\User;
 use App\Services\DriverTripRequestService;
 use App\Services\DriverWalletService;
+use App\Services\OperatorTripOverdueService;
 use App\Services\ScheduleLifecycleService;
 use App\Support\PageList;
 use Illuminate\Http\Request;
@@ -32,6 +33,8 @@ class OperatorController extends Controller
         }
 
         $this->scheduleLifecycle->sync();
+        $this->tripRequests->expireStale();
+        app(OperatorTripOverdueService::class)->escalateOverdueTrips();
 
         $user = Auth::user();
 
@@ -50,38 +53,55 @@ class OperatorController extends Controller
         $pendingDriverCount = DriverProfile::pendingCountForOperator($user->id);
 
         $pendingBookingsCount = Booking::query()
-            ->with('schedule')
-            ->whereHas('schedule.vehicle', fn ($q) => $q->where('operator_id', $user->id))
-            ->whereNotIn('booking_status', ['cancelled', 'rejected'])
-            ->get()
-            ->filter(fn (Booking $b): bool => ! $b->isExpired()
-                && $b->booking_status === 'pending'
-                && ($b->needsOperatorConfirmation() || ! $b->hasDriverAccepted()))
+            ->forOperatorVehicle($user->id)
+            ->visibleOnOperatorDashboard()
+            ->operatorListBucket('pending')
             ->count();
 
-        $passengers = Booking::query()
+        $bookingList = in_array($request->query('list'), ['active', 'pending', 'completed', 'feedback', 'cancelled'], true)
+            ? $request->query('list')
+            : 'active';
+
+        $operatorBookingBase = fn () => Booking::query()
+            ->forOperatorVehicle($user->id)
+            ->visibleOnOperatorDashboard();
+
+        $bookingListCounts = [
+            'active'    => $operatorBookingBase()->operatorListBucket('active')->count(),
+            'pending'   => $operatorBookingBase()->operatorListBucket('pending')->count(),
+            'completed' => $operatorBookingBase()->operatorListBucket('completed')->count(),
+            'feedback'  => $operatorBookingBase()->operatorListBucket('feedback')->count(),
+            'cancelled' => $operatorBookingBase()->operatorListBucket('cancelled')->count(),
+        ];
+
+        $passengers = $operatorBookingBase()
+            ->operatorListBucket($bookingList)
             ->with([
                 'schedule.route',
                 'schedule.vehicle',
                 'schedule.template',
                 'schedule.driver',
                 'schedule.driverTripRequests',
-                'schedule.tripSettlement',
                 'appliedReferralCode',
                 'tripReview',
+                'cancellationReason',
             ])
-            ->whereHas('schedule.vehicle', fn ($q) => $q->where('operator_id', $user->id))
-            ->where(function ($q): void {
-                $q->whereNotIn('booking_status', ['cancelled', 'rejected'])
-                    ->orWhereNotNull('expired_at');
-            })
             ->latest()
             ->paginate(PageList::PER_PAGE)
             ->withQueryString();
 
         $pendingSettleCount = $this->driverWallet->pendingWalletRequestCounts($user->id)['total'];
 
-        return view('operator.dashboard', compact('drivers', 'driverList', 'passengers', 'pendingDriverCount', 'pendingSettleCount', 'pendingBookingsCount'));
+        return view('operator.dashboard', compact(
+            'drivers',
+            'driverList',
+            'passengers',
+            'pendingDriverCount',
+            'pendingSettleCount',
+            'pendingBookingsCount',
+            'bookingList',
+            'bookingListCounts',
+        ));
     }
 
     public function driverWallet(Request $request)
@@ -89,35 +109,55 @@ class OperatorController extends Controller
         $this->driverWallet->enforceDeadlines();
 
         $operatorId = Auth::id();
-        $awaitingCodeAll = $this->driverWallet->settlementsAwaitingCodeForOperator($operatorId);
-        $codesIssuedAll = $this->driverWallet->codesAwaitingDriverForOperator($operatorId);
         $depositsPendingAll = $this->driverWallet->pendingDepositsForOperator($operatorId);
         $walletHistoryAll = $this->driverWallet->operatorWalletActivityHistory($operatorId);
 
-        $awaitingCode = PageList::paginateCollection($awaitingCodeAll, $request, 'settle_page');
-        $codesIssued = PageList::paginateCollection($codesIssuedAll, $request, 'issued_page');
         $depositsPending = PageList::paginateCollection($depositsPendingAll, $request, 'deposit_page');
         $walletHistory = PageList::paginateCollection($walletHistoryAll, $request, 'history_page');
 
         $counts = $this->driverWallet->pendingWalletRequestCounts($operatorId);
 
-        $defaultTab = match ($request->query('tab')) {
-            'deposits', 'settlements', 'issued' => $request->query('tab'),
-            default => $depositsPendingAll->isNotEmpty()
-                ? 'deposits'
-                : ($awaitingCodeAll->isNotEmpty() ? 'settlements' : 'deposits'),
-        };
-
         return view('operator.driver-wallet', compact(
-            'awaitingCode',
-            'codesIssued',
             'depositsPending',
             'walletHistory',
             'counts',
-            'defaultTab',
         ));
     }
 
+    public function bulkDismissBookings(Request $request)
+    {
+        $validated = $request->validate([
+            'booking_ids'   => ['required', 'array', 'min:1'],
+            'booking_ids.*' => ['integer', 'distinct'],
+        ], [
+            'booking_ids.required' => 'Vui lòng chọn ít nhất một đơn.',
+            'booking_ids.min'      => 'Vui lòng chọn ít nhất một đơn.',
+        ]);
+
+        $operatorId = Auth::id();
+
+        if (! Booking::supportsOperatorDismiss()) {
+            return back()->withErrors(['booking_ids' => 'Hệ thống chưa cập nhật migration — liên hệ quản trị.']);
+        }
+
+        $updated = Booking::query()
+            ->whereIn('id', array_map('intval', $validated['booking_ids']))
+            ->whereHas('schedule.vehicle', fn ($q) => $q->where('operator_id', $operatorId))
+            ->where(function ($q): void {
+                $q->whereIn('booking_status', ['cancelled', 'rejected'])
+                    ->orWhere('trip_status', 'cancelled');
+            })
+            ->update(['operator_dismissed_at' => now()]);
+
+        if ($updated < 1) {
+            return back()->withErrors(['booking_ids' => 'Không có đơn hủy hợp lệ để xóa.']);
+        }
+
+        return redirect()->route('operator.dashboard', ['list' => 'cancelled'])
+            ->with('success', "Đã xóa {$updated} đơn hủy khỏi danh sách.");
+    }
+
+    /** @deprecated Luồng kết chuyến đã bỏ. */
     public function issueSettlementCode(DriverTripSettlement $settlement)
     {
         $settlement->loadMissing('wallet.driverProfile');
@@ -164,7 +204,7 @@ class OperatorController extends Controller
         }
 
         return redirect()
-            ->route('operator.driverWallet', ['tab' => 'deposits'])
+            ->route('operator.driverWallet')
             ->with('success', 'Đã cộng tiền vào ví tài xế — tài xế có thể nhận cuốc bình thường.');
     }
 
@@ -205,7 +245,9 @@ class OperatorController extends Controller
                 ])->withInput();
             }
 
-            $booking->update(['operator_confirmed_at' => now()]);
+            if (! $booking->operator_confirmed_at) {
+                $booking->update(['operator_confirmed_at' => now()]);
+            }
 
             try {
                 $this->tripRequests->requestDriver(
@@ -214,12 +256,12 @@ class OperatorController extends Controller
                     (string) $booking->contact_phone,
                 );
             } catch (InvalidArgumentException $e) {
-                $booking->update(['operator_confirmed_at' => null]);
-
                 return back()->withErrors(['driver_code' => $e->getMessage()])->withInput();
             }
 
-            return back()->with('success', 'Đã xác nhận và giao chuyến cho tài xế ' . $profile->user->name . '.');
+            $this->tripRequests->clearOperatorHelp($booking->fresh());
+
+            return back()->with('success', 'Đã giao chuyến cho tài xế ' . $profile->user->name . ' — chờ tài xế xác nhận.');
         }
 
         if (! $booking->hasDriverAccepted()) {

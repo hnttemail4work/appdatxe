@@ -28,7 +28,7 @@
         </div>
     @elseif($driver->isRejected())
         <div class="driver-edit-actions">
-            <span class="text-danger small fw-semibold">Hồ sơ đã từ chối — tài xế không đăng nhập được.</span>
+            <span class="text-danger small fw-semibold d-block">Hồ sơ đã từ chối — tài xế không đăng nhập được.</span>
         </div>
     @elseif($driver->isMissedTripLocked())
         <div class="driver-edit-actions">

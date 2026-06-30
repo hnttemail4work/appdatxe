@@ -2,17 +2,19 @@
 
 namespace App\Support;
 
-/** Quy tắc ví tài xế & kết chuyến. */
+/** Quy tắc ví tài xế — nạp tối thiểu 100k để kích hoạt; sau doanh thu 200k giữ số dư > 100k. */
 class DriverWalletConfig
 {
-    public const REVENUE_THRESHOLD = 100_000;
+    /** Tổng doanh thu đạt ngưỡng này → bật cổng ví (yêu cầu số dư tối thiểu). */
+    public const REVENUE_THRESHOLD = 200_000;
 
+    /** Số dư tối thiểu để nhận cuốc sau khi đã bật cổng ví. */
     public const MIN_BALANCE = 100_000;
 
-    public const FEE_DEADLINE_HOURS = 12;
+    /** Số tiền nạp tối thiểu mỗi lần & tổng nạp để kích hoạt tài xế chính thức. */
+    public const MIN_DEPOSIT = 100_000;
 
-    /** Mã kết chuyến quản lý cấp — hiệu lực 24 giờ. */
-    public const SETTLEMENT_CODE_TTL_HOURS = 24;
+    public const ACTIVATION_DEPOSIT = self::MIN_DEPOSIT;
 
     public static function revenueThresholdShortLabel(): string
     {
@@ -24,13 +26,13 @@ class DriverWalletConfig
         return number_format(self::REVENUE_THRESHOLD, 0, ',', '.') . ' đ';
     }
 
-    public static function commissionRate(): float
+    public static function minBalanceFormatted(): string
     {
-        return \App\Support\PlatformFees::appCommissionPercent();
+        return number_format(self::MIN_BALANCE, 0, ',', '.') . ' đ';
     }
 
-    public static function platformFee(float $revenue): int
+    public static function minDepositFormatted(): string
     {
-        return (int) round($revenue * self::commissionRate() / 100, 0);
+        return number_format(self::MIN_DEPOSIT, 0, ',', '.') . ' đ';
     }
 }

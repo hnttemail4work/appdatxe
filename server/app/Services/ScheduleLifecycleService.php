@@ -24,6 +24,7 @@ class ScheduleLifecycleService
         $this->expireStaleHolds();
         app(BookingWorkflowService::class)->expireStaleBookings();
         $this->expireStaleDriverRequests();
+        app(GuestTripWatchService::class)->expireStaleDriverSearches();
         $this->backfillExpectedArrivals();
         $this->cancelEmptyStaleSchedules($now);
         $this->purgeEmptyExpiredDaySchedules($now);
@@ -90,15 +91,17 @@ class ScheduleLifecycleService
 
     private function expectedArrivalFrom(ScheduleTemplate $template, Carbon $departure, Carbon $serviceDate): Carbon
     {
-        $templateDeparture = $template->departureAt($serviceDate);
-        $templateArrival = $template->expectedArrivalAt($serviceDate);
-        $offsetMinutes = $templateDeparture->diffInMinutes($templateArrival, false);
+        if ($template->hasFixedDepartureTime() && $template->expected_arrival_time) {
+            $templateDeparture = $template->departureAt($serviceDate);
+            $templateArrival = $template->expectedArrivalAt($serviceDate);
+            $offsetMinutes = $templateDeparture->diffInMinutes($templateArrival, false);
 
-        if ($offsetMinutes <= 0) {
-            $offsetMinutes = (int) ($template->duration_minutes ?? 720);
+            if ($offsetMinutes > 0) {
+                return $departure->copy()->addMinutes($offsetMinutes);
+            }
         }
 
-        return $departure->copy()->addMinutes($offsetMinutes);
+        return $departure->copy()->addMinutes((int) ($template->duration_minutes ?? 720));
     }
 
     private function backfillExpectedArrivals(): void

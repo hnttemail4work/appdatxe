@@ -23,6 +23,20 @@ class ServiceDate
         return Carbon::createFromFormat('Y-m-d', $raw, config('app.timezone'))->startOfDay();
     }
 
+    /** Carbon từ cột date/datetime hoặc chuỗi Y-m-d — dùng khi đọc từ Eloquent. */
+    public static function dayStart(mixed $value): Carbon
+    {
+        if ($value instanceof Carbon) {
+            return $value->copy()->timezone(config('app.timezone'))->startOfDay();
+        }
+
+        if ($value instanceof \DateTimeInterface) {
+            return Carbon::instance($value)->timezone(config('app.timezone'))->startOfDay();
+        }
+
+        return self::parse(trim((string) $value));
+    }
+
     public static function parseOrToday(?string $value): Carbon
     {
         if (is_string($value) && preg_match('/^\d{4}-\d{2}-\d{2}$/', trim($value))) {

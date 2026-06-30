@@ -13,6 +13,8 @@ class DriverWallet extends Model
         'cumulative_revenue',
         'completed_settlements_count',
         'wallet_gate_enabled',
+        'wallet_activated_at',
+        'total_approved_deposits',
         'platform_fee_deadline_at',
         'accept_trips_blocked_at',
         'accept_trips_block_reason',
@@ -25,6 +27,8 @@ class DriverWallet extends Model
             'cumulative_revenue'           => 'integer',
             'completed_settlements_count'  => 'integer',
             'wallet_gate_enabled'          => 'boolean',
+            'wallet_activated_at'        => 'datetime',
+            'total_approved_deposits'    => 'integer',
             'platform_fee_deadline_at'     => 'datetime',
             'accept_trips_blocked_at'      => 'datetime',
         ];

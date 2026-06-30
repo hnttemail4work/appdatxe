@@ -43,6 +43,10 @@ class DepartureTimeDisplay
     /** Giờ hiển thị cho khách, ví dụ «06:00 sáng». */
     public static function label(mixed $time): string
     {
+        if ($time === null || trim((string) $time) === '') {
+            return 'Tự chọn';
+        }
+
         $raw = is_string($time) ? trim($time) : null;
         $hour = null;
         $minute = null;

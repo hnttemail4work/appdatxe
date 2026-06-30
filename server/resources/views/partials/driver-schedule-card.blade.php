@@ -3,7 +3,7 @@
 $bookings = $schedule->driverRelevantBookings();
 $phase = $schedule->driverWorkflowPhase();
 $showActions = $showActions ?? true;
-$needsAction = $showActions && in_array($phase, ['active', 'needs_settle', 'enter_settle_code'], true);
+$needsAction = $showActions && $phase === 'active';
 $isRunning = $phase === 'active';
 @endphp
 

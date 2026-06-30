@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Booking;
+use App\Models\DriverProfile;
 use App\Models\TripReview;
 
 class GuestTripWatchService
@@ -12,6 +13,12 @@ class GuestTripWatchService
     public const MAX_WATCHLIST = 10;
 
     public const REVIEW_WINDOW_DAYS = 2;
+
+    /** Tự reload trang đặt xe khi đang tìm tài xế. */
+    public const GUEST_PAGE_RELOAD_SECONDS = 180;
+
+    /** Ẩn khách / quản lý nếu quá lâu không có tài xế. */
+    public const STALE_DRIVER_SEARCH_MINUTES = 15;
 
     public function addToWatchlist(string $bookingReference, string $contactPhone): void
     {
@@ -40,6 +47,8 @@ class GuestTripWatchService
     /** @return list<array<string, mixed>> */
     public function visibleTrips(): array
     {
+        $this->expireStaleDriverSearches();
+
         $entries = $this->pruneWatchlist();
         if ($entries === []) {
             return [];
@@ -134,6 +143,10 @@ class GuestTripWatchService
 
     private function shouldKeepInWatchlist(Booking $booking): bool
     {
+        if ($this->isStaleDriverSearch($booking)) {
+            return false;
+        }
+
         if (in_array($booking->booking_status, ['cancelled', 'rejected'], true)
             || $booking->trip_status === 'cancelled') {
             return false;
@@ -148,6 +161,50 @@ class GuestTripWatchService
         }
 
         return true;
+    }
+
+    /** Ẩn đơn tìm tài xế quá hạn khỏi session khách và dashboard quản lý. */
+    public function expireStaleDriverSearches(): int
+    {
+        if (! Booking::supportsOperatorDismiss()) {
+            return 0;
+        }
+
+        $cutoff = now()->subMinutes(self::STALE_DRIVER_SEARCH_MINUTES);
+
+        return Booking::query()
+            ->whereNotIn('booking_status', ['cancelled', 'rejected'])
+            ->where('trip_status', '!=', 'completed')
+            ->whereNull('operator_dismissed_at')
+            ->where(function ($query) use ($cutoff): void {
+                $query->where(function ($q) use ($cutoff): void {
+                    $q->whereNotNull('driver_search_started_at')
+                        ->where('driver_search_started_at', '<=', $cutoff);
+                })->orWhere(function ($q) use ($cutoff): void {
+                    $q->whereNull('driver_search_started_at')
+                        ->where('created_at', '<=', $cutoff);
+                });
+            })
+            ->whereHas('schedule', fn ($q) => $q->whereNull('driver_id'))
+            ->update(['operator_dismissed_at' => now()]);
+    }
+
+    public function isStaleDriverSearch(Booking $booking): bool
+    {
+        $booking->loadMissing('schedule');
+
+        if (! $booking->schedule || $booking->schedule->driver_id) {
+            return false;
+        }
+
+        if (in_array($booking->booking_status, ['cancelled', 'rejected'], true)
+            || $booking->trip_status === 'completed') {
+            return false;
+        }
+
+        $startedAt = $booking->driver_search_started_at ?? $booking->created_at;
+
+        return $startedAt && $startedAt->lte(now()->subMinutes(self::STALE_DRIVER_SEARCH_MINUTES));
     }
 
     public function shouldDisplay(Booking $booking): bool
@@ -198,7 +255,11 @@ class GuestTripWatchService
             return 'running';
         }
 
-        return 'booked';
+        if (! $schedule->driver_id) {
+            return 'searching_driver';
+        }
+
+        return 'driver_assigned';
     }
 
     public function canCancel(Booking $booking): bool
@@ -225,6 +286,17 @@ class GuestTripWatchService
             ?: $schedule?->driver?->name
             ?: null;
 
+        $driverProfile = null;
+        if ($schedule?->driver_id) {
+            $driverProfile = DriverProfile::query()
+                ->where('user_id', $schedule->driver_id)
+                ->first();
+        }
+
+        $vehicleLabel = $driverProfile?->vehicle_type;
+        $vehicleSeats = $driverProfile?->vehicle_seats ? (int) $driverProfile->vehicle_seats : null;
+        $vehiclePlate = $driverProfile?->vehicle_license_plate;
+
         $expiresAt = null;
         if ($booking->completed_at && $this->canReview($booking)) {
             $expiresAt = $booking->completed_at->copy()->addDays(self::REVIEW_WINDOW_DAYS)->toIso8601String();
@@ -240,16 +312,23 @@ class GuestTripWatchService
             'service_date'       => $schedule?->departure_time?->format('d/m/Y H:i'),
             'driver_name'        => $driverName,
             'driver_pending'     => $driverName === null,
+            'vehicle_type'       => $vehicleLabel,
+            'vehicle_seats'      => $vehicleSeats,
+            'vehicle_plate'      => $vehiclePlate,
             'progress'           => $progress,
             'progress_label'     => match ($progress) {
-                'running'   => 'Đang chạy',
-                'completed' => 'Hoàn thành',
-                default     => 'Đã đặt',
+                'searching_driver' => 'Đang tìm tài xế',
+                'driver_assigned'  => 'Đã có tài xế',
+                'running'          => 'Đang chạy',
+                'completed'        => 'Hoàn thành',
+                default            => 'Đã đặt',
             },
             'can_review'         => $this->canReview($booking),
             'can_cancel'         => $this->canCancel($booking),
             'reviewed'           => $booking->tripReview !== null,
             'expires_review_at'  => $expiresAt,
+            'requires_cancel_reason' => app(\App\Services\BookingPhoneGuardService::class)
+                ->requiresCancelReason($contactPhone),
         ];
     }
 

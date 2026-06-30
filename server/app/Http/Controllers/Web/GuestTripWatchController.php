@@ -65,8 +65,9 @@ class GuestTripWatchController extends Controller
     public function cancelBooking(Request $request)
     {
         $validated = $request->validate([
-            'booking_ref'   => ['required', 'string', 'max:64'],
-            'contact_phone' => ['required', 'string', 'max:30'],
+            'booking_ref'            => ['required', 'string', 'max:64'],
+            'contact_phone'          => ['required', 'string', 'max:30'],
+            'cancellation_reason_id' => ['nullable', 'integer', 'exists:cancellation_reasons,id'],
         ]);
 
         $booking = Booking::query()
@@ -87,7 +88,11 @@ class GuestTripWatchController extends Controller
         }
 
         try {
-            $this->workflow->cancelByPhone($booking, $validated['contact_phone']);
+            $this->workflow->cancelByPhone(
+                $booking,
+                $validated['contact_phone'],
+                isset($validated['cancellation_reason_id']) ? (int) $validated['cancellation_reason_id'] : null,
+            );
         } catch (InvalidArgumentException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }

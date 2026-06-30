@@ -311,8 +311,8 @@ class Schedule extends Model
     {
         $this->loadMissing('tripSettlement');
 
-        if ($this->tripSettlement) {
-            return DriverTripSettlement::workflowPhaseFromStatus($this->tripSettlement->status);
+        if ($this->tripSettlement?->status === 'completed') {
+            return 'settled';
         }
 
         $bookings = $this->driverRelevantBookings();
@@ -321,7 +321,7 @@ class Schedule extends Model
         }
 
         if ($bookings->every(fn (Booking $b): bool => $b->trip_status === 'completed')) {
-            return 'needs_settle';
+            return 'settled';
         }
 
         $hasActive = $bookings->contains(function (Booking $b): bool {
@@ -368,24 +368,20 @@ class Schedule extends Model
         $count = $bookings->count();
 
         return match ($this->driverWorkflowPhase()) {
-            'upcoming'          => $count > 1 ? "Sắp chạy ({$count} vé)" : 'Sắp chạy',
-            'active'            => $count > 1 ? "Đang phục vụ ({$count} vé)" : 'Đang phục vụ',
-            'needs_settle'      => 'Chuyển phí nền tảng',
-            'enter_settle_code' => 'Nhập mã kết chuyến',
-            'settled'           => 'Hoàn thành chuyến',
-            default             => '—',
+            'upcoming' => $count > 1 ? "Sắp chạy ({$count} vé)" : 'Sắp chạy',
+            'active'   => $count > 1 ? "Đang phục vụ ({$count} vé)" : 'Đang phục vụ',
+            'settled'  => 'Hoàn thành chuyến',
+            default    => '—',
         };
     }
 
     public function driverWorkflowColor(): string
     {
         return match ($this->driverWorkflowPhase()) {
-            'upcoming'           => \App\Support\StatusBadge::NEUTRAL,
-            'active'             => \App\Support\StatusBadge::GOLD,
-            'needs_settle'      => \App\Support\StatusBadge::PENDING,
-            'enter_settle_code' => \App\Support\StatusBadge::PENDING,
-            'settled'           => \App\Support\StatusBadge::SUCCESS,
-            default              => \App\Support\StatusBadge::NEUTRAL,
+            'upcoming' => \App\Support\StatusBadge::NEUTRAL,
+            'active'   => \App\Support\StatusBadge::GOLD,
+            'settled'  => \App\Support\StatusBadge::SUCCESS,
+            default    => \App\Support\StatusBadge::NEUTRAL,
         };
     }
 
@@ -394,15 +390,13 @@ class Schedule extends Model
         $phase = $this->driverWorkflowPhase();
 
         $priority = match ($phase) {
-            'active'            => 0,
-            'enter_settle_code' => 1,
-            'needs_settle'      => 2,
-            'upcoming'          => 3,
-            'settled'           => 4,
-            default             => 5,
+            'active'   => 0,
+            'upcoming' => 1,
+            'settled'  => 4,
+            default    => 5,
         };
 
-        $timeKey = in_array($phase, ['active', 'enter_settle_code', 'needs_settle'], true)
+        $timeKey = $phase === 'active'
             ? 9_999_999_999 - $this->departure_time->timestamp
             : $this->departure_time->timestamp;
 
@@ -426,5 +420,107 @@ class Schedule extends Model
         return $bookings
             ->filter(fn (Booking $b): bool => ! in_array($b->booking_status, ['cancelled', 'rejected'], true))
             ->values();
+    }
+
+    /** Tất cả vé trên chuyến (kể cả đã hủy) — dùng tab lịch sử. */
+    public function driverHistoryBookings(): \Illuminate\Support\Collection
+    {
+        $bookings = $this->relationLoaded('bookings')
+            ? $this->bookings
+            : $this->bookings()->get();
+
+        return $bookings
+            ->whereNotIn('booking_status', ['rejected'])
+            ->values();
+    }
+
+    /** Vé thuộc lịch sử của một tài xế (theo assigned_driver_id hoặc legacy driver_id). */
+    public function driverHistoryBookingsFor(int $driverUserId): \Illuminate\Support\Collection
+    {
+        return $this->driverHistoryBookings()->filter(function (Booking $booking) use ($driverUserId): bool {
+            if (! $booking->isVisibleInDriverHistory()) {
+                return false;
+            }
+
+            if ($booking->cancelled_by === 'customer') {
+                return false;
+            }
+
+            if ((int) $booking->assigned_driver_id === $driverUserId) {
+                return true;
+            }
+
+            if ($booking->assigned_driver_id === null && (int) $this->driver_id === $driverUserId) {
+                return true;
+            }
+
+            if ($booking->assigned_driver_id === null
+                && $booking->resolveAssignedDriverId($this) === $driverUserId) {
+                return true;
+            }
+
+            return false;
+        })->values();
+    }
+
+    public function driverHistoryOutcomeFor(int $driverUserId): string
+    {
+        $bookings = $this->driverHistoryBookingsFor($driverUserId);
+
+        if ($bookings->contains(fn (Booking $b): bool => $b->trip_status === 'completed')) {
+            return 'completed';
+        }
+
+        if ($bookings->contains(fn (Booking $b): bool => $b->cancelled_by === 'driver')) {
+            return 'cancelled_driver';
+        }
+
+        return 'other';
+    }
+
+    public function driverHistoryLabelFor(int $driverUserId): string
+    {
+        $bookings = $this->driverHistoryBookingsFor($driverUserId);
+        $count = $bookings->count();
+
+        return match ($this->driverHistoryOutcomeFor($driverUserId)) {
+            'completed'        => $count > 1 ? "Hoàn thành ({$count} vé)" : 'Hoàn thành',
+            'cancelled_driver' => $count > 1 ? "Tài xế hủy ({$count} vé)" : 'Tài xế hủy',
+            default            => '—',
+        };
+    }
+
+    public function driverHistoryColorFor(int $driverUserId): string
+    {
+        return match ($this->driverHistoryOutcomeFor($driverUserId)) {
+            'completed'        => \App\Support\StatusBadge::SUCCESS,
+            'cancelled_driver' => \App\Support\StatusBadge::DANGER,
+            default            => \App\Support\StatusBadge::NEUTRAL,
+        };
+    }
+
+    public function completedRevenueTotalFor(int $driverUserId): float
+    {
+        return (float) $this->driverHistoryBookingsFor($driverUserId)
+            ->filter(fn (Booking $b): bool => $b->trip_status === 'completed')
+            ->sum(fn (Booking $b): float => (float) $b->total_price);
+    }
+
+    public function scopeForDriverHistory($query, int $driverUserId)
+    {
+        return $query->where(function ($q) use ($driverUserId): void {
+            $q->whereHas('bookings', function ($b) use ($driverUserId): void {
+                $b->assignedToDriver($driverUserId)->visibleInDriverHistory();
+            })->orWhere(function ($q2) use ($driverUserId): void {
+                $q2->where('driver_id', $driverUserId)
+                    ->whereHas('bookings', fn ($b) => $b->visibleInDriverHistory());
+            });
+        });
+    }
+
+    /** @deprecated Use scopeForDriverHistory */
+    public function scopeDriverTripHistory($query, int $driverUserId)
+    {
+        return $query->forDriverHistory($driverUserId);
     }
 }

@@ -1,7 +1,10 @@
 <div id="guest-trip-watch-root" class="guest-trip-watch d-none" aria-live="polite">
     <div class="guest-trip-watch-head mb-3">
-        <h2 class="booking-list-title mb-1">Chuyến của bạn</h2>
-        <p class="text-muted small mb-0">Theo dõi tiến trình và đánh giá tài xế sau khi hoàn thành chuyến (trong 2 ngày).</p>
+        <h2 class="booking-list-title mb-2">Chuyến của bạn</h2>
+        <div class="guest-trip-watch-info" role="status">
+            <span class="guest-trip-watch-info-icon" aria-hidden="true">ℹ</span>
+            <p class="guest-trip-watch-info-text mb-0">Theo dõi tiến trình và đánh giá tài xế sau khi hoàn thành chuyến (trong 2 ngày).</p>
+        </div>
     </div>
     <div id="guest-trip-watch-list" class="guest-trip-watch-list"></div>
 </div>
@@ -17,6 +20,7 @@
             <div class="text-end">
                 <div class="small text-muted">Tài xế</div>
                 <div class="fw-semibold" data-field="driver_name"></div>
+                <div class="small text-muted d-none guest-trip-vehicle" data-field="vehicle_info"></div>
             </div>
         </div>
         <div class="guest-trip-progress" data-field="progress_steps"></div>
