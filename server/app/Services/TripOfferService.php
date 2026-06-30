@@ -240,7 +240,14 @@ class TripOfferService
         $arrivalStored = $arrivalTime !== '' ? $this->normalizeTime($arrivalTime) : null;
         $serviceDateString = trim((string) ($data['service_date'] ?? ''));
         $serviceDate = $this->resolveServiceDate($serviceDateString);
-        $destinations = $this->destinationsForDeparture($departure);
+        $rawDestinations = $data['destinations'] ?? null;
+        if (! is_array($rawDestinations) || $rawDestinations === []) {
+            throw new InvalidArgumentException('Vui lòng chọn ít nhất một điểm đến.');
+        }
+        $destinations = $this->resolveBulkDestinations($departure, $rawDestinations);
+        if ($destinations === []) {
+            throw new InvalidArgumentException('Điểm đến không hợp lệ với điểm đi đã chọn.');
+        }
 
         $created = 0;
         $updated = 0;
@@ -371,7 +378,7 @@ class TripOfferService
     }
 
     /** @return list<string> */
-    private function destinationsForDeparture(string $departure): array
+    public function destinationsForDeparture(string $departure): array
     {
         if ($departure === LocationCatalog::hub()) {
             return LocationCatalog::hubDestinations();
@@ -381,6 +388,25 @@ class TripOfferService
             ->reject(fn (string $name): bool => $name === $departure)
             ->values()
             ->all();
+    }
+
+    /**
+     * @param  list<string>  $selected
+     * @return list<string>
+     */
+    private function resolveBulkDestinations(string $departure, array $selected): array
+    {
+        $allowed = array_flip($this->destinationsForDeparture($departure));
+        $destinations = [];
+
+        foreach ($selected as $destination) {
+            $destination = trim((string) $destination);
+            if ($destination !== '' && isset($allowed[$destination])) {
+                $destinations[] = $destination;
+            }
+        }
+
+        return array_values(array_unique($destinations));
     }
 
     private function findVehicleWithPhoto(int $operatorId, int $capacity): ?Vehicle

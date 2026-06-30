@@ -646,3 +646,36 @@ body:has(.console-page) {
     background: var(--tl-surface);
     border-color: var(--tl-border);
 }
+
+.admin-booking-banner-preview {
+    display: block;
+    width: 100%;
+    max-width: 520px;
+    max-height: 180px;
+    object-fit: cover;
+    object-position: center;
+}
+
+.quick-dest-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
+    gap: .45rem .75rem;
+    max-height: 14rem;
+    overflow: auto;
+    padding: .75rem;
+    border: 1px solid var(--tl-border);
+    border-radius: .65rem;
+    background: #1a1a1a;
+}
+.quick-dest-item {
+    display: flex;
+    align-items: flex-start;
+    gap: .45rem;
+    margin: 0;
+    font-size: .8125rem;
+    color: #f5f5f5;
+    cursor: pointer;
+}
+.quick-dest-item .form-check-input {
+    margin-top: .15rem;
+}

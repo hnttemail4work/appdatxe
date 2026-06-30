@@ -113,6 +113,32 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
     </div>
     @endif
 
+    @if($bookingBannerUrl ?? null)
+    <div class="customer-hero customer-hero--banner">
+        <img src="{{ $bookingBannerUrl }}" alt="" class="customer-hero-banner-img" loading="eager" decoding="async">
+        <div class="customer-hero-banner-overlay">
+            <span class="badge customer-hero-badge px-3 py-2">Tổng đài {{ config('app.contact_phone') }}</span>
+        </div>
+        @if($appliedReferral ?? null)
+            <div class="customer-hero-banner-foot small">
+                Giới thiệu: <strong>{{ $appliedReferral->name }}</strong>
+                — mã <span class="driver-meta-code">{{ $appliedReferral->code }}</span>
+                @if($appliedReferral->grantsCustomerDiscount() && ($referralDiscountMeta['eligible'] ?? false))
+                    <span class="text-success">(giảm {{ number_format($referralDiscountMeta['percent'] ?? 0, 1) }}%)</span>
+                @elseif($appliedReferral->type === \App\Models\ReferralCode::TYPE_REFERRER)
+                    <span class="text-muted">(mã người giới thiệu)</span>
+                @endif
+            </div>
+        @elseif($pendingReferral ?? null)
+            <div class="customer-hero-banner-foot small text-warning">
+                Mã <span class="driver-meta-code">{{ $pendingReferral->code }}</span> chưa kích hoạt —
+                hoàn tất chuyến giới thiệu trước khi dùng được.
+            </div>
+        @elseif(($prefillReferral ?? '') !== '')
+            <div class="customer-hero-banner-foot small text-warning">Mã {{ $prefillReferral }} không hợp lệ hoặc chưa sử dụng được.</div>
+        @endif
+    </div>
+    @else
     <div class="customer-hero">
         <div class="row align-items-center position-relative" style="z-index:1">
             <div class="col-lg-8">
@@ -142,6 +168,7 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
             </div>
         </div>
     </div>
+    @endif
 
     <div class="search-panel mb-4">
         <form method="GET" action="{{ route('home') }}" id="trip-filter-form">
@@ -177,26 +204,63 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
 
     @include('partials.guest-trip-watch')
 
-    <div class="booking-list-head mb-3">
-        <div>
-            @php
-                $hasActiveFilters = ($filters['departure'] ?? '') !== '' || ($filters['destination'] ?? '') !== '';
-            @endphp
-            <h2 class="booking-list-title mb-1">
-                @if(! $hasActiveFilters)
-                    Chuyến gợi ý
-                @else
-                    Kết quả tìm kiếm
-                @endif
-                <span class="status-pill status-pill--gold" id="trip-count">{{ $offers->total() }}</span>
-            </h2>
-            <p class="text-muted small mb-0">
-                Ngày đi: <strong id="list-service-date-label">{{ $filterWeekday }}, {{ $filterDateLabel }}</strong>
-            </p>
-        </div>
-    </div>
+    <div class="booking-results-layout">
+        <aside class="booking-offer-sidebar" aria-label="Bộ lọc loại chuyến">
+            <div class="booking-offer-sidebar-card">
+                <div class="booking-offer-sidebar-head">
+                    <h3 class="booking-offer-sidebar-title">Loại vé</h3>
+                </div>
+                <div class="booking-offer-filters" id="booking-offer-filters" role="group" aria-label="Loại chuyến và hình thức đặt">
+                    <button type="button" class="booking-offer-filter-btn is-active" data-offer-filter="one_way_whole" aria-pressed="true">
+                        <span class="booking-offer-filter-type">Một chiều</span>
+                        <span class="booking-offer-filter-mode">Cả xe</span>
+                    </button>
+                    <button type="button" class="booking-offer-filter-btn" data-offer-filter="one_way_shared" aria-pressed="false">
+                        <span class="booking-offer-filter-type">Một chiều</span>
+                        <span class="booking-offer-filter-mode">Ghép xe</span>
+                    </button>
+                    <button type="button" class="booking-offer-filter-btn" data-offer-filter="round_trip_whole" aria-pressed="false">
+                        <span class="booking-offer-filter-type">Khứ hồi</span>
+                        <span class="booking-offer-filter-mode">Cả xe</span>
+                    </button>
+                    <button type="button" class="booking-offer-filter-btn" data-offer-filter="round_trip_shared" aria-pressed="false">
+                        <span class="booking-offer-filter-type">Khứ hồi</span>
+                        <span class="booking-offer-filter-mode">Ghép xe</span>
+                    </button>
+                </div>
+            </div>
+        </aside>
 
-    <div id="trips-list">
+        <div class="booking-results-main">
+            <div class="booking-list-head mb-3">
+                @php
+                    $hasActiveFilters = ($filters['departure'] ?? '') !== '' || ($filters['destination'] ?? '') !== '';
+                    $clearSearchQuery = array_filter([
+                        'service_date' => $filterServiceDate,
+                        'ref' => ($appliedReferral ?? null)?->code ?? (($prefillReferral ?? '') !== '' ? $prefillReferral : null),
+                    ]);
+                @endphp
+                <div class="booking-list-head-main">
+                    <div class="booking-list-head-row">
+                        <h2 class="booking-list-title mb-0">
+                            @if(! $hasActiveFilters)
+                                Chuyến gợi ý
+                            @else
+                                Kết quả
+                            @endif
+                            <span class="status-pill status-pill--gold" id="trip-count">{{ $offers->total() }}</span>
+                        </h2>
+                        @if($hasActiveFilters)
+                            <a href="{{ route('home', $clearSearchQuery) }}" class="btn btn-sm btn-outline-secondary booking-clear-search-btn">Xóa tìm kiếm</a>
+                        @endif
+                    </div>
+                    <p class="text-muted small mb-0">
+                        Ngày đi: <strong id="list-service-date-label">{{ $filterWeekday }}, {{ $filterDateLabel }}</strong>
+                    </p>
+                </div>
+            </div>
+
+            <div id="trips-list">
         @forelse($offers as $offer)
         @php
             $capacity = $offer->capacity();
@@ -204,8 +268,8 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
             $tripQuote = $pricingService->quote($offer, 'one_way', null, null, 'shared');
             $wholeQuote = $pricingService->quote($offer, 'one_way', null, null, 'whole_car');
             $roundQuote = $pricingService->quote($offer, 'round_trip', null, null, 'shared');
-            $seatRange = $pricingService->seatPriceRangeForTemplate($offer);
-            $listPriceLabel = $pricingService->formatSeatRange($seatRange['min'], $seatRange['max']);
+            $wholeRoundQuote = $pricingService->quote($offer, 'round_trip', null, null, 'whole_car');
+            $listPriceLabel = number_format($wholeQuote['one_way_whole_car_price'], 0, ',', '.') . ' đ';
             $roundPrice = $roundQuote['shared_seat_price'];
             $vehicleCapacityLabel = \App\Support\VehicleCapacityOptions::label($capacity);
             $vehiclePhotoUrl = \App\Support\VehicleDisplay::photoFromVehicle($offer->vehicle);
@@ -234,7 +298,7 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
 
                     <div class="trip-card-prices">
                         <span class="trip-price-inline">
-                            <span class="trip-price-amount">{{ $listPriceLabel }}</span><span class="trip-price-unit">/ghế</span>
+                            <span class="trip-price-amount">{{ $listPriceLabel }}</span><span class="trip-price-unit">/cả xe</span>
                         </span>
                     </div>
                 </div>
@@ -251,6 +315,8 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                         data-price="{{ $wholeQuote['one_way_whole_car_price'] }}"
                         data-one-way-price="{{ $tripQuote['one_way_seat_price'] }}"
                         data-whole-car-price="{{ $wholeQuote['one_way_whole_car_price'] }}"
+                        data-whole-car-round-price="{{ $wholeRoundQuote['whole_car_price'] }}"
+                        data-seat-round-trip-price="{{ $roundQuote['shared_seat_price'] }}"
                         data-round-trip-price="{{ $roundPrice }}"
                         data-capacity="{{ $capacity }}"
                         data-vehicle-photo="{{ $vehiclePhotoUrl ?? '' }}"
@@ -269,8 +335,10 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
             <a href="{{ route('home') }}" class="btn btn-sm btn-outline-primary">Xem tất cả chuyến</a>
         </div>
         @endforelse
+            </div>
+            @include('partials.pagination', ['paginator' => $offers])
+        </div>
     </div>
-    @include('partials.pagination', ['paginator' => $offers])
 </div>
 
 <div class="modal fade" id="bookingModal" tabindex="-1" aria-labelledby="modal-route" aria-hidden="true">
@@ -302,6 +370,10 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
 
                 <div class="modal-body pt-3 booking-modal-body">
                     <div id="booking-step-1">
+                        <div class="booking-modal-offer-preset" id="modal-offer-preset" aria-live="polite">
+                            <span>Loại chuyến: <strong id="modal-preset-trip-type">Một chiều</strong></span>
+                            <span>Hình thức đặt: <strong id="modal-preset-booking-mode">Cả xe</strong></span>
+                        </div>
                         <div class="booking-modal-panel">
                             <div class="booking-panel-section">
                                 <div class="booking-panel-label">Chuyến đi</div>
@@ -375,7 +447,7 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                                         <div class="form-text">Mã từ link giới thiệu — không thể chỉnh sửa.</div>
                                     </div>
                                     @endif
-                                    <div class="col-12">
+                                    <div class="col-12 d-none" id="modal-trip-type-section">
                                         <label class="form-label">Loại chuyến</label>
                                         <div class="d-flex flex-wrap gap-3" id="modal-trip-type-group">
                                             <div class="form-check">
@@ -395,7 +467,7 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
 
                             <div class="booking-panel-divider"></div>
 
-                            <div class="booking-panel-section">
+                            <div class="booking-panel-section d-none" id="modal-booking-mode-section">
                                 <div class="booking-panel-label">Hình thức đặt</div>
                                 <div class="d-flex flex-wrap gap-3 mb-2" id="modal-booking-mode-group">
                                     <div class="form-check" id="booking-mode-whole-car-wrap">

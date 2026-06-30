@@ -25,6 +25,7 @@ class ScheduleLifecycleService
         app(BookingWorkflowService::class)->expireStaleBookings();
         $this->expireStaleDriverRequests();
         app(GuestTripWatchService::class)->expireStaleDriverSearches();
+        app(OperatorBookingDismissService::class)->purgeExpiredDismissals();
         $this->backfillExpectedArrivals();
         $this->cancelEmptyStaleSchedules($now);
         $this->purgeEmptyExpiredDaySchedules($now);

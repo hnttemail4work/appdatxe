@@ -88,6 +88,7 @@ Route::middleware(['auth', 'role:operator'])->group(function () {
     Route::get('operator/dashboard',                   [OperatorController::class, 'dashboard'])->name('operator.dashboard');
     Route::post('operator/bookings/{booking}/assign', [OperatorController::class, 'confirmAndAssignBooking'])->name('operator.bookings.assign');
     Route::delete('operator/bookings/lo', [OperatorController::class, 'bulkDismissBookings'])->name('operator.bookings.bulkDismiss');
+    Route::delete('operator/bookings/{booking}/dismiss-stuck', [OperatorController::class, 'dismissStuckBooking'])->name('operator.bookings.dismissStuck');
 
     Route::get('operator/drivers',                     [DriverController::class, 'index'])->name('operator.drivers');
     Route::get('operator/drivers/{driverProfile}/edit', [DriverController::class, 'edit'])->name('operator.drivers.edit');
@@ -122,6 +123,8 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::post('admin/referrers/{referralCode}/hide', [AdminController::class, 'suspendReferrer'])->name('admin.referrers.hide');
     Route::post('admin/referrers/{referralCode}/show', [AdminController::class, 'showReferrer'])->name('admin.referrers.show');
     Route::post('admin/bank-settings',         [AdminController::class, 'updateBankSettings'])->name('admin.bankSettings.update');
+    Route::post('admin/booking-banner',        [AdminController::class, 'updateBookingBanner'])->name('admin.bookingBanner.update');
+    Route::delete('admin/booking-banner',      [AdminController::class, 'destroyBookingBanner'])->name('admin.bookingBanner.destroy');
     Route::post('admin/fee-settings',         [AdminController::class, 'updateFeeSettings'])->name('admin.feeSettings.update');
     Route::post('admin/route-distances',      [AdminController::class, 'updateRouteDistances'])->name('admin.routeDistances.update');
     Route::post('admin/destinations',         [AdminController::class, 'storeDestination'])->name('admin.destinations.store');

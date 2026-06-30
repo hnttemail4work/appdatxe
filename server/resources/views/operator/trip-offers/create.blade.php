@@ -28,21 +28,24 @@ $quickHasPhoto = ! empty($quickVehiclePhotos[$quickSeats]);
     <div class="console-panel-head">
         <div class="console-panel-head-accent">
             <h2>Tạo chuyến nhanh</h2>
-            <p class="subtitle mb-0">Chọn điểm đi — hệ thống tự tạo tất cả tuyến đến (km/giá theo admin).</p>
+            <p class="subtitle mb-0">Chọn điểm đi và tick điểm đến cần mở — km/giá theo admin.</p>
         </div>
     </div>
     <div class="console-panel-body">
         @error('quick_trip')
             <div class="alert alert-danger">{{ $message }}</div>
         @enderror
+        @error('destinations')
+            <div class="alert alert-danger">{{ $message }}</div>
+        @enderror
         @error('vehicle_photo')
             <div class="alert alert-danger">{{ $message }}</div>
         @enderror
         <form method="POST" action="{{ route('operator.tripOffers.bulkQuick') }}" class="console-form"
-              enctype="multipart/form-data"
-              data-confirm="Tạo tất cả tuyến từ điểm đi đã chọn cho ngày {{ $quickServiceDateLabel }}?"
+              enctype="multipart/form-data" id="quick-trip-form"
+              data-confirm="Tạo các tuyến đã chọn cho ngày {{ $quickServiceDateLabel }}?"
               data-confirm-title="Tạo chuyến nhanh"
-              data-confirm-ok="Tạo tất cả">
+              data-confirm-ok="Tạo đã chọn">
             @csrf
             <div class="row g-3 align-items-end">
                 <div class="col-md-3">
@@ -75,7 +78,7 @@ $quickHasPhoto = ! empty($quickVehiclePhotos[$quickSeats]);
                     </select>
                 </div>
                 <div class="col-md-2">
-                    <button type="submit" class="btn btn-primary fw-semibold w-100">Tạo tất cả</button>
+                    <button type="submit" class="btn btn-primary fw-semibold w-100" id="quick-trip-submit" disabled>Tạo đã chọn</button>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label" for="quick-vehicle-photo">
@@ -85,7 +88,6 @@ $quickHasPhoto = ! empty($quickVehiclePhotos[$quickSeats]);
                            class="form-control @error('vehicle_photo') is-invalid @enderror"
                            accept="image/jpeg,image/png,image/webp,image/*"
                            @if(! $quickHasPhoto) required @endif>
-                    <div class="form-text">Một ảnh dùng chung cho tất cả tuyến tạo nhanh.</div>
                     @error('vehicle_photo')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
                 </div>
                 <div class="col-md-6">
@@ -98,6 +100,18 @@ $quickHasPhoto = ! empty($quickVehiclePhotos[$quickSeats]);
                              style="object-fit:cover"
                              id="quick-vehicle-photo-img">
                     </div>
+                </div>
+                <div class="col-12">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                        <label class="form-label mb-0">Điểm đến <span class="text-danger">*</span></label>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="quick-dest-select-all">Chọn tất cả</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="quick-dest-clear-all">Bỏ chọn</button>
+                        </div>
+                    </div>
+                    <div class="form-text mb-2">Chỉ tạo tuyến tới các điểm bạn tick — tránh mở quá nhiều điểm ít khách đi.</div>
+                    <div class="quick-dest-grid" id="quick-dest-grid"></div>
+                    <div class="small text-muted mt-2" id="quick-dest-count">Đã chọn: 0 điểm</div>
                 </div>
             </div>
         </form>
@@ -298,6 +312,8 @@ $quickHasPhoto = ! empty($quickVehiclePhotos[$quickSeats]);
 <script>
     window.tripOfferQuoteUrl = @json($quoteUrl ?? route('operator.tripOffers.quote'));
     window.quickTripVehiclePhotos = @json($quickVehiclePhotos ?? []);
+    window.quickTripDestinationsByDeparture = @json($quickTrip['destinations_by_departure'] ?? []);
+    window.quickTripOldDestinations = @json(old('destinations', []));
 </script>
 <script src="{{ asset('js/trip-offer-pricing.js') }}"></script>
 <script>
@@ -385,18 +401,94 @@ $quickHasPhoto = ! empty($quickVehiclePhotos[$quickSeats]);
 
     var quickForm = document.querySelector('#trip-offer-quick form');
     var quickDate = document.getElementById('quick-service-date');
+    var quickDeparture = document.getElementById('quick-departure');
+    var quickDestGrid = document.getElementById('quick-dest-grid');
+    var quickDestCount = document.getElementById('quick-dest-count');
+    var quickSubmit = document.getElementById('quick-trip-submit');
+    var destByDeparture = window.quickTripDestinationsByDeparture || {};
+    var oldDestinations = window.quickTripOldDestinations || [];
+
+    function selectedQuickDestCount() {
+        if (!quickDestGrid) return 0;
+        return quickDestGrid.querySelectorAll('input[name="destinations[]"]:checked').length;
+    }
+
+    function syncQuickDestUi() {
+        var count = selectedQuickDestCount();
+        if (quickDestCount) {
+            quickDestCount.textContent = 'Đã chọn: ' + count + ' điểm';
+        }
+        if (quickSubmit) {
+            quickSubmit.disabled = count === 0;
+            quickSubmit.textContent = count > 0 ? ('Tạo đã chọn (' + count + ')') : 'Tạo đã chọn';
+        }
+        if (quickForm) {
+            quickForm.setAttribute(
+                'data-confirm',
+                count > 0
+                    ? ('Tạo ' + count + ' tuyến đã chọn cho ngày ' + (quickDate && quickDate.value ? quickDate.value.split('-').reverse().join('/') : '') + '?')
+                    : 'Tạo các tuyến đã chọn?',
+            );
+        }
+    }
+
+    function renderQuickDestinations() {
+        if (!quickDestGrid || !quickDeparture) return;
+        var departure = quickDeparture.value;
+        var destinations = destByDeparture[departure] || [];
+        quickDestGrid.innerHTML = '';
+        destinations.forEach(function (name) {
+            var label = document.createElement('label');
+            label.className = 'quick-dest-item form-check';
+            var input = document.createElement('input');
+            input.type = 'checkbox';
+            input.className = 'form-check-input quick-dest-check';
+            input.name = 'destinations[]';
+            input.value = name;
+            input.checked = oldDestinations.indexOf(name) !== -1;
+            var span = document.createElement('span');
+            span.className = 'form-check-label';
+            span.textContent = name;
+            label.appendChild(input);
+            label.appendChild(span);
+            quickDestGrid.appendChild(label);
+        });
+        oldDestinations = [];
+        quickDestGrid.querySelectorAll('.quick-dest-check').forEach(function (el) {
+            el.addEventListener('change', syncQuickDestUi);
+        });
+        syncQuickDestUi();
+    }
+
+    if (quickDeparture) {
+        quickDeparture.addEventListener('change', renderQuickDestinations);
+    }
+
+    var selectAllBtn = document.getElementById('quick-dest-select-all');
+    if (selectAllBtn) {
+        selectAllBtn.addEventListener('click', function () {
+            quickDestGrid.querySelectorAll('.quick-dest-check').forEach(function (el) {
+                el.checked = true;
+            });
+            syncQuickDestUi();
+        });
+    }
+
+    var clearAllBtn = document.getElementById('quick-dest-clear-all');
+    if (clearAllBtn) {
+        clearAllBtn.addEventListener('click', function () {
+            quickDestGrid.querySelectorAll('.quick-dest-check').forEach(function (el) {
+                el.checked = false;
+            });
+            syncQuickDestUi();
+        });
+    }
+
+    renderQuickDestinations();
+
     if (quickForm && quickDate) {
         function syncQuickConfirm() {
-            var value = quickDate.value;
-            if (!value) {
-                return;
-            }
-            var parts = value.split('-');
-            if (parts.length !== 3) {
-                return;
-            }
-            var label = parts[2] + '/' + parts[1] + '/' + parts[0];
-            quickForm.setAttribute('data-confirm', 'Tạo tất cả tuyến từ điểm đi đã chọn cho ngày ' + label + '?');
+            syncQuickDestUi();
         }
         quickDate.addEventListener('change', syncQuickConfirm);
         syncQuickConfirm();

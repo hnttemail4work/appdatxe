@@ -10,6 +10,7 @@ use App\Models\TripRoute;
 use App\Models\User;
 use App\Services\CancellationReasonService;
 use App\Services\CompanyRevenueService;
+use App\Services\CustomerBookingBannerService;
 use App\Services\RegistrationService;
 use App\Services\ReferralCodeService;
 use App\Services\ScheduleLifecycleService;
@@ -18,6 +19,8 @@ use App\Support\PageList;
 use App\Support\RouteDistanceCatalog;
 use App\Support\PlatformFees;
 use App\Support\PlatformPaymentInfo;
+use App\Support\CustomerBookingBanner;
+use App\Support\VehicleCapacityPricing;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -30,6 +33,7 @@ class AdminController extends Controller
         private readonly ReferralCodeService $referralCodes,
         private readonly CompanyRevenueService $revenue,
         private readonly CancellationReasonService $cancellationReasons,
+        private readonly CustomerBookingBannerService $bookingBanner,
     ) {
     }
 
@@ -57,6 +61,7 @@ class AdminController extends Controller
             'round_trip_discount'      => PlatformFees::roundTripDiscountPercent(),
             'km_rate_under_100'   => PlatformFees::kmRateUnder100(),
             'km_rate_over_100'    => PlatformFees::kmRateOver100(),
+            'vehicle_capacity'    => VehicleCapacityPricing::settingsForAdmin(),
         ];
 
         $hubRoutes = TripRoute::query()
@@ -79,6 +84,7 @@ class AdminController extends Controller
 
         $bankSettings = PlatformPaymentInfo::bank();
         $bankQrPreview = PlatformPaymentInfo::vietQrImageUrl();
+        $bookingBannerUrl = CustomerBookingBanner::imageUrl();
         $revenueSummary = $this->revenue->summary();
         $revenueMonthFrom = now()->startOfMonth();
         $revenueMonthTo = now();
@@ -97,6 +103,7 @@ class AdminController extends Controller
             'hubRoutes',
             'bankSettings',
             'bankQrPreview',
+            'bookingBannerUrl',
             'revenueSummary',
             'revenueByRoute',
             'referralCostTrips',
@@ -214,8 +221,32 @@ class AdminController extends Controller
             'account_name' => trim($validated['account_name']),
         ], 'finance');
 
-        return redirect()->route('admin.dashboard', ['tab' => 'bank'])
+        return redirect()->route('admin.dashboard', ['tab' => 'settings'])
             ->with('success', 'Đã lưu tài khoản ngân hàng — QR VietQR tự sinh khi tài xế nạp ví / đóng phí.');
+    }
+
+    public function updateBookingBanner(Request $request)
+    {
+        $request->validate([
+            'banner_image' => ['required', 'image', 'max:8192'],
+        ], [
+            'banner_image.required' => 'Vui lòng chọn ảnh banner.',
+            'banner_image.image'    => 'Banner phải là file hình ảnh.',
+            'banner_image.max'      => 'Ảnh banner tối đa 8MB.',
+        ]);
+
+        $this->bookingBanner->save($request->file('banner_image'));
+
+        return redirect()->route('admin.dashboard', ['tab' => 'settings'])
+            ->with('success', 'Đã lưu banner trang đặt vé.');
+    }
+
+    public function destroyBookingBanner()
+    {
+        $this->bookingBanner->remove();
+
+        return redirect()->route('admin.dashboard', ['tab' => 'settings'])
+            ->with('success', 'Đã xóa banner — trang đặt vé hiển thị mặc định.');
     }
 
     public function updateUserStatus(Request $request, User $user)
@@ -241,14 +272,21 @@ class AdminController extends Controller
 
     public function updateFeeSettings(Request $request)
     {
-        $validated = $request->validate([
+        $capacityRules = [];
+        foreach (\App\Support\VehicleCapacityOptions::STANDARD as $capacity) {
+            $capacityRules['capacity_percents.' . $capacity] = ['required', 'numeric', 'min:50', 'max:500'];
+        }
+
+        $validated = $request->validate(array_merge([
             'app_commission'        => ['required', 'numeric', 'min:0', 'max:100'],
             'referral_commission_first'  => ['required', 'numeric', 'min:0', 'max:100'],
             'referral_commission_repeat' => ['required', 'numeric', 'min:0', 'max:100'],
             'round_trip_discount'   => ['required', 'numeric', 'min:0', 'max:100'],
             'km_rate_under_100'   => ['required', 'integer', 'min:0'],
             'km_rate_over_100'    => ['required', 'integer', 'min:0'],
-        ]);
+            'capacity_step_percent' => ['required', 'numeric', 'min:0', 'max:50'],
+            'capacity_percents'   => ['required', 'array'],
+        ], $capacityRules));
 
         PlatformSetting::setValue('app_commission_percentage', [
             'value' => (float) $validated['app_commission'],
@@ -277,6 +315,11 @@ class AdminController extends Controller
         PlatformSetting::setValue('pricing_km_rate_over_100', [
             'value' => (int) $validated['km_rate_over_100'],
         ], 'finance');
+
+        VehicleCapacityPricing::save(
+            (float) $validated['capacity_step_percent'],
+            $validated['capacity_percents'],
+        );
 
         return redirect()->route('admin.dashboard', ['tab' => 'fees'])
             ->with('success', 'Đã lưu cài đặt phí và bảng giá.');

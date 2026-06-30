@@ -8,7 +8,7 @@ $id = $id ?? 'departure-time';
 $value = $value ?? '';
 $required = $required ?? true;
 $label = $label ?? 'Giờ khởi hành';
-$hint = $hint ?? 'Để trống nếu khách tự chọn giờ đón trên trang đặt vé.';
+$hint = $hint ?? '';
 @endphp
 <label class="form-label" for="{{ $id }}">{{ $label }}@if($required) <span class="text-danger">*</span>@endif</label>
 <input type="time" name="{{ $name }}" id="{{ $id }}"
@@ -16,7 +16,7 @@ $hint = $hint ?? 'Để trống nếu khách tự chọn giờ đón trên trang
        @if($required) required @endif
        data-validate-label="{{ $label }}"
        value="{{ $value }}">
-@if(($name ?? 'departure_time') === 'departure_time')
+@if(($name ?? 'departure_time') === 'departure_time' && $hint !== '')
 <div class="form-text">{{ $hint }}</div>
 @endif
 @error($name)<div class="invalid-feedback d-block">{{ $message }}</div>@enderror

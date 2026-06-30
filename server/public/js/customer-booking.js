@@ -26,6 +26,107 @@
     var seatPollTimer = null;
     var quoteFetchSeq = 0;
     var roundTripMultiplier = Number(window.__roundTripMultiplier) || 1.7;
+    var OFFER_FILTER_OPTIONS = {
+        one_way_whole: { tripType: 'one_way', bookingMode: 'whole_car' },
+        one_way_shared: { tripType: 'one_way', bookingMode: 'shared' },
+        round_trip_whole: { tripType: 'round_trip', bookingMode: 'whole_car' },
+        round_trip_shared: { tripType: 'round_trip', bookingMode: 'shared' },
+    };
+    var OFFER_FILTER_STORAGE_KEY = 'bookingOfferFilter';
+    var activeOfferFilterId = loadOfferFilterId();
+
+    function loadOfferFilterId() {
+        try {
+            var stored = localStorage.getItem(OFFER_FILTER_STORAGE_KEY);
+            if (stored && OFFER_FILTER_OPTIONS[stored]) {
+                return stored;
+            }
+        } catch (e) {
+            // localStorage có thể bị chặn
+        }
+
+        return 'one_way_whole';
+    }
+
+    function getActiveOfferFilter() {
+        return OFFER_FILTER_OPTIONS[activeOfferFilterId] || OFFER_FILTER_OPTIONS.one_way_whole;
+    }
+
+    function tripTypeLabel(type) {
+        return type === 'round_trip' ? 'Khứ hồi' : 'Một chiều';
+    }
+
+    function bookingModeDisplayLabel(mode) {
+        return mode === 'whole_car' ? 'Cả xe' : 'Ghép xe';
+    }
+
+    function setOfferFilter(filterId) {
+        if (!OFFER_FILTER_OPTIONS[filterId]) {
+            return;
+        }
+        activeOfferFilterId = filterId;
+        try {
+            localStorage.setItem(OFFER_FILTER_STORAGE_KEY, filterId);
+        } catch (e) {
+            // localStorage có thể bị chặn
+        }
+        document.querySelectorAll('.booking-offer-filter-btn').forEach(function (btn) {
+            var active = btn.dataset.offerFilter === filterId;
+            btn.classList.toggle('is-active', active);
+            btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+        applyOfferFilterToAllCards();
+    }
+
+    function applyOfferFilterToCard(card) {
+        var id = card.getAttribute('data-template-id');
+        var tpl = findTemplate(id);
+        if (!tpl) {
+            return;
+        }
+        var filter = getActiveOfferFilter();
+        var price = priceFromTemplate(tpl, filter.bookingMode, filter.tripType);
+        var amountEl = card.querySelector('.trip-price-amount');
+        var unitEl = card.querySelector('.trip-price-unit');
+        if (amountEl) {
+            amountEl.textContent = formatMoney(price);
+        }
+        if (unitEl) {
+            unitEl.textContent = filter.bookingMode === 'whole_car' ? '/cả xe' : '/ghế';
+        }
+    }
+
+    function applyOfferFilterToAllCards() {
+        document.querySelectorAll('.trip-card-pro[data-template-id]').forEach(applyOfferFilterToCard);
+    }
+
+    function applyOfferFilterToModalRadios() {
+        if (window.__bookingRestoreModal && window.__bookingRestoreModal.template_id) {
+            updateModalOfferPresetSummary();
+            return;
+        }
+        var filter = getActiveOfferFilter();
+        var tripRadio = document.querySelector('input[name="trip_type"][value="' + filter.tripType + '"]');
+        var modeRadio = document.querySelector('input[name="booking_mode"][value="' + filter.bookingMode + '"]');
+        if (tripRadio) {
+            tripRadio.checked = true;
+        }
+        if (modeRadio) {
+            modeRadio.checked = true;
+        }
+        updateModalOfferPresetSummary();
+    }
+
+    function updateModalOfferPresetSummary() {
+        var tripEl = document.getElementById('modal-preset-trip-type');
+        var modeEl = document.getElementById('modal-preset-booking-mode');
+        if (tripEl) {
+            tripEl.textContent = tripTypeLabel(getSelectedTripType());
+        }
+        if (modeEl) {
+            modeEl.textContent = bookingModeDisplayLabel(getBookingMode());
+        }
+    }
 
     function formatMoney(n) {
         return new Intl.NumberFormat('vi-VN').format(n) + ' đ';
@@ -442,14 +543,12 @@
                 parseInt(timeParts[1], 10),
                 0,
             );
-            var minAllowed = new Date(now.getTime());
-            minAllowed.setMinutes(minAllowed.getMinutes() + 30);
-            if (pickupAt < minAllowed) {
-                var leadMsg = 'Giờ đón phải sau ít nhất 30 phút so với hiện tại.';
+            if (pickupAt <= now) {
+                var pastMsg = 'Giờ đón phải sau thời gian hiện tại.';
                 if (window.FormFieldValidation && window.FormFieldValidation.markInvalid) {
-                    FormFieldValidation.markInvalid(input, leadMsg);
+                    FormFieldValidation.markInvalid(input, pastMsg);
                 } else if (window.AppDialog) {
-                    window.AppDialog.alert(leadMsg);
+                    window.AppDialog.alert(pastMsg);
                 }
                 input.focus();
                 return false;
@@ -510,6 +609,7 @@
             syncActiveUnitPriceFromTemplate(findTemplate(activeTemplateId));
             fetchQuotePrice();
         }
+        updateModalOfferPresetSummary();
         updateSummary(activeTemplateId);
     }
 
@@ -811,6 +911,7 @@
 
             resetBookingModal();
             applyReferralPrefill();
+            applyOfferFilterToModalRadios();
 
             var routeText = btn.dataset.route || '';
             activeRoute = routeText;
@@ -1119,13 +1220,8 @@
                 thumbWrap.innerHTML = '<img src="' + trip.vehicle_photo_url + '" alt="" class="trip-vehicle-photo" loading="lazy" decoding="async">';
             }
         }
-        var priceAmounts = card.querySelectorAll('.trip-price-amount');
-        if (priceAmounts.length && trip.price) {
-            priceAmounts.forEach(function (el) {
-                el.textContent = trip.price;
-            });
-        }
-        if (trip.one_way_price) {
+        if (btn) {
+            btn.dataset.serviceDate = trip.service_date || btn.dataset.serviceDate;
             basePrice[trip.id] = {
                 one_way: trip.one_way_price,
                 round_trip: trip.seat_round_trip_price || trip.round_trip_price || trip.one_way_price,
@@ -1158,6 +1254,8 @@
                 btn.dataset.vehiclePhoto = trip.vehicle_photo_url;
             }
         }
+
+        applyOfferFilterToCard(card);
 
         if (activeTemplateId && String(activeTemplateId) === String(trip.id)) {
             activeVehicleLabel = trip.vehicle_label || activeVehicleLabel;
@@ -1212,6 +1310,13 @@
         poll();
         setInterval(poll, 12000);
     }
+
+    document.querySelectorAll('.booking-offer-filter-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            setOfferFilter(btn.dataset.offerFilter);
+        });
+    });
+    setOfferFilter(activeOfferFilterId);
 
     document.querySelectorAll('.swap-route-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {

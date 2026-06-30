@@ -14,6 +14,7 @@ use App\Services\ReferralCodeService;
 use App\Services\ScheduleLifecycleService;
 use App\Services\TripListingService;
 use App\Services\TripPricingService;
+use App\Support\CustomerBookingBanner;
 use App\Support\DepartureTimeDisplay;
 use App\Support\PlatformFees;
 use App\Support\PageList;
@@ -70,6 +71,7 @@ class GuestBookingController extends Controller
         }
 
         $referralDiscountMeta = $this->referralCodes->discountMeta($appliedReferral);
+        $bookingBannerUrl = CustomerBookingBanner::imageUrl();
 
         return view('booking.index', compact(
             'offers',
@@ -78,6 +80,7 @@ class GuestBookingController extends Controller
             'appliedReferral',
             'pendingReferral',
             'referralDiscountMeta',
+            'bookingBannerUrl',
         ));
     }
 

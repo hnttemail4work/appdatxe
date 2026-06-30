@@ -18,19 +18,19 @@ use App\Support\RouteDistanceCatalog;
 
 use App\Support\LocationCatalog;
 
+use App\Support\VehicleCapacityPricing;
+
 
 
 /** Giá vé theo km (admin) và giá cấu hình trên từng chuyến. */
 
 class TripPricingService
 {
-    /** Giá cả xe mốc cho xe 7 chỗ (một chiều) — fallback khi chưa cấu hình giá. */
+    /** Giá cả xe mốc cho xe 4 chỗ (một chiều) — fallback khi chưa cấu hình giá. */
 
     public const REFERENCE_WHOLE_CAR = 1_000_000;
 
-
-
-    public const REFERENCE_CAPACITY = 7;
+    public const REFERENCE_CAPACITY = 4;
 
 
 
@@ -118,11 +118,9 @@ class TripPricingService
 
     {
 
-        $cap = max($capacity, 1);
-
-
-
-        return $this->roundToThousand((int) round(self::REFERENCE_WHOLE_CAR * $cap / self::REFERENCE_CAPACITY));
+        return $this->roundToThousand((int) round(
+            self::REFERENCE_WHOLE_CAR * VehicleCapacityPricing::multiplierForCapacity($capacity),
+        ));
 
     }
 
@@ -186,13 +184,19 @@ class TripPricingService
 
 
 
-        $seat = $this->oneWaySeatPrice($entity, $pickup, $dropoff);
+        $entity->loadMissing(['route', 'vehicle']);
 
-        $entity->loadMissing('vehicle');
+        $distance = $this->resolveDistanceKm($entity->route, $pickup, $dropoff);
+
+        if ($distance > 0) {
+
+            return $this->wholeCarOneWayFromDistance($distance, $entity->capacity());
+
+        }
 
 
 
-        return $this->roundToThousand($seat * max($entity->capacity(), 1));
+        return $this->defaultWholeCarPrice($entity->capacity());
 
     }
 
@@ -240,7 +244,9 @@ class TripPricingService
 
         $distance = $this->resolveDistanceKm($route, $pickup, $dropoff);
 
-        $wholeFromDistance = $distance > 0 ? $this->wholeCarOneWayFromDistance($distance) : 0;
+        $wholeFromDistance = $distance > 0
+            ? $this->wholeCarOneWayFromDistance($distance, $entity->capacity())
+            : 0;
 
         $entity->loadMissing('vehicle');
 
@@ -376,7 +382,7 @@ class TripPricingService
 
     /** Giá cả xe một chiều theo km và bảng giá admin. */
 
-    public function wholeCarOneWayFromDistance(int $distanceKm): int
+    public function wholeCarOneWayFromDistance(int $distanceKm, int $capacity = 4): int
 
     {
 
@@ -394,9 +400,11 @@ class TripPricingService
 
             : PlatformFees::kmRateUnder100();
 
+        $base = $this->roundToThousand((int) round($distanceKm * $rate));
 
-
-        return $this->roundToThousand((int) round($distanceKm * $rate));
+        return $this->roundToThousand((int) round(
+            $base * VehicleCapacityPricing::multiplierForCapacity($capacity),
+        ));
 
     }
 
@@ -426,7 +434,7 @@ class TripPricingService
 
             : PlatformFees::kmRateUnder100();
 
-        $wholeOneWay = $this->wholeCarOneWayFromDistance($distanceKm);
+        $wholeOneWay = $this->wholeCarOneWayFromDistance($distanceKm, $seats);
 
         $seatOneWay = $this->roundToThousand((int) round($wholeOneWay / $seats));
 

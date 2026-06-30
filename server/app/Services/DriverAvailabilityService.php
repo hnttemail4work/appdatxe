@@ -13,7 +13,7 @@ use InvalidArgumentException;
 
 class DriverAvailabilityService
 {
-    public const MIN_PICKUP_LEAD_MINUTES = 30;
+    public const MIN_PICKUP_LEAD_MINUTES = 30; // Gợi ý mặc định khi khách không chọn giờ đón
 
     /**
      * Tài xế bận khung giờ khi đã nhận chuyến (driver_id gán) cùng điểm đi/đến + giờ khởi hành và xe đã full ghế.
@@ -132,19 +132,8 @@ class DriverAvailabilityService
             DepartureTimeDisplay::normalizeForClock($pickupTime),
         );
 
-        if ($date->isToday()) {
-            $minAllowed = now()->copy()->addMinutes(self::MIN_PICKUP_LEAD_MINUTES)->startOfMinute();
-            if ($departure < $minAllowed) {
-                throw new InvalidArgumentException(
-                    'Giờ đón phải sau ít nhất ' . self::MIN_PICKUP_LEAD_MINUTES . ' phút so với hiện tại.',
-                );
-            }
-
-            return;
-        }
-
-        if ($departure->lt($date->copy()->startOfDay())) {
-            throw new InvalidArgumentException('Giờ đón không hợp lệ.');
+        if ($date->isToday() && $departure->lt(now())) {
+            throw new InvalidArgumentException('Giờ đón phải sau thời gian hiện tại.');
         }
     }
 

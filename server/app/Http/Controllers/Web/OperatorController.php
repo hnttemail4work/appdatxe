@@ -10,6 +10,7 @@ use App\Models\DriverWalletTransaction;
 use App\Models\User;
 use App\Services\DriverTripRequestService;
 use App\Services\DriverWalletService;
+use App\Services\OperatorBookingDismissService;
 use App\Services\OperatorTripOverdueService;
 use App\Services\ScheduleLifecycleService;
 use App\Support\PageList;
@@ -35,6 +36,7 @@ class OperatorController extends Controller
         $this->scheduleLifecycle->sync();
         $this->tripRequests->expireStale();
         app(OperatorTripOverdueService::class)->escalateOverdueTrips();
+        app(OperatorBookingDismissService::class)->purgeExpiredDismissals();
 
         $user = Auth::user();
 
@@ -155,6 +157,18 @@ class OperatorController extends Controller
 
         return redirect()->route('operator.dashboard', ['list' => 'cancelled'])
             ->with('success', "Đã xóa {$updated} đơn hủy khỏi danh sách.");
+    }
+
+    public function dismissStuckBooking(Booking $booking)
+    {
+        try {
+            app(OperatorBookingDismissService::class)->dismissStuckTrip($booking, (int) Auth::id());
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['booking' => $e->getMessage()]);
+        }
+
+        return redirect()->route('operator.dashboard', ['list' => 'pending'])
+            ->with('success', 'Đã ẩn chuyến treo. Hệ thống sẽ tự xóa sau ' . OperatorBookingDismissService::RETENTION_DAYS . ' ngày.');
     }
 
     /** @deprecated Luồng kết chuyến đã bỏ. */

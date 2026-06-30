@@ -158,6 +158,8 @@ class OperatorTripOfferController extends Controller
 
         $request->validate([
             'departure'             => ['required', 'string', LocationCatalog::inRule()],
+            'destinations'          => ['required', 'array', 'min:1'],
+            'destinations.*'        => ['required', 'string', LocationCatalog::inRule()],
             'service_date'          => ['required', 'date', 'after_or_equal:today'],
             'departure_time'        => ['nullable', 'date_format:H:i'],
             'expected_arrival_time' => ['nullable', 'date_format:H:i'],
@@ -167,6 +169,8 @@ class OperatorTripOfferController extends Controller
                 : ['required', 'image', 'max:5120'],
         ], [
             'departure.required'        => 'Vui lòng chọn điểm đi.',
+            'destinations.required'     => 'Vui lòng chọn ít nhất một điểm đến.',
+            'destinations.min'          => 'Vui lòng chọn ít nhất một điểm đến.',
             'service_date.required'     => 'Vui lòng chọn ngày chạy.',
             'service_date.after_or_equal' => 'Ngày chạy phải từ hôm nay trở đi.',
             'departure_time.required'   => 'Vui lòng nhập giờ khởi hành.',
@@ -179,6 +183,7 @@ class OperatorTripOfferController extends Controller
         try {
             $result = $this->offers->bulkCreateFromDeparture(Auth::id(), [
                 'departure'             => $request->input('departure'),
+                'destinations'          => $request->input('destinations', []),
                 'service_date'          => $request->input('service_date'),
                 'departure_time'        => $request->input('departure_time'),
                 'expected_arrival_time' => $request->input('expected_arrival_time'),
@@ -291,9 +296,14 @@ class OperatorTripOfferController extends Controller
             ),
             'quoteUrl'        => route('operator.tripOffers.quote'),
             'quickTrip'       => [
-                'service_date'       => now()->toDateString(),
-                'default_departure'  => LocationCatalog::hub(),
-                'vehicle_photos'     => $this->offers->vehiclePhotoUrlsForOperator(Auth::id()),
+                'service_date'              => now()->toDateString(),
+                'default_departure'         => LocationCatalog::hub(),
+                'vehicle_photos'            => $this->offers->vehiclePhotoUrlsForOperator(Auth::id()),
+                'destinations_by_departure' => collect(LocationCatalog::all())
+                    ->mapWithKeys(fn (string $departure): array => [
+                        $departure => $this->offers->destinationsForDeparture($departure),
+                    ])
+                    ->all(),
             ],
         ];
     }

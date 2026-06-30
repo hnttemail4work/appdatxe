@@ -52,6 +52,48 @@ body:has(.customer-page) {
 .customer-hero h1 { font-size: 1.35rem; font-weight: 800; margin-bottom: .35rem; color: var(--tl-primary-light); }
 .customer-hero p { opacity: .85; font-size: .9rem; margin-bottom: 0; color: var(--tl-text-muted); }
 
+.customer-hero--banner {
+    padding: 0;
+    position: relative;
+    overflow: hidden;
+    line-height: 0;
+}
+.customer-hero-banner-img {
+    width: 100%;
+    height: auto;
+    display: block;
+    max-height: min(42vw, 260px);
+    object-fit: cover;
+    object-position: center;
+}
+.customer-hero-banner-overlay {
+    position: absolute;
+    top: .75rem;
+    right: .75rem;
+    z-index: 2;
+    line-height: normal;
+}
+.customer-hero-banner-foot {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 2;
+    line-height: 1.45;
+    padding: .55rem .85rem;
+    background: linear-gradient(180deg, transparent 0%, rgba(10, 10, 10, .82) 100%);
+    color: #f5f5f5;
+}
+@media (max-width: 575.98px) {
+    .customer-hero-banner-img {
+        max-height: 180px;
+    }
+    .customer-hero-banner-overlay .customer-hero-badge {
+        font-size: .68rem;
+        padding: .25rem .5rem !important;
+    }
+}
+
 .customer-hero-badge {
     background: rgba(212, 175, 55, .15) !important;
     border: 1px solid rgba(212, 175, 55, .35);
@@ -964,12 +1006,219 @@ body.modal-open .modal-backdrop.show {
 .booking-list-head {
     display: flex;
     justify-content: space-between;
-    align-items: flex-end;
+    align-items: flex-start;
     gap: 1rem;
+}
+.booking-list-head-main {
+    flex: 1;
+    min-width: 0;
+}
+.booking-list-head-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    margin-bottom: .25rem;
 }
 .booking-list-title {
     font-size: 1.15rem;
     font-weight: 800;
+    min-width: 0;
+}
+.booking-clear-search-btn {
+    flex-shrink: 0;
+    white-space: nowrap;
+    font-size: .75rem;
+    padding: .25rem .65rem;
+    border-color: var(--tl-border);
+    color: var(--tl-text-muted);
+}
+.booking-clear-search-btn:hover {
+    border-color: rgba(212, 175, 55, .45);
+    color: var(--tl-primary-light);
+    background: rgba(212, 175, 55, .08);
+}
+.booking-results-layout {
+    display: grid;
+    gap: .75rem;
+    align-items: start;
+}
+.booking-results-main {
+    min-width: 0;
+}
+.booking-offer-sidebar-card {
+    background: var(--tl-surface);
+    border: 1px solid var(--tl-border);
+    border-radius: .85rem;
+    padding: .65rem;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, .28);
+}
+.booking-offer-sidebar-head {
+    margin-bottom: .55rem;
+}
+.booking-offer-sidebar-title {
+    font-size: .8rem;
+    font-weight: 800;
+    margin: 0;
+    color: var(--tl-primary-light);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+.booking-offer-filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .4rem;
+}
+.booking-offer-filter-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: .05rem;
+    width: 100%;
+    min-height: 2.65rem;
+    border: 1px solid var(--tl-border);
+    background: var(--tl-surface-elevated);
+    color: var(--tl-text);
+    border-radius: .6rem;
+    padding: .45rem .55rem;
+    font-size: .75rem;
+    font-weight: 600;
+    line-height: 1.2;
+    text-align: left;
+    transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+}
+.booking-offer-filter-type {
+    font-size: .65rem;
+    font-weight: 600;
+    color: rgba(245, 245, 245, .72);
+    letter-spacing: .01em;
+}
+.booking-offer-filter-mode {
+    font-size: .78rem;
+    font-weight: 800;
+    color: var(--tl-primary-light);
+}
+.booking-offer-filter-btn:hover {
+    border-color: rgba(212, 175, 55, .55);
+    background: #262626;
+}
+.booking-offer-filter-btn:hover .booking-offer-filter-mode {
+    color: #fff;
+}
+.booking-offer-filter-btn.is-active {
+    border-color: var(--tl-primary);
+    background: linear-gradient(145deg, rgba(212, 175, 55, .22) 0%, rgba(34, 34, 34, 1) 72%);
+    box-shadow: 0 0 0 1px rgba(212, 175, 55, .35);
+}
+.booking-offer-filter-btn.is-active .booking-offer-filter-type {
+    color: rgba(232, 197, 71, .9);
+}
+.booking-offer-filter-btn.is-active .booking-offer-filter-mode {
+    color: #fff;
+}
+@media (max-width: 479.98px) {
+    .booking-offer-sidebar-card {
+        padding: .55rem;
+    }
+    .booking-offer-sidebar-title {
+        font-size: .74rem;
+        margin-bottom: .35rem;
+    }
+    .booking-offer-filters {
+        gap: .35rem;
+    }
+    .booking-offer-filter-btn {
+        min-height: 2.25rem;
+        padding: .35rem .45rem;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: .15rem .3rem;
+    }
+    .booking-offer-filter-type,
+    .booking-offer-filter-mode {
+        font-size: .68rem;
+        line-height: 1.15;
+    }
+    .booking-offer-filter-type::after {
+        content: '·';
+        margin-left: .2rem;
+        color: rgba(245, 245, 245, .45);
+    }
+}
+@media (min-width: 480px) {
+    .booking-results-layout {
+        grid-template-columns: minmax(8.75rem, 10.25rem) minmax(0, 1fr);
+        gap: .75rem;
+    }
+    .booking-offer-sidebar {
+        position: sticky;
+        top: .65rem;
+    }
+    .booking-offer-sidebar-card {
+        padding: .7rem;
+    }
+    .booking-offer-sidebar-head {
+        margin-bottom: .5rem;
+        padding-bottom: .45rem;
+        border-bottom: 1px solid var(--tl-border);
+    }
+    .booking-offer-filters {
+        grid-template-columns: 1fr;
+        gap: .4rem;
+    }
+    .booking-offer-filter-btn {
+        min-height: 2.75rem;
+        padding: .5rem .6rem;
+    }
+    .booking-offer-filter-type::after {
+        content: none;
+    }
+}
+@media (min-width: 992px) {
+    .booking-results-layout {
+        grid-template-columns: minmax(13.5rem, 15rem) minmax(0, 1fr);
+        gap: 1.15rem;
+    }
+    .booking-offer-sidebar-card {
+        padding: .9rem;
+        border-radius: 1rem;
+    }
+    .booking-offer-sidebar-title {
+        font-size: .9rem;
+        text-transform: none;
+        letter-spacing: 0;
+        color: var(--tl-text);
+    }
+    .booking-offer-filters {
+        gap: .5rem;
+    }
+    .booking-offer-filter-btn {
+        min-height: 3rem;
+        padding: .6rem .7rem;
+        border-radius: .7rem;
+    }
+    .booking-offer-filter-type {
+        font-size: .7rem;
+    }
+    .booking-offer-filter-mode {
+        font-size: .84rem;
+    }
+}
+.booking-modal-offer-preset {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem 1rem;
+    padding: .65rem .85rem;
+    margin-bottom: .75rem;
+    background: #f8f9fa;
+    border: 1px solid var(--tl-border);
+    border-radius: .65rem;
+    font-size: .875rem;
+}
+.booking-modal-offer-preset strong {
+    color: var(--tl-text);
 }
 .booking-empty-state {
     text-align: center;

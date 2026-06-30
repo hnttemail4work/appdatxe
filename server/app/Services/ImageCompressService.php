@@ -15,8 +15,10 @@ class ImageCompressService
     /** @var list<string> */
     private const ALLOWED_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
-    public function storeOptimized(UploadedFile $file, string $directory, string $basename = 'photo'): string
+    public function storeOptimized(UploadedFile $file, string $directory, string $basename = 'photo', ?int $maxWidth = null): string
     {
+        $maxWidth = $maxWidth ?? self::MAX_WIDTH;
+
         if (! extension_loaded('gd')) {
             return $file->store($directory, 'public');
         }
@@ -37,7 +39,7 @@ class ImageCompressService
         }
 
         [$srcW, $srcH] = $info;
-        $targetW = min($srcW, self::MAX_WIDTH);
+        $targetW = min($srcW, $maxWidth);
         $targetH = (int) round($srcH * ($targetW / $srcW));
 
         $canvas = imagecreatetruecolor($targetW, $targetH);

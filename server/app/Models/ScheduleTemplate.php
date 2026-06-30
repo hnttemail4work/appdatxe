@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\DriverAvailabilityService;
 use App\Support\DepartureTimeDisplay;
 use App\Support\ServiceDate;
 use Carbon\Carbon;

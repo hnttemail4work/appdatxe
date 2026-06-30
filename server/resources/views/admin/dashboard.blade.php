@@ -2,16 +2,22 @@
 
 @section('console')
 @php
-$allowedAdminTabs = ['operators', 'referrals', 'referral-costs', 'fees', 'bank', 'revenue', 'routes', 'cancel-reasons'];
+$allowedAdminTabs = ['operators', 'referrals', 'referral-costs', 'fees', 'settings', 'revenue', 'routes', 'cancel-reasons'];
 $tabFromRequest = request('tab');
+if ($tabFromRequest === 'bank') {
+    $tabFromRequest = 'settings';
+}
 $tabFromCookie = request()->cookie('admin-main_tab');
+if ($tabFromCookie === 'bank') {
+    $tabFromCookie = 'settings';
+}
 $adminDefaultTab = in_array($tabFromRequest, $allowedAdminTabs, true)
     ? $tabFromRequest
     : (in_array($tabFromCookie, $allowedAdminTabs, true) ? $tabFromCookie : null);
 if ($adminDefaultTab === null) {
     $adminDefaultTab = ($errors->has('name') || $errors->has('phone')) && ! $errors->has('email')
         ? (request()->has('commission_percent') ? 'referrals' : 'operators')
-        : (($errors->has('bank_name') || $errors->has('bank_bin')) ? 'bank'
+        : (($errors->has('bank_name') || $errors->has('bank_bin') || $errors->has('banner_image')) ? 'settings'
         : ($errors->has('label') && $errors->has('audience') ? 'cancel-reasons' : 'operators'));
 }
 @endphp
@@ -31,7 +37,7 @@ if ($adminDefaultTab === null) {
                         ['key' => 'referrals', 'label' => 'Mã giới thiệu', 'badge' => $referralCodes->total()],
                         ['key' => 'referral-costs', 'label' => 'Chi phí người GT', 'badge' => $referralCostTrips->total() ?: null],
                         ['key' => 'fees', 'label' => 'Phí & giá'],
-                        ['key' => 'bank', 'label' => 'Ngân hàng'],
+                        ['key' => 'settings', 'label' => 'Cài đặt'],
                         ['key' => 'revenue', 'label' => 'Doanh thu'],
                         ['key' => 'routes', 'label' => 'Điểm đến'],
                         ['key' => 'cancel-reasons', 'label' => 'Lý do hủy', 'badge' => ($cancellationReasonList ?? collect())->count()],
@@ -306,11 +312,13 @@ if ($adminDefaultTab === null) {
                 @endif
                 @include('partials.screen-tab-pane-end')
 
-                @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'bank', 'active' => $adminDefaultTab === 'bank'])
-                <p class="text-muted small mb-3">
-                    QR chuyển khoản <strong>tự sinh qua VietQR</strong> từ thông tin bên dưới — dùng chung cho nạp ví tài xế và phí nền tảng.
-                    Số tiền và nội dung CK cập nhật theo từng thao tác trên trang tài xế.
-                </p>
+                @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'settings', 'active' => $adminDefaultTab === 'settings'])
+
+                <div class="mb-4 pb-4 border-bottom border-secondary">
+                    <h3 class="h6 fw-bold text-uppercase text-muted mb-2" style="letter-spacing:.04em">Tài khoản ngân hàng</h3>
+                    <p class="text-muted small mb-3">
+                        QR chuyển khoản <strong>tự sinh qua VietQR</strong> từ thông tin bên dưới — dùng chung cho nạp ví tài xế và phí nền tảng.
+                    </p>
                 <form method="POST" action="{{ route('admin.bankSettings.update') }}" class="console-form">
                     @csrf
                     <div class="row g-3">
@@ -343,12 +351,51 @@ if ($adminDefaultTab === null) {
                     <button class="btn btn-primary px-4 fw-semibold mt-3">Lưu tài khoản</button>
                 </form>
                 @if($bankQrPreview)
-                <div class="mt-4 pt-3 border-top">
+                <div class="mt-4 pt-3 border-top border-secondary">
                     <label class="form-label d-block">Xem thử QR (chưa có số tiền)</label>
                     <img src="{{ $bankQrPreview }}" alt="QR VietQR xem thử" class="rounded border" width="160" height="160">
-                    <p class="form-text mb-0">Quét bằng app ngân hàng để kiểm tra STK và tên chủ TK.</p>
                 </div>
                 @endif
+                </div>
+
+                <div>
+                    <h3 class="h6 fw-bold text-uppercase text-muted mb-2" style="letter-spacing:.04em">Banner trang đặt vé</h3>
+                    <p class="text-muted small mb-3">
+                        Ảnh hiển thị thay cho dòng «Đặt vé xe liên tỉnh» trên trang khách đặt chuyến. Khuyến nghị ngang ≥ 1200px.
+                    </p>
+                    @if($bookingBannerUrl ?? null)
+                    <div class="mb-3">
+                        <label class="form-label d-block">Banner hiện tại</label>
+                        <img src="{{ $bookingBannerUrl }}" alt="Banner trang đặt vé" class="rounded border admin-booking-banner-preview">
+                    </div>
+                    @endif
+                    <form method="POST" action="{{ route('admin.bookingBanner.update') }}" class="console-form mb-3" enctype="multipart/form-data">
+                        @csrf
+                        <div class="row g-3 align-items-end">
+                            <div class="col-md-8">
+                                <label class="form-label" for="banner-image">Ảnh banner</label>
+                                <input type="file" name="banner_image" id="banner-image"
+                                       class="form-control @error('banner_image') is-invalid @enderror"
+                                       accept="image/jpeg,image/png,image/webp,image/*" required>
+                                @error('banner_image')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
+                            </div>
+                            <div class="col-md-4">
+                                <button type="submit" class="btn btn-primary fw-semibold w-100">Lưu banner</button>
+                            </div>
+                        </div>
+                    </form>
+                    @if($bookingBannerUrl ?? null)
+                    <form method="POST" action="{{ route('admin.bookingBanner.destroy') }}"
+                          data-confirm="Xóa banner và dùng lại giao diện mặc định?"
+                          data-confirm-title="Xóa banner"
+                          data-confirm-variant="danger"
+                          data-confirm-ok="Xóa">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="btn btn-outline-danger btn-sm">Xóa banner</button>
+                    </form>
+                    @endif
+                </div>
                 @include('partials.screen-tab-pane-end')
 
                 @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'revenue', 'active' => $adminDefaultTab === 'revenue'])
@@ -453,6 +500,61 @@ if ($adminDefaultTab === null) {
                             </div>
                         </div>
                     </div>
+
+                    <hr class="my-4">
+                    <h3 class="h6 fw-semibold mb-2">Hệ số giá cả xe theo loại chỗ</h3>
+                    <p class="text-muted small mb-3">
+                        Lấy <strong>4 chỗ = 100%</strong> làm chuẩn. Mỗi bậc loại xe tiếp theo tăng thêm
+                        <strong>{{ number_format($feeSettings['vehicle_capacity']['step_percent'], 1) }}%</strong> (có thể chỉnh bên dưới).
+                        Giá cả xe = (km × đơn giá/km) × hệ số %.
+                    </p>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4 col-lg-3">
+                            <label class="form-label">Bước tăng mỗi loại xe (%)</label>
+                            <div class="input-group">
+                                <input type="number" name="capacity_step_percent" class="form-control" min="0" max="50" step="0.1"
+                                       value="{{ old('capacity_step_percent', $feeSettings['vehicle_capacity']['step_percent']) }}" required>
+                                <span class="input-group-text">%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="console-table-wrap mb-3">
+                        <table class="console-table">
+                            <thead>
+                                <tr>
+                                    <th>Loại xe</th>
+                                    <th>% so với 4 chỗ</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach(\App\Support\VehicleCapacityOptions::STANDARD as $capacity)
+                                @php
+                                    $defaultPercent = \App\Support\VehicleCapacityPricing::defaultPercentForCapacity($capacity);
+                                @endphp
+                                <tr>
+                                    <td>{{ \App\Support\VehicleCapacityOptions::label($capacity) }}</td>
+                                    <td style="max-width: 12rem;">
+                                        <div class="input-group input-group-sm">
+                                            <input type="number"
+                                                   name="capacity_percents[{{ $capacity }}]"
+                                                   class="form-control"
+                                                   min="50" max="500" step="0.1"
+                                                   value="{{ old('capacity_percents.'.$capacity, $feeSettings['vehicle_capacity']['percents'][$capacity] ?? $defaultPercent) }}"
+                                                   required>
+                                            <span class="input-group-text">%</span>
+                                        </div>
+                                        @if($capacity !== 4)
+                                            <div class="form-text">Mặc định {{ number_format($defaultPercent, 1) }}%</div>
+                                        @else
+                                            <div class="form-text">Chuẩn 100%</div>
+                                        @endif
+                                    </td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+
                     <button class="btn btn-primary px-4 fw-semibold mt-3">Lưu cài đặt</button>
                 </form>
                 @include('partials.screen-tab-pane-end')
