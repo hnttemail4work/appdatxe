@@ -79,7 +79,7 @@ class GeocodeController extends Controller
     {
         try {
             $response = $this->nominatimClient()->get($url, $params);
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
             return null;
         }
 
