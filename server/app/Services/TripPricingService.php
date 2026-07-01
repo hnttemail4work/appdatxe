@@ -316,15 +316,19 @@ class TripPricingService
 
         ?string $dropoff = null,
 
+        int $vehicleCount = 1,
+
     ): float {
+
+        $vehicleCount = max($vehicleCount, 1);
 
         if ($bookingMode === 'whole_car') {
 
             $oneWay = $this->oneWayWholeCarPrice($entity, $pickup, $dropoff);
 
+            $tripTotal = (float) $this->priceForTripType($oneWay, $tripType, $this->tripDiscountPercent($entity));
 
-
-            return (float) $this->priceForTripType($oneWay, $tripType, $this->tripDiscountPercent($entity));
+            return $tripTotal * $vehicleCount;
 
         }
 

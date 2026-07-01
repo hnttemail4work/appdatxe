@@ -50,6 +50,8 @@ class BookingWorkflowService
         ?int $passengerAge = null,
         ?float $pickupLat = null,
         ?float $pickupLng = null,
+        int $vehicleCount = 1,
+        ?int $vehicleCapacity = null,
     ): Booking {
         $template->loadMissing(['route', 'vehicle']);
 
@@ -57,12 +59,15 @@ class BookingWorkflowService
             $template,
             $serviceDate,
             $pickupTime,
+            $bookingMode === 'whole_car',
         );
 
         $pickup = $pickupAddress ?: $template->route->departure;
         $dropoff = $dropoffAddress ?: $template->route->destination;
+        $vehicleCount = max($vehicleCount, 1);
+        $vehicleCapacity = $vehicleCapacity ?? $template->capacity();
 
-        $existing = $this->findReusablePendingBooking($schedule, $contactPhone, $seatNumbers);
+        $existing = $this->findReusablePendingBooking($schedule, $contactPhone, $seatNumbers, $vehicleCount);
         if ($existing) {
             return $this->refreshPendingBooking(
                 $existing,
@@ -80,6 +85,8 @@ class BookingWorkflowService
                 $passengerAge,
                 $pickupLat,
                 $pickupLng,
+                $vehicleCount,
+                $vehicleCapacity,
             );
         }
 
@@ -101,6 +108,8 @@ class BookingWorkflowService
             $passengerAge,
             $pickupLat,
             $pickupLng,
+            $vehicleCount,
+            $vehicleCapacity,
         );
     }
 
@@ -122,8 +131,13 @@ class BookingWorkflowService
         ?int $passengerAge = null,
         ?float $pickupLat = null,
         ?float $pickupLng = null,
+        int $vehicleCount = 1,
+        ?int $vehicleCapacity = null,
     ): Booking {
-        $booking = DB::transaction(function () use ($schedule, $contactPhone, $passengerName, $seatNumbers, $pickupAddress, $pickupDetail, $dropoffAddress, $dropoffDetail, $notes, $tripType, $bookingMode, $pickupTime, $appliedReferralCodeId, $passengerGender, $passengerAge, $pickupLat, $pickupLng): Booking {
+        $vehicleCount = max($vehicleCount, 1);
+        $vehicleCapacity = $vehicleCapacity ?? $schedule->capacity();
+
+        $booking = DB::transaction(function () use ($schedule, $contactPhone, $passengerName, $seatNumbers, $pickupAddress, $pickupDetail, $dropoffAddress, $dropoffDetail, $notes, $tripType, $bookingMode, $pickupTime, $appliedReferralCodeId, $passengerGender, $passengerAge, $pickupLat, $pickupLng, $vehicleCount, $vehicleCapacity): Booking {
             $this->scheduleLifecycle->sync();
 
             $schedule = Schedule::query()
@@ -147,6 +161,7 @@ class BookingWorkflowService
                 count($seatNumbers),
                 $pickupAddress,
                 $dropoffAddress,
+                $bookingMode === 'whole_car' ? $vehicleCount : 1,
             );
             $totalPrice = $this->applyReferralToTotal($totalPrice, $contactPhone, $appliedReferralCodeId);
             $holdExpires = null;
@@ -160,6 +175,8 @@ class BookingWorkflowService
                 'seat_numbers'      => $seatNumbers,
                 'trip_type'         => $tripType,
                 'booking_mode'      => $bookingMode,
+                'vehicle_count'     => $bookingMode === 'whole_car' ? $vehicleCount : 1,
+                'vehicle_capacity'  => $vehicleCapacity,
                 'booking_reference' => 'BK-' . now()->format('YmdHis') . '-' . Str::upper(Str::random(6)),
                 'applied_referral_code_id' => $appliedReferralCodeId,
                 'total_price'       => $totalPrice,
@@ -449,6 +466,7 @@ class BookingWorkflowService
         Schedule $schedule,
         string $contactPhone,
         array $seatNumbers,
+        int $vehicleCount = 1,
     ): ?Booking {
         $targetSeats = collect($seatNumbers)->map(fn ($seat): string => (string) $seat)->sort()->values()->all();
 
@@ -457,8 +475,12 @@ class BookingWorkflowService
             ->where('booking_status', 'pending')
             ->where(fn ($q) => $q->whereNull('hold_expires_at')->orWhere('hold_expires_at', '>', now()))
             ->get()
-            ->first(function (Booking $booking) use ($contactPhone, $targetSeats): bool {
+            ->first(function (Booking $booking) use ($contactPhone, $targetSeats, $vehicleCount): bool {
                 if (! $booking->matchesContactPhone($contactPhone)) {
+                    return false;
+                }
+
+                if (max((int) ($booking->vehicle_count ?? 1), 1) !== max($vehicleCount, 1)) {
                     return false;
                 }
 
@@ -484,9 +506,13 @@ class BookingWorkflowService
         ?int $passengerAge = null,
         ?float $pickupLat = null,
         ?float $pickupLng = null,
+        int $vehicleCount = 1,
+        ?int $vehicleCapacity = null,
     ): Booking {
         $booking->loadMissing('schedule.route');
         $seatCount = count($booking->seat_numbers ?? []);
+        $vehicleCount = max($vehicleCount, 1);
+        $vehicleCapacity = $vehicleCapacity ?? (int) ($booking->vehicle_capacity ?? $booking->schedule?->capacity() ?? 0);
         $totalPrice = $this->pricing->bookingTotal(
             $booking->schedule,
             $tripType,
@@ -494,11 +520,12 @@ class BookingWorkflowService
             max($seatCount, 1),
             $pickupAddress,
             $dropoffAddress,
+            $bookingMode === 'whole_car' ? $vehicleCount : 1,
         );
         $appliedId = $appliedReferralCodeId;
         $totalPrice = $this->applyReferralToTotal($totalPrice, $booking->contact_phone, $appliedId);
 
-        $booking->update([
+        $refreshFields = [
             'passenger_name'   => trim($passengerName),
             'passenger_gender' => $passengerGender === 'female' ? 'female' : 'male',
             'passenger_age'    => $passengerAge,
@@ -512,9 +539,19 @@ class BookingWorkflowService
             'notes'           => $notes,
             'booking_mode'    => $bookingMode,
             'trip_type'       => $tripType,
+            'vehicle_count'   => $bookingMode === 'whole_car' ? $vehicleCount : 1,
+            'vehicle_capacity'=> $vehicleCapacity,
             'total_price'     => $totalPrice,
             'hold_expires_at' => null,
-        ]);
+            'driver_search_started_at' => now(),
+            'needs_operator_help_at'   => null,
+        ];
+
+        if (Booking::supportsOperatorDismiss()) {
+            $refreshFields['operator_dismissed_at'] = null;
+        }
+
+        $booking->update($refreshFields);
 
         if ($appliedId !== null) {
             $booking->update(['applied_referral_code_id' => $appliedId]);

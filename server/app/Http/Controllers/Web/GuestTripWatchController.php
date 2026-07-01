@@ -22,8 +22,9 @@ class GuestTripWatchController extends Controller
     public function index()
     {
         return response()->json([
-            'synced_at' => now()->toIso8601String(),
-            'trips'     => $this->watchlist->visibleTrips(),
+            'synced_at'        => now()->toIso8601String(),
+            'watchlist_count'  => $this->watchlist->watchlistCount(),
+            'trips'            => $this->watchlist->visibleTrips(),
         ]);
     }
 

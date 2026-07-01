@@ -17,8 +17,13 @@ class GuestTripWatchService
     /** Tự reload trang đặt xe khi đang tìm tài xế. */
     public const GUEST_PAGE_RELOAD_SECONDS = 180;
 
-    /** Ẩn khách / quản lý nếu quá lâu không có tài xế. */
+    /** Đồng bộ với {@see DriverTripRequestService::OPERATOR_ESCALATION_MINUTES}. */
     public const STALE_DRIVER_SEARCH_MINUTES = 15;
+
+    public function watchlistCount(): int
+    {
+        return count($this->rawWatchlist());
+    }
 
     public function addToWatchlist(string $bookingReference, string $contactPhone): void
     {
@@ -47,7 +52,7 @@ class GuestTripWatchService
     /** @return list<array<string, mixed>> */
     public function visibleTrips(): array
     {
-        $this->expireStaleDriverSearches();
+        app(DriverTripRequestService::class)->escalateDriverSearchTimeouts();
 
         $entries = $this->pruneWatchlist();
         if ($entries === []) {
@@ -143,10 +148,6 @@ class GuestTripWatchService
 
     private function shouldKeepInWatchlist(Booking $booking): bool
     {
-        if ($this->isStaleDriverSearch($booking)) {
-            return false;
-        }
-
         if (in_array($booking->booking_status, ['cancelled', 'rejected'], true)
             || $booking->trip_status === 'cancelled') {
             return false;
@@ -163,30 +164,12 @@ class GuestTripWatchService
         return true;
     }
 
-    /** Ẩn đơn tìm tài xế quá hạn khỏi session khách và dashboard quản lý. */
+    /** @deprecated Chỉ còn gọi escalate — không ẩn đơn khách sau 15 phút. */
     public function expireStaleDriverSearches(): int
     {
-        if (! Booking::supportsOperatorDismiss()) {
-            return 0;
-        }
+        app(DriverTripRequestService::class)->escalateDriverSearchTimeouts();
 
-        $cutoff = now()->subMinutes(self::STALE_DRIVER_SEARCH_MINUTES);
-
-        return Booking::query()
-            ->whereNotIn('booking_status', ['cancelled', 'rejected'])
-            ->where('trip_status', '!=', 'completed')
-            ->whereNull('operator_dismissed_at')
-            ->where(function ($query) use ($cutoff): void {
-                $query->where(function ($q) use ($cutoff): void {
-                    $q->whereNotNull('driver_search_started_at')
-                        ->where('driver_search_started_at', '<=', $cutoff);
-                })->orWhere(function ($q) use ($cutoff): void {
-                    $q->whereNull('driver_search_started_at')
-                        ->where('created_at', '<=', $cutoff);
-                });
-            })
-            ->whereHas('schedule', fn ($q) => $q->whereNull('driver_id'))
-            ->update(['operator_dismissed_at' => now()]);
+        return 0;
     }
 
     public function isStaleDriverSearch(Booking $booking): bool
@@ -256,6 +239,10 @@ class GuestTripWatchService
         }
 
         if (! $schedule->driver_id) {
+            if ($booking->needs_operator_help_at) {
+                return 'needs_operator_help';
+            }
+
             return 'searching_driver';
         }
 
@@ -312,17 +299,28 @@ class GuestTripWatchService
             'service_date'       => $schedule?->departure_time?->format('d/m/Y H:i'),
             'driver_name'        => $driverName,
             'driver_pending'     => $driverName === null,
+            'driver_distance_km' => $booking->driver_pickup_distance_km !== null
+                ? (float) $booking->driver_pickup_distance_km
+                : null,
+            'driver_distance_label' => $booking->driver_pickup_distance_km !== null
+                ? \App\Services\DriverProximityService::formatDistanceLabel((float) $booking->driver_pickup_distance_km)
+                : null,
             'vehicle_type'       => $vehicleLabel,
             'vehicle_seats'      => $vehicleSeats,
             'vehicle_plate'      => $vehiclePlate,
+            'vehicle_count'      => max((int) ($booking->vehicle_count ?? 1), 1),
+            'vehicle_capacity'   => (int) ($booking->vehicle_capacity ?? $vehicleSeats ?? 0),
+            'vehicle_booking_label' => $booking->vehicleBookingLabel(),
             'progress'           => $progress,
             'progress_label'     => match ($progress) {
-                'searching_driver' => 'Đang tìm tài xế',
-                'driver_assigned'  => 'Đã có tài xế',
-                'running'          => 'Đang chạy',
-                'completed'        => 'Hoàn thành',
-                default            => 'Đã đặt',
+                'searching_driver'   => 'Đang tìm tài xế',
+                'needs_operator_help'=> 'Quản lý đang hỗ trợ gán tài xế',
+                'driver_assigned'    => 'Đã có tài xế',
+                'running'            => 'Đang chạy',
+                'completed'          => 'Hoàn thành',
+                default              => 'Đã đặt',
             },
+            'needs_operator_help' => $booking->needs_operator_help_at !== null,
             'can_review'         => $this->canReview($booking),
             'can_cancel'         => $this->canCancel($booking),
             'reviewed'           => $booking->tripReview !== null,

@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\Vehicle;
 use App\Services\DriverProximityService;
 use App\Services\DriverTripRequestService;
+use App\Services\DriverWalletService;
 use App\Support\DriverWalletConfig;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\Schema;
@@ -247,37 +248,44 @@ class DriverAutoAssignTest extends TestCase
         }
     }
 
-    public function test_auto_assign_picks_nearest_available_driver(): void
+    public function test_mark_awaiting_driver_does_not_create_request(): void
     {
-        if (! $this->schemaReady()) {
-            $this->markTestSkipped('Thiếu bảng/cột cần cho auto-assign — chạy php artisan migrate.');
-        }
-
         $data = $this->seedOpenScheduleWithDrivers();
         $service = app(DriverTripRequestService::class);
 
         $request = $service->autoAssignForBooking($data['booking']->fresh(['schedule.route', 'schedule.vehicle']));
 
-        $this->assertNotNull($request);
-        $this->assertSame('pending', $request->status);
-        $this->assertSame((int) $data['driverNear']->id, (int) $request->driver_id);
-        $this->assertNull($data['schedule']->fresh()->driver_id);
+        $this->assertNull($request);
+        $this->assertNotNull($data['booking']->fresh()->driver_search_started_at);
+        $this->assertSame(0, DriverTripRequest::query()->where('schedule_id', $data['schedule']->id)->count());
+    }
+
+    public function test_driver_discovers_and_claims_nearby_open_booking(): void
+    {
+        $data = $this->seedOpenScheduleWithDrivers();
+        $service = app(DriverTripRequestService::class);
+
+        $service->markBookingAwaitingDriver($data['booking']->fresh());
+
+        $open = $service->discoverOpenTripsForDriver((int) $data['driverNear']->id);
+        $this->assertTrue($open->contains(
+            fn (array $group): bool => (int) $group['primary_booking']->id === (int) $data['booking']->id,
+        ));
+
+        $service->claimBooking($data['booking']->fresh(['schedule.route', 'schedule.vehicle']), (int) $data['driverNear']->id);
+
+        $this->assertSame((int) $data['driverNear']->id, (int) $data['schedule']->fresh()->driver_id);
+        $this->assertNotNull($data['booking']->fresh()->driver_pickup_distance_km);
+    }
+
+    public function test_auto_assign_picks_nearest_available_driver(): void
+    {
+        $this->markTestSkipped('Đã chuyển sang tài xế chủ động dò cuốc.');
     }
 
     public function test_auto_assign_skips_wallet_blocked_driver(): void
     {
-        $data = $this->seedOpenScheduleWithDrivers();
-
-        DriverProfile::query()->whereKey($data['profileNear']->id)->update([
-            'availability_status' => 'off_duty',
-        ]);
-
-        $service = app(DriverTripRequestService::class);
-        $request = $service->autoAssignForBooking($data['booking']->fresh(['schedule.route', 'schedule.vehicle']));
-
-        $this->assertNotNull($request);
-        $this->assertSame((int) $data['driverFar']->id, (int) $request->driver_id);
-        $this->assertNotSame((int) $data['driverBlocked']->id, (int) $request->driver_id);
+        $this->markTestSkipped('Đã chuyển sang tài xế chủ động dò cuốc.');
     }
 
     public function test_proximity_prefers_nearest_over_dislikes(): void
@@ -392,22 +400,7 @@ class DriverAutoAssignTest extends TestCase
 
     public function test_auto_assign_ignores_operator(): void
     {
-        $data = $this->seedOpenScheduleWithDrivers();
-        $otherOperator = User::factory()->create([
-            'role' => 'operator',
-            'email' => 'op-other-' . uniqid() . '@test.test',
-        ]);
-
-        DriverProfile::query()->whereKey($data['profileNear']->id)->update([
-            'operator_id' => $otherOperator->id,
-        ]);
-
-        $request = app(DriverTripRequestService::class)->autoAssignForBooking(
-            $data['booking']->fresh(['schedule.route', 'schedule.vehicle']),
-        );
-
-        $this->assertNotNull($request);
-        $this->assertSame((int) $data['driverNear']->id, (int) $request->driver_id);
+        $this->markTestSkipped('Đã chuyển sang tài xế chủ động dò cuốc.');
     }
 
     public function test_expire_stale_reassigns_to_next_driver(): void
@@ -427,17 +420,13 @@ class DriverAutoAssignTest extends TestCase
 
         $first->refresh();
         $this->assertSame('expired', $first->status);
-
-        $pending = DriverTripRequest::query()
-            ->where('schedule_id', $data['schedule']->id)
-            ->where('contact_phone', $data['booking']->contact_phone)
-            ->where('status', 'pending')
-            ->latest()
-            ->first();
-
-        $this->assertNotNull($pending);
-        $this->assertNotSame((int) $data['driverNear']->id, (int) $pending->driver_id);
-        $this->assertSame((int) $data['driverFar']->id, (int) $pending->driver_id);
+        $this->assertSame(
+            0,
+            DriverTripRequest::query()
+                ->where('schedule_id', $data['schedule']->id)
+                ->where('status', 'pending')
+                ->count(),
+        );
     }
 
     public function test_reject_reassigns_to_next_driver(): void
@@ -457,16 +446,13 @@ class DriverAutoAssignTest extends TestCase
 
         $request->refresh();
         $this->assertSame('rejected', $request->status);
-
-        $next = DriverTripRequest::query()
-            ->where('schedule_id', $data['schedule']->id)
-            ->where('contact_phone', $data['booking']->contact_phone)
-            ->where('status', 'pending')
-            ->latest()
-            ->first();
-
-        $this->assertNotNull($next);
-        $this->assertSame((int) $data['driverFar']->id, (int) $next->driver_id);
+        $this->assertSame(
+            0,
+            DriverTripRequest::query()
+                ->where('schedule_id', $data['schedule']->id)
+                ->where('status', 'pending')
+                ->count(),
+        );
     }
 
     public function test_auto_assign_skipped_when_schedule_already_has_driver(): void
@@ -511,47 +497,24 @@ class DriverAutoAssignTest extends TestCase
         $service = app(DriverTripRequestService::class);
         $booking = $data['booking']->fresh(['schedule.route', 'schedule.vehicle']);
 
-        $first = $service->autoAssignForBooking($booking);
-        $second = $service->autoAssignForBooking($booking);
+        $service->autoAssignForBooking($booking);
+        $service->autoAssignForBooking($booking);
 
-        $this->assertNotNull($first);
-        $this->assertNull($second);
+        $this->assertSame(0, DriverTripRequest::query()->where('schedule_id', $data['schedule']->id)->count());
     }
 
     public function test_retry_waiting_bookings_after_driver_updates_location(): void
     {
         $data = $this->seedOpenScheduleWithDrivers();
-
-        DriverProfile::query()->whereKey($data['profileNear']->id)->update([
-            'last_lat' => null,
-            'last_lng' => null,
-            'last_location_at' => null,
-        ]);
-        DriverProfile::query()->whereKey($data['profileFar']->id)->update([
-            'last_lat' => null,
-            'last_lng' => null,
-            'last_location_at' => null,
-        ]);
-
         $service = app(DriverTripRequestService::class);
-        $this->assertNull($service->autoAssignForBooking($data['booking']->fresh(['schedule.route', 'schedule.vehicle'])));
 
-        DriverProfile::query()->whereKey($data['profileNear']->id)->update([
-            'last_lat' => 10.7769,
-            'last_lng' => 106.7009,
-            'last_location_at' => now(),
-        ]);
+        $service->markBookingAwaitingDriver($data['booking']->fresh());
+        $this->assertSame(0, $service->retryWaitingBookings());
 
-        $assigned = $service->retryWaitingBookings();
-        $this->assertSame(1, $assigned);
-
-        $pending = DriverTripRequest::query()
-            ->where('schedule_id', $data['schedule']->id)
-            ->where('status', 'pending')
-            ->first();
-
-        $this->assertNotNull($pending);
-        $this->assertSame((int) $data['driverNear']->id, (int) $pending->driver_id);
+        $open = $service->discoverOpenTripsForDriver((int) $data['driverNear']->id);
+        $this->assertTrue($open->contains(
+            fn (array $group): bool => (int) $group['primary_booking']->id === (int) $data['booking']->id,
+        ));
     }
 
     public function test_operator_manual_request_still_works(): void
@@ -604,5 +567,49 @@ class DriverAutoAssignTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
 
         app(DriverTripRequestService::class)->accept($request, (int) $data['driverBlocked']->id);
+    }
+
+    public function test_pre_threshold_driver_without_wallet_can_discover_and_claim(): void
+    {
+        $data = $this->seedOpenScheduleWithDrivers();
+
+        DriverWallet::query()->where('driver_profile_id', $data['profileNear']->id)->update([
+            'wallet_activated_at' => null,
+            'wallet_gate_enabled' => false,
+            'balance' => 0,
+            'cumulative_revenue' => 0,
+        ]);
+
+        $service = app(DriverTripRequestService::class);
+        $service->markBookingAwaitingDriver($data['booking']->fresh());
+
+        $this->assertNull(app(DriverWalletService::class)->acceptBlockReason($data['profileNear']->fresh()));
+
+        $open = $service->discoverOpenTripsForDriver((int) $data['driverNear']->id);
+        $this->assertTrue($open->contains(
+            fn (array $group): bool => (int) $group['primary_booking']->id === (int) $data['booking']->id,
+        ));
+
+        $service->claimBooking($data['booking']->fresh(['schedule.route', 'schedule.vehicle']), (int) $data['driverNear']->id);
+        $this->assertSame((int) $data['driverNear']->id, (int) $data['schedule']->fresh()->driver_id);
+    }
+
+    public function test_accept_stores_driver_pickup_distance_km(): void
+    {
+        $data = $this->seedOpenScheduleWithDrivers();
+
+        $request = DriverTripRequest::query()->create([
+            'schedule_id'   => $data['schedule']->id,
+            'contact_phone' => $data['booking']->contact_phone,
+            'driver_id'     => $data['driverNear']->id,
+            'status'        => 'pending',
+            'expires_at'    => now()->addMinutes(15),
+        ]);
+
+        app(DriverTripRequestService::class)->accept($request, (int) $data['driverNear']->id);
+
+        $booking = $data['booking']->fresh();
+        $this->assertNotNull($booking->driver_pickup_distance_km);
+        $this->assertLessThan(1.0, (float) $booking->driver_pickup_distance_km);
     }
 }

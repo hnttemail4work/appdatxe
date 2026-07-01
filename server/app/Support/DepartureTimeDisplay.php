@@ -18,19 +18,27 @@ class DepartureTimeDisplay
             return '00:00';
         }
 
-        if (preg_match('/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(SA|PM)?\s*$/iu', $raw, $m)) {
+        if (preg_match('/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(.+)?\s*$/iu', $raw, $m)) {
             $hour = (int) $m[1];
             $minute = (int) $m[2];
-            $suffix = isset($m[4]) ? strtoupper($m[4]) : null;
+            $suffixRaw = isset($m[4]) ? trim($m[4]) : '';
+            $suffix = $suffixRaw !== '' ? self::normalizePeriodKey($suffixRaw) : null;
 
-            if ($suffix === 'PM' && $hour < 12) {
+            if ($suffix === null) {
+                return sprintf('%02d:%02d', min(23, max(0, $hour)), min(59, max(0, $minute)));
+            }
+
+            if (in_array($suffix, ['chieu', 'toi'], true) && $hour < 12) {
                 $hour += 12;
             }
-            if ($suffix === 'SA' && $hour === 12) {
+            if ($suffix === 'dem' && $hour === 12) {
+                $hour = 0;
+            }
+            if ($suffix === 'sang' && $hour === 12) {
                 $hour = 0;
             }
 
-            return sprintf('%02d:%02d', $hour, $minute);
+            return sprintf('%02d:%02d', min(23, max(0, $hour)), min(59, max(0, $minute)));
         }
 
         if (preg_match('/^\d{1,2}:\d{2}:\d{2}$/', $raw)) {
@@ -47,23 +55,10 @@ class DepartureTimeDisplay
             return 'Tự chọn';
         }
 
-        $raw = is_string($time) ? trim($time) : null;
-        $hour = null;
-        $minute = null;
-        $suffix = null;
+        $clock = self::normalizeForClock($time);
+        [$hour, $minute] = array_map('intval', explode(':', $clock));
 
-        if ($raw !== null && $raw !== '' && preg_match('/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(SA|PM)?\s*$/iu', $raw, $m)) {
-            $hour = (int) $m[1];
-            $minute = (int) $m[2];
-            $suffix = isset($m[3]) && $m[3] !== '' ? strtoupper($m[3]) : null;
-        } else {
-            $clock = self::normalizeForClock($time);
-            [$hour, $minute] = array_map('intval', explode(':', $clock));
-        }
-
-        $clock = sprintf('%02d:%02d', $hour, $minute);
-
-        return $clock . ' ' . self::periodLabel($hour, $suffix);
+        return sprintf('%02d:%02d', $hour, $minute) . ' ' . self::periodLabelFromHour($hour);
     }
 
     /** @return string H:i:s cho cột time trong DB */
@@ -72,16 +67,21 @@ class DepartureTimeDisplay
         return self::normalizeForClock($input) . ':00';
     }
 
-    private static function periodLabel(int $hour, ?string $suffix): string
+    private static function normalizePeriodKey(string $suffix): ?string
     {
-        if ($suffix === 'SA') {
-            return 'sáng';
-        }
+        $key = mb_strtolower(trim($suffix));
 
-        if ($suffix === 'PM') {
-            return $hour >= 18 ? 'tối' : 'chiều';
-        }
+        return match ($key) {
+            'dem', 'đêm' => 'dem',
+            'sa', 'sáng', 'sang' => 'sang',
+            'ch', 'chiều', 'chieu', 'pm' => 'chieu',
+            'toi', 'tối' => 'toi',
+            default => null,
+        };
+    }
 
+    private static function periodLabelFromHour(int $hour): string
+    {
         if ($hour >= 18) {
             return 'tối';
         }
@@ -90,6 +90,10 @@ class DepartureTimeDisplay
             return 'chiều';
         }
 
-        return 'sáng';
+        if ($hour >= 5) {
+            return 'sáng';
+        }
+
+        return 'đêm';
     }
 }

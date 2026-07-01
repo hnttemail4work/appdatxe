@@ -50,7 +50,9 @@ Route::get('/', [GuestBookingController::class, 'index'])->name('home');
 Route::get('live-sync', [GuestBookingController::class, 'liveSync'])->name('booking.liveSync');
 Route::get('available-drivers', [GuestBookingController::class, 'availableDrivers'])->name('booking.availableDrivers');
 Route::get('seat-availability', [GuestBookingController::class, 'seatAvailability'])->name('booking.seatAvailability');
+Route::get('check-duplicate-booking', [GuestBookingController::class, 'checkDuplicateBooking'])->name('booking.checkDuplicate');
 Route::get('quote-price', [GuestBookingController::class, 'quotePrice'])->name('booking.quotePrice');
+Route::get('resolve-route', [GuestBookingController::class, 'resolveRoute'])->name('booking.resolveRoute');
 Route::post('bookings', [GuestBookingController::class, 'store'])->name('booking.store');
 Route::get('bookings', fn () => redirect()->route('home'));
 Route::get('cancellation-reasons', [CancellationReasonController::class, 'index'])->name('cancellationReasons.index');
@@ -74,6 +76,7 @@ Route::middleware(['auth', 'role:driver'])->group(function () {
     Route::get('driver/live-sync', [LiveSyncController::class, 'driver'])->name('driver.liveSync');
     Route::post('driver/trip-requests/{driverTripRequest}/accept', [DriverController::class, 'acceptTripRequest'])->name('driver.tripRequests.accept');
     Route::post('driver/trip-requests/{driverTripRequest}/reject', [DriverController::class, 'rejectTripRequest'])->name('driver.tripRequests.reject');
+    Route::post('driver/bookings/{booking}/claim', [DriverController::class, 'claimBooking'])->name('driver.bookings.claim');
     Route::redirect('driver/profile', '/driver/dashboard');
     Route::patch('driver/availability', [DriverController::class, 'updateAvailability'])->name('driver.availability.update');
     Route::post('driver/bookings/{booking}/complete', [DriverController::class, 'completeTrip'])->name('driver.bookings.complete');

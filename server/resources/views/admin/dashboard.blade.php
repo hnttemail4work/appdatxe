@@ -502,6 +502,31 @@ if ($adminDefaultTab === null) {
                     </div>
 
                     <hr class="my-4">
+                    <h3 class="h6 fw-semibold mb-2">Loại chỗ hiển thị trên form đặt xe</h3>
+                    <p class="text-muted small mb-3">Chọn loại xe khách có thể chọn khi đặt. Có thể thêm số chỗ tùy chỉnh (1–60).</p>
+                    <div class="row g-2 mb-3">
+                        @foreach($vehicleCapacityKnown ?? \App\Support\VehicleCapacityOptions::knownCapacities() as $capacity)
+                        <div class="col-6 col-md-4 col-lg-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="capacity_enabled[]"
+                                       value="{{ $capacity }}" id="cap-enabled-{{ $capacity }}"
+                                       @checked(in_array($capacity, $vehicleCapacityEnabled ?? [], true))>
+                                <label class="form-check-label" for="cap-enabled-{{ $capacity }}">
+                                    {{ \App\Support\VehicleCapacityOptions::label($capacity) }}
+                                </label>
+                            </div>
+                        </div>
+                        @endforeach
+                    </div>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4 col-lg-3">
+                            <label class="form-label">Thêm số chỗ mới</label>
+                            <input type="number" name="capacity_custom_add" class="form-control" min="1" max="60" step="1"
+                                   placeholder="VD: 45">
+                            <div class="form-text">Tick thêm ở trên sau khi lưu lần đầu.</div>
+                        </div>
+                    </div>
+
                     <h3 class="h6 fw-semibold mb-2">Hệ số giá cả xe theo loại chỗ</h3>
                     <p class="text-muted small mb-3">
                         Lấy <strong>4 chỗ = 100%</strong> làm chuẩn. Mỗi bậc loại xe tiếp theo tăng thêm
@@ -527,7 +552,7 @@ if ($adminDefaultTab === null) {
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach(\App\Support\VehicleCapacityOptions::STANDARD as $capacity)
+                                @foreach($vehicleCapacityEnabled ?? \App\Support\VehicleCapacityOptions::enabled() as $capacity)
                                 @php
                                     $defaultPercent = \App\Support\VehicleCapacityPricing::defaultPercentForCapacity($capacity);
                                 @endphp

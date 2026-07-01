@@ -22,8 +22,8 @@ class VehicleCapacityPricing
 
     public static function tierIndex(int $capacity): int
     {
-        $capIdx = array_search($capacity, VehicleCapacityOptions::STANDARD, true);
-        $baseIdx = array_search(self::BASELINE_CAPACITY, VehicleCapacityOptions::STANDARD, true);
+        $capIdx = array_search($capacity, VehicleCapacityOptions::enabled(), true);
+        $baseIdx = array_search(self::BASELINE_CAPACITY, VehicleCapacityOptions::enabled(), true);
 
         if ($capIdx === false) {
             return 0;
@@ -58,7 +58,7 @@ class VehicleCapacityPricing
     public static function allPercents(): array
     {
         $out = [];
-        foreach (VehicleCapacityOptions::STANDARD as $capacity) {
+        foreach (VehicleCapacityOptions::enabled() as $capacity) {
             $out[$capacity] = self::percentForCapacity($capacity);
         }
 
@@ -80,7 +80,7 @@ class VehicleCapacityPricing
     public static function save(float $stepPercent, array $percents): void
     {
         $normalized = [];
-        foreach (VehicleCapacityOptions::STANDARD as $capacity) {
+        foreach (VehicleCapacityOptions::enabled() as $capacity) {
             $key = (string) $capacity;
             if (array_key_exists($capacity, $percents)) {
                 $normalized[$key] = round((float) $percents[$capacity], 2);

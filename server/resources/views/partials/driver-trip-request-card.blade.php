@@ -4,24 +4,35 @@
 /** @var \Illuminate\Support\Collection<int, \App\Models\Booking> $passengers */
 $schedule = $schedule ?? $req->schedule;
 $passengers = $passengers ?? collect([$req->relatedBooking()])->filter();
-$walletBlocked = (bool) ($walletBlockReason ?? null);
+$tripTotal = (float) $passengers->sum(fn (\App\Models\Booking $b) => (float) $b->total_price);
 @endphp
-<div class="driver-request-card" data-request-id="{{ $req->id }}">
+<div class="driver-request-card driver-action-card" data-request-id="{{ $req->id }}">
     <div class="driver-card-top">
-        <div>
-            <div class="route">{{ $schedule->route->departure }} → {{ $schedule->route->destination }}</div>
-            <div class="meta">{{ $schedule->tripMetaLabel() }}</div>
+        <div class="driver-card-top-main">
+            @include('partials.driver-route-head', [
+                'from' => $schedule->route->departure,
+                'to' => $schedule->route->destination,
+            ])
+            <div class="driver-card-meta-row">
+                <span class="driver-meta-chip">{{ $schedule->tripMetaLabel() }}</span>
+                @if($passengers->count() > 1)
+                    <span class="driver-meta-chip">{{ $passengers->count() }} khách</span>
+                @endif
+                @if($label = $req->acceptTimeRemainingLabel())
+                    <span class="driver-meta-chip driver-meta-chip--warn">⏱ {{ $label }}</span>
+                @endif
+            </div>
             @if($schedule->shortTripCode())
-                <div class="meta driver-schedule-trip-code">Mã chuyến: <code class="driver-trip-code">{{ $schedule->shortTripCode() }}</code></div>
-            @endif
-            @if($passengers->count() > 1)
-                <div class="meta">{{ $passengers->count() }} khách ghép</div>
-            @endif
-            @if($label = $req->acceptTimeRemainingLabel())
-                <div class="meta text-warning">Còn {{ $label }} để nhận</div>
+                <div class="meta driver-schedule-trip-code">Mã <code class="driver-trip-code">{{ $schedule->shortTripCode() }}</code></div>
             @endif
         </div>
-        <div class="driver-card-top-aside text-end">
+        <div class="driver-card-top-aside">
+            @if($tripTotal > 0)
+                <div class="driver-fare-badge">
+                    <span class="driver-fare-label">Tổng</span>
+                    <span class="driver-fare-amount">{{ number_format($tripTotal, 0, ',', '.') }} đ</span>
+                </div>
+            @endif
             <span class="status-pill status-pill--accent">Cuốc mới</span>
         </div>
     </div>
@@ -29,15 +40,15 @@ $walletBlocked = (bool) ($walletBlockReason ?? null);
         @include('partials.driver-schedule-passengers', [
             'schedule' => $schedule,
             'bookings' => $passengers,
-            'showTripTotal' => true,
+            'showTripTotal' => false,
         ])
     </div>
-    <div class="driver-card-actions d-flex gap-2 flex-wrap justify-content-end">
-        <form method="POST" action="{{ route('driver.tripRequests.accept', $req) }}">@csrf
-            <button class="btn btn-success btn-sm px-4" @if($walletBlocked) disabled @endif>Nhận cuốc</button>
+    <div class="driver-card-actions driver-card-actions--job">
+        <form method="POST" action="{{ route('driver.tripRequests.accept', $req) }}" class="driver-accept-form">@csrf
+            <button type="submit" class="btn btn-success driver-btn-accept">Nhận cuốc</button>
         </form>
-        <form method="POST" action="{{ route('driver.tripRequests.reject', $req) }}">@csrf
-            <button class="btn btn-driver-reject btn-sm px-4" @if($walletBlocked) disabled @endif>Từ chối</button>
+        <form method="POST" action="{{ route('driver.tripRequests.reject', $req) }}" class="driver-reject-form">@csrf
+            <button type="submit" class="btn btn-driver-reject-ghost">Từ chối</button>
         </form>
     </div>
 </div>

@@ -20,8 +20,11 @@ use App\Support\PlatformFees;
 use App\Support\PageList;
 use App\Support\SouthernProvinces;
 use App\Support\ServiceDate;
+use App\Services\DuplicateBookingService;
+use App\Support\VehicleCapacityOptions;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use InvalidArgumentException;
 
 class GuestBookingController extends Controller
@@ -36,6 +39,7 @@ class GuestBookingController extends Controller
         private readonly DriverTripRequestService $driverRequests,
         private readonly DriverAvailabilityService $driverAvailability,
         private readonly BookingPhoneGuardService $phoneGuard,
+        private readonly DuplicateBookingService $duplicateBookings,
     ) {
     }
 
@@ -73,6 +77,19 @@ class GuestBookingController extends Controller
         $referralDiscountMeta = $this->referralCodes->discountMeta($appliedReferral);
         $bookingBannerUrl = CustomerBookingBanner::imageUrl();
 
+        if ($flash = session('booking_success')) {
+            $ref = trim((string) ($flash['booking_reference'] ?? ''));
+            $phone = trim((string) ($flash['contact_phone'] ?? ''));
+            if ($ref !== '' && $phone !== '') {
+                $this->tripWatch->addToWatchlist($ref, $phone);
+            }
+        }
+
+        $guestWatchlistCount = $this->tripWatch->watchlistCount();
+        $guestActiveOrdersCount = count($this->tripWatch->visibleTrips());
+        $guestShowTrackTab = $guestWatchlistCount > 0 || session('booking_success');
+        $vehicleCapacityChoices = VehicleCapacityOptions::choices();
+
         return view('booking.index', compact(
             'offers',
             'filters',
@@ -81,7 +98,33 @@ class GuestBookingController extends Controller
             'pendingReferral',
             'referralDiscountMeta',
             'bookingBannerUrl',
+            'guestWatchlistCount',
+            'guestActiveOrdersCount',
+            'guestShowTrackTab',
+            'vehicleCapacityChoices',
         ));
+    }
+
+    public function checkDuplicateBooking(Request $request)
+    {
+        $validated = $request->validate([
+            'template_id'   => ['required', 'exists:schedule_templates,id'],
+            'contact_phone' => ['required', 'string', 'max:30'],
+        ]);
+
+        $template = ScheduleTemplate::query()
+            ->with('route')
+            ->findOrFail($validated['template_id']);
+
+        $duplicate = $this->duplicateBookings->findActiveSameRouteForTemplate(
+            $validated['contact_phone'],
+            $template,
+        );
+
+        return response()->json([
+            'duplicate' => $duplicate !== null,
+            'booking'   => $duplicate ? $this->duplicateBookings->serializeDuplicate($duplicate) : null,
+        ]);
     }
 
     public function liveSync(Request $request)
@@ -92,6 +135,9 @@ class GuestBookingController extends Controller
         return response()->json([
             'synced_at'    => now()->toIso8601String(),
             'service_date' => $filters['service_date'] ?? null,
+            'filters'      => [
+                'vehicle_capacity' => $filters['vehicle_capacity'] ?? null,
+            ],
             'trips'        => $offers->map(fn (ScheduleTemplate $t) => $this->tripListing->serializeOffer(
                 $t,
                 $filters['service_date'] ?? null,
@@ -195,6 +241,8 @@ class GuestBookingController extends Controller
             'pickup_address'  => ['nullable', 'string', 'max:255', SouthernProvinces::inRule()],
             'dropoff_address' => ['nullable', 'string', 'max:255', SouthernProvinces::inRule()],
             'seat_count'      => ['nullable', 'integer', 'min:1', 'max:50'],
+            'vehicle_count'   => ['nullable', 'integer', 'min:1', 'max:10'],
+            'vehicle_capacity' => ['nullable', 'integer', Rule::in(VehicleCapacityOptions::enabled())],
             'contact_phone'   => ['nullable', 'string', 'max:30'],
         ]);
 
@@ -202,6 +250,14 @@ class GuestBookingController extends Controller
             ->where('status', 'active')
             ->with(['route', 'vehicle'])
             ->findOrFail($validated['template_id']);
+
+        if (! empty($validated['vehicle_capacity'])) {
+            try {
+                $template = $this->resolveTemplateForCapacity($template, (int) $validated['vehicle_capacity']);
+            } catch (InvalidArgumentException) {
+                // Giữ template gốc nếu chưa có loại xe — client sẽ báo lỗi
+            }
+        }
 
         $bookingMode = $validated['booking_mode'] ?? 'shared';
         $quote = $this->pricing->quote(
@@ -214,7 +270,10 @@ class GuestBookingController extends Controller
 
         $unitPrice = (int) ($bookingMode === 'whole_car' ? $quote['whole_car_price'] : $quote['seat_price']);
         $seatCount = max((int) ($validated['seat_count'] ?? 1), 1);
-        $subtotal = $bookingMode === 'whole_car' ? $unitPrice : $unitPrice * $seatCount;
+        $vehicleCount = $bookingMode === 'whole_car'
+            ? max((int) ($validated['vehicle_count'] ?? 1), 1)
+            : 1;
+        $subtotal = $bookingMode === 'whole_car' ? ($unitPrice * $vehicleCount) : ($unitPrice * $seatCount);
 
         $referral = $this->referralCodes->resolveUsableCode(session('guest_referral_code'));
         $discountMeta = $this->referralCodes->discountMeta(
@@ -228,6 +287,9 @@ class GuestBookingController extends Controller
         return response()->json(array_merge($quote, [
             'unit_price'           => $unitPrice,
             'seat_count'           => $seatCount,
+            'vehicle_count'        => $vehicleCount,
+            'template_id'          => $template->id,
+            'vehicle_capacity'     => $template->capacity(),
             'subtotal'             => $subtotal,
             'referral_code'        => $discountMeta['code'],
             'referral_discount_percent' => $discountPercent,
@@ -237,6 +299,41 @@ class GuestBookingController extends Controller
             'referral_ineligible_reason' => $discountMeta['reason'],
             'total_after_discount' => (int) round($total, 0),
         ]));
+    }
+
+    public function resolveRoute(Request $request)
+    {
+        $validated = $request->validate([
+            'departure'        => ['required', 'string', 'max:255', SouthernProvinces::inRule()],
+            'destination'      => ['required', 'string', 'max:255', 'different:departure', SouthernProvinces::inRule()],
+            'service_date'     => ['nullable', 'date', 'after_or_equal:today'],
+            'vehicle_capacity' => ['nullable', 'integer', 'min:1', 'max:60'],
+        ], [
+            'departure.required'    => 'Vui lòng chọn điểm đi.',
+            'destination.required'  => 'Vui lòng chọn điểm đến.',
+            'destination.different' => 'Điểm đến phải khác điểm đi.',
+        ]);
+
+        $serviceDate = $validated['service_date'] ?? ServiceDate::today();
+        $vehicleCapacity = isset($validated['vehicle_capacity'])
+            ? (int) $validated['vehicle_capacity']
+            : null;
+
+        $template = $this->tripListing->resolveTemplateForCustomBooking(
+            $validated['departure'],
+            $validated['destination'],
+            $vehicleCapacity,
+        );
+
+        if (! $template) {
+            return response()->json([
+                'message' => 'Chưa có tuyến cho cặp điểm này — vui lòng gọi tổng đài ' . config('app.contact_phone') . ' để đặt.',
+            ], 404);
+        }
+
+        return response()->json([
+            'trip' => $this->tripListing->serializeOffer($template, $serviceDate),
+        ]);
     }
 
     public function store(Request $request)
@@ -259,7 +356,9 @@ class GuestBookingController extends Controller
             'trip_type'       => ['required', 'in:one_way,round_trip'],
             'booking_mode'    => ['required', 'in:whole_car,shared'],
             'seat_count'      => ['nullable', 'integer', 'min:1', 'max:50'],
-            'vehicle_capacity' => ['nullable', 'integer', 'min:1', 'max:50'],
+            'vehicle_count'   => ['nullable', 'integer', 'min:1', 'max:10'],
+            'vehicle_capacity' => ['required', 'integer', Rule::in(VehicleCapacityOptions::enabled())],
+            'duplicate_booking_ack' => ['nullable', 'in:1'],
         ]);
 
         if ($validator->fails()) {
@@ -275,6 +374,24 @@ class GuestBookingController extends Controller
             ->with(['route', 'vehicle'])
             ->findOrFail($validated['template_id']);
 
+        try {
+            $template = $this->resolveTemplateForCapacity($template, (int) $validated['vehicle_capacity']);
+        } catch (InvalidArgumentException $e) {
+            return $this->bookingFormError($e);
+        }
+
+        if (($validated['duplicate_booking_ack'] ?? '') !== '1') {
+            $duplicate = $this->duplicateBookings->findActiveSameRouteForTemplate(
+                $validated['contact_phone'],
+                $template,
+            );
+            if ($duplicate) {
+                return $this->bookingFormRedirect()
+                    ->withErrors(['booking' => 'duplicate_route'])
+                    ->withInput();
+            }
+        }
+
         $pickupTimeRaw = trim((string) ($validated['pickup_time'] ?? ''));
         $pickupTime = $pickupTimeRaw !== ''
             ? DepartureTimeDisplay::normalizeForClock($pickupTimeRaw)
@@ -287,26 +404,28 @@ class GuestBookingController extends Controller
         }
 
         $bookingMode = $validated['booking_mode'];
-        $occupiedMap = $this->tripListing->occupiedSeatMapForDate(
-            $template,
-            $validated['service_date'],
-            $pickupTime,
-        );
+        $vehicleCount = $bookingMode === 'whole_car'
+            ? max((int) ($validated['vehicle_count'] ?? 1), 1)
+            : 1;
+        $vehicleCapacity = (int) $validated['vehicle_capacity'];
         $capacity = $template->capacity();
-        $freeSeats = collect(range(1, $capacity))
-            ->map(fn ($n): string => (string) $n)
-            ->filter(fn (string $seat): bool => empty($occupiedMap[$seat]))
-            ->values()
-            ->all();
 
         if ($bookingMode === 'whole_car') {
-            if (count($freeSeats) !== $capacity) {
-                return $this->bookingFormRedirect()
-                    ->withErrors(['booking_mode' => 'Đặt cả xe chỉ khả dụng khi chuyến còn trống toàn bộ.'])
-                    ->withInput();
-            }
-            $seatNumbers = $freeSeats;
+            $seatNumbers = collect(range(1, $capacity))
+                ->map(fn ($n): string => (string) $n)
+                ->all();
         } else {
+            $occupiedMap = $this->tripListing->occupiedSeatMapForDate(
+                $template,
+                $validated['service_date'],
+                $pickupTime,
+            );
+            $freeSeats = collect(range(1, $capacity))
+                ->map(fn ($n): string => (string) $n)
+                ->filter(fn (string $seat): bool => empty($occupiedMap[$seat]))
+                ->values()
+                ->all();
+
             if ($freeSeats === []) {
                 return $this->bookingFormRedirect()
                     ->withErrors(['booking_mode' => 'Hết chỗ trên chuyến này — vui lòng chọn chuyến khác.'])
@@ -377,6 +496,8 @@ class GuestBookingController extends Controller
                 $passengerAge,
                 $pickupLat,
                 $pickupLng,
+                $vehicleCount,
+                $vehicleCapacity,
             );
         } catch (InvalidArgumentException $e) {
             return $this->bookingFormError($e);
@@ -390,6 +511,9 @@ class GuestBookingController extends Controller
         $issuedReferral = $booking->referralCode;
         $driverAssigned = (int) ($booking->schedule->driver_id ?? 0) > 0;
         $searchingDriver = ! $driverAssigned;
+        $driverDistanceLabel = $booking->driver_pickup_distance_km !== null
+            ? \App\Services\DriverProximityService::formatDistanceLabel((float) $booking->driver_pickup_distance_km)
+            : null;
 
         return redirect()->route('home')->with('booking_success', [
             'trip_code'         => $booking->schedule->shortTripCode(),
@@ -402,6 +526,7 @@ class GuestBookingController extends Controller
             'awaiting_operator' => $searchingDriver,
             'driver_assigned'   => $driverAssigned,
             'searching_driver'  => $searchingDriver,
+            'driver_distance_label' => $driverDistanceLabel,
         ]);
     }
 
@@ -424,5 +549,29 @@ class GuestBookingController extends Controller
         }
 
         return $this->bookingFormRedirect()->withErrors([$field => $message])->withInput();
+    }
+
+    private function resolveTemplateForCapacity(ScheduleTemplate $template, int $requestedCapacity): ScheduleTemplate
+    {
+        if ($template->capacity() === $requestedCapacity) {
+            return $template;
+        }
+
+        $template->loadMissing('route');
+
+        $alt = ScheduleTemplate::query()
+            ->where('status', 'active')
+            ->where('route_id', $template->route_id)
+            ->whereHas('vehicle', fn ($query) => $query->where('capacity', $requestedCapacity))
+            ->with(['route', 'vehicle'])
+            ->first();
+
+        if (! $alt) {
+            throw new InvalidArgumentException(
+                'Chưa có chuyến ' . VehicleCapacityOptions::label($requestedCapacity) . ' trên tuyến này — vui lòng chọn loại xe khác.'
+            );
+        }
+
+        return $alt;
     }
 }

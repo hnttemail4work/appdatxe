@@ -20,6 +20,7 @@ use App\Support\RouteDistanceCatalog;
 use App\Support\PlatformFees;
 use App\Support\PlatformPaymentInfo;
 use App\Support\CustomerBookingBanner;
+use App\Support\VehicleCapacityOptions;
 use App\Support\VehicleCapacityPricing;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -62,6 +63,8 @@ class AdminController extends Controller
             'km_rate_under_100'   => PlatformFees::kmRateUnder100(),
             'km_rate_over_100'    => PlatformFees::kmRateOver100(),
             'vehicle_capacity'    => VehicleCapacityPricing::settingsForAdmin(),
+            'vehicleCapacityEnabled' => VehicleCapacityOptions::enabled(),
+            'vehicleCapacityKnown'   => VehicleCapacityOptions::knownCapacities(),
         ];
 
         $hubRoutes = TripRoute::query()
@@ -272,9 +275,10 @@ class AdminController extends Controller
 
     public function updateFeeSettings(Request $request)
     {
+        $knownCapacities = VehicleCapacityOptions::knownCapacities();
         $capacityRules = [];
-        foreach (\App\Support\VehicleCapacityOptions::STANDARD as $capacity) {
-            $capacityRules['capacity_percents.' . $capacity] = ['required', 'numeric', 'min:50', 'max:500'];
+        foreach ($knownCapacities as $capacity) {
+            $capacityRules['capacity_percents.' . $capacity] = ['nullable', 'numeric', 'min:50', 'max:500'];
         }
 
         $validated = $request->validate(array_merge([
@@ -285,8 +289,24 @@ class AdminController extends Controller
             'km_rate_under_100'   => ['required', 'integer', 'min:0'],
             'km_rate_over_100'    => ['required', 'integer', 'min:0'],
             'capacity_step_percent' => ['required', 'numeric', 'min:0', 'max:50'],
-            'capacity_percents'   => ['required', 'array'],
+            'capacity_percents'   => ['nullable', 'array'],
+            'capacity_enabled'    => ['nullable', 'array'],
+            'capacity_enabled.*'  => ['integer', 'min:1', 'max:60'],
+            'capacity_custom_add' => ['nullable', 'integer', 'min:1', 'max:60'],
         ], $capacityRules));
+
+        $enabled = collect($validated['capacity_enabled'] ?? [])
+            ->map(fn ($value): int => (int) $value)
+            ->filter(fn (int $value): bool => $value >= 1 && $value <= 60)
+            ->values()
+            ->all();
+
+        $customAdd = (int) ($validated['capacity_custom_add'] ?? 0);
+        if ($customAdd >= 1 && $customAdd <= 60) {
+            $enabled[] = $customAdd;
+        }
+
+        VehicleCapacityOptions::saveEnabled($enabled);
 
         PlatformSetting::setValue('app_commission_percentage', [
             'value' => (float) $validated['app_commission'],
@@ -318,7 +338,7 @@ class AdminController extends Controller
 
         VehicleCapacityPricing::save(
             (float) $validated['capacity_step_percent'],
-            $validated['capacity_percents'],
+            $validated['capacity_percents'] ?? [],
         );
 
         return redirect()->route('admin.dashboard', ['tab' => 'fees'])

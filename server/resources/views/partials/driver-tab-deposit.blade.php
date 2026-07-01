@@ -12,27 +12,14 @@ $needsMinBalance = $wallet->wallet_gate_enabled;
 $activated = (bool) $wallet->wallet_activated_at;
 @endphp
 
-<div class="row g-3 mb-3">
-    <div class="col-6">
-        <div class="driver-sidebar-card h-100">
-            <div class="small text-muted">Doanh thu ngày (hoàn thành)</div>
-            <div class="fs-5 fw-bold">{{ number_format($revenueStats['day'] ?? 0, 0, ',', '.') }} đ</div>
-        </div>
+<div class="driver-wallet-overview mb-3">
+    <div class="driver-wallet-balance-card">
+        <span class="driver-stat-tile-label">Số dư ví</span>
+        <span class="driver-wallet-balance-value">{{ number_format($wallet->balance, 0, ',', '.') }} đ</span>
+        @if(! $activated)
+            <p class="driver-wallet-balance-hint">Chưa kích hoạt — nạp tối thiểu {{ DriverWalletConfig::minDepositFormatted() }}</p>
+        @endif
     </div>
-    <div class="col-6">
-        <div class="driver-sidebar-card h-100">
-            <div class="small text-muted">Doanh thu tuần (hoàn thành)</div>
-            <div class="fs-5 fw-bold">{{ number_format($revenueStats['week'] ?? 0, 0, ',', '.') }} đ</div>
-        </div>
-    </div>
-</div>
-
-<div class="driver-sidebar-card mb-3">
-    <div class="small text-muted">Số dư ví</div>
-    <div class="fs-3 fw-bold text-primary">{{ number_format($wallet->balance, 0, ',', '.') }} đ</div>
-    @if(! $activated)
-        <div class="small text-warning mt-1">Chưa kích hoạt — nạp tối thiểu {{ DriverWalletConfig::minDepositFormatted() }}</div>
-    @endif
 </div>
 
 @if($pendingDeposits->isNotEmpty())

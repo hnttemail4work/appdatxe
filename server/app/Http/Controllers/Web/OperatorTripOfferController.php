@@ -83,7 +83,7 @@ class OperatorTripOfferController extends Controller
                 'different:departure',
                 LocationCatalog::inRule(),
             ],
-            'seats'       => ['nullable', 'integer', Rule::in(VehicleCapacityOptions::STANDARD)],
+            'seats'       => ['nullable', 'integer', Rule::in(VehicleCapacityOptions::enabled())],
         ]);
 
         $distance = $request->filled('distance_km')
@@ -98,7 +98,7 @@ class OperatorTripOfferController extends Controller
             : PlatformFees::kmRateUnder100();
 
         $pricesBySeats = [];
-        foreach (VehicleCapacityOptions::STANDARD as $capacity) {
+        foreach (VehicleCapacityOptions::enabled() as $capacity) {
             $pricesBySeats[(string) $capacity] = $this->pricing->suggestOfferPrices($distance, $capacity);
         }
 
@@ -163,7 +163,7 @@ class OperatorTripOfferController extends Controller
             'service_date'          => ['required', 'date', 'after_or_equal:today'],
             'departure_time'        => ['nullable', 'date_format:H:i'],
             'expected_arrival_time' => ['nullable', 'date_format:H:i'],
-            'seats'                 => ['required', 'integer', Rule::in(VehicleCapacityOptions::STANDARD)],
+            'seats'                 => ['required', 'integer', Rule::in(VehicleCapacityOptions::enabled())],
             'vehicle_photo'         => $hasVehiclePhoto
                 ? ['nullable', 'image', 'max:5120']
                 : ['required', 'image', 'max:5120'],
@@ -218,7 +218,7 @@ class OperatorTripOfferController extends Controller
             'destination'           => ['required', 'string', 'different:departure', LocationCatalog::inRule()],
             'departure_time'        => ['nullable', 'date_format:H:i'],
             'expected_arrival_time' => ['nullable', 'date_format:H:i'],
-            'seats'                 => ['required', 'integer', Rule::in(VehicleCapacityOptions::STANDARD)],
+            'seats'                 => ['required', 'integer', Rule::in(VehicleCapacityOptions::enabled())],
             'whole_car_one_way'     => ['required', 'integer', 'min:10000'],
             'seat_one_way'          => ['required', 'integer', 'min:10000'],
             'whole_car_round'       => ['required', 'integer', 'min:10000'],

@@ -7,6 +7,7 @@ use App\Models\ScheduleTemplate;
 use App\Support\DepartureTimeDisplay;
 use App\Support\SouthernProvinces;
 use App\Support\ServiceDate;
+use App\Support\VehicleCapacityOptions;
 use App\Services\TripPricingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -32,12 +33,52 @@ class TripListingService
             $serviceDate = ServiceDate::today();
         }
 
-        return [
-            'departure'     => SouthernProvinces::isAllowed($departure) ? $departure : null,
-            'destination'   => SouthernProvinces::isAllowed($destination) ? $destination : null,
-            'vehicle_type'  => $request->input('vehicle_type'),
-            'service_date'  => $serviceDate,
+        $base = [
+            'departure'    => SouthernProvinces::isAllowed($departure) ? $departure : null,
+            'destination'  => SouthernProvinces::isAllowed($destination) ? $destination : null,
+            'vehicle_type' => $request->input('vehicle_type'),
+            'service_date' => $serviceDate,
         ];
+
+        if ($request->has('vehicle_capacity')) {
+            $raw = (int) $request->input('vehicle_capacity', 0);
+            $vehicleCapacity = VehicleCapacityOptions::isAllowed($raw) ? $raw : null;
+        } else {
+            $vehicleCapacity = $this->resolveDefaultVehicleCapacity($base);
+        }
+
+        return array_merge($base, ['vehicle_capacity' => $vehicleCapacity]);
+    }
+
+    /**
+     * Dò theo thứ tự cấu hình (4 → 7 → 9 …), trả về loại xe đầu tiên còn chuyến.
+     */
+    public function resolveDefaultVehicleCapacity(array $filters): ?int
+    {
+        $available = array_flip($this->availableCapacities($filters));
+
+        foreach (VehicleCapacityOptions::enabled() as $capacity) {
+            if (isset($available[$capacity])) {
+                return $capacity;
+            }
+        }
+
+        return null;
+    }
+
+    /** @return list<int> */
+    public function availableCapacities(array $filters): array
+    {
+        $probe = $filters;
+        unset($probe['vehicle_capacity']);
+
+        return $this->query($probe)
+            ->pluck('vehicle.capacity')
+            ->map(fn ($cap) => (int) $cap)
+            ->filter(fn (int $cap) => $cap > 0)
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /** Danh sách chuyến gợi ý — từ mẫu tuyến, không phải lịch chạy hằng ngày. */
@@ -59,6 +100,10 @@ class TripListingService
             ->when($filters['vehicle_type'] ?? null, fn ($q, $type) => $q->whereHas(
                 'vehicle',
                 fn ($v) => $v->where('type', $type)
+            ))
+            ->when($filters['vehicle_capacity'] ?? null, fn ($q, $cap) => $q->whereHas(
+                'vehicle',
+                fn ($v) => $v->where('capacity', $cap)
             ))
             ->orderBy('id')
             ->get()
@@ -217,5 +262,32 @@ class TripListingService
         }
 
         return $this->scheduleLifecycle->occupiedSeatMap($schedule);
+    }
+
+    public function resolveTemplateForCustomBooking(
+        string $departure,
+        string $destination,
+        ?int $vehicleCapacity = null,
+    ): ?ScheduleTemplate {
+        $departure = trim($departure);
+        $destination = trim($destination);
+
+        if ($departure === '' || $destination === '' || $departure === $destination) {
+            return null;
+        }
+
+        return ScheduleTemplate::query()
+            ->where('status', 'active')
+            ->whereHas('route', fn ($route) => $route
+                ->where('departure', $departure)
+                ->where('destination', $destination))
+            ->when(
+                $vehicleCapacity !== null && VehicleCapacityOptions::isAllowed($vehicleCapacity),
+                fn ($q) => $q->whereHas('vehicle', fn ($v) => $v->where('capacity', $vehicleCapacity))
+            )
+            ->with(['route', 'vehicle'])
+            ->get()
+            ->sortBy(fn (ScheduleTemplate $template) => VehicleCapacityOptions::sortKey($template->capacity()))
+            ->first();
     }
 }

@@ -43,6 +43,8 @@ class Booking extends Model
         'seat_numbers',
         'trip_type',
         'booking_mode',
+        'vehicle_count',
+        'vehicle_capacity',
         'booking_reference',
         'applied_referral_code_id',
         'total_price',
@@ -53,6 +55,7 @@ class Booking extends Model
         'pickup_detail',
         'pickup_lat',
         'pickup_lng',
+        'driver_pickup_distance_km',
         'pickup_time',
         'dropoff_address',
         'dropoff_detail',
@@ -80,12 +83,15 @@ class Booking extends Model
             'passenger_age'  => 'integer',
             'pickup_lat'     => 'float',
             'pickup_lng'     => 'float',
+            'driver_pickup_distance_km' => 'float',
             'total_price'    => 'decimal:2',
             'hold_expires_at' => 'datetime',
             'driver_search_started_at' => 'datetime',
             'needs_operator_help_at' => 'datetime',
             'operator_dismissed_at' => 'datetime',
             'repeat_cancel_flag' => 'boolean',
+            'vehicle_count'    => 'integer',
+            'vehicle_capacity' => 'integer',
             'confirmed_at'   => 'datetime',
             'completed_at'   => 'datetime',
             'cancelled_at'   => 'datetime',
@@ -513,7 +519,7 @@ class Booking extends Model
     {
         return match ($this->operator_help_reason) {
             self::HELP_SEARCH_TIMEOUT => 'Quá ' . \App\Services\DriverTripRequestService::OPERATOR_ESCALATION_MINUTES . ' phút chưa có tài xế',
-            self::HELP_NO_DRIVER_IN_PROVINCE => 'Không có tài xế phù hợp trong khu vực',
+            self::HELP_NO_DRIVER_IN_PROVINCE => 'Không tìm được tài xế đủ điều kiện gần điểm đón',
             self::HELP_DRIVER_DECLINED => 'Tài xế từ chối / hết hạn — không gán lại được',
             self::HELP_TRIP_OVERDUE => $this->tripOverdueHelpLabel(),
             default => $this->needs_operator_help_at ? 'Cần quản lý gán tài xế thủ công' : null,
@@ -550,13 +556,35 @@ class Booking extends Model
             max($this->seatCount(), 1),
             $this->pickup_address,
             $this->dropoff_address,
+            max((int) ($this->vehicle_count ?? 1), 1),
         );
+    }
+
+    public function vehicleBookingLabel(): string
+    {
+        $capacity = (int) ($this->vehicle_capacity ?? $this->schedule?->capacity() ?? 0);
+        $count = max((int) ($this->vehicle_count ?? 1), 1);
+        $capacityLabel = $capacity > 0
+            ? \App\Support\VehicleCapacityOptions::label($capacity)
+            : 'xe';
+
+        if (($this->booking_mode ?? 'shared') === 'whole_car' && $count > 1) {
+            return $count . ' × ' . $capacityLabel;
+        }
+
+        if ($capacity > 0) {
+            return $capacityLabel;
+        }
+
+        return '';
     }
 
     public function seatCountLabel(): string
     {
         if (($this->booking_mode ?? 'shared') === 'whole_car') {
-            return 'Cả xe';
+            $count = max((int) ($this->vehicle_count ?? 1), 1);
+
+            return $count > 1 ? ($count . ' xe') : 'Cả xe';
         }
 
         $count = $this->seatCount();

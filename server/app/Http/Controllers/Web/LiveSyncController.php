@@ -28,8 +28,7 @@ class LiveSyncController extends Controller
         $profile = DriverProfile::query()->where('user_id', $user->id)->first();
 
         $pendingIncoming = $this->driverRequests
-            ->pendingGroupsForDriver($user->id)
-            ->map(fn (array $group): array => $this->driverRequests->serializePendingGroup($group));
+            ->tripCardsForDriver($user->id);
 
         $schedules = Schedule::query()
             ->with([

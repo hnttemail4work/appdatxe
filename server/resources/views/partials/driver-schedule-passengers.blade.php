@@ -16,20 +16,21 @@ $phase = $phase ?? $schedule->driverWorkflowPhase();
             $mode = $booking->booking_mode ?? 'shared';
             $modeBadge = \App\Support\StatusBadge::bookingMode($mode);
         @endphp
-        <div class="driver-passenger-item {{ ! $loop->last ? 'mb-2 pb-2 border-bottom' : '' }}">
-            <div class="mb-1">
+        <div class="driver-passenger-item {{ ! $loop->last ? 'driver-passenger-item--split' : '' }}">
+            <div class="driver-passenger-head">
                 <strong>{{ $booking->passenger_name ?: 'Hành khách' }}</strong>
-                <span class="status-pill status-pill--{{ $modeBadge }} ms-1">{{ $booking->bookingModeLabel() }}</span>
+                <span class="status-pill status-pill--{{ $modeBadge }}">{{ $booking->bookingModeLabel() }}</span>
             </div>
-            <div class="text-muted small">{{ $booking->passengerProfileDetail() }}</div>
-            <div class="text-muted small">🕐 Giờ đón: <strong>{{ $booking->pickupTimeLabel() ?? '—' }}</strong></div>
-            <div class="text-muted small">📍 Địa chỉ đón: <strong>{{ $booking->driverPickupDetailLabel() }}</strong></div>
-            <div class="text-muted small">🏁 Địa chỉ trả: <strong>{{ $booking->driverDropoffDetailLabel() }}</strong></div>
+            @if($booking->passengerProfileDetail())
+                <div class="driver-info-line">{{ $booking->passengerProfileDetail() }}</div>
+            @endif
+            <div class="driver-info-line"><span class="driver-info-k">Đón</span> {{ $booking->pickupTimeLabel() ?? '—' }} · {{ $booking->driverPickupDetailLabel() }}</div>
+            <div class="driver-info-line"><span class="driver-info-k">Trả</span> {{ $booking->driverDropoffDetailLabel() }}</div>
             @if(($booking->booking_mode ?? 'shared') === 'shared' && ($label = $booking->seatCountLabel()))
-                <div class="text-muted small">{{ $label }}</div>
+                <div class="driver-info-line">{{ $label }}</div>
             @endif
             @if($booking->notes)
-                <div class="text-muted small">📝 {{ $booking->notes }}</div>
+                <div class="driver-info-line driver-info-line--note">{{ $booking->notes }}</div>
             @endif
             @if($showCancelDetail ?? false)
                 @include('partials.booking-cancel-detail', ['booking' => $booking])

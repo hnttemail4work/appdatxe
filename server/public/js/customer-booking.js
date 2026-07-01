@@ -6,6 +6,9 @@
     var syncUrl = window.__customerSyncUrl;
     var seatAvailabilityUrl = window.__seatAvailabilityUrl;
     var quotePriceUrl = window.__quotePriceUrl;
+    var resolveRouteUrl = window.__bookingResolveRouteUrl;
+    var checkDuplicateUrl = window.__bookingCheckDuplicateUrl || '';
+    var contactPhone = window.__contactPhone || '';
     var basePrice = window.__customerBasePrices || {};
     var bookingTemplates = window.__bookingTemplates || [];
     var referralPrefill = (window.__referralPrefill || '').toUpperCase();
@@ -23,6 +26,7 @@
     var activeUnitPrice = 0;
     var activeVehicleLabel = '';
     var currentStep = 1;
+    var allowNativeSubmit = false;
     var seatPollTimer = null;
     var quoteFetchSeq = 0;
     var roundTripMultiplier = Number(window.__roundTripMultiplier) || 1.7;
@@ -52,6 +56,42 @@
         return OFFER_FILTER_OPTIONS[activeOfferFilterId] || OFFER_FILTER_OPTIONS.one_way_whole;
     }
 
+    function wantsWholeCarFromSearch() {
+        return getActiveOfferFilter().bookingMode === 'whole_car';
+    }
+
+    function getEffectiveOfferFilter() {
+        return getActiveOfferFilter();
+    }
+
+    function isWholeCarBooking() {
+        return wantsWholeCarFromSearch();
+    }
+
+    function syncHiddenOfferRadiosFromFilter() {
+        if (window.__bookingRestoreModal && window.__bookingRestoreModal.template_id) {
+            return;
+        }
+        var filter = getActiveOfferFilter();
+        var tripRadio = document.querySelector('input[name="trip_type"][value="' + filter.tripType + '"]');
+        var modeRadio = document.querySelector('input[name="booking_mode"][value="' + filter.bookingMode + '"]');
+        if (tripRadio) {
+            tripRadio.checked = true;
+        }
+        if (modeRadio) {
+            modeRadio.checked = true;
+        }
+    }
+
+    function resetVehicleCountIfNeeded(previousMode) {
+        if (previousMode === 'whole_car' && !isWholeCarBooking()) {
+            var vehicleCountInput = document.getElementById('modal-vehicle-count');
+            if (vehicleCountInput) {
+                vehicleCountInput.value = '1';
+            }
+        }
+    }
+
     function tripTypeLabel(type) {
         return type === 'round_trip' ? 'Khứ hồi' : 'Một chiều';
     }
@@ -60,22 +100,115 @@
         return mode === 'whole_car' ? 'Cả xe' : 'Ghép xe';
     }
 
+    var VI_WEEKDAYS = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+
+    function syncRouteSheetDateDisplay(isoDate) {
+        if (!isoDate) {
+            return;
+        }
+        var parts = isoDate.split('-');
+        if (parts.length !== 3) {
+            return;
+        }
+        var date = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        var weekdayEl = document.getElementById('filter-date-weekday');
+        var labelEl = document.getElementById('filter-date-label');
+        if (weekdayEl) {
+            weekdayEl.textContent = VI_WEEKDAYS[date.getDay()];
+        }
+        if (labelEl) {
+            labelEl.textContent = ('0' + date.getDate()).slice(-2) + '/' + ('0' + (date.getMonth() + 1)).slice(-2) + '/' + date.getFullYear();
+        }
+    }
+
+    function offerFilterIdFromParts(tripType, bookingMode) {
+        if (tripType === 'round_trip') {
+            return bookingMode === 'whole_car' ? 'round_trip_whole' : 'round_trip_shared';
+        }
+
+        return bookingMode === 'whole_car' ? 'one_way_whole' : 'one_way_shared';
+    }
+
+    function syncRouteSheetSegments(filterId) {
+        var filter = OFFER_FILTER_OPTIONS[filterId];
+        if (!filter) {
+            return;
+        }
+
+        document.querySelectorAll('.route-sheet-seg-btn[data-trip-type]').forEach(function (btn) {
+            var active = btn.dataset.tripType === filter.tripType;
+            btn.classList.toggle('is-active', active);
+            btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+        document.querySelectorAll('.route-sheet-seg-btn[data-booking-mode]').forEach(function (btn) {
+            var active = btn.dataset.bookingMode === filter.bookingMode;
+            btn.classList.toggle('is-active', active);
+            btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+    }
+
     function setOfferFilter(filterId) {
         if (!OFFER_FILTER_OPTIONS[filterId]) {
             return;
         }
+        var previousMode = getActiveOfferFilter().bookingMode;
         activeOfferFilterId = filterId;
         try {
             localStorage.setItem(OFFER_FILTER_STORAGE_KEY, filterId);
         } catch (e) {
             // localStorage có thể bị chặn
         }
-        document.querySelectorAll('.booking-offer-filter-btn').forEach(function (btn) {
-            var active = btn.dataset.offerFilter === filterId;
-            btn.classList.toggle('is-active', active);
-            btn.setAttribute('aria-pressed', active ? 'true' : 'false');
-        });
+        syncRouteSheetSegments(filterId);
         applyOfferFilterToAllCards();
+        syncHiddenOfferRadiosFromFilter();
+        resetVehicleCountIfNeeded(previousMode);
+        updateModalOfferPresetSummary();
+        updateBookingModeUi();
+        if (activeTemplateId) {
+            updateSummary(activeTemplateId);
+        }
+    }
+
+    function syncOfferFilterToOpenModal() {
+        var modal = document.getElementById('bookingModal');
+        if (!modal || !modal.classList.contains('show')) {
+            return;
+        }
+        applyOfferFilterToModalRadios();
+        if (activeTemplateId) {
+            onTripContextChange();
+        }
+    }
+
+    function initRouteSheetOfferFilters() {
+        var container = document.getElementById('booking-offer-filters');
+        if (!container || container.dataset.offerFilterBound === '1') {
+            return;
+        }
+        container.dataset.offerFilterBound = '1';
+        container.addEventListener('click', function (event) {
+            var filter = getActiveOfferFilter();
+            var tripBtn = event.target.closest('.route-sheet-seg-btn[data-trip-type]');
+            if (tripBtn) {
+                var tripType = tripBtn.getAttribute('data-trip-type');
+                if (!tripType) {
+                    return;
+                }
+                setOfferFilter(offerFilterIdFromParts(tripType, filter.bookingMode));
+                syncOfferFilterToOpenModal();
+                return;
+            }
+            var modeBtn = event.target.closest('.route-sheet-seg-btn[data-booking-mode]');
+            if (!modeBtn) {
+                return;
+            }
+            var bookingMode = modeBtn.getAttribute('data-booking-mode');
+            if (!bookingMode) {
+                return;
+            }
+            setOfferFilter(offerFilterIdFromParts(filter.tripType, bookingMode));
+            syncOfferFilterToOpenModal();
+        });
     }
 
     function applyOfferFilterToCard(card) {
@@ -103,28 +236,23 @@
     function applyOfferFilterToModalRadios() {
         if (window.__bookingRestoreModal && window.__bookingRestoreModal.template_id) {
             updateModalOfferPresetSummary();
+            updateBookingModeUi();
             return;
         }
-        var filter = getActiveOfferFilter();
-        var tripRadio = document.querySelector('input[name="trip_type"][value="' + filter.tripType + '"]');
-        var modeRadio = document.querySelector('input[name="booking_mode"][value="' + filter.bookingMode + '"]');
-        if (tripRadio) {
-            tripRadio.checked = true;
-        }
-        if (modeRadio) {
-            modeRadio.checked = true;
-        }
+        syncHiddenOfferRadiosFromFilter();
         updateModalOfferPresetSummary();
+        updateBookingModeUi();
     }
 
     function updateModalOfferPresetSummary() {
         var tripEl = document.getElementById('modal-preset-trip-type');
         var modeEl = document.getElementById('modal-preset-booking-mode');
+        var filter = getActiveOfferFilter();
         if (tripEl) {
-            tripEl.textContent = tripTypeLabel(getSelectedTripType());
+            tripEl.textContent = tripTypeLabel(filter.tripType);
         }
         if (modeEl) {
-            modeEl.textContent = bookingModeDisplayLabel(getBookingMode());
+            modeEl.textContent = bookingModeDisplayLabel(filter.bookingMode);
         }
     }
 
@@ -154,8 +282,7 @@
     }
 
     function getSelectedTripType() {
-        var checked = document.querySelector('input[name="trip_type"]:checked');
-        return checked ? checked.value : 'one_way';
+        return getEffectiveOfferFilter().tripType;
     }
 
     function findTemplate(id) {
@@ -259,6 +386,11 @@
         });
         if (getBookingMode() !== 'whole_car') {
             params.set('seat_count', String(clampSharedSeatCount()));
+        } else {
+            params.set('vehicle_count', String(clampVehicleCount()));
+        }
+        if (activeSelectedCapacity) {
+            params.set('vehicle_capacity', String(activeSelectedCapacity));
         }
         var phoneInput = document.getElementById('modal-contact-phone');
         if (phoneInput && phoneInput.value.trim()) {
@@ -272,6 +404,14 @@
                     return;
                 }
                 activeUnitPrice = Number(data.unit_price || data.seat_price) || 0;
+                if (data.template_id) {
+                    activeTemplateId = String(data.template_id);
+                    var templateInput = document.getElementById('modal-template-id');
+                    if (templateInput) templateInput.value = activeTemplateId;
+                }
+                if (data.vehicle_capacity) {
+                    setSelectedCapacity(data.vehicle_capacity);
+                }
                 lastQuoteReferral = {
                     percent: Number(data.referral_discount_percent) || 0,
                     amount: Number(data.referral_discount_amount) || 0,
@@ -295,8 +435,7 @@
     }
 
     function getBookingMode() {
-        var checked = document.querySelector('input[name="booking_mode"]:checked');
-        return checked ? checked.value : 'whole_car';
+        return getEffectiveOfferFilter().bookingMode;
     }
 
     function getAvailableSeatCount() {
@@ -347,9 +486,8 @@
         if (!canLoadSeats()) {
             return true;
         }
-        if (getBookingMode() === 'whole_car') {
-            var picks = activeTemplateId ? (window.__seatPicks[activeTemplateId] || new Set()) : new Set();
-            return picks.size > 0;
+        if (getBookingMode() === 'whole_car' || isWholeCarBooking()) {
+            return clampVehicleCount() >= 1;
         }
         return getAvailableSeatCount() > 0 && clampSharedSeatCount() >= 1;
     }
@@ -391,65 +529,205 @@
         if (s === '') {
             return '';
         }
-        var m = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(SA|CH|PM|sáng|sang|chiều|chieu|tối|toi)?\s*$/iu);
+        var m = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(dem|đêm|sang|chieu|toi|sa|ch|pm|tối|sáng|chiều)?\s*$/iu);
         if (!m) {
             return normalizeTime24h(s);
         }
         var hour = parseInt(m[1], 10);
         var minute = parseInt(m[2], 10);
-        if (isNaN(hour) || isNaN(minute) || minute > 59 || hour > 23) {
+        if (isNaN(hour) || isNaN(minute) || minute > 59) {
             return '';
         }
-        var suffix = (m[3] || 'SA').toLowerCase();
-        if (suffix === 'pm' || suffix === 'ch' || suffix === 'chiều' || suffix === 'chieu') {
-            if (hour < 12) {
-                hour += 12;
-            }
-        } else if (suffix === 'sa' || suffix === 'sáng' || suffix === 'sang') {
+        var suffixRaw = (m[3] || '').toLowerCase();
+        if (!suffixRaw && hour >= 13 && hour <= 23) {
+            return String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0');
+        }
+        if (!suffixRaw) {
+            return normalizeTime24h(s) || '';
+        }
+        if (suffixRaw === 'dem' || suffixRaw === 'đêm') {
             if (hour === 12) {
                 hour = 0;
             }
-        } else if (suffix === 'tối' || suffix === 'toi') {
+        } else if (suffixRaw === 'chieu' || suffixRaw === 'ch' || suffixRaw === 'chiều' || suffixRaw === 'pm') {
             if (hour < 12) {
                 hour += 12;
             }
-            if (hour < 18) {
+        } else if (suffixRaw === 'toi' || suffixRaw === 'tối') {
+            if (hour < 12) {
                 hour += 12;
             }
         }
-        if (hour > 23) {
+        if (hour > 23 || minute > 59) {
             return '';
         }
         return String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0');
     }
 
+    var PICKUP_PERIOD_HOURS = {
+        dem: [12, 1, 2, 3, 4],
+        sang: [5, 6, 7, 8, 9, 10, 11],
+        chieu: [12, 1, 2, 3, 4, 5],
+        toi: [6, 7, 8, 9, 10, 11],
+    };
+
+    function getPickupTimeWidgetRoot() {
+        return document.querySelector('[data-vi-pickup-time-root]');
+    }
+
+    function getActivePickupPeriod(root) {
+        root = root || getPickupTimeWidgetRoot();
+        if (!root) {
+            return 'sang';
+        }
+        var btn = root.querySelector('.vi-pickup-period-btn.is-active');
+        return (btn && btn.dataset.viPeriod) || 'sang';
+    }
+
+    function clock24FromWidgetParts(period, hour12, minute) {
+        if (isNaN(hour12) || isNaN(minute)) {
+            return '';
+        }
+        var hour24 = hour12;
+        if (period === 'dem') {
+            hour24 = hour12 === 12 ? 0 : hour12;
+        } else if (period === 'sang') {
+            hour24 = hour12;
+        } else if (period === 'chieu') {
+            hour24 = hour12 === 12 ? 12 : hour12 + 12;
+        } else if (period === 'toi') {
+            hour24 = hour12 + 12;
+        }
+        return String(hour24).padStart(2, '0') + ':' + String(minute).padStart(2, '0');
+    }
+
+    function rebuildPickupHourOptions(root, period, preferredHour) {
+        var hourEl = root.querySelector('[data-vi-hour]');
+        if (!hourEl) {
+            return null;
+        }
+        var hours = PICKUP_PERIOD_HOURS[period] || PICKUP_PERIOD_HOURS.sang;
+        var current = preferredHour != null ? parseInt(preferredHour, 10) : parseInt(hourEl.value, 10);
+        hourEl.innerHTML = hours.map(function (h) {
+            var label = String(h).padStart(2, '0') + 'h';
+            return '<option value="' + h + '">' + label + '</option>';
+        }).join('');
+        if (hours.indexOf(current) === -1) {
+            current = hours[0];
+        }
+        hourEl.value = String(current);
+        return current;
+    }
+
+    function periodFromHour24(hour) {
+        if (hour === 0) {
+            return { displayHour: 12, period: 'dem' };
+        }
+        if (hour >= 1 && hour <= 4) {
+            return { displayHour: hour, period: 'dem' };
+        }
+        if (hour >= 5 && hour <= 11) {
+            return { displayHour: hour, period: 'sang' };
+        }
+        if (hour === 12) {
+            return { displayHour: 12, period: 'chieu' };
+        }
+        if (hour < 18) {
+            return { displayHour: hour - 12, period: 'chieu' };
+        }
+        return { displayHour: hour - 12, period: 'toi' };
+    }
+
+    function periodDisplayLabel(period) {
+        if (period === 'dem') {
+            return 'đêm';
+        }
+        if (period === 'chieu') {
+            return 'chiều';
+        }
+        if (period === 'toi') {
+            return 'tối';
+        }
+        return 'sáng';
+    }
+
+    function updatePickupTimePreview() {
+        /* Không hiển thị dòng preview — giờ lưu qua hidden 24h. */
+    }
+
+    function readPickupTimeWidget24h() {
+        var root = getPickupTimeWidgetRoot();
+        if (!root) {
+            return '';
+        }
+        var hourEl = root.querySelector('[data-vi-hour]');
+        var minuteEl = root.querySelector('[data-vi-minute]');
+        if (!hourEl || !minuteEl) {
+            return '';
+        }
+        var hour = parseInt(hourEl.value, 10);
+        var minute = parseInt(minuteEl.value, 10);
+        var period = getActivePickupPeriod(root);
+        if (isNaN(hour) || isNaN(minute)) {
+            return '';
+        }
+        return clock24FromWidgetParts(period, hour, minute);
+    }
+
+    function writePickupTimeWidget(clock24) {
+        var root = getPickupTimeWidgetRoot();
+        if (!root || !clock24) {
+            return;
+        }
+        var parts = String(clock24).split(':');
+        var hour24 = parseInt(parts[0], 10);
+        var minute = parseInt(parts[1], 10);
+        if (isNaN(hour24) || isNaN(minute)) {
+            return;
+        }
+        var mapped = periodFromHour24(hour24);
+        var minuteEl = root.querySelector('[data-vi-minute]');
+        root.querySelectorAll('.vi-pickup-period-btn').forEach(function (btn) {
+            btn.classList.toggle('is-active', btn.dataset.viPeriod === mapped.period);
+        });
+        rebuildPickupHourOptions(root, mapped.period, mapped.displayHour);
+        if (minuteEl) {
+            var roundedMinute = Math.round(minute / 5) * 5;
+            if (roundedMinute > 55) {
+                roundedMinute = 55;
+            }
+            minuteEl.value = String(roundedMinute);
+        }
+        syncPickupTimeHiddenField();
+    }
+
+    function syncPickupTimeHiddenField() {
+        var hidden = document.getElementById('modal-pickup-time');
+        var clock24 = readPickupTimeWidget24h();
+        if (hidden && clock24) {
+            hidden.value = clock24;
+        }
+        updatePickupTimePreview();
+        return clock24;
+    }
+
+    function getPickupTime24h() {
+        var widgetValue = readPickupTimeWidget24h();
+        if (widgetValue) {
+            return widgetValue;
+        }
+        var input = document.getElementById('modal-pickup-time');
+        return input ? parseViTimeTo24h(input.value) : '';
+    }
+
     function formatViPickupTime(raw) {
-        var clock = parseViTimeTo24h(raw);
+        var clock = parseViTimeTo24h(raw) || normalizeTime24h(raw);
         if (!clock) {
             return String(raw || '').trim();
         }
         var parts = clock.split(':');
-        var hour = parseInt(parts[0], 10);
-        var minute = parts[1];
-        var period = 'SA';
-        var displayHour = hour;
-        if (hour === 0) {
-            displayHour = 12;
-            period = 'SA';
-        } else if (hour < 12) {
-            displayHour = hour;
-            period = 'SA';
-        } else if (hour === 12) {
-            displayHour = 12;
-            period = 'CH';
-        } else if (hour < 18) {
-            displayHour = hour - 12;
-            period = 'CH';
-        } else {
-            displayHour = hour > 12 ? hour - 12 : hour;
-            period = 'Tối';
-        }
-        return String(displayHour).padStart(2, '0') + ':' + minute + ' ' + period;
+        var mapped = periodFromHour24(parseInt(parts[0], 10));
+        return String(mapped.displayHour).padStart(2, '0') + ':' + parts[1] + ' ' + periodDisplayLabel(mapped.period);
     }
 
     function normalizeTime24h(raw) {
@@ -472,59 +750,48 @@
     }
 
     function normalizePickupTimeField() {
-        var input = document.getElementById('modal-pickup-time');
-        if (!input) {
+        var clock24 = getPickupTime24h();
+        if (!clock24) {
             return '';
         }
-        var formatted = formatViPickupTime(input.value);
-        if (formatted) {
-            input.value = formatted;
-        }
-        return parseViTimeTo24h(input.value);
+        writePickupTimeWidget(clock24);
+        return clock24;
     }
 
     function setPickupTimeForSubmit() {
+        var clock24 = syncPickupTimeHiddenField() || getPickupTime24h();
         var input = document.getElementById('modal-pickup-time');
-        if (!input) {
-            return '';
-        }
-        var clock24 = parseViTimeTo24h(input.value);
-        if (clock24) {
+        if (input && clock24) {
             input.value = clock24;
         }
         return clock24;
     }
 
     function setDefaultPickupTime() {
-        var input = document.getElementById('modal-pickup-time');
-        if (!input) {
-            return;
-        }
         var pickupAt = new Date();
         pickupAt.setMinutes(pickupAt.getMinutes() + 30);
         var clock24 = String(pickupAt.getHours()).padStart(2, '0') + ':'
             + String(pickupAt.getMinutes()).padStart(2, '0');
-        input.value = formatViPickupTime(clock24);
+        writePickupTimeWidget(clock24);
     }
 
     function validatePickupTimeField() {
-        var input = document.getElementById('modal-pickup-time');
-        if (!input) {
+        var hidden = document.getElementById('modal-pickup-time');
+        if (!hidden || hidden.dataset.viRequired !== '1') {
             return true;
         }
-        var raw = String(input.value || '').trim();
-        if (raw === '') {
-            return true;
-        }
-        var pickup = parseViTimeTo24h(raw);
+        var pickup = getPickupTime24h();
         if (!pickup) {
             if (window.AppDialog) {
-                window.AppDialog.alert('Vui lòng nhập giờ đón hợp lệ (ví dụ: 06:00 SA).');
+                window.AppDialog.alert('Vui lòng chọn giờ đón.');
             }
-            input.focus();
+            var hourEl = document.querySelector('[data-vi-hour]');
+            if (hourEl) {
+                hourEl.focus();
+            }
             return false;
         }
-        input.value = formatViPickupTime(pickup);
+        syncPickupTimeHiddenField();
 
         var dateInput = document.getElementById('modal-service-date');
         var serviceDate = dateInput ? String(dateInput.value || '').trim() : '';
@@ -545,12 +812,15 @@
             );
             if (pickupAt <= now) {
                 var pastMsg = 'Giờ đón phải sau thời gian hiện tại.';
-                if (window.FormFieldValidation && window.FormFieldValidation.markInvalid) {
-                    FormFieldValidation.markInvalid(input, pastMsg);
+                var hourEl = document.querySelector('[data-vi-hour]');
+                if (window.FormFieldValidation && window.FormFieldValidation.markInvalid && hourEl) {
+                    FormFieldValidation.markInvalid(hourEl, pastMsg);
                 } else if (window.AppDialog) {
                     window.AppDialog.alert(pastMsg);
                 }
-                input.focus();
+                if (hourEl) {
+                    hourEl.focus();
+                }
                 return false;
             }
         }
@@ -571,49 +841,22 @@
         }, 220);
     }
 
-    function isWholeCarAvailable() {
-        var cap = activeCapacity || 0;
-        if (cap <= 0) {
-            return false;
-        }
-        if (canLoadSeats()) {
-            return getAvailableSeatCount() === cap;
-        }
-        return !activeSeatsPartiallyBooked;
-    }
-
     function syncWholeCarOption() {
-        var wholeRadio = document.getElementById('booking-mode-whole-car');
-        var sharedRadio = document.getElementById('booking-mode-shared');
-        var wholeWrap = document.getElementById('booking-mode-whole-car-wrap');
-        var hint = document.getElementById('modal-whole-car-unavailable-hint');
-        var available = isWholeCarAvailable();
-        var switchedMode = false;
-
-        if (wholeRadio) {
-            wholeRadio.disabled = !available;
-        }
-        if (wholeWrap) {
-            wholeWrap.classList.toggle('is-disabled', !available);
-            wholeWrap.setAttribute('aria-disabled', available ? 'false' : 'true');
-        }
-        if (hint) {
-            hint.classList.toggle('d-none', available);
-        }
-        if (!available && wholeRadio && wholeRadio.checked && sharedRadio) {
-            sharedRadio.checked = true;
-            switchedMode = true;
-        }
+        syncHiddenOfferRadiosFromFilter();
         updateBookingModeUi();
-        if (switchedMode) {
+        updateModalOfferPresetSummary();
+        if (activeTemplateId) {
             syncActiveUnitPriceFromTemplate(findTemplate(activeTemplateId));
             fetchQuotePrice();
+            updateSummary(activeTemplateId);
         }
-        updateModalOfferPresetSummary();
-        updateSummary(activeTemplateId);
     }
 
     function setPartialBookingFromCard(capacity, seatsFree) {
+        if (wantsWholeCarFromSearch()) {
+            activeSeatsPartiallyBooked = false;
+            return;
+        }
         var cap = parseInt(capacity, 10) || 0;
         if (seatsFree === undefined || seatsFree === null || seatsFree === '') {
             activeSeatsPartiallyBooked = false;
@@ -627,16 +870,32 @@
         activeSeatsPartiallyBooked = free < cap;
     }
 
+    function syncFilterCapacityFromResponse(data) {
+        if (!data || !data.filters) {
+            return;
+        }
+        var cap = data.filters.vehicle_capacity;
+        var select = document.getElementById('filter-vehicle-capacity');
+        if (!select) {
+            return;
+        }
+        select.value = cap ? String(cap) : '';
+    }
+
     function updateBookingModeUi() {
-        var isWhole = getBookingMode() === 'whole_car';
+        var wantsWhole = wantsWholeCarFromSearch();
         var wrap = document.getElementById('modal-seat-count-wrap');
+        var vehicleCountWrap = document.getElementById('modal-vehicle-count-wrap');
         var spotSummary = document.getElementById('modal-spot-summary');
         var unitWrap = document.getElementById('modal-price-unit-wrap');
         if (wrap) {
-            wrap.classList.toggle('d-none', isWhole || !canLoadSeats());
+            wrap.classList.toggle('d-none', wantsWhole || !canLoadSeats());
         }
-        if (spotSummary) spotSummary.classList.toggle('d-none', isWhole);
-        if (unitWrap) unitWrap.classList.toggle('d-none', isWhole);
+        if (vehicleCountWrap) {
+            vehicleCountWrap.classList.toggle('d-none', !wantsWhole);
+        }
+        if (spotSummary) spotSummary.classList.toggle('d-none', wantsWhole);
+        if (unitWrap) unitWrap.classList.toggle('d-none', wantsWhole);
     }
 
     function bookingModeLabel(mode) {
@@ -660,7 +919,7 @@
         activeTemplateId = String(template.id);
         activeRoute = template.route;
         activeCapacity = parseInt(template.capacity, 10) || 0;
-        setSelectedCapacity(activeCapacity);
+        setSelectedCapacity(getFilterCapacity() || activeCapacity);
         activeVehicleLabel = template.vehicle_label || (activeCapacity + ' chỗ');
         syncActiveUnitPriceFromTemplate(template);
 
@@ -685,6 +944,7 @@
         fetchQuotePrice();
         loadSeatAvailability();
         syncWholeCarOption();
+        updateBookingModeUi();
         updateSummary(activeTemplateId);
     }
 
@@ -700,6 +960,11 @@
     }
 
     function loadSeatAvailability() {
+        if (wantsWholeCarFromSearch()) {
+            syncWholeCarOption();
+            updateSummary(activeTemplateId);
+            return;
+        }
         if (!canLoadSeats() || !seatAvailabilityUrl) {
             activeOccupied = {};
             if (activeTemplateId && window.__seatPicks[activeTemplateId]) {
@@ -769,10 +1034,11 @@
         var footerStep1 = document.getElementById('modal-footer-step1');
         var seatSummaryText = document.getElementById('modal-seat-summary-text');
         var price = getUnitPrice(templateId);
-        var isWhole = getBookingMode() === 'whole_car';
+        var isWhole = isWholeCarBooking();
         var seatCount = isWhole ? list.length : clampSharedSeatCount();
+        var vehicleCount = isWhole ? clampVehicleCount() : 1;
         var hasSeats = isStep1Ready();
-        var subtotal = isWhole ? price : (seatCount * price);
+        var subtotal = isWhole ? (price * vehicleCount) : (seatCount * price);
         var total = subtotal;
         if (lastQuoteReferral && lastQuoteReferral.eligible && lastQuoteReferral.total > 0) {
             total = lastQuoteReferral.total;
@@ -780,13 +1046,19 @@
         }
 
         if (seatSummaryText) {
-            seatSummaryText.textContent = isWhole ? bookingModeLabel('whole_car') : seatCountLabel(seatCount);
+            seatSummaryText.textContent = isWhole
+                ? (vehicleCount > 1 ? (vehicleCount + ' xe · ' + bookingModeLabel('whole_car')) : bookingModeLabel('whole_car'))
+                : seatCountLabel(seatCount);
         }
         if (totalEl) totalEl.textContent = formatMoney(total);
         if (listStep1) {
-            listStep1.textContent = isWhole
-                ? bookingModeLabel('whole_car')
-                : ('Số ghế: ' + seatCountLabel(seatCount));
+            if (wantsWholeCarFromSearch()) {
+                listStep1.textContent = vehicleCount > 1
+                    ? (vehicleCount + ' xe · ' + vehicleLabelForGuest(activeCapacity, findTemplate(templateId)))
+                    : 'Cả xe';
+            } else {
+                listStep1.textContent = 'Số ghế: ' + seatCountLabel(seatCount);
+            }
         }
         if (totalStep1) totalStep1.textContent = formatMoney(total);
         renderReferralDiscount(subtotal, total);
@@ -795,6 +1067,10 @@
         if (nextBtn) {
             nextBtn.disabled = false;
             nextBtn.textContent = 'Tiếp tục';
+        }
+        var submitBtn = document.getElementById('modal-submit-btn');
+        if (submitBtn) {
+            submitBtn.textContent = 'Xác nhận đặt vé';
         }
         if (footerStep1) footerStep1.classList.toggle('is-ready', !!activeTemplateId && isStep1SeatsReady());
     }
@@ -881,8 +1157,11 @@
         activeUnitPrice = 0;
         activeSeatsPartiallyBooked = false;
         activeOccupied = {};
+        activeCapacity = 0;
+        allowNativeSubmit = false;
+        var ackInput = document.getElementById('modal-duplicate-booking-ack');
+        if (ackInput) ackInput.value = '';
         setBookingStep(1);
-        syncWholeCarOption();
     }
 
     function setRouteEndpoints(pickup, dropoff) {
@@ -903,47 +1182,274 @@
         updateSummary(activeTemplateId);
     }
 
-    document.querySelectorAll('[data-open-booking]').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            var id = btn.dataset.templateId;
-            var modal = document.getElementById('bookingModal');
-            if (!modal) return;
+    function findTemplateByRoute(departure, destination) {
+        var dep = (departure || '').trim();
+        var dest = (destination || '').trim();
+        if (!dep || !dest) {
+            return null;
+        }
+        var cap = getSelectedCapacityValue();
+        return findTemplateByRouteAndCapacity(dep, dest, cap);
+    }
 
-            resetBookingModal();
-            applyReferralPrefill();
-            applyOfferFilterToModalRadios();
-
-            var routeText = btn.dataset.route || '';
-            activeRoute = routeText;
-            var serviceDate = btn.dataset.serviceDate || getFilterServiceDate();
-
-            document.getElementById('modal-route').textContent = routeText;
-            document.getElementById('modal-route-step2').textContent = routeText;
-            updateModalTripBanner(routeText);
-
-            var dateInput = document.getElementById('modal-service-date');
-            if (dateInput && serviceDate) {
-                dateInput.value = serviceDate;
-            }
-
-            setRouteEndpoints(btn.dataset.pickupDefault || '', btn.dataset.dropoffDefault || '');
-            onTripContextChange();
-
-            var seatCountInput = document.getElementById('modal-seat-count');
-            if (seatCountInput) seatCountInput.value = '1';
-
-            setPartialBookingFromCard(btn.dataset.capacity, btn.dataset.seatsFree);
-
-            var template = findTemplate(id);
-            if (template) {
-                applyTemplate(template);
-            } else {
-                setDefaultPickupTime();
-            }
-
-            startSeatPolling();
-            bootstrap.Modal.getOrCreateInstance(modal).show();
+    function findTemplateByRouteAndCapacity(departure, destination, capacity) {
+        var dep = (departure || '').trim();
+        var dest = (destination || '').trim();
+        if (!dep || !dest) {
+            return null;
+        }
+        var matches = bookingTemplates.filter(function (t) {
+            return String(t.departure || '') === dep && String(t.destination || '') === dest;
         });
+        if (!matches.length) {
+            return null;
+        }
+        var cap = parseInt(capacity, 10) || 0;
+        if (cap > 0) {
+            var exact = matches.filter(function (t) {
+                return Number(t.capacity) === cap;
+            });
+            if (exact.length) {
+                exact.sort(function (a, b) {
+                    return (Number(a.capacity_sort) || Number(a.capacity) || 0) - (Number(b.capacity_sort) || Number(b.capacity) || 0);
+                });
+                return exact[0];
+            }
+            return null;
+        }
+        matches.sort(function (a, b) {
+            return (Number(a.capacity_sort) || Number(a.capacity) || 0) - (Number(b.capacity_sort) || Number(b.capacity) || 0);
+        });
+        return matches[0];
+    }
+
+    function getFilterCapacity() {
+        var el = document.getElementById('filter-vehicle-capacity');
+        if (!el || !el.value) {
+            return 0;
+        }
+        return parseInt(el.value, 10) || 0;
+    }
+
+    function getSelectedCapacityValue() {
+        var filterCap = getFilterCapacity();
+        if (filterCap > 0) {
+            return filterCap;
+        }
+        return activeSelectedCapacity || activeCapacity || 0;
+    }
+
+    function getVehicleCount() {
+        var input = document.getElementById('modal-vehicle-count');
+        var count = parseInt(input && input.value, 10) || 1;
+        return Math.max(1, Math.min(count, 10));
+    }
+
+    function clampVehicleCount() {
+        var input = document.getElementById('modal-vehicle-count');
+        if (!input) {
+            return 1;
+        }
+        input.value = String(getVehicleCount());
+        return getVehicleCount();
+    }
+
+    function adjustVehicleCount(delta) {
+        var input = document.getElementById('modal-vehicle-count');
+        if (!input) {
+            return;
+        }
+        var next = getVehicleCount() + delta;
+        next = Math.max(1, Math.min(next, 10));
+        input.value = String(next);
+        fetchQuotePrice();
+        updateSummary(activeTemplateId);
+    }
+
+    function getSearchRouteSelection() {
+        if (!form) {
+            return { departure: '', destination: '' };
+        }
+        var depEl = form.querySelector('[name="departure"]');
+        var destEl = form.querySelector('[name="destination"]');
+        return {
+            departure: depEl ? String(depEl.value || '').trim() : '',
+            destination: destEl ? String(destEl.value || '').trim() : '',
+        };
+    }
+
+    function openBookingModalFromContext(ctx) {
+        var modal = document.getElementById('bookingModal');
+        if (!modal) {
+            return;
+        }
+
+        resetBookingModal();
+        applyReferralPrefill();
+
+        var routeText = ctx.routeText || '';
+        activeRoute = routeText;
+        var serviceDate = ctx.serviceDate || getFilterServiceDate();
+
+        var routeEl = document.getElementById('modal-route');
+        var routeStep2 = document.getElementById('modal-route-step2');
+        if (routeEl) routeEl.textContent = routeText;
+        if (routeStep2) routeStep2.textContent = routeText;
+        updateModalTripBanner(routeText);
+
+        var dateInput = document.getElementById('modal-service-date');
+        if (dateInput && serviceDate) {
+            dateInput.value = serviceDate;
+        }
+
+        setRouteEndpoints(ctx.pickupDefault || '', ctx.dropoffDefault || '');
+
+        var seatCountInput = document.getElementById('modal-seat-count');
+        if (seatCountInput) seatCountInput.value = '1';
+
+        var vehicleCountInput = document.getElementById('modal-vehicle-count');
+        if (vehicleCountInput) vehicleCountInput.value = '1';
+
+        setPartialBookingFromCard(ctx.capacity, ctx.seatsFree);
+
+        var template = ctx.template || findTemplate(ctx.templateId);
+        if (template) {
+            applyTemplate(template);
+        } else if (ctx.templateId) {
+            activeTemplateId = String(ctx.templateId);
+            activeCapacity = parseInt(ctx.capacity, 10) || 0;
+            var templateInput = document.getElementById('modal-template-id');
+            if (templateInput) templateInput.value = activeTemplateId;
+            var cap = getFilterCapacity() || activeCapacity || 0;
+            if (cap) {
+                setSelectedCapacity(cap);
+                updateVehicleDisplay();
+            }
+            setDefaultPickupTime();
+        } else {
+            setDefaultPickupTime();
+        }
+
+        applyOfferFilterToModalRadios();
+        syncWholeCarOption();
+        onTripContextChange();
+        updateBookingModeUi();
+        startSeatPolling();
+        bootstrap.Modal.getOrCreateInstance(modal).show();
+    }
+
+    function openCustomBookingModal() {
+        var route = getSearchRouteSelection();
+        if (!route.departure || !route.destination) {
+            if (window.AppDialog) {
+                window.AppDialog.alert('Vui lòng chọn điểm đi và điểm đến ở form tìm chuyến phía trên.');
+            }
+            return;
+        }
+        if (route.departure === route.destination) {
+            if (window.AppDialog) {
+                window.AppDialog.alert('Điểm đến phải khác điểm đi.');
+            }
+            return;
+        }
+
+        var serviceDate = getFilterServiceDate();
+        var routeText = route.departure + ' → ' + route.destination;
+        var localTemplate = findTemplateByRoute(route.departure, route.destination);
+
+        function launchWithTrip(trip) {
+            if (trip) {
+                upsertBookingTemplate(trip);
+            }
+            var template = trip ? findTemplate(trip.id) : localTemplate;
+            openBookingModalFromContext({
+                templateId: template ? template.id : null,
+                template: template,
+                routeText: routeText,
+                serviceDate: serviceDate,
+                pickupDefault: route.departure,
+                dropoffDefault: route.destination,
+                capacity: trip ? trip.capacity : (template ? template.capacity : null),
+                seatsFree: trip && trip.seats_free != null ? trip.seats_free : undefined,
+            });
+        }
+
+        if (localTemplate) {
+            launchWithTrip(null);
+            return;
+        }
+
+        if (!resolveRouteUrl) {
+            if (window.AppDialog) {
+                window.AppDialog.alert('Chưa có tuyến cho cặp điểm này — vui lòng gọi tổng đài ' + contactPhone + '.');
+            }
+            return;
+        }
+
+        var params = new URLSearchParams({
+            departure: route.departure,
+            destination: route.destination,
+            service_date: serviceDate,
+        });
+        var filterCap = getFilterCapacity();
+        if (filterCap > 0) {
+            params.set('vehicle_capacity', String(filterCap));
+        }
+
+        fetch(resolveRouteUrl + '?' + params.toString(), { headers: { Accept: 'application/json' } })
+            .then(function (r) {
+                return r.json().then(function (data) {
+                    if (!r.ok) {
+                        throw new Error(data.message || 'Không tìm được tuyến phù hợp.');
+                    }
+                    return data;
+                });
+            })
+            .then(function (data) {
+                launchWithTrip(data.trip || null);
+            })
+            .catch(function (err) {
+                if (window.AppDialog) {
+                    window.AppDialog.alert(err.message || ('Chưa có tuyến — gọi tổng đài ' + contactPhone + '.'));
+                }
+            });
+    }
+
+    document.querySelectorAll('[data-open-booking]').forEach(function (btn) {
+        btn.setAttribute('data-booking-bound', '1');
+        btn.addEventListener('click', function () {
+            openBookingModalFromContext({
+                templateId: btn.dataset.templateId,
+                routeText: btn.dataset.route || '',
+                serviceDate: btn.dataset.serviceDate || getFilterServiceDate(),
+                pickupDefault: btn.dataset.pickupDefault || '',
+                dropoffDefault: btn.dataset.dropoffDefault || '',
+                capacity: btn.dataset.capacity,
+                seatsFree: btn.dataset.seatsFree,
+            });
+        });
+    });
+
+    function bindOpenBookingButtons(scope) {
+        (scope || document).querySelectorAll('[data-open-booking]:not([data-booking-bound])').forEach(function (btn) {
+            btn.setAttribute('data-booking-bound', '1');
+            btn.addEventListener('click', function () {
+                openBookingModalFromContext({
+                    templateId: btn.dataset.templateId,
+                    routeText: btn.dataset.route || '',
+                    serviceDate: btn.dataset.serviceDate || getFilterServiceDate(),
+                    pickupDefault: btn.dataset.pickupDefault || '',
+                    dropoffDefault: btn.dataset.dropoffDefault || '',
+                    capacity: btn.dataset.capacity,
+                    seatsFree: btn.dataset.seatsFree,
+                });
+            });
+        });
+    }
+
+    var customBookingBtns = document.querySelectorAll('.js-open-custom-booking');
+    customBookingBtns.forEach(function (btn) {
+        btn.addEventListener('click', openCustomBookingModal);
     });
 
     var dateInput = document.getElementById('modal-service-date');
@@ -954,26 +1460,54 @@
     var filterDateInput = document.getElementById('filter-service-date');
     if (filterDateInput) {
         filterDateInput.addEventListener('change', function () {
-            var info = formatDateLabel(filterDateInput.value);
-            var listDate = document.getElementById('list-service-date-label');
-            if (listDate) listDate.textContent = info.label;
+            syncRouteSheetDateDisplay(filterDateInput.value);
+            var modalDate = document.getElementById('modal-service-date');
+            if (modalDate && !modalDate.value) {
+                modalDate.value = filterDateInput.value;
+            }
         });
     }
 
-    var pickupTimeInput = document.getElementById('modal-pickup-time');
-    if (pickupTimeInput) {
-        if (pickupTimeInput.value) {
-            pickupTimeInput.value = formatViPickupTime(pickupTimeInput.value);
+    function initViPickupTimeWidget() {
+        var root = getPickupTimeWidgetRoot();
+        if (!root) {
+            return;
         }
-        pickupTimeInput.addEventListener('blur', function () {
-            normalizePickupTimeField();
-            onTripContextChange();
+        var hidden = document.getElementById('modal-pickup-time');
+        if (hidden && hidden.value) {
+            var initial = parseViTimeTo24h(hidden.value) || normalizeTime24h(hidden.value);
+            if (initial) {
+                writePickupTimeWidget(initial);
+            } else {
+                rebuildPickupHourOptions(root, getActivePickupPeriod(root));
+            }
+        } else {
+            rebuildPickupHourOptions(root, getActivePickupPeriod(root));
+        }
+        root.querySelectorAll('[data-vi-hour], [data-vi-minute]').forEach(function (el) {
+            el.addEventListener('change', function () {
+                syncPickupTimeHiddenField();
+                onTripContextChange();
+            });
         });
-        pickupTimeInput.addEventListener('change', function () {
-            normalizePickupTimeField();
-            onTripContextChange();
+        root.querySelectorAll('.vi-pickup-period-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var nextPeriod = btn.dataset.viPeriod || 'sang';
+                var hourEl = root.querySelector('[data-vi-hour]');
+                var preferredHour = hourEl ? parseInt(hourEl.value, 10) : null;
+                root.querySelectorAll('.vi-pickup-period-btn').forEach(function (other) {
+                    other.classList.remove('is-active');
+                });
+                btn.classList.add('is-active');
+                rebuildPickupHourOptions(root, nextPeriod, preferredHour);
+                syncPickupTimeHiddenField();
+                onTripContextChange();
+            });
         });
+        syncPickupTimeHiddenField();
     }
+
+    initViPickupTimeWidget();
 
     ['modal-pickup', 'modal-dropoff', 'modal-pickup-detail', 'modal-dropoff-detail'].forEach(function (id) {
         var el = document.getElementById(id);
@@ -996,12 +1530,6 @@
 
     document.querySelectorAll('input[name="booking_mode"]').forEach(function (radio) {
         radio.addEventListener('change', function () {
-            if (radio.value === 'whole_car' && !isWholeCarAvailable()) {
-                var sharedRadio = document.getElementById('booking-mode-shared');
-                if (sharedRadio) sharedRadio.checked = true;
-                syncWholeCarOption();
-                return;
-            }
             if (activeTemplateId && window.__seatPicks[activeTemplateId]) {
                 window.__seatPicks[activeTemplateId].clear();
             }
@@ -1032,6 +1560,21 @@
     var seatPlus = document.getElementById('modal-seat-count-plus');
     if (seatPlus) seatPlus.addEventListener('click', function () { adjustSeatCount(1); });
 
+    var vehicleCountInput = document.getElementById('modal-vehicle-count');
+    if (vehicleCountInput) {
+        vehicleCountInput.addEventListener('input', function () {
+            clampVehicleCount();
+            fetchQuotePrice();
+            updateSummary(activeTemplateId);
+        });
+    }
+
+    var vehicleMinus = document.getElementById('modal-vehicle-count-minus');
+    if (vehicleMinus) vehicleMinus.addEventListener('click', function () { adjustVehicleCount(-1); });
+
+    var vehiclePlus = document.getElementById('modal-vehicle-count-plus');
+    if (vehiclePlus) vehiclePlus.addEventListener('click', function () { adjustVehicleCount(1); });
+
     var nextBtn = document.getElementById('modal-next-btn');
     if (nextBtn) {
         nextBtn.addEventListener('click', function () {
@@ -1059,6 +1602,13 @@
 
     var bookingModal = document.getElementById('bookingModal');
     if (bookingModal) {
+        bookingModal.addEventListener('shown.bs.modal', function () {
+            updateBookingModeUi();
+            if (activeTemplateId) {
+                fetchQuotePrice();
+                updateSummary(activeTemplateId);
+            }
+        });
         bookingModal.addEventListener('hidden.bs.modal', resetBookingModal);
     }
 
@@ -1084,7 +1634,6 @@
             });
     }
 
-    var allowNativeSubmit = false;
     var bookingForm = document.getElementById('booking-form');
 
     if (bookingForm && window.FormFieldValidation) {
@@ -1136,43 +1685,395 @@
             var isWhole = getBookingMode() === 'whole_car';
             var seatCount = isWhole ? (window.__seatPicks[activeTemplateId] || new Set()).size : clampSharedSeatCount();
 
-            refreshOccupiedBeforeSubmit(function () {
-                var free = getAvailableSeatCount();
-                if (isWhole && free !== activeCapacity) {
-                    if (submitBtn) {
-                        submitBtn.disabled = false;
-                        submitBtn.textContent = 'Đặt vé';
-                    }
-                    if (window.AppDialog) {
-                        window.AppDialog.alert('Đặt cả xe chỉ khả dụng khi chuyến còn trống toàn bộ.');
-                    }
-                    setBookingStep(1);
-                    loadSeatAvailability();
+            checkDuplicateBeforeSubmit(function (isDuplicate, bookingInfo) {
+                if (isDuplicate) {
+                    promptDuplicateBooking(submitBtn, bookingInfo, function () {
+                        finalizeBookingSubmit(submitBtn);
+                    });
                     return;
                 }
-                if (!isWhole && seatCount > free) {
-                    if (submitBtn) {
-                        submitBtn.disabled = false;
-                        submitBtn.textContent = 'Đặt vé';
-                    }
-                    if (window.AppDialog) {
-                        window.AppDialog.alert('Không đủ ghế trống. Vui lòng giảm số ghế.');
-                    }
-                    setBookingStep(1);
-                    loadSeatAvailability();
-                    return;
-                }
-
-                if (submitBtn) submitBtn.textContent = 'Đang gửi...';
-                setPickupTimeForSubmit();
-                allowNativeSubmit = true;
-                if (typeof bookingForm.requestSubmit === 'function') {
-                    bookingForm.requestSubmit();
-                } else {
-                    bookingForm.submit();
-                }
+                finalizeBookingSubmit(submitBtn);
             });
         });
+    }
+
+    function checkDuplicateBeforeSubmit(callback) {
+        var ackInput = document.getElementById('modal-duplicate-booking-ack');
+        if (ackInput && ackInput.value === '1') {
+            callback(false);
+            return;
+        }
+        var phoneInput = document.getElementById('modal-contact-phone');
+        var phone = phoneInput ? phoneInput.value.trim() : '';
+        if (!checkDuplicateUrl || !phone || !activeTemplateId) {
+            callback(false);
+            return;
+        }
+        var params = new URLSearchParams({
+            template_id: activeTemplateId,
+            contact_phone: phone,
+        });
+        fetch(checkDuplicateUrl + '?' + params.toString(), { headers: { Accept: 'application/json' } })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                callback(!!(data && data.duplicate), data && data.booking ? data.booking : null);
+            })
+            .catch(function () {
+                callback(false);
+            });
+    }
+
+    function finalizeBookingSubmit(submitBtn) {
+        refreshOccupiedBeforeSubmit(function () {
+            var isWhole = getBookingMode() === 'whole_car';
+            var seatCount = isWhole ? clampVehicleCount() : clampSharedSeatCount();
+            var free = getAvailableSeatCount();
+            if (!isWhole && seatCount > free) {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Xác nhận đặt vé';
+                }
+                updateSummary(activeTemplateId);
+                if (window.AppDialog) {
+                    window.AppDialog.alert('Không đủ ghế trống. Vui lòng giảm số ghế.');
+                }
+                setBookingStep(1);
+                loadSeatAvailability();
+                return;
+            }
+
+            if (submitBtn) submitBtn.textContent = 'Đang gửi...';
+            setSelectedCapacity(getSelectedCapacityValue());
+            var templateInput = document.getElementById('modal-template-id');
+            if (templateInput && activeTemplateId) {
+                templateInput.value = activeTemplateId;
+            }
+            syncHiddenOfferRadiosFromFilter();
+            setPickupTimeForSubmit();
+            allowNativeSubmit = true;
+            if (typeof bookingForm.requestSubmit === 'function') {
+                bookingForm.requestSubmit();
+            } else {
+                bookingForm.submit();
+            }
+        });
+    }
+
+    function promptDuplicateBooking(submitBtn, bookingInfo, onContinue) {
+        var routeLabel = bookingInfo && bookingInfo.route ? bookingInfo.route : 'tuyến này';
+        var tripCode = bookingInfo && bookingInfo.trip_code ? bookingInfo.trip_code : '';
+        var message = 'Bạn đã có đơn đang chờ trên ' + routeLabel + '.';
+        if (tripCode) {
+            message += ' Mã: ' + tripCode + '.';
+        }
+        message += ' Bạn vẫn muốn đặt thêm?';
+
+        if (window.AppDialog && window.AppDialog.confirm) {
+            window.AppDialog.confirm({
+                title: 'Đặt xe trùng tuyến',
+                message: message,
+                confirmText: 'Đặt thêm',
+                cancelText: 'Quay lại',
+            }).then(function (ok) {
+                if (ok) {
+                    var ackInput = document.getElementById('modal-duplicate-booking-ack');
+                    if (ackInput) ackInput.value = '1';
+                    onContinue();
+                } else if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Xác nhận đặt vé';
+                }
+            });
+            return;
+        }
+
+        if (window.confirm(message)) {
+            var ackInput = document.getElementById('modal-duplicate-booking-ack');
+            if (ackInput) ackInput.value = '1';
+            onContinue();
+        } else if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Xác nhận đặt vé';
+        }
+    }
+
+    function escapeHtml(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function formatVnd(amount) {
+        return Number(amount || 0).toLocaleString('vi-VN') + ' đ';
+    }
+
+    function hasActiveSearchFilters() {
+        if (!form) {
+            return false;
+        }
+        var departure = form.querySelector('[name="departure"]');
+        var destination = form.querySelector('[name="destination"]');
+        var urlParams = new URLSearchParams(window.location.search);
+        var capActive = urlParams.has('vehicle_capacity') && urlParams.get('vehicle_capacity') !== '';
+        return !!((departure && departure.value) || (destination && destination.value) || capActive);
+    }
+
+    function updateListHead() {
+        var textEl = document.querySelector('.booking-list-title-text');
+        if (textEl) {
+            textEl.textContent = hasActiveSearchFilters() ? 'Kết quả' : 'Tuyến cố định';
+        }
+        updateClearSearchButton();
+    }
+
+    function updateClearSearchButton() {
+        var row = document.querySelector('.booking-list-head-row');
+        var btn = document.getElementById('booking-clear-search');
+        var show = hasActiveSearchFilters();
+        if (show && !btn && row) {
+            btn = document.createElement('button');
+            btn.type = 'button';
+            btn.id = 'booking-clear-search';
+            btn.className = 'btn btn-sm btn-outline-secondary booking-clear-search-btn';
+            btn.textContent = 'Xóa tìm kiếm';
+            btn.addEventListener('click', clearSearchFilters);
+            row.appendChild(btn);
+        } else if (!show && btn) {
+            btn.remove();
+        }
+    }
+
+    function updateTripCount(pagination, tripsLength) {
+        var cnt = document.getElementById('trip-count');
+        if (!cnt) {
+            return;
+        }
+        cnt.textContent = (pagination && pagination.total != null)
+            ? pagination.total
+            : (tripsLength || 0);
+    }
+
+    function renderTripCard(trip) {
+        var vehicleType = String(trip.vehicle_type || 'sedan').charAt(0).toUpperCase();
+        var priceLabel = formatVnd(trip.whole_car_price || trip.price_raw);
+        var photoHtml = trip.vehicle_photo_url
+            ? '<img src="' + escapeHtml(trip.vehicle_photo_url) + '" alt="" class="trip-vehicle-photo" loading="lazy" decoding="async">'
+            : '<div class="trip-vehicle-photo trip-vehicle-photo--empty">' + escapeHtml(vehicleType) + '</div>';
+        var routeLine = trip.route_line || ((trip.departure || '') + ' → ' + (trip.destination || ''));
+
+        return ''
+            + '<article class="trip-card-pro" data-template-id="' + escapeHtml(trip.id) + '">'
+            + '<div class="trip-card-layout">'
+            + '<div class="trip-vehicle-thumb" aria-hidden="true">' + photoHtml + '</div>'
+            + '<div class="trip-card-body">'
+            + '<div class="trip-route-line">'
+            + '<span class="city">' + escapeHtml(trip.departure) + '</span>'
+            + '<span class="arrow">→</span>'
+            + '<span class="city">' + escapeHtml(trip.destination) + '</span>'
+            + '</div>'
+            + '<div class="trip-card-prices">'
+            + '<span class="trip-price-inline">'
+            + '<span class="trip-price-amount">' + escapeHtml(priceLabel) + '</span>'
+            + '<span class="trip-price-unit">/cả xe</span>'
+            + '</span>'
+            + '</div>'
+            + '</div>'
+            + '<div class="trip-card-side">'
+            + '<button type="button" class="btn btn-outline-primary btn-book fw-semibold"'
+            + ' data-open-booking'
+            + ' data-template-id="' + escapeHtml(trip.id) + '"'
+            + ' data-route="' + escapeHtml(routeLine) + '"'
+            + ' data-service-date="' + escapeHtml(trip.service_date || '') + '"'
+            + ' data-date-label="' + escapeHtml(trip.date_label || '') + '"'
+            + ' data-weekday="' + escapeHtml(trip.weekday || '') + '"'
+            + ' data-date-short="' + escapeHtml(trip.date_short || '') + '"'
+            + ' data-price="' + escapeHtml(trip.whole_car_price || trip.price_raw || '') + '"'
+            + ' data-one-way-price="' + escapeHtml(trip.one_way_price || trip.price_raw || '') + '"'
+            + ' data-whole-car-price="' + escapeHtml(trip.whole_car_price || '') + '"'
+            + ' data-whole-car-round-price="' + escapeHtml(trip.whole_car_round_trip_price || '') + '"'
+            + ' data-seat-round-trip-price="' + escapeHtml(trip.seat_round_trip_price || trip.round_trip_price || '') + '"'
+            + ' data-round-trip-price="' + escapeHtml(trip.round_trip_price || '') + '"'
+            + ' data-capacity="' + escapeHtml(trip.capacity || '') + '"'
+            + ' data-vehicle-photo="' + escapeHtml(trip.vehicle_photo_url || '') + '"'
+            + ' data-vehicle-label="' + escapeHtml(trip.vehicle_label || '') + '"'
+            + ' data-pickup-default="' + escapeHtml(trip.pickup_default || '') + '"'
+            + ' data-dropoff-default="' + escapeHtml(trip.dropoff_default || '') + '"'
+            + ' data-seats-free="' + escapeHtml(trip.seats_free != null ? trip.seats_free : '') + '"'
+            + '>Đặt chuyến</button>'
+            + '</div>'
+            + '</div>'
+            + '</article>';
+    }
+
+    function renderEmptyTripsHtml() {
+        return ''
+            + '<div class="booking-empty-state" id="no-trips-msg">'
+            + '<h3 class="h6 fw-bold">Không có chuyến phù hợp</h3>'
+            + '<p class="text-muted small mb-3">Đổi ngày hoặc bộ lọc.</p>'
+            + '<button type="button" class="btn btn-sm btn-outline-primary" id="booking-show-all-trips">Xem tất cả chuyến</button>'
+            + '</div>';
+    }
+
+    function renderPaginationHtml(pagination) {
+        if (!pagination || pagination.last_page <= 1) {
+            return '';
+        }
+        var current = pagination.current_page || 1;
+        var last = pagination.last_page || 1;
+        var html = '<nav class="app-pagination mt-3" aria-label="Phân trang"><ul class="pagination pagination-sm justify-content-center mb-0">';
+
+        if (current <= 1) {
+            html += '<li class="page-item disabled" aria-disabled="true"><span class="page-link">Trước</span></li>';
+        } else {
+            html += '<li class="page-item"><a class="page-link" href="#" data-page="' + (current - 1) + '" rel="prev">Trước</a></li>';
+        }
+
+        var start = Math.max(1, current - 2);
+        var end = Math.min(last, current + 2);
+        for (var page = start; page <= end; page++) {
+            if (page === current) {
+                html += '<li class="page-item active" aria-current="page"><span class="page-link">' + page + '</span></li>';
+            } else {
+                html += '<li class="page-item"><a class="page-link" href="#" data-page="' + page + '">' + page + '</a></li>';
+            }
+        }
+
+        if (current >= last) {
+            html += '<li class="page-item disabled" aria-disabled="true"><span class="page-link">Sau</span></li>';
+        } else {
+            html += '<li class="page-item"><a class="page-link" href="#" data-page="' + (current + 1) + '" rel="next">Sau</a></li>';
+        }
+
+        html += '</ul></nav>';
+        return html;
+    }
+
+    function updatePagination(pagination) {
+        var wrap = document.getElementById('trips-pagination');
+        if (!wrap) {
+            return;
+        }
+        wrap.innerHTML = renderPaginationHtml(pagination);
+    }
+
+    function syncTripBasePrices(trip) {
+        basePrice[trip.id] = {
+            one_way: trip.one_way_price || trip.price_raw,
+            round_trip: trip.seat_round_trip_price || trip.round_trip_price || trip.one_way_price || trip.price_raw,
+            whole_car_round: trip.whole_car_round_trip_price || null,
+        };
+    }
+
+    function fullRenderTripsList(data) {
+        var list = document.getElementById('trips-list');
+        if (!list) {
+            return;
+        }
+        var trips = Array.isArray(data.trips) ? data.trips : [];
+        if (!trips.length) {
+            list.innerHTML = renderEmptyTripsHtml();
+            var showAllBtn = document.getElementById('booking-show-all-trips');
+            if (showAllBtn) {
+                showAllBtn.addEventListener('click', clearSearchFilters);
+            }
+        } else {
+            list.innerHTML = trips.map(renderTripCard).join('');
+            bindOpenBookingButtons(list);
+            trips.forEach(function (trip) {
+                upsertBookingTemplate(trip);
+                syncTripBasePrices(trip);
+            });
+            applyOfferFilterToAllCards();
+        }
+        updateTripCount(data.pagination, trips.length);
+        updatePagination(data.pagination);
+        updateListHead();
+    }
+
+    function buildFilterParams(page, options) {
+        options = options || {};
+        var params = new URLSearchParams(new FormData(form));
+        if (options.useDefaultCapacity) {
+            params.delete('vehicle_capacity');
+        }
+        if (page && page > 1) {
+            params.set('page', String(page));
+        } else {
+            params.delete('page');
+        }
+        var ref = new URLSearchParams(window.location.search).get('ref');
+        if (ref) {
+            params.set('ref', ref);
+        }
+        return params;
+    }
+
+    function updateBrowserUrl(params) {
+        var homeUrl = window.__customerHomeUrl || window.location.pathname;
+        var query = params.toString();
+        var next = query ? (homeUrl + '?' + query) : homeUrl;
+        window.history.pushState({ customerFilters: true }, '', next);
+    }
+
+    function loadTripsList(page, options) {
+        options = options || {};
+        if (!form || !syncUrl) {
+            return Promise.resolve();
+        }
+
+        var params = buildFilterParams(page, options);
+        var submitBtn = document.getElementById('filter-search-submit');
+
+        if (options.showLoading && submitBtn) {
+            submitBtn.disabled = true;
+            if (!submitBtn.dataset.prevLabel) {
+                submitBtn.dataset.prevLabel = submitBtn.textContent;
+            }
+            submitBtn.textContent = 'Đang tìm...';
+        }
+
+        return fetch(syncUrl + '?' + params.toString(), { headers: { Accept: 'application/json' } })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                fullRenderTripsList(data);
+                syncFilterCapacityFromResponse(data);
+                if (options.updateUrl) {
+                    updateBrowserUrl(params);
+                }
+                if (options.scrollToResults && window.CustomerScrollDock) {
+                    window.CustomerScrollDock.scrollToResults();
+                }
+                return data;
+            })
+            .catch(function () {})
+            .finally(function () {
+                if (options.showLoading && submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = submitBtn.dataset.prevLabel || 'Tìm chuyến';
+                }
+            });
+    }
+
+    function clearSearchFilters() {
+        var dep = document.getElementById('filter-departure');
+        var dest = document.getElementById('filter-destination');
+        if (dep) {
+            dep.value = '';
+        }
+        if (dest) {
+            dest.value = '';
+        }
+        var capFilter = document.getElementById('filter-vehicle-capacity');
+        if (capFilter) {
+            capFilter.value = '';
+        }
+        if (typeof syncRouteSheetPickerTrigger === 'function') {
+            syncRouteSheetPickerTrigger(dep);
+            syncRouteSheetPickerTrigger(dest);
+        }
+        loadTripsList(1, { updateUrl: true, scrollToResults: true, useDefaultCapacity: true });
     }
 
     function upsertBookingTemplate(trip) {
@@ -1209,6 +2110,7 @@
         upsertBookingTemplate(trip);
 
         var thumbWrap = card.querySelector('.trip-vehicle-thumb');
+        var btn = card.querySelector('[data-open-booking]');
         if (thumbWrap && trip.vehicle_photo_url) {
             thumbWrap.classList.remove('trip-route-thumb');
             var existing = thumbWrap.querySelector('.trip-vehicle-photo');
@@ -1220,21 +2122,7 @@
                 thumbWrap.innerHTML = '<img src="' + trip.vehicle_photo_url + '" alt="" class="trip-vehicle-photo" loading="lazy" decoding="async">';
             }
         }
-        if (btn) {
-            btn.dataset.serviceDate = trip.service_date || btn.dataset.serviceDate;
-            basePrice[trip.id] = {
-                one_way: trip.one_way_price,
-                round_trip: trip.seat_round_trip_price || trip.round_trip_price || trip.one_way_price,
-                whole_car_round: trip.whole_car_round_trip_price || null,
-            };
-        } else if (trip.price_raw) {
-            basePrice[trip.id] = {
-                one_way: trip.price_raw,
-                round_trip: trip.seat_round_trip_price || trip.round_trip_price || trip.price_raw,
-                whole_car_round: trip.whole_car_round_trip_price || null,
-            };
-        }
-        var btn = card.querySelector('[data-open-booking]');
+        syncTripBasePrices(trip);
         if (btn) {
             btn.dataset.serviceDate = trip.service_date || btn.dataset.serviceDate;
             btn.dataset.dateLabel = trip.date_label || btn.dataset.dateLabel;
@@ -1269,54 +2157,234 @@
 
     function poll() {
         if (!form || !syncUrl) return;
-        var params = new URLSearchParams(new FormData(form));
-        var page = new URLSearchParams(window.location.search).get('page');
-        if (page) params.set('page', page);
+        var page = parseInt(new URLSearchParams(window.location.search).get('page') || '1', 10);
+        var params = buildFilterParams(page, {});
         fetch(syncUrl + '?' + params.toString(), { headers: { Accept: 'application/json' } })
             .then(function (r) { return r.json(); })
             .then(function (data) {
-                var cnt = document.getElementById('trip-count');
-                if (cnt) {
-                    cnt.textContent = (data.pagination && data.pagination.total != null)
-                        ? data.pagination.total
-                        : data.trips.length;
-                }
-                if (data.service_date) {
-                    var listDate = document.getElementById('list-service-date-label');
-                    if (listDate) {
-                        var info = formatDateLabel(data.service_date);
-                        listDate.textContent = info.label;
-                    }
-                }
+                updateTripCount(data.pagination, data.trips.length);
                 var visibleIds = data.trips.map(function (trip) { return String(trip.id); });
                 document.querySelectorAll('.trip-card-pro[data-template-id]').forEach(function (card) {
                     if (visibleIds.indexOf(card.getAttribute('data-template-id')) === -1) {
                         card.remove();
                     }
                 });
+                var list = document.getElementById('trips-list');
                 data.trips.forEach(function (trip) {
                     var card = document.querySelector('.trip-card-pro[data-template-id="' + trip.id + '"]');
-                    if (card) updateTripCard(card, trip);
+                    if (card) {
+                        updateTripCard(card, trip);
+                    } else if (list && !list.querySelector('#no-trips-msg')) {
+                        list.insertAdjacentHTML('beforeend', renderTripCard(trip));
+                        bindOpenBookingButtons(list);
+                        upsertBookingTemplate(trip);
+                        syncTripBasePrices(trip);
+                        applyOfferFilterToCard(list.lastElementChild);
+                    }
                 });
-                var list = document.getElementById('trips-list');
-                var emptyMsg = document.getElementById('no-trips-msg');
-                if (list && emptyMsg && !list.querySelector('.trip-card-pro') && !emptyMsg.parentElement) {
-                    list.innerHTML = emptyMsg.outerHTML;
+                if (list && !list.querySelector('.trip-card-pro') && !list.querySelector('#no-trips-msg')) {
+                    list.innerHTML = renderEmptyTripsHtml();
+                    var showAllBtn = document.getElementById('booking-show-all-trips');
+                    if (showAllBtn) {
+                        showAllBtn.addEventListener('click', clearSearchFilters);
+                    }
                 }
             }).catch(function () {});
     }
 
     if (form && syncUrl) {
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
+            loadTripsList(1, { updateUrl: true, scrollToResults: true, showLoading: true });
+        });
+
+        var clearBtn = document.getElementById('booking-clear-search');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', clearSearchFilters);
+        }
+        var showAllBtn = document.getElementById('booking-show-all-trips');
+        if (showAllBtn) {
+            showAllBtn.addEventListener('click', clearSearchFilters);
+        }
+
+        var paginationWrap = document.getElementById('trips-pagination');
+        if (paginationWrap) {
+            paginationWrap.addEventListener('click', function (event) {
+                var link = event.target.closest('a.page-link[data-page], a.page-link[href]');
+                if (!link || link.classList.contains('disabled')) {
+                    return;
+                }
+                event.preventDefault();
+                var page = parseInt(link.dataset.page || new URL(link.href, window.location.origin).searchParams.get('page') || '1', 10);
+                loadTripsList(page, { updateUrl: true, scrollToResults: true });
+            });
+        }
+
+        window.addEventListener('popstate', function () {
+            var params = new URLSearchParams(window.location.search);
+            var dep = document.getElementById('filter-departure');
+            var dest = document.getElementById('filter-destination');
+            var date = document.getElementById('filter-service-date');
+            if (dep) {
+                dep.value = params.get('departure') || '';
+            }
+            if (dest) {
+                dest.value = params.get('destination') || '';
+            }
+            if (date && params.has('service_date')) {
+                date.value = params.get('service_date') || date.value;
+                syncRouteSheetDateDisplay(date.value);
+            }
+            if (typeof syncRouteSheetPickerTrigger === 'function') {
+                syncRouteSheetPickerTrigger(dep);
+                syncRouteSheetPickerTrigger(dest);
+            }
+            var page = parseInt(params.get('page') || '1', 10);
+            loadTripsList(page, { updateUrl: false });
+        });
+
         poll();
         setInterval(poll, 12000);
     }
 
-    document.querySelectorAll('.booking-offer-filter-btn').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            setOfferFilter(btn.dataset.offerFilter);
-        });
-    });
+    if (window.__guestTripSearchingReload && window.CustomerScrollDock) {
+        window.setTimeout(function () {
+            window.CustomerScrollDock.scrollToTrack();
+        }, 400);
+    }
+
+    initRouteSheetOfferFilters();
     setOfferFilter(activeOfferFilterId);
+
+    function syncRouteSheetPickerTrigger(select) {
+        if (!select || !select.id) {
+            return;
+        }
+        var trigger = document.querySelector('.route-sheet-picker-trigger[data-picker-for="' + select.id + '"]');
+        if (!trigger) {
+            return;
+        }
+        var textEl = trigger.querySelector('.route-sheet-picker-text');
+        var placeholder = trigger.dataset.placeholder || 'Chọn';
+        var option = select.options[select.selectedIndex];
+        var hasValue = !!(select.value && option);
+        var label = hasValue ? option.textContent : placeholder;
+        if (textEl) {
+            textEl.textContent = label;
+        }
+        trigger.classList.toggle('is-placeholder', !hasValue);
+    }
+
+    function initRouteSheetPickers() {
+        var sheet = document.getElementById('route-sheet-province-picker');
+        var body = document.getElementById('route-sheet-picker-body');
+        var titleEl = document.getElementById('route-sheet-picker-title');
+        if (!sheet || !body) {
+            return;
+        }
+
+        var activeSelect = null;
+        var activeTrigger = null;
+
+        document.querySelectorAll('.route-sheet-stop-native').forEach(syncRouteSheetPickerTrigger);
+
+        function closePicker() {
+            sheet.hidden = true;
+            document.body.classList.remove('route-sheet-picker-open');
+            if (activeTrigger) {
+                activeTrigger.setAttribute('aria-expanded', 'false');
+            }
+            activeSelect = null;
+            activeTrigger = null;
+        }
+
+        function appendPickerItem(container, label, value, selectedValue, isPlaceholder) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'route-sheet-picker-item'
+                + (value === selectedValue ? ' is-selected' : '')
+                + (isPlaceholder ? ' route-sheet-picker-item--placeholder' : '');
+            btn.textContent = label;
+            btn.dataset.value = value;
+            btn.setAttribute('role', 'option');
+            if (value === selectedValue) {
+                btn.setAttribute('aria-selected', 'true');
+            }
+            container.appendChild(btn);
+        }
+
+        function openPicker(select, trigger) {
+            activeSelect = select;
+            activeTrigger = trigger;
+            titleEl.textContent = select.id === 'filter-destination' ? 'Chọn điểm đến' : 'Chọn điểm đi';
+            body.innerHTML = '';
+
+            appendPickerItem(body, trigger.dataset.placeholder || 'Tất cả', '', select.value, true);
+
+            Array.from(select.children).forEach(function (node) {
+                if (node.tagName === 'OPTGROUP') {
+                    var group = document.createElement('div');
+                    group.className = 'route-sheet-picker-group';
+                    var groupLabel = document.createElement('div');
+                    groupLabel.className = 'route-sheet-picker-group-label';
+                    groupLabel.textContent = node.label || '';
+                    group.appendChild(groupLabel);
+                    Array.from(node.children).forEach(function (opt) {
+                        if (opt.tagName !== 'OPTION' || !opt.value) {
+                            return;
+                        }
+                        appendPickerItem(group, opt.textContent, opt.value, select.value, false);
+                    });
+                    body.appendChild(group);
+                    return;
+                }
+                if (node.tagName === 'OPTION' && node.value) {
+                    appendPickerItem(body, node.textContent, node.value, select.value, false);
+                }
+            });
+
+            sheet.hidden = false;
+            document.body.classList.add('route-sheet-picker-open');
+            trigger.setAttribute('aria-expanded', 'true');
+        }
+
+        document.querySelectorAll('.route-sheet-picker-trigger').forEach(function (trigger) {
+            trigger.addEventListener('click', function () {
+                var select = document.getElementById(trigger.dataset.pickerFor);
+                if (!select) {
+                    return;
+                }
+                if (!sheet.hidden && activeSelect === select) {
+                    closePicker();
+                    return;
+                }
+                openPicker(select, trigger);
+            });
+        });
+
+        body.addEventListener('click', function (event) {
+            var item = event.target.closest('.route-sheet-picker-item');
+            if (!item || !activeSelect) {
+                return;
+            }
+            activeSelect.value = item.dataset.value;
+            syncRouteSheetPickerTrigger(activeSelect);
+            activeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+            closePicker();
+        });
+
+        sheet.querySelectorAll('[data-picker-close]').forEach(function (el) {
+            el.addEventListener('click', closePicker);
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape' && !sheet.hidden) {
+                closePicker();
+            }
+        });
+    }
+
+    initRouteSheetPickers();
 
     document.querySelectorAll('.swap-route-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
@@ -1326,6 +2394,8 @@
                 var t = dep.value;
                 dep.value = dest.value;
                 dest.value = t;
+                syncRouteSheetPickerTrigger(dep);
+                syncRouteSheetPickerTrigger(dest);
             }
         });
     });
@@ -1357,12 +2427,22 @@
         btn.click();
 
         window.setTimeout(function () {
+            if (restore.vehicle_capacity) {
+                setSelectedCapacity(restore.vehicle_capacity);
+            }
+            if (restore.vehicle_count) {
+                var vehicleCountInput = document.getElementById('modal-vehicle-count');
+                if (vehicleCountInput) vehicleCountInput.value = String(restore.vehicle_count);
+            }
             if (restore.seat_count) {
                 var seatCountInput = document.getElementById('modal-seat-count');
                 if (seatCountInput) seatCountInput.value = String(restore.seat_count);
             }
             updateSummary(String(restore.template_id));
             setBookingStep(restore.step || 2);
+            if (restore.duplicate_route && window.AppDialog) {
+                window.AppDialog.alert('Bạn đã có đơn đang chờ trên tuyến này. Bấm xác nhận lại và chọn «Đặt thêm» nếu vẫn muốn đặt.');
+            }
         }, 350);
     }
 

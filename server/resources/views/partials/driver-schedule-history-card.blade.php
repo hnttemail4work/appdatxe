@@ -9,7 +9,10 @@ $revenue = $schedule->completedRevenueTotalFor($driverUserId);
 <article class="driver-trip-card driver-trip-card--compact driver-trip-card--history">
     <div class="driver-card-top">
         <div class="driver-card-top-main">
-            <div class="route">{{ $schedule->route->departure }} → {{ $schedule->route->destination }}</div>
+            @include('partials.driver-route-head', [
+                'from' => $schedule->route->departure,
+                'to' => $schedule->route->destination,
+            ])
             <div class="meta">
                 {{ $schedule->departure_time->format('H:i, d/m/Y') }}
                 @if($bookings->count() > 0)

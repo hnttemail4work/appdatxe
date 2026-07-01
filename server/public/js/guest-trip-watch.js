@@ -17,7 +17,9 @@
 
     function hasSearchingTrip(trips) {
         return trips.some(function (trip) {
-            return trip.progress === 'searching_driver' || trip.driver_pending === true;
+            return trip.progress === 'searching_driver'
+                || trip.progress === 'needs_operator_help'
+                || trip.driver_pending === true;
         });
     }
 
@@ -35,11 +37,10 @@
         }
     }
 
-    function startReloadLoop() {
+    function startFastPollLoop() {
         clearReloadTimer();
-        reloadTimer = window.setInterval(function () {
-            window.location.reload();
-        }, REFRESH_MS);
+        clearPollTimer();
+        pollTimer = window.setInterval(loadTrips, 15000);
     }
 
     function syncAutoRefresh(trips) {
@@ -51,7 +52,7 @@
         }
 
         if (hasSearchingTrip(trips)) {
-            startReloadLoop();
+            startFastPollLoop();
             return;
         }
 
@@ -66,8 +67,11 @@
             { key: 'running', label: 'Đang chạy' },
             { key: 'completed', label: 'Hoàn thành' },
         ];
-        var order = { booked: 0, searching_driver: 1, driver_assigned: 2, running: 3, completed: 4 };
+        var order = { booked: 0, searching_driver: 1, needs_operator_help: 1, driver_assigned: 2, running: 3, completed: 4 };
         var activeIdx = order[activeKey] ?? 0;
+        if (activeKey === 'needs_operator_help') {
+            steps[1].label = 'Quản lý hỗ trợ';
+        }
         var html = '<div class="guest-trip-progress-track">';
         steps.forEach(function (step, idx) {
             var state = idx < activeIdx ? 'done' : (idx === activeIdx ? 'active' : 'pending');
@@ -270,10 +274,17 @@
         card.querySelector('[data-field="service_date"]').textContent = trip.service_date ? 'Khởi hành: ' + trip.service_date : '';
 
         var driverEl = card.querySelector('[data-field="driver_name"]');
+        var distanceEl = card.querySelector('[data-field="driver_distance"]');
         var vehicleEl = card.querySelector('[data-field="vehicle_info"]');
         if (trip.driver_pending) {
-            driverEl.textContent = 'Đang tìm kiếm tài xế';
+            driverEl.textContent = trip.needs_operator_help
+                ? 'Quản lý đang hỗ trợ gán tài xế'
+                : 'Đang tìm kiếm tài xế';
             driverEl.classList.add('text-muted');
+            if (distanceEl) {
+                distanceEl.classList.add('d-none');
+                distanceEl.textContent = '';
+            }
             if (vehicleEl) {
                 vehicleEl.classList.add('d-none');
                 vehicleEl.textContent = '';
@@ -281,10 +292,24 @@
         } else {
             driverEl.textContent = trip.driver_name || '—';
             driverEl.classList.remove('text-muted');
-            if (vehicleEl && (trip.vehicle_type || trip.vehicle_plate || trip.vehicle_seats)) {
+            if (distanceEl) {
+                if (trip.driver_distance_label) {
+                    distanceEl.textContent = 'Cách điểm đón ~' + trip.driver_distance_label + ' (lúc nhận chuyến)';
+                    distanceEl.classList.remove('d-none');
+                } else {
+                    distanceEl.classList.add('d-none');
+                    distanceEl.textContent = '';
+                }
+            }
+            if (vehicleEl && (trip.vehicle_type || trip.vehicle_plate || trip.vehicle_seats || trip.vehicle_booking_label)) {
                 var parts = [];
-                if (trip.vehicle_type) parts.push(trip.vehicle_type);
-                if (trip.vehicle_seats) parts.push(trip.vehicle_seats + ' chỗ');
+                if (trip.vehicle_booking_label) {
+                    parts.push(trip.vehicle_booking_label);
+                } else {
+                    if (trip.vehicle_type) parts.push(trip.vehicle_type);
+                    if (trip.vehicle_seats) parts.push(trip.vehicle_seats + ' chỗ');
+                }
+                if (trip.vehicle_count > 1) parts.push(trip.vehicle_count + ' xe');
                 if (trip.vehicle_plate) parts.push(trip.vehicle_plate);
                 vehicleEl.textContent = parts.join(' · ');
                 vehicleEl.classList.remove('d-none');
@@ -313,6 +338,27 @@
         return card;
     }
 
+    function syncTrackUi(trips, watchlistCount) {
+        document.dispatchEvent(new CustomEvent('guesttrips:updated', {
+            detail: {
+                count: trips.length,
+                watchlist_count: Number(watchlistCount) || 0,
+            },
+        }));
+    }
+
+    function renderEmptyState(watchlistCount) {
+        var n = Number(watchlistCount) || 0;
+        if (n <= 0 && !window.__bookingSuccessActive) {
+            return;
+        }
+        var empty = document.createElement('div');
+        empty.className = 'guest-trip-watch-empty text-muted small py-2';
+        empty.setAttribute('role', 'status');
+        empty.textContent = 'Đang tải thông tin đơn đặt…';
+        listEl.appendChild(empty);
+    }
+
     function loadTrips() {
         fetch(watchUrl, {
             headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
@@ -321,28 +367,37 @@
             .then(function (res) { return res.json(); })
             .then(function (data) {
                 var trips = Array.isArray(data.trips) ? data.trips : [];
+                var watchlistCount = Number(data.watchlist_count);
+                if (Number.isNaN(watchlistCount)) {
+                    watchlistCount = Number(window.__guestWatchlistCount) || 0;
+                }
+                window.__guestWatchlistCount = watchlistCount;
                 listEl.innerHTML = '';
                 if (!trips.length) {
-                    root.classList.add('d-none');
+                    renderEmptyState(watchlistCount);
+                    syncTrackUi(trips, watchlistCount);
                     clearReloadTimer();
                     clearPollTimer();
                     return;
                 }
-                root.classList.remove('d-none');
+                syncTrackUi(trips, watchlistCount);
                 trips.forEach(function (trip) {
                     listEl.appendChild(renderCard(trip));
                 });
                 syncAutoRefresh(trips);
             })
             .catch(function () {
-                /* Giữ section ẩn nếu lỗi mạng — không ảnh hưởng đặt vé */
+                /* Giữ tab nếu vừa đặt — không ẩn khi lỗi mạng tạm thời */
+                syncTrackUi([], window.__guestWatchlistCount || 0);
             });
     }
+
+    window.__guestTripWatchRefresh = loadTrips;
 
     loadTrips();
 
     if (window.__guestTripSearchingReload) {
-        startReloadLoop();
+        startFastPollLoop();
     }
 
     document.addEventListener('visibilitychange', function () {

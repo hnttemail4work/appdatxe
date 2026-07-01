@@ -204,6 +204,11 @@ class DriverWalletService
 
         $wallet = $this->walletFor($profile);
 
+        // Chưa đạt 200k doanh thu — tài xế mới dò/nhận cuốc không cần nạp ví trước.
+        if ($this->isPreRevenueThreshold($profile)) {
+            return null;
+        }
+
         if (! $wallet->wallet_activated_at) {
             return 'Cần nạp ví tối thiểu ' . DriverWalletConfig::minDepositFormatted() . ' để kích hoạt tài khoản.';
         }
@@ -214,6 +219,12 @@ class DriverWalletService
         }
 
         return null;
+    }
+
+    /** Dò cuốc gần — cùng quy tắc ví; không yêu cầu wallet_activated khi chưa đạt ngưỡng doanh thu. */
+    public function canDiscoverTrips(DriverProfile $profile): bool
+    {
+        return $this->acceptBlockReason($profile) === null;
     }
 
     public function needsTopUpNotice(DriverProfile $profile): bool
@@ -232,6 +243,10 @@ class DriverWalletService
     public function shouldShowTopUpBanner(DriverProfile $profile): bool
     {
         $wallet = $this->walletFor($profile);
+
+        if ($this->isPreRevenueThreshold($profile)) {
+            return false;
+        }
 
         if (! $wallet->wallet_activated_at) {
             return true;

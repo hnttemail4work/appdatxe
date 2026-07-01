@@ -133,6 +133,94 @@ class DriverProximityService
         return $distance <= self::MAX_SAME_PROVINCE_KM;
     }
 
+    public static function formatDistanceLabel(float $km): string
+    {
+        if ($km < 1) {
+            return '< 1 km';
+        }
+
+        if ($km >= 10) {
+            return number_format($km, 0, ',', '.') . ' km';
+        }
+
+        return number_format($km, 1, ',', '.') . ' km';
+    }
+
+    public function snapshotPickupDistance(Booking $booking, DriverProfile $profile): ?float
+    {
+        $pickup = $this->pickupCoordinates($booking);
+        if ($pickup === null || $profile->last_lat === null || $profile->last_lng === null) {
+            return null;
+        }
+
+        return round($this->distanceKm($profile, $pickup), 1);
+    }
+
+    /** @return array{distance_km: ?float, distance_label: ?string, auto_assign_eligible: bool, hint: ?string} */
+    public function assignDiagnostics(DriverProfile $profile, Booking $booking, Schedule $schedule): array
+    {
+        $pickup = $this->pickupCoordinates($booking);
+        $distance = ($pickup !== null && $profile->last_lat !== null && $profile->last_lng !== null)
+            ? round($this->distanceKm($profile, $pickup), 1)
+            : null;
+
+        $hints = [];
+        $eligible = true;
+
+        if ($pickup === null) {
+            $hints[] = 'Đơn thiếu tọa độ đón';
+            $eligible = false;
+        }
+
+        if (($profile->availability_status ?? 'off_duty') !== 'available') {
+            $hints[] = 'Chưa bật Sẵn sàng';
+            $eligible = false;
+        }
+
+        if (! $this->wallets->canAcceptTrips($profile)) {
+            $hints[] = $this->wallets->acceptBlockReason($profile) ?: 'Ví/chứng thực chưa đủ';
+            $eligible = false;
+        }
+
+        if ($this->availability->isDriverBusyForSlot(
+            (int) $profile->user_id,
+            $schedule->route->departure,
+            $schedule->route->destination,
+            $schedule->departure_time,
+        )) {
+            $hints[] = 'Bận khung giờ này';
+            $eligible = false;
+        }
+
+        if ($pickup !== null) {
+            if (! $profile->hasFreshLocation(self::LOCATION_MAX_AGE_MINUTES)) {
+                $hints[] = 'GPS cũ (> ' . self::LOCATION_MAX_AGE_MINUTES . ' phút)';
+                $eligible = false;
+            } elseif ($distance !== null && ! $this->withinDiscoveryRadius($profile, $booking)) {
+                $hints[] = 'Xa điểm đón (>' . (int) self::MAX_SAME_PROVINCE_KM . ' km)';
+                $eligible = false;
+            }
+        }
+
+        return [
+            'distance_km'          => $distance,
+            'distance_label'       => $distance !== null ? self::formatDistanceLabel($distance) : null,
+            'auto_assign_eligible' => $eligible,
+            'hint'                 => $hints !== [] ? implode(' · ', $hints) : null,
+        ];
+    }
+
+    /** Tài xế dò cuốc: chỉ theo khoảng cách GPS, không phân biệt tỉnh (tránh lệch catalog). */
+    public function withinDiscoveryRadius(DriverProfile $profile, Booking $booking, float $maxKm = self::MAX_SAME_PROVINCE_KM): bool
+    {
+        $pickup = $this->pickupCoordinates($booking);
+        if ($pickup === null || ! $profile->hasFreshLocation(self::LOCATION_MAX_AGE_MINUTES)) {
+            return false;
+        }
+
+        return $this->distanceKm($profile, $pickup) <= $maxKm;
+    }
+
     /** @param array{lat: float, lng: float}|null $pickup */
     private function sortKey(DriverProfile $profile, ?array $pickup): array
     {

@@ -20,7 +20,8 @@ class DriverTripRequestService
 
     public const ACCEPT_TIMEOUT_MINUTES = 15;
 
-    public const OPERATOR_ESCALATION_MINUTES = 10;
+    /** Sau bao lâu không có tài xế nhận cuốc thì chuyển quản lý hỗ trợ gán thủ công. */
+    public const OPERATOR_ESCALATION_MINUTES = 15;
 
     public const HELP_SEARCH_TIMEOUT = Booking::HELP_SEARCH_TIMEOUT;
 
@@ -150,7 +151,7 @@ class DriverTripRequestService
                             'expires_at'   => null,
                         ],
                     ),
-                    fn () => $this->stampBookingAssignment($schedule, $contactPhone, (int) $profile->user_id),
+                    fn () => $this->stampAssignedDriverOnBooking($schedule, $contactPhone, (int) $profile->user_id),
                 );
             }
 
@@ -167,19 +168,54 @@ class DriverTripRequestService
             throw new InvalidArgumentException('Bạn đang chờ tài xế phản hồi cho chuyến này.');
         }
 
-        return tap(
-            DriverTripRequest::query()->create([
-                'schedule_id'   => $schedule->id,
-                'contact_phone' => $contactPhone,
-                'driver_id'     => $profile->user_id,
-                'status'        => 'pending',
-                'expires_at'    => now()->addMinutes(self::ACCEPT_TIMEOUT_MINUTES),
-            ]),
-            fn () => $this->stampBookingAssignment($schedule, $contactPhone, (int) $profile->user_id),
-        );
+        $request = DriverTripRequest::query()->create([
+            'schedule_id'   => $schedule->id,
+            'contact_phone' => $contactPhone,
+            'driver_id'     => $profile->user_id,
+            'status'        => 'pending',
+            'expires_at'    => now()->addMinutes(self::ACCEPT_TIMEOUT_MINUTES),
+        ]);
+
+        return $request;
     }
 
-    private function stampBookingAssignment(Schedule $schedule, string $contactPhone, int $driverUserId): void
+    /** Đánh dấu đơn chờ tài xế chủ động dò — không gửi cuốc tự động. */
+    public function markBookingAwaitingDriver(Booking $booking): void
+    {
+        $booking->loadMissing('schedule');
+
+        if (! $booking->schedule
+            || $booking->schedule->driver_id
+            || in_array($booking->booking_status, ['cancelled', 'rejected'], true)) {
+            return;
+        }
+
+        if (! $booking->driver_search_started_at) {
+            $booking->update([
+                'driver_search_started_at' => now(),
+                'operator_confirmed_at'    => $booking->operator_confirmed_at ?? now(),
+            ]);
+        }
+    }
+
+    /** @deprecated Không còn gán tự động — tài xế dò và nhận cuốc. */
+    public function autoAssignForBooking(Booking $booking): ?DriverTripRequest
+    {
+        $this->markBookingAwaitingDriver($booking);
+
+        return null;
+    }
+
+    /** Tài xế cập nhật vị trí — chỉ hết hạn yêu cầu cũ, không gán tự động. */
+    public function retryWaitingBookings(): int
+    {
+        $this->expireStale();
+
+        return 0;
+    }
+
+    /** Ghép thêm khách vào chuyến tài xế đang phục vụ — schedule đã có driver_id. */
+    private function stampAssignedDriverOnBooking(Schedule $schedule, string $contactPhone, int $driverUserId): void
     {
         $booking = Booking::query()
             ->where('schedule_id', $schedule->id)
@@ -188,6 +224,258 @@ class DriverTripRequestService
             ->first();
 
         $booking?->stampAssignedDriver($driverUserId);
+    }
+
+    public function claimBooking(Booking $booking, int $driverUserId): void
+    {
+        $this->expireStale();
+
+        $profile = DriverProfile::query()
+            ->operational()
+            ->where('user_id', $driverUserId)
+            ->with('user')
+            ->firstOrFail();
+
+        $booking->loadMissing(['schedule.route', 'schedule.vehicle']);
+        $schedule = $booking->schedule;
+
+        if (! $schedule || $schedule->driver_id) {
+            throw new InvalidArgumentException('Chuyến đã có tài xế nhận.');
+        }
+
+        if (in_array($booking->booking_status, ['cancelled', 'rejected'], true)) {
+            throw new InvalidArgumentException('Đơn không còn hiệu lực.');
+        }
+
+        if (($profile->availability_status ?? 'off_duty') !== 'available') {
+            throw new InvalidArgumentException('Bật trạng thái Sẵn sàng trước khi nhận cuốc.');
+        }
+
+        if (! $profile->hasFreshLocation(DriverProximityService::LOCATION_MAX_AGE_MINUTES)) {
+            throw new InvalidArgumentException('Cập nhật vị trí GPS trên bản đồ trước khi nhận cuốc.');
+        }
+
+        if (! $this->proximity->withinDiscoveryRadius($profile, $booking)) {
+            throw new InvalidArgumentException('Cuốc này ngoài phạm vi của bạn (quá xa điểm đón).');
+        }
+
+        $blockReason = $this->wallets->acceptBlockReason($profile);
+        if ($blockReason) {
+            throw new InvalidArgumentException($blockReason);
+        }
+
+        $designated = $schedule->designatedDriverProfile();
+        if ($designated && (int) $designated->user_id !== $driverUserId) {
+            throw new InvalidArgumentException('Chuyến ghép đã giao cho tài xế khác.');
+        }
+
+        if ($this->availability->isDriverBusyForSlot(
+            $driverUserId,
+            $schedule->route->departure,
+            $schedule->route->destination,
+            $schedule->departure_time,
+        )) {
+            throw new InvalidArgumentException('Bạn đã full ghế khung giờ này.');
+        }
+
+        if ($this->hasExclusivePendingFromOtherDriver($booking, $driverUserId)) {
+            throw new InvalidArgumentException('Cuốc đang chờ tài xế khác xác nhận.');
+        }
+
+        DB::transaction(function () use ($booking, $profile): void {
+            $schedule = Schedule::query()->lockForUpdate()->findOrFail($booking->schedule_id);
+
+            if ($schedule->driver_id) {
+                throw new InvalidArgumentException('Chuyến đã có tài xế nhận.');
+            }
+
+            DriverTripRequest::query()
+                ->where('schedule_id', $schedule->id)
+                ->where('status', 'pending')
+                ->update([
+                    'status'       => 'cancelled',
+                    'responded_at' => now(),
+                ]);
+
+            $tripRequest = DriverTripRequest::query()->create([
+                'schedule_id'   => $schedule->id,
+                'contact_phone' => $booking->contact_phone,
+                'driver_id'     => $profile->user_id,
+                'status'        => 'pending',
+                'expires_at'    => now()->addMinute(),
+            ]);
+
+            $this->accept($tripRequest, (int) $profile->user_id);
+        });
+    }
+
+    /** @return Collection<int, array<string, mixed>> */
+    public function tripCardsForDriver(int $driverUserId): Collection
+    {
+        $profile = DriverProfile::query()->where('user_id', $driverUserId)->first();
+
+        $cards = $this->pendingGroupsForDriver($driverUserId)
+            ->map(function (array $group) use ($profile): array {
+                $payload = $this->serializePendingGroup($group);
+                $payload['is_open_trip'] = false;
+
+                if ($profile) {
+                    $booking = $this->bookingForRequest($group['primary']);
+                    $km = $this->proximity->snapshotPickupDistance($booking, $profile);
+                    $payload['distance_label'] = $km !== null
+                        ? DriverProximityService::formatDistanceLabel($km)
+                        : null;
+                }
+
+                return $payload;
+            });
+
+        if (! $profile) {
+            return $cards;
+        }
+
+        $open = $this->discoverOpenTripsForDriver($driverUserId)
+            ->map(fn (array $group): array => $this->serializeOpenTripGroup($group));
+
+        return $cards->concat($open)->values();
+    }
+
+    /** @return Collection<int, array{primary_booking: Booking, schedule: Schedule, passengers: Collection<int, Booking>, distance_km: ?float}> */
+    public function discoverOpenTripsForDriver(int $driverUserId): Collection
+    {
+        $profile = DriverProfile::query()->where('user_id', $driverUserId)->with('user')->first();
+        if (! $profile || ! $this->profileEligibleForMatching($profile)) {
+            return collect();
+        }
+
+        if (($profile->availability_status ?? 'off_duty') !== 'available') {
+            return collect();
+        }
+
+        if (! $this->wallets->canDiscoverTrips($profile)) {
+            return collect();
+        }
+
+        if (! $profile->hasFreshLocation(DriverProximityService::LOCATION_MAX_AGE_MINUTES)) {
+            return collect();
+        }
+
+        $pendingScheduleIds = DriverTripRequest::query()
+            ->where('driver_id', $driverUserId)
+            ->where('status', 'pending')
+            ->pluck('schedule_id');
+
+        $bookings = Booking::query()
+            ->whereNotIn('booking_status', ['cancelled', 'rejected'])
+            ->whereNotNull('pickup_lat')
+            ->whereNotNull('pickup_lng')
+            ->whereHas('schedule', fn ($q) => $q
+                ->whereNull('driver_id')
+                ->where('status', 'scheduled')
+                ->where('departure_time', '>', now()))
+            ->with(['schedule.route', 'schedule.vehicle', 'schedule.bookings'])
+            ->orderBy('created_at')
+            ->get();
+
+        return $bookings
+            ->filter(function (Booking $booking) use ($profile, $driverUserId, $pendingScheduleIds): bool {
+                if ($pendingScheduleIds->contains($booking->schedule_id)) {
+                    return false;
+                }
+
+                if ($this->hasExclusivePendingFromOtherDriver($booking, $driverUserId)) {
+                    return false;
+                }
+
+                $schedule = $booking->schedule;
+                $designated = $schedule->designatedDriverProfile();
+                if ($designated && (int) $designated->user_id !== $driverUserId) {
+                    return false;
+                }
+
+                if (! $this->proximity->withinDiscoveryRadius($profile, $booking)) {
+                    return false;
+                }
+
+                return ! $this->availability->isDriverBusyForSlot(
+                    $driverUserId,
+                    $schedule->route->departure,
+                    $schedule->route->destination,
+                    $schedule->departure_time,
+                );
+            })
+            ->groupBy('schedule_id')
+            ->map(function (Collection $scheduleBookings) use ($profile): array {
+                /** @var Booking $primaryBooking */
+                $primaryBooking = $scheduleBookings->sortByDesc('id')->first();
+                $schedule = $primaryBooking->schedule;
+                $schedule->loadMissing('bookings', 'route', 'vehicle');
+                $ids = $scheduleBookings->pluck('id');
+
+                return [
+                    'primary_booking' => $primaryBooking,
+                    'schedule'        => $schedule,
+                    'passengers'      => $schedule->driverRelevantBookings()
+                        ->filter(fn (Booking $b): bool => $ids->contains($b->id))
+                        ->values(),
+                    'distance_km'     => $this->proximity->snapshotPickupDistance($primaryBooking, $profile),
+                ];
+            })
+            ->sortBy(fn (array $group): float => $group['distance_km'] ?? 9999.0)
+            ->values();
+    }
+
+    private function hasExclusivePendingFromOtherDriver(Booking $booking, int $driverUserId): bool
+    {
+        return DriverTripRequest::query()
+            ->where('schedule_id', $booking->schedule_id)
+            ->where('contact_phone', $booking->contact_phone)
+            ->where('status', 'pending')
+            ->where('driver_id', '!=', $driverUserId)
+            ->exists();
+    }
+
+    private function profileEligibleForMatching(DriverProfile $profile): bool
+    {
+        $profile->loadMissing('user');
+
+        return $profile->status === 'active'
+            && $profile->user
+            && $profile->user->status === 'active'
+            && $profile->isApproved()
+            && ! $profile->isMissedTripLocked();
+    }
+
+    /** @param array{primary_booking: Booking, schedule: Schedule, passengers: Collection<int, Booking>, distance_km: ?float} $group */
+    private function serializeOpenTripGroup(array $group): array
+    {
+        /** @var Booking $booking */
+        $booking = $group['primary_booking'];
+        /** @var Schedule $schedule */
+        $schedule = $group['schedule'];
+        /** @var Collection<int, Booking> $passengers */
+        $passengers = $group['passengers'];
+        $distanceKm = $group['distance_km'];
+
+        return [
+            'id'               => 'open-' . $booking->id,
+            'is_open_trip'     => true,
+            'accept_url'       => route('driver.bookings.claim', $booking),
+            'claim_url'        => route('driver.bookings.claim', $booking),
+            'reject_url'       => null,
+            'route'            => $schedule->route->departure . ' → ' . $schedule->route->destination,
+            'departure_time'   => $schedule->departure_time->format('H:i, d/m/Y'),
+            'expires_at'       => null,
+            'expires_in_label' => null,
+            'trip_code'        => $schedule->shortTripCode(),
+            'meta_label'       => $schedule->tripMetaLabel(),
+            'passenger_count'  => $passengers->count(),
+            'trip_total'       => number_format((float) $passengers->sum(fn (Booking $b) => (float) $b->total_price), 0, ',', '.'),
+            'distance_label' => $distanceKm !== null
+                ? DriverProximityService::formatDistanceLabel($distanceKm)
+                : null,
+            'passengers'       => $passengers->map(fn (Booking $b): array => $this->serializePassengerForRequest($b))->values()->all(),
+        ];
     }
 
     /** Gán thẳng tài xế vào chuyến khi khách đặt xe (gần điểm đón nhất). */
@@ -235,99 +523,23 @@ class DriverTripRequestService
         return false;
     }
 
-    public function autoAssignForBooking(Booking $booking): ?DriverTripRequest
-    {
-        $this->expireStale();
-
-        $booking->loadMissing(['schedule.route', 'schedule.vehicle']);
-        $schedule = $booking->schedule;
-
-        if (! $schedule
-            || $schedule->driver_id
-            || in_array($booking->booking_status, ['cancelled', 'rejected'], true)) {
-            return null;
-        }
-
-        if ($this->proximity->pickupCoordinates($booking) === null) {
-            return null;
-        }
-
-        if (DriverTripRequest::query()
-            ->where('schedule_id', $schedule->id)
-            ->where('contact_phone', $booking->contact_phone)
-            ->where('status', 'pending')
-            ->exists()) {
-            return null;
-        }
-
-        if (! $booking->driver_search_started_at) {
-            $booking->update([
-                'driver_search_started_at' => now(),
-                'operator_confirmed_at'    => $booking->operator_confirmed_at ?? now(),
-            ]);
-        }
-
-        $tried = $this->triedDriverIds($schedule, (string) $booking->contact_phone);
-
-        for ($attempt = 0; $attempt < 15; $attempt++) {
-            $driver = $this->proximity->pickBest($schedule, $booking, $tried, true);
-
-            if (! $driver?->driver_code) {
-                $this->markNeedsOperatorHelp(
-                    $booking,
-                    $tried->isEmpty() ? self::HELP_NO_DRIVER_IN_PROVINCE : self::HELP_DRIVER_DECLINED,
-                );
-
-                return null;
-            }
-
-            try {
-                return $this->requestDriver(
-                    $schedule,
-                    $driver->driver_code,
-                    (string) $booking->contact_phone,
-                );
-            } catch (InvalidArgumentException) {
-                $tried->push((int) $driver->user_id);
-            }
-        }
-
-        return null;
-    }
-
-    /** Thử gán lại các chuyến đang chờ tài xế (sau khi tài xế cập nhật vị trí). */
-    public function retryWaitingBookings(): int
-    {
-        $this->expireStale();
-
-        $assigned = 0;
-
-        Booking::query()
-            ->whereNotIn('booking_status', ['cancelled', 'rejected'])
-            ->whereNotNull('pickup_lat')
-            ->whereNotNull('pickup_lng')
-            ->whereHas('schedule', fn ($q) => $q
-                ->whereNull('driver_id')
-                ->where('status', 'scheduled')
-                ->where('departure_time', '>', now()))
-            ->with(['schedule.route', 'schedule.vehicle'])
-            ->orderBy('created_at')
-            ->each(function (Booking $booking) use (&$assigned): void {
-                if ($this->autoAssignForBooking($booking->fresh(['schedule.route', 'schedule.vehicle']))) {
-                    $assigned++;
-                }
-            });
-
-        return $assigned;
-    }
-
     public function escalateDriverSearchTimeouts(): void
     {
+        $cutoff = now()->subMinutes(self::OPERATOR_ESCALATION_MINUTES);
+
         Booking::query()
             ->whereNotIn('booking_status', ['cancelled', 'rejected'])
-            ->whereNotNull('driver_search_started_at')
+            ->where('trip_status', '!=', 'completed')
             ->whereNull('needs_operator_help_at')
-            ->where('driver_search_started_at', '<=', now()->subMinutes(self::OPERATOR_ESCALATION_MINUTES))
+            ->where(function ($query) use ($cutoff): void {
+                $query->where(function ($q) use ($cutoff): void {
+                    $q->whereNotNull('driver_search_started_at')
+                        ->where('driver_search_started_at', '<=', $cutoff);
+                })->orWhere(function ($q) use ($cutoff): void {
+                    $q->whereNull('driver_search_started_at')
+                        ->where('created_at', '<=', $cutoff);
+                });
+            })
             ->whereHas('schedule', fn ($q) => $q->whereNull('driver_id'))
             ->each(function (Booking $booking): void {
                 $this->markNeedsOperatorHelp($booking->fresh(), self::HELP_SEARCH_TIMEOUT);
@@ -343,10 +555,16 @@ class DriverTripRequestService
             return;
         }
 
-        $booking->update([
+        $payload = [
             'needs_operator_help_at' => now(),
             'operator_help_reason'   => $reason,
-        ]);
+        ];
+
+        if (Booking::supportsOperatorDismiss()) {
+            $payload['operator_dismissed_at'] = null;
+        }
+
+        $booking->update($payload);
     }
 
     public function clearOperatorHelp(Booking $booking): void
@@ -466,6 +684,7 @@ class DriverTripRequestService
 
         return [
             'id'               => $primary->id,
+            'is_open_trip'     => false,
             'accept_url'       => route('driver.tripRequests.accept', $primary),
             'reject_url'       => route('driver.tripRequests.reject', $primary),
             'route'            => $schedule->route->departure . ' → ' . $schedule->route->destination,
@@ -519,9 +738,19 @@ class DriverTripRequestService
     {
         $workflow = app(BookingWorkflowService::class);
         $driverUserId = (int) $schedule->driver_id;
+        $driverProfile = DriverProfile::query()->where('user_id', $driverUserId)->first();
 
         foreach ($schedule->driverRelevantBookings() as $booking) {
+            $distance = $driverProfile
+                ? $this->proximity->snapshotPickupDistance($booking, $driverProfile)
+                : null;
+
             $booking->stampAssignedDriver($driverUserId);
+
+            if ($distance !== null) {
+                $booking->update(['driver_pickup_distance_km' => $distance]);
+            }
+
             $this->clearOperatorHelp($booking);
             $this->anchorBookingForDriverAccept($schedule, $booking, $workflow);
         }
@@ -694,29 +923,7 @@ class DriverTripRequestService
             return;
         }
 
-        $triedDriverIds = $this->triedDriverIds($schedule, (string) $request->contact_phone);
-        $booking = $this->bookingForRequest($request);
-
-        for ($attempt = 0; $attempt < 15; $attempt++) {
-            $next = $this->proximity->pickBest($schedule, $booking, $triedDriverIds, true);
-
-            if (! $next?->driver_code) {
-                $this->markNeedsOperatorHelp(
-                    $booking,
-                    $triedDriverIds->isEmpty() ? self::HELP_NO_DRIVER_IN_PROVINCE : self::HELP_DRIVER_DECLINED,
-                );
-
-                return;
-            }
-
-            try {
-                $this->requestDriver($schedule, $next->driver_code, (string) $request->contact_phone);
-
-                return;
-            } catch (InvalidArgumentException) {
-                $triedDriverIds->push((int) $next->user_id);
-            }
-        }
+        // Cuốc mở lại cho tài xế khác dò — không gán tự động.
     }
 
     private function bookingForRequest(DriverTripRequest $request): Booking

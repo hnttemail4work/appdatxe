@@ -11,14 +11,18 @@ $filterWeekday = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'T
 $filterQuery = array_filter([
     'departure' => $filters['departure'] ?? null,
     'destination' => $filters['destination'] ?? null,
+    'vehicle_capacity' => $filters['vehicle_capacity'] ?? null,
     'service_date' => $filterServiceDate,
     'ref' => ($appliedReferral ?? null)?->code ?? (($prefillReferral ?? '') !== '' ? $prefillReferral : null),
 ]);
 $bookingRestoreModal = $errors->any() && old('template_id')
     ? [
-        'template_id' => old('template_id'),
-        'seat_count' => old('seat_count', 1),
-        'step' => 2,
+        'template_id'      => old('template_id'),
+        'seat_count'       => old('seat_count', 1),
+        'vehicle_count'    => old('vehicle_count', 1),
+        'vehicle_capacity' => old('vehicle_capacity'),
+        'step'             => 2,
+        'duplicate_route'  => $errors->first('booking') === 'duplicate_route',
     ]
     : null;
 
@@ -36,6 +40,10 @@ $pricingService = app(\App\Services\TripPricingService::class);
 $offerItems = ($offers instanceof \Illuminate\Contracts\Pagination\Paginator)
     ? collect($offers->items())
     : collect($offers ?? []);
+
+$guestWatchlistCount = $guestWatchlistCount ?? 0;
+$guestActiveOrdersCount = $guestActiveOrdersCount ?? 0;
+$guestShowTrackTab = $guestShowTrackTab ?? ($guestWatchlistCount > 0);
 
 $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, $pricingService) {
     $schedule = $offer->scheduleInfoForDate($filterServiceDate);
@@ -84,11 +92,14 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                     <span class="text-muted">(dùng được sau khi bạn hoàn tất chuyến)</span>
                 </p>
                 @endif
-                <p class="mb-0 small booking-flash-note">
+                <p class="mb-2 small booking-flash-note">
                     @if(! empty($bookingSuccess['driver_assigned']))
                         Tài xế đã nhận chuyến — sẽ gọi xác nhận
+                        @if(! empty($bookingSuccess['driver_distance_label']))
+                            · cách điểm đón ~{{ $bookingSuccess['driver_distance_label'] }}
+                        @endif
                     @elseif(! empty($bookingSuccess['searching_driver']))
-                        Đang tìm kiếm tài xế phù hợp — vui lòng theo dõi bên dưới
+                        Đang chờ tài xế gần bạn nhận cuốc
                     @elseif(! empty($bookingSuccess['awaiting_operator']))
                         Quản lý sẽ gọi xác nhận trong thời gian sớm nhất
                     @else
@@ -99,6 +110,9 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                     @endif
                     .
                 </p>
+                <button type="button" class="btn btn-sm btn-outline-light booking-flash-view-order" id="booking-flash-view-order-btn">
+                    Xem tiến trình đơn đặt
+                </button>
             </div>
             @include('partials.flash-close')
         </div>
@@ -112,6 +126,8 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
         @include('partials.flash-close')
     </div>
     @endif
+
+    <div id="booking-search-block">
 
     @if($bookingBannerUrl ?? null)
     <div class="customer-hero customer-hero--banner">
@@ -170,93 +186,137 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
     </div>
     @endif
 
-    <div class="search-panel mb-4">
-        <form method="GET" action="{{ route('home') }}" id="trip-filter-form">
-            <div class="row g-2 align-items-end search-panel-grid">
-                <div class="col-6 col-md-3">
-                    <label class="form-label">Điểm đi</label>
-                    <select name="departure" class="form-select">
-                        <option value="">Tất cả</option>
-                        @include('partials.province-options', ['selected' => $filters['departure'] ?? ''])
-                    </select>
+    <div class="booking-route-sheet mb-4">
+        <form method="GET" action="{{ route('home') }}" id="trip-filter-form" class="booking-route-sheet-form">
+            <div class="route-sheet-journey">
+                <div class="route-sheet-rail" aria-hidden="true">
+                    <span class="route-sheet-marker route-sheet-marker--from"></span>
+                    <span class="route-sheet-rail-line"></span>
+                    <span class="route-sheet-marker route-sheet-marker--to"></span>
                 </div>
-                <div class="col-6 col-md-3">
-                    <label class="form-label">Điểm đến</label>
-                    <div class="input-group">
-                        <select name="destination" class="form-select">
-                            <option value="">Tất cả</option>
-                            @include('partials.province-options', ['selected' => $filters['destination'] ?? ''])
-                        </select>
-                        <button type="button" class="btn btn-outline-secondary swap-route-btn" title="Đổi chiều">⇄</button>
+                <div class="route-sheet-stops">
+                    <div class="route-sheet-stop">
+                        <span class="route-sheet-stop-label">Điểm đi</span>
+                        <div class="route-sheet-picker-field">
+                            <select name="departure" id="filter-departure" class="route-sheet-stop-native" tabindex="-1" aria-hidden="true">
+                                <option value="">Chọn tỉnh / thành</option>
+                                @include('partials.province-options', ['selected' => $filters['departure'] ?? ''])
+                            </select>
+                            <button type="button" class="route-sheet-stop-value route-sheet-picker-trigger"
+                                    data-picker-for="filter-departure" data-placeholder="Chọn tỉnh / thành"
+                                    aria-haspopup="listbox" aria-expanded="false" aria-controls="route-sheet-picker-body">
+                                <span class="route-sheet-picker-text">Chọn tỉnh / thành</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="route-sheet-stop route-sheet-stop--dest">
+                        <span class="route-sheet-stop-label">Điểm đến</span>
+                        <div class="route-sheet-picker-field">
+                            <select name="destination" id="filter-destination" class="route-sheet-stop-native" tabindex="-1" aria-hidden="true">
+                                <option value="">Bạn muốn đi đâu?</option>
+                                @include('partials.province-options', ['selected' => $filters['destination'] ?? ''])
+                            </select>
+                            <button type="button" class="route-sheet-stop-value route-sheet-picker-trigger"
+                                    data-picker-for="filter-destination" data-placeholder="Bạn muốn đi đâu?"
+                                    aria-haspopup="listbox" aria-expanded="false" aria-controls="route-sheet-picker-body">
+                                <span class="route-sheet-picker-text">Bạn muốn đi đâu?</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
-                <div class="col-6 col-md-3">
-                    <label class="form-label">Ngày đi</label>
-                    <input type="date" name="service_date" id="filter-service-date" class="form-control"
-                           min="{{ now()->toDateString() }}" value="{{ $filterServiceDate }}" required>
+                <button type="button" class="route-sheet-swap swap-route-btn" title="Đổi chiều" aria-label="Đổi chiều đi và đến">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <path d="M11 2.5 13.5 5 11 7.5M13.5 5H4.5a3 3 0 0 0-3 3v.5M5 13.5 2.5 11 5 8.5M2.5 11h9a3 3 0 0 0 3-3V7.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+            </div>
+
+            <label class="route-sheet-date">
+                <span class="route-sheet-date-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                        <rect x="2" y="3.5" width="14" height="12.5" rx="2" stroke="currentColor" stroke-width="1.3"/>
+                        <path d="M2 7.5h14M6 2v3M12 2v3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+                    </svg>
+                </span>
+                <span class="route-sheet-date-body">
+                    <span class="route-sheet-date-weekday" id="filter-date-weekday">{{ $filterWeekday }}</span>
+                    <span class="route-sheet-date-day" id="filter-date-label">{{ $filterDateLabel }}</span>
+                </span>
+                <span class="route-sheet-date-action">Đổi</span>
+                <input type="date" name="service_date" id="filter-service-date" class="route-sheet-date-native"
+                       min="{{ now()->toDateString() }}" value="{{ $filterServiceDate }}" required
+                       aria-label="Ngày đi">
+            </label>
+
+            <div class="route-sheet-filters" id="booking-offer-filters">
+                <div class="route-sheet-seg-row">
+                    <span class="route-sheet-seg-label">Chuyến</span>
+                    <div class="route-sheet-seg" role="group" aria-label="Loại chuyến">
+                        <button type="button" class="route-sheet-seg-btn is-active" data-trip-type="one_way" aria-pressed="true">Một chiều</button>
+                        <button type="button" class="route-sheet-seg-btn" data-trip-type="round_trip" aria-pressed="false">Khứ hồi</button>
+                    </div>
                 </div>
-                <div class="col-6 col-md-3 search-panel-submit">
-                    <button type="submit" class="btn btn-outline-primary fw-semibold w-100">Tìm chuyến</button>
+                <div class="route-sheet-seg-row">
+                    <span class="route-sheet-seg-label">Vé</span>
+                    <div class="route-sheet-seg" role="group" aria-label="Hình thức đặt">
+                        <button type="button" class="route-sheet-seg-btn is-active" data-booking-mode="whole_car" aria-pressed="true">Cả xe</button>
+                        <button type="button" class="route-sheet-seg-btn" data-booking-mode="shared" aria-pressed="false">Ghép xe</button>
+                    </div>
                 </div>
+                <div class="route-sheet-seg-row">
+                    <span class="route-sheet-seg-label">Số chỗ</span>
+                    <select name="vehicle_capacity" id="filter-vehicle-capacity" class="form-select form-select-sm route-sheet-capacity-select" aria-label="Lọc theo số chỗ">
+                        <option value="" @selected(! ($filters['vehicle_capacity'] ?? null))>Tất cả loại xe</option>
+                        @foreach($vehicleCapacityChoices ?? \App\Support\VehicleCapacityOptions::choices() as $capacity => $label)
+                            <option value="{{ $capacity }}" @selected((int) ($filters['vehicle_capacity'] ?? 0) === (int) $capacity)>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                </div>
+            </div>
+
+            <div class="route-sheet-actions">
+                <button type="submit" id="filter-search-submit" class="route-sheet-cta">Tìm chuyến</button>
+                <button type="button" class="route-sheet-secondary js-open-custom-booking" id="open-custom-booking">Đặt theo yêu cầu</button>
             </div>
         </form>
     </div>
 
-    @include('partials.guest-trip-watch')
-
-    <div class="booking-results-layout">
-        <aside class="booking-offer-sidebar" aria-label="Bộ lọc loại chuyến">
-            <div class="booking-offer-sidebar-card">
-                <div class="booking-offer-sidebar-head">
-                    <h3 class="booking-offer-sidebar-title">Loại vé</h3>
-                </div>
-                <div class="booking-offer-filters" id="booking-offer-filters" role="group" aria-label="Loại chuyến và hình thức đặt">
-                    <button type="button" class="booking-offer-filter-btn is-active" data-offer-filter="one_way_whole" aria-pressed="true">
-                        <span class="booking-offer-filter-type">Một chiều</span>
-                        <span class="booking-offer-filter-mode">Cả xe</span>
-                    </button>
-                    <button type="button" class="booking-offer-filter-btn" data-offer-filter="one_way_shared" aria-pressed="false">
-                        <span class="booking-offer-filter-type">Một chiều</span>
-                        <span class="booking-offer-filter-mode">Ghép xe</span>
-                    </button>
-                    <button type="button" class="booking-offer-filter-btn" data-offer-filter="round_trip_whole" aria-pressed="false">
-                        <span class="booking-offer-filter-type">Khứ hồi</span>
-                        <span class="booking-offer-filter-mode">Cả xe</span>
-                    </button>
-                    <button type="button" class="booking-offer-filter-btn" data-offer-filter="round_trip_shared" aria-pressed="false">
-                        <span class="booking-offer-filter-type">Khứ hồi</span>
-                        <span class="booking-offer-filter-mode">Ghép xe</span>
-                    </button>
-                </div>
+    <div class="route-sheet-picker-sheet" id="route-sheet-province-picker" hidden>
+        <div class="route-sheet-picker-backdrop" data-picker-close></div>
+        <div class="route-sheet-picker-panel" role="dialog" aria-modal="true" aria-labelledby="route-sheet-picker-title">
+            <div class="route-sheet-picker-head">
+                <span class="route-sheet-picker-head-title" id="route-sheet-picker-title">Chọn tỉnh</span>
+                <button type="button" class="route-sheet-picker-close" data-picker-close aria-label="Đóng">&times;</button>
             </div>
-        </aside>
+            <div class="route-sheet-picker-body" id="route-sheet-picker-body" role="listbox"></div>
+        </div>
+    </div>
 
-        <div class="booking-results-main">
+    </div>
+
+    <div id="booking-results-main" class="booking-results-main">
             <div class="booking-list-head mb-3">
                 @php
-                    $hasActiveFilters = ($filters['departure'] ?? '') !== '' || ($filters['destination'] ?? '') !== '';
-                    $clearSearchQuery = array_filter([
-                        'service_date' => $filterServiceDate,
-                        'ref' => ($appliedReferral ?? null)?->code ?? (($prefillReferral ?? '') !== '' ? $prefillReferral : null),
-                    ]);
+                    $hasActiveFilters = ($filters['departure'] ?? '') !== ''
+                        || ($filters['destination'] ?? '') !== ''
+                        || (request()->has('vehicle_capacity') && request()->input('vehicle_capacity') !== '');
                 @endphp
                 <div class="booking-list-head-main">
                     <div class="booking-list-head-row">
                         <h2 class="booking-list-title mb-0">
+                            <span class="booking-list-title-text">
                             @if(! $hasActiveFilters)
-                                Chuyến gợi ý
+                                Tuyến cố định
                             @else
                                 Kết quả
                             @endif
+                            </span>
                             <span class="status-pill status-pill--gold" id="trip-count">{{ $offers->total() }}</span>
                         </h2>
                         @if($hasActiveFilters)
-                            <a href="{{ route('home', $clearSearchQuery) }}" class="btn btn-sm btn-outline-secondary booking-clear-search-btn">Xóa tìm kiếm</a>
+                            <button type="button" class="btn btn-sm btn-outline-secondary booking-clear-search-btn" id="booking-clear-search">Xóa tìm kiếm</button>
                         @endif
                     </div>
-                    <p class="text-muted small mb-0">
-                        Ngày đi: <strong id="list-service-date-label">{{ $filterWeekday }}, {{ $filterDateLabel }}</strong>
-                    </p>
                 </div>
             </div>
 
@@ -332,78 +392,113 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
         <div class="booking-empty-state" id="no-trips-msg">
             <h3 class="h6 fw-bold">Không có chuyến phù hợp</h3>
             <p class="text-muted small mb-3">Đổi ngày hoặc bộ lọc.</p>
-            <a href="{{ route('home') }}" class="btn btn-sm btn-outline-primary">Xem tất cả chuyến</a>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="booking-show-all-trips">Xem tất cả chuyến</button>
         </div>
         @endforelse
             </div>
+            <div id="trips-pagination">
             @include('partials.pagination', ['paginator' => $offers])
-        </div>
+            </div>
     </div>
+
+    <div id="guest-trip-watch-section" class="guest-trip-watch-section{{ ($guestShowTrackTab ?? false) ? '' : ' d-none' }}">
+        @include('partials.guest-trip-watch')
+    </div>
+
+    @include('partials.customer-scroll-dock')
 </div>
 
 <div class="modal fade" id="bookingModal" tabindex="-1" aria-labelledby="modal-route" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content border-0 shadow">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable booking-modal-dialog">
+        <div class="modal-content border-0 shadow booking-modal-sheet">
+            <div class="booking-sheet-handle" aria-hidden="true"></div>
             <form method="POST" action="{{ route('booking.store') }}" id="booking-form" class="booking-modal-form" novalidate>
                 @csrf
                 <input type="hidden" name="template_id" id="modal-template-id">
                 <input type="hidden" name="vehicle_capacity" id="modal-vehicle-capacity" value="{{ old('vehicle_capacity') }}">
+                <input type="hidden" name="duplicate_booking_ack" id="modal-duplicate-booking-ack" value="{{ old('duplicate_booking_ack') }}">
 
                 <div class="modal-header border-0 p-0 booking-modal-header">
                     <div class="booking-modal-header-inner w-100">
                         <div class="booking-modal-header-top">
-                            <div class="booking-steps" id="booking-steps">
+                            <div class="booking-steps booking-steps--compact" id="booking-steps">
                                 <div class="booking-step active" data-step="1">
-                                    <span class="step-num">1</span> Thông tin chuyến
+                                    <span class="step-num">1</span><span class="step-label">Chuyến</span>
                                 </div>
                                 <div class="booking-step" data-step="2">
-                                    <span class="step-num">2</span> Liên hệ
+                                    <span class="step-num">2</span><span class="step-label">Liên hệ</span>
                                 </div>
                             </div>
                             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Đóng"></button>
                         </div>
                         <div class="booking-trip-banner" id="modal-trip-banner">
-                            <div class="booking-trip-banner-route" id="modal-route">—</div>
+                            <div class="booking-route-timeline" aria-hidden="true">
+                                <span class="booking-route-dot booking-route-dot--from"></span>
+                                <span class="booking-route-line"></span>
+                                <span class="booking-route-dot booking-route-dot--to"></span>
+                            </div>
+                            <div class="booking-trip-banner-copy">
+                                <div class="booking-trip-banner-route" id="modal-route">—</div>
+                                <div class="booking-modal-offer-preset" id="modal-offer-preset" aria-live="polite">
+                                    <span class="booking-preset-chip" id="modal-preset-trip-type">Một chiều</span>
+                                    <span class="booking-preset-chip" id="modal-preset-booking-mode">Cả xe</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="modal-body pt-3 booking-modal-body">
+                <div class="modal-body pt-0 booking-modal-body">
                     <div id="booking-step-1">
-                        <div class="booking-modal-offer-preset" id="modal-offer-preset" aria-live="polite">
-                            <span>Loại chuyến: <strong id="modal-preset-trip-type">Một chiều</strong></span>
-                            <span>Hình thức đặt: <strong id="modal-preset-booking-mode">Cả xe</strong></span>
+                        <div class="booking-sheet-section">
+                            <div class="booking-schedule-grid">
+                                <div class="booking-schedule-item">
+                                    <label class="form-label" for="modal-service-date">Ngày đi</label>
+                                    <input type="date" name="service_date" id="modal-service-date"
+                                           class="form-control @error('service_date') is-invalid @enderror" required
+                                           data-validate-label="Ngày đi"
+                                           min="{{ now()->toDateString() }}" value="{{ old('service_date', $filterServiceDate) }}">
+                                    @error('service_date')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="booking-schedule-item">
+                                    @include('partials.vi-pickup-time-input', [
+                                        'name' => 'pickup_time',
+                                        'id' => 'modal-pickup-time',
+                                        'value' => old('pickup_time', ''),
+                                        'label' => 'Giờ đón',
+                                        'required' => false,
+                                    ])
+                                </div>
+                            </div>
                         </div>
-                        <div class="booking-modal-panel">
-                            <div class="booking-panel-section">
-                                <div class="booking-panel-label">Chuyến đi</div>
-                                <div class="row g-3">
-                                    <div class="col-6 col-md-6">
-                                        <label class="form-label" for="modal-service-date">Ngày đi</label>
-                                        <input type="date" name="service_date" id="modal-service-date"
-                                               class="form-control @error('service_date') is-invalid @enderror" required
-                                               data-validate-label="Ngày đi"
-                                               min="{{ now()->toDateString() }}" value="{{ old('service_date', $filterServiceDate) }}">
-                                        @error('service_date')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
-                                    </div>
-                                    <div class="col-6 col-md-6">
-                                        @include('partials.vi-pickup-time-input', [
-                                            'name' => 'pickup_time',
-                                            'id' => 'modal-pickup-time',
-                                            'value' => old('pickup_time', ''),
-                                            'label' => 'Giờ đón',
-                                            'required' => false,
-                                        ])
-                                    </div>
-                                    <input type="hidden" name="pickup_address" id="modal-pickup" value="{{ old('pickup_address') }}">
-                                    <input type="hidden" name="pickup_lat" id="modal-pickup-lat" value="{{ old('pickup_lat') }}">
-                                    <input type="hidden" name="pickup_lng" id="modal-pickup-lng" value="{{ old('pickup_lng') }}">
-                                    <input type="hidden" name="dropoff_address" id="modal-dropoff" value="{{ old('dropoff_address') }}">
-                                    <div class="col-12">
-                                        <label class="form-label" for="modal-pickup-detail">Địa chỉ đón <span class="text-danger">*</span></label>
+
+                        <div class="booking-sheet-section d-none" id="modal-vehicle-count-wrap">
+                            <div class="booking-panel-label">Số xe</div>
+                            <div class="booking-seat-stepper">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="modal-vehicle-count-minus" aria-label="Giảm số xe">−</button>
+                                <input type="number" name="vehicle_count" id="modal-vehicle-count" class="form-control form-control-sm text-center"
+                                       min="1" max="10" value="{{ old('vehicle_count', 1) }}" inputmode="numeric" aria-label="Số xe đặt">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="modal-vehicle-count-plus" aria-label="Tăng số xe">+</button>
+                            </div>
+                            <div class="form-text">Số chiếc xe cùng loại trên một đơn (giá × số xe).</div>
+                        </div>
+
+                        <div class="booking-sheet-section">
+                            <div class="booking-panel-label">Địa điểm</div>
+                            <input type="hidden" name="pickup_address" id="modal-pickup" value="{{ old('pickup_address') }}">
+                            <input type="hidden" name="pickup_lat" id="modal-pickup-lat" value="{{ old('pickup_lat') }}">
+                            <input type="hidden" name="pickup_lng" id="modal-pickup-lng" value="{{ old('pickup_lng') }}">
+                            <input type="hidden" name="dropoff_address" id="modal-dropoff" value="{{ old('dropoff_address') }}">
+
+                            <div class="booking-address-card">
+                                <div class="booking-address-row">
+                                    <span class="booking-address-marker booking-address-marker--pickup" aria-hidden="true"></span>
+                                    <div class="booking-address-field">
+                                        <label class="booking-address-label" for="modal-pickup-detail">Điểm đón <span class="text-danger">*</span></label>
                                         <div class="input-group address-map-input-group">
                                             <input type="text" name="pickup_detail" id="modal-pickup-detail" class="form-control" required
                                                    data-validate-label="Địa chỉ đón"
+                                                   placeholder="Nhập hoặc chọn trên bản đồ"
                                                    value="{{ old('pickup_detail') }}">
                                             <button type="button" class="btn btn-outline-primary address-map-trigger"
                                                     data-address-map-for="modal-pickup-detail"
@@ -420,10 +515,15 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                                             </button>
                                         </div>
                                     </div>
-                                    <div class="col-12">
-                                        <label class="form-label" for="modal-dropoff-detail">Địa chỉ trả</label>
+                                </div>
+                                <div class="booking-address-divider" aria-hidden="true"></div>
+                                <div class="booking-address-row">
+                                    <span class="booking-address-marker booking-address-marker--dropoff" aria-hidden="true"></span>
+                                    <div class="booking-address-field">
+                                        <label class="booking-address-label" for="modal-dropoff-detail">Điểm trả</label>
                                         <div class="input-group address-map-input-group">
                                             <input type="text" name="dropoff_detail" id="modal-dropoff-detail" class="form-control"
+                                                   placeholder="Nhập hoặc chọn trên bản đồ"
                                                    value="{{ old('dropoff_detail') }}">
                                             <button type="button" class="btn btn-outline-primary address-map-trigger"
                                                     data-address-map-for="modal-dropoff-detail"
@@ -438,135 +538,127 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                                             </button>
                                         </div>
                                     </div>
-                                    @if($appliedReferral)
-                                    <div class="col-12">
-                                        <label class="form-label" for="modal-referral-code">Mã giới thiệu</label>
-                                        <input type="text" id="modal-referral-code" class="form-control bg-light"
-                                               value="{{ $appliedReferral->code }}" readonly tabindex="-1" autocomplete="off"
-                                               aria-readonly="true">
-                                        <div class="form-text">Mã từ link giới thiệu — không thể chỉnh sửa.</div>
-                                    </div>
-                                    @endif
-                                    <div class="col-12 d-none" id="modal-trip-type-section">
-                                        <label class="form-label">Loại chuyến</label>
-                                        <div class="d-flex flex-wrap gap-3" id="modal-trip-type-group">
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="radio" name="trip_type" id="trip-type-one-way"
-                                                       value="one_way" {{ old('trip_type', 'one_way') === 'round_trip' ? '' : 'checked' }}>
-                                                <label class="form-check-label" for="trip-type-one-way">Một chiều</label>
-                                            </div>
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="radio" name="trip_type" id="trip-type-round-trip"
-                                                       value="round_trip" {{ old('trip_type') === 'round_trip' ? 'checked' : '' }}>
-                                                <label class="form-check-label" for="trip-type-round-trip">Khứ hồi</label>
-                                            </div>
-                                        </div>
-                                    </div>
                                 </div>
                             </div>
+                        </div>
 
-                            <div class="booking-panel-divider"></div>
+                        @if($appliedReferral)
+                        <div class="booking-sheet-section">
+                            <label class="form-label" for="modal-referral-code">Mã giới thiệu</label>
+                            <input type="text" id="modal-referral-code" class="form-control bg-light"
+                                   value="{{ $appliedReferral->code }}" readonly tabindex="-1" autocomplete="off"
+                                   aria-readonly="true">
+                            <div class="form-text">Mã từ link giới thiệu — không thể chỉnh sửa.</div>
+                        </div>
+                        @endif
 
-                            <div class="booking-panel-section d-none" id="modal-booking-mode-section">
-                                <div class="booking-panel-label">Hình thức đặt</div>
-                                <div class="d-flex flex-wrap gap-3 mb-2" id="modal-booking-mode-group">
-                                    <div class="form-check" id="booking-mode-whole-car-wrap">
-                                        <input class="form-check-input" type="radio" name="booking_mode" id="booking-mode-whole-car"
-                                               value="whole_car" {{ old('booking_mode', 'whole_car') !== 'shared' ? 'checked' : '' }}>
-                                        <label class="form-check-label" for="booking-mode-whole-car">Đặt cả xe</label>
-                                    </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="booking_mode" id="booking-mode-shared"
-                                               value="shared" {{ old('booking_mode') === 'shared' ? 'checked' : '' }}>
-                                        <label class="form-check-label" for="booking-mode-shared">Ghép xe</label>
-                                    </div>
+                        <div class="booking-sheet-section d-none" id="modal-trip-type-section">
+                            <div class="booking-panel-label">Loại chuyến</div>
+                            <div class="booking-chip-group" id="modal-trip-type-group">
+                                <div class="form-check booking-chip">
+                                    <input class="form-check-input" type="radio" name="trip_type" id="trip-type-one-way"
+                                           value="one_way" {{ old('trip_type', 'one_way') === 'round_trip' ? '' : 'checked' }}>
+                                    <label class="form-check-label" for="trip-type-one-way">Một chiều</label>
                                 </div>
-                                <p class="small text-muted mb-0 d-none" id="modal-whole-car-unavailable-hint">
-                                    Chuyến đã có khách ghép — chỉ có thể đặt ghép xe.
-                                </p>
-                                @error('booking_mode')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
+                                <div class="form-check booking-chip">
+                                    <input class="form-check-input" type="radio" name="trip_type" id="trip-type-round-trip"
+                                           value="round_trip" {{ old('trip_type') === 'round_trip' ? 'checked' : '' }}>
+                                    <label class="form-check-label" for="trip-type-round-trip">Khứ hồi</label>
+                                </div>
                             </div>
+                        </div>
 
-                            <div class="booking-panel-divider"></div>
-
-                            <div class="booking-panel-section d-none" id="modal-seat-count-wrap">
-                                <div class="booking-panel-label">Số ghế</div>
-                                <div class="d-flex align-items-center gap-2 flex-wrap">
-                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="modal-seat-count-minus" aria-label="Giảm số ghế">−</button>
-                                    <input type="number" name="seat_count" id="modal-seat-count" class="form-control form-control-sm text-center"
-                                           style="max-width:4.5rem" min="1" value="{{ old('seat_count', 1) }}" inputmode="numeric">
-                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="modal-seat-count-plus" aria-label="Tăng số ghế">+</button>
+                        <div class="booking-sheet-section d-none" id="modal-booking-mode-section">
+                            <div class="booking-panel-label">Hình thức đặt</div>
+                            <div class="booking-chip-group mb-2" id="modal-booking-mode-group">
+                                <div class="form-check booking-chip" id="booking-mode-whole-car-wrap">
+                                    <input class="form-check-input" type="radio" name="booking_mode" id="booking-mode-whole-car"
+                                           value="whole_car" {{ old('booking_mode', 'whole_car') !== 'shared' ? 'checked' : '' }}>
+                                    <label class="form-check-label" for="booking-mode-whole-car">Cả xe</label>
                                 </div>
+                                <div class="form-check booking-chip">
+                                    <input class="form-check-input" type="radio" name="booking_mode" id="booking-mode-shared"
+                                           value="shared" {{ old('booking_mode') === 'shared' ? 'checked' : '' }}>
+                                    <label class="form-check-label" for="booking-mode-shared">Ghép xe</label>
+                                </div>
+                            </div>
+                            @error('booking_mode')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
+                        </div>
+
+                        <div class="booking-sheet-section d-none" id="modal-seat-count-wrap">
+                            <div class="booking-panel-label">Số ghế</div>
+                            <div class="booking-seat-stepper">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="modal-seat-count-minus" aria-label="Giảm số ghế">−</button>
+                                <input type="number" name="seat_count" id="modal-seat-count" class="form-control form-control-sm text-center"
+                                       min="1" value="{{ old('seat_count', 1) }}" inputmode="numeric">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="modal-seat-count-plus" aria-label="Tăng số ghế">+</button>
                             </div>
                         </div>
                     </div>
 
                     <div id="booking-step-2" class="d-none">
-                        <div class="booking-modal-panel">
-                            <div class="booking-panel-section booking-summary-section">
-                                <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
-                                    <div class="min-w-0">
-                                        <div class="fw-bold" id="modal-route-step2">—</div>
-                                        <div class="mt-2 small" id="modal-driver-summary"></div>
-                                        <div class="mt-1 small" id="modal-trip-type-summary"></div>
-                                        <div class="mt-1 small d-none" id="modal-spot-summary">
-                                            <span id="modal-seat-summary-text">—</span>
-                                        </div>
-                                        <div class="small text-muted mt-1" id="modal-vehicle">—</div>
+                        <div class="booking-sheet-section booking-summary-card">
+                            <div class="booking-summary-top">
+                                <div class="min-w-0">
+                                    <div class="booking-summary-route fw-bold" id="modal-route-step2">—</div>
+                                    <div class="small mt-2" id="modal-driver-summary"></div>
+                                    <div class="small mt-1" id="modal-trip-type-summary"></div>
+                                    <div class="small d-none mt-1" id="modal-spot-summary">
+                                        <span id="modal-seat-summary-text">—</span>
                                     </div>
-                                    <div class="text-end flex-shrink-0">
-                                        <div class="small text-muted">Tổng tiền</div>
-                                        <div class="booking-summary-total" id="modal-total-price">0 đ</div>
-                                        <div class="small text-muted d-none" id="modal-price-unit-wrap"><span id="modal-price-unit">0 đ</span>/vé</div>
-                                        <div id="modal-referral-discount-step2" class="booking-referral-discount mt-2 d-none"></div>
-                                    </div>
+                                    <div class="small text-muted mt-1" id="modal-vehicle">—</div>
+                                </div>
+                                <div class="text-end flex-shrink-0">
+                                    <div class="small text-muted">Tổng tiền</div>
+                                    <div class="booking-summary-total" id="modal-total-price">0 đ</div>
+                                    <div class="small text-muted d-none" id="modal-price-unit-wrap"><span id="modal-price-unit">0 đ</span>/vé</div>
+                                    <div id="modal-referral-discount-step2" class="booking-referral-discount mt-2 d-none"></div>
                                 </div>
                             </div>
+                        </div>
 
-                            <div class="booking-panel-divider"></div>
-
-                            <div class="booking-panel-section">
-                                <div class="booking-panel-label">Liên hệ</div>
-                                <div class="row g-3">
-                                    <div class="col-md-6">
-                                        <label class="form-label" for="modal-passenger-name">Tên <span class="text-danger">*</span></label>
-                                        <input type="text" name="passenger_name" id="modal-passenger-name" class="form-control" required
-                                               data-validate-label="Tên"
-                                               value="{{ old('passenger_name') }}" autocomplete="name">
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label" for="modal-contact-phone">Số điện thoại <span class="text-danger">*</span></label>
-                                        <input type="tel" name="contact_phone" id="modal-contact-phone" class="form-control" required
-                                               data-validate-label="Số điện thoại" autocomplete="tel"
-                                               value="{{ old('contact_phone') }}">
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label d-block">Giới tính</label>
-                                        <div class="d-flex gap-3 pt-1">
-                                            <div class="form-check">
-                                                <input type="radio" name="passenger_gender" id="modal-passenger-gender-male" value="male"
-                                                       class="form-check-input" @checked(old('passenger_gender', 'male') === 'male')>
-                                                <label class="form-check-label" for="modal-passenger-gender-male">Nam</label>
-                                            </div>
-                                            <div class="form-check">
-                                                <input type="radio" name="passenger_gender" id="modal-passenger-gender-female" value="female"
-                                                       class="form-check-input" @checked(old('passenger_gender') === 'female')>
-                                                <label class="form-check-label" for="modal-passenger-gender-female">Nữ</label>
-                                            </div>
+                        <div class="booking-sheet-section">
+                            <div class="booking-panel-label">Liên hệ</div>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label" for="modal-passenger-name">Tên <span class="text-danger">*</span></label>
+                                    <input type="text" name="passenger_name" id="modal-passenger-name" class="form-control" required
+                                           data-validate-label="Tên"
+                                           value="{{ old('passenger_name') }}" autocomplete="name">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label" for="modal-contact-phone">Số điện thoại <span class="text-danger">*</span></label>
+                                    <input type="tel" name="contact_phone" id="modal-contact-phone" class="form-control" required
+                                           data-validate-label="Số điện thoại" autocomplete="tel" inputmode="tel"
+                                           value="{{ old('contact_phone') }}">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label d-block">Giới tính</label>
+                                    <div class="booking-chip-group booking-chip-group--inline">
+                                        <div class="form-check booking-chip">
+                                            <input type="radio" name="passenger_gender" id="modal-passenger-gender-male" value="male"
+                                                   class="form-check-input" @checked(old('passenger_gender', 'male') === 'male')>
+                                            <label class="form-check-label" for="modal-passenger-gender-male">Nam</label>
+                                        </div>
+                                        <div class="form-check booking-chip">
+                                            <input type="radio" name="passenger_gender" id="modal-passenger-gender-female" value="female"
+                                                   class="form-check-input" @checked(old('passenger_gender') === 'female')>
+                                            <label class="form-check-label" for="modal-passenger-gender-female">Nữ</label>
                                         </div>
                                     </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label" for="modal-passenger-age">Tuổi</label>
-                                        <input type="number" name="passenger_age" id="modal-passenger-age" class="form-control"
-                                               min="1" max="120" inputmode="numeric"
-                                               value="{{ old('passenger_age') }}">
-                                    </div>
-                                    <div class="col-12">
-                                        <label class="form-label" for="modal-notes">Ghi chú cho tài xế</label>
-                                        <textarea name="notes" id="modal-notes" rows="2" maxlength="500"
-                                                  class="form-control @error('notes') is-invalid @enderror">{{ old('notes') }}</textarea>
-                                        @error('notes')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
-                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label" for="modal-passenger-age">Tuổi</label>
+                                    <input type="number" name="passenger_age" id="modal-passenger-age" class="form-control"
+                                           min="1" max="120" inputmode="numeric"
+                                           value="{{ old('passenger_age') }}">
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label" for="modal-notes">Ghi chú cho tài xế</label>
+                                    <textarea name="notes" id="modal-notes" rows="2" maxlength="500"
+                                              class="form-control @error('notes') is-invalid @enderror"
+                                              placeholder="Ví dụ: mang theo hành lý lớn, cần ghế trẻ em…">{{ old('notes') }}</textarea>
+                                    @error('notes')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
                                 </div>
                             </div>
                         </div>
@@ -579,15 +671,15 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                         <div class="booking-footer-price" id="modal-total-price-step1">0 đ</div>
                         <div id="modal-referral-discount-step1" class="booking-referral-discount d-none"></div>
                     </div>
-                    <button type="button" class="btn btn-outline-primary fw-semibold px-4" id="modal-next-btn">
+                    <button type="button" class="btn btn-primary fw-semibold px-4 booking-cta-btn" id="modal-next-btn">
                         Tiếp tục
                     </button>
                 </div>
 
                 <div class="modal-footer border-0 booking-modal-footer d-none" id="modal-footer-step2">
                     <button type="button" class="btn btn-outline-secondary" id="modal-back-btn">← Quay lại</button>
-                    <button type="submit" class="btn btn-primary px-4 fw-semibold ms-auto" id="modal-submit-btn">
-                        Đặt vé
+                    <button type="submit" class="btn btn-primary px-4 fw-semibold ms-auto booking-cta-btn" id="modal-submit-btn">
+                        Xác nhận đặt vé
                     </button>
                 </div>
             </form>
@@ -608,9 +700,14 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
 
 @push('scripts')
 <script>
+window.__bookingCheckDuplicateUrl = @json(route('booking.checkDuplicate'));
+window.__vehicleCapacityChoices = @json($vehicleCapacityChoices ?? \App\Support\VehicleCapacityOptions::choices());
 window.__customerSyncUrl = @json(route('booking.liveSync'));
+window.__customerHomeUrl = @json(route('home'));
 window.__seatAvailabilityUrl = @json(route('booking.seatAvailability'));
 window.__quotePriceUrl = @json(route('booking.quotePrice'));
+window.__bookingResolveRouteUrl = @json(route('booking.resolveRoute'));
+window.__contactPhone = @json(config('app.contact_phone'));
 window.__geocodeReverseUrl = @json(route('geocode.reverse'));
 window.__geocodeSearchUrl = @json(route('geocode.search'));
 window.__customerBasePrices = @json($basePrices);
@@ -629,9 +726,14 @@ window.__guestTripReloadMs = @json(\App\Services\GuestTripWatchService::GUEST_PA
 window.__guestTripSearchingReload = @json(! empty(session('booking_success.searching_driver')));
 window.__guestTripReviewUrl = @json(route('guest.tripReviews.store'));
 window.__guestTripCancelUrl = @json(route('guest.bookings.cancel'));
+window.__guestActiveOrdersCount = @json($guestActiveOrdersCount);
+window.__guestWatchlistCount = @json($guestWatchlistCount);
+window.__guestShowTrackTab = @json($guestShowTrackTab ?? false);
+window.__bookingSuccessActive = @json((bool) session('booking_success'));
 window.__cancellationReasonsUrl = @json(route('cancellationReasons.index'));
 </script>
-<script src="{{ asset('js/customer-booking.js') }}"></script>
+<script src="{{ asset('js/customer-booking.js') }}?v={{ filemtime(public_path('js/customer-booking.js')) }}"></script>
+<script src="{{ asset('js/customer-scroll-dock.js') }}?v={{ filemtime(public_path('js/customer-scroll-dock.js')) }}"></script>
 <script src="{{ asset('js/guest-trip-watch.js') }}?v={{ filemtime(public_path('js/guest-trip-watch.js')) }}"></script>
 @if(session('booking_success.referral_code'))
 <script src="{{ asset('js/booking-referral-success.js') }}?v={{ filemtime(public_path('js/booking-referral-success.js')) }}"></script>

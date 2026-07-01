@@ -57,6 +57,14 @@ body.app-shell {
     .app-main .container {
         padding-bottom: 1rem;
     }
+
+    body.app-shell--mobile-app .app-footer {
+        display: none;
+    }
+
+    body.app-shell--mobile-app .app-main .container {
+        padding-bottom: .5rem;
+    }
 }
 
 /* Validation chung — FormFieldValidation */

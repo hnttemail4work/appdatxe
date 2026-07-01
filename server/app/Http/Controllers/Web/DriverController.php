@@ -89,9 +89,9 @@ class DriverController extends Controller
 
         $tripHistory = PageList::paginateCollection($tripHistoryAll, $request, 'history_page');
 
-        $pendingGroupsAll = $this->driverRequests->pendingGroupsForDriver($user->id);
-        $pendingGroups = PageList::paginateCollection($pendingGroupsAll, $request, 'requests_page');
-        $pendingPassengerCount = $pendingGroupsAll->sum(fn (array $group): int => $group['passengers']->count());
+        $tripCardsAll = $this->driverRequests->tripCardsForDriver($user->id);
+        $tripCards = PageList::paginateCollection($tripCardsAll, $request, 'requests_page');
+        $pendingPassengerCount = $tripCardsAll->sum(fn (array $card): int => (int) ($card['passenger_count'] ?? 0));
 
         $tripActionCount = $tripSchedulesAll
             ->filter(fn (Schedule $s): bool => $s->driverWorkflowPhase() === 'active')
@@ -109,7 +109,7 @@ class DriverController extends Controller
         return view('driver.dashboard', compact(
             'user',
             'profile',
-            'pendingGroups',
+            'tripCards',
             'pendingPassengerCount',
             'walletBlockReason',
             'driverWallet',
@@ -131,6 +131,17 @@ class DriverController extends Controller
         }
 
         return redirect()->route('driver.dashboard', ['tab' => 'trips'])->with('success', 'Đã nhận chuyến. Xem tab Xem chuyến để theo dõi.');
+    }
+
+    public function claimBooking(Request $request, Booking $booking)
+    {
+        try {
+            $this->driverRequests->claimBooking($booking, Auth::id());
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['driver_request' => $e->getMessage()]);
+        }
+
+        return redirect()->route('driver.dashboard', ['tab' => 'trips'])->with('success', 'Đã nhận cuốc — khách sẽ thấy thông tin tài xế.');
     }
 
     public function rejectTripRequest(Request $request, DriverTripRequest $driverTripRequest)

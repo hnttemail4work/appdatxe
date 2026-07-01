@@ -38,6 +38,7 @@ class ScheduleLifecycleService
         ScheduleTemplate $template,
         string $serviceDate,
         ?string $pickupTime = null,
+        bool $alwaysCreate = false,
     ): Schedule {
         $template->loadMissing(['vehicle', 'route']);
         $date = ServiceDate::parse($serviceDate);
@@ -47,15 +48,19 @@ class ScheduleLifecycleService
 
         $departure = $availability->resolveDepartureTime($template, $serviceDate, $pickupTime);
 
-        $schedule = Schedule::query()
-            ->where('template_id', $template->id)
-            ->whereDate('service_date', $serviceDate)
-            ->where('departure_time', $departure)
-            ->where('status', 'scheduled')
-            ->first();
+        if (! $alwaysCreate) {
+            $schedule = Schedule::query()
+                ->where('template_id', $template->id)
+                ->whereDate('service_date', $serviceDate)
+                ->where('departure_time', $departure)
+                ->where('status', 'scheduled')
+                ->first();
 
-        if ($schedule) {
-            return $schedule;
+            if ($schedule) {
+                return $schedule;
+            }
+        } else {
+            $departure = $this->nextAvailableDeparture($template, $serviceDate, $departure);
         }
 
         try {
@@ -88,6 +93,32 @@ class ScheduleLifecycleService
 
             throw new InvalidArgumentException('Không tạo được chuyến cho khung giờ này. Vui lòng thử lại.');
         }
+    }
+
+    /** Đặt cả xe: mỗi đơn một chuyến mới — dịch giờ khởi hành nếu trùng slot. */
+    private function nextAvailableDeparture(
+        ScheduleTemplate $template,
+        string $serviceDate,
+        Carbon $departure,
+    ): Carbon {
+        $candidate = $departure->copy()->startOfMinute();
+
+        for ($attempt = 0; $attempt < 1440; $attempt++) {
+            $exists = Schedule::query()
+                ->where('template_id', $template->id)
+                ->whereDate('service_date', $serviceDate)
+                ->where('departure_time', $candidate)
+                ->where('status', 'scheduled')
+                ->exists();
+
+            if (! $exists) {
+                return $candidate;
+            }
+
+            $candidate = $candidate->copy()->addMinute();
+        }
+
+        throw new InvalidArgumentException('Không tạo được chuyến mới cho khung giờ này. Vui lòng đổi giờ đón.');
     }
 
     private function expectedArrivalFrom(ScheduleTemplate $template, Carbon $departure, Carbon $serviceDate): Carbon

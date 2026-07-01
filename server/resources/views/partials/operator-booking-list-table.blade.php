@@ -106,7 +106,12 @@ $showPendingActionsColumn = $bookingList === 'pending';
                     <td class="small">
                         <span class="status-pill status-pill--{{ \App\Support\StatusBadge::bookingMode($booking->booking_mode ?? 'shared') }}">{{ $booking->bookingModeLabel() }}</span>
                     </td>
-                    <td>{{ $booking->booking_mode === 'shared' ? $booking->seatCountLabel() : 'Cả xe' }}</td>
+                    <td>
+                        @if($booking->vehicleBookingLabel())
+                            <div>{{ $booking->vehicleBookingLabel() }}</div>
+                        @endif
+                        <div class="small text-muted">{{ $booking->booking_mode === 'shared' ? $booking->seatCountLabel() : ($booking->seatCountLabel()) }}</div>
+                    </td>
                     <td class="fw-semibold">{{ number_format($booking->chargedTotal(), 0, ',', '.') }} đ</td>
                     <td class="small cell-muted">
                         @if($booking->appliedReferralCode)

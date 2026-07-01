@@ -27,8 +27,8 @@
             return;
         }
         var value = String(text || '').trim();
-        addressLine.textContent = value || 'Chưa chọn trên bản đồ';
-        addressLine.classList.toggle('text-muted', value === '');
+        addressLine.textContent = value || 'Chọn vị trí để nhận cuốc gần bạn';
+        addressLine.classList.toggle('is-empty', value === '');
     }
 
     function setMetaLine(text) {
@@ -72,7 +72,7 @@
                 var data = result.data;
                 setAddressLine(data.address || address);
                 setMetaLine(data.updated_at ? ('Cập nhật ' + data.updated_at) : '');
-                setStatus('ok', 'Sẵn sàng gán cuốc');
+                setStatus('ok', 'Sẵn sàng');
             })
             .catch(function () {
                 setStatus('warn', 'Lỗi mạng');
