@@ -14,9 +14,9 @@ use App\Services\ReferralCodeService;
 use App\Services\ScheduleLifecycleService;
 use App\Services\TripListingService;
 use App\Services\TripPricingService;
+use App\Support\PlatformFees;
 use App\Support\CustomerBookingBanner;
 use App\Support\DepartureTimeDisplay;
-use App\Support\PlatformFees;
 use App\Support\PageList;
 use App\Support\SouthernProvinces;
 use App\Support\ServiceDate;
@@ -87,7 +87,6 @@ class GuestBookingController extends Controller
 
         $guestWatchlistCount = $this->tripWatch->watchlistCount();
         $guestActiveOrdersCount = count($this->tripWatch->visibleTrips());
-        $guestShowTrackTab = $guestWatchlistCount > 0 || session('booking_success');
         $vehicleCapacityChoices = VehicleCapacityOptions::choices();
 
         return view('booking.index', compact(
@@ -100,7 +99,6 @@ class GuestBookingController extends Controller
             'bookingBannerUrl',
             'guestWatchlistCount',
             'guestActiveOrdersCount',
-            'guestShowTrackTab',
             'vehicleCapacityChoices',
         ));
     }
@@ -108,22 +106,16 @@ class GuestBookingController extends Controller
     public function checkDuplicateBooking(Request $request)
     {
         $validated = $request->validate([
-            'template_id'   => ['required', 'exists:schedule_templates,id'],
             'contact_phone' => ['required', 'string', 'max:30'],
+            'template_id'   => ['nullable', 'exists:schedule_templates,id'],
         ]);
 
-        $template = ScheduleTemplate::query()
-            ->with('route')
-            ->findOrFail($validated['template_id']);
-
-        $duplicate = $this->duplicateBookings->findActiveSameRouteForTemplate(
-            $validated['contact_phone'],
-            $template,
-        );
+        $active = $this->duplicateBookings->findActiveBooking($validated['contact_phone']);
 
         return response()->json([
-            'duplicate' => $duplicate !== null,
-            'booking'   => $duplicate ? $this->duplicateBookings->serializeDuplicate($duplicate) : null,
+            'duplicate'      => $active !== null,
+            'active_booking' => $active !== null,
+            'booking'        => $active ? $this->duplicateBookings->serializeDuplicate($active) : null,
         ]);
     }
 
@@ -273,8 +265,9 @@ class GuestBookingController extends Controller
         $vehicleCount = $bookingMode === 'whole_car'
             ? max((int) ($validated['vehicle_count'] ?? 1), 1)
             : 1;
-        $subtotal = $bookingMode === 'whole_car' ? ($unitPrice * $vehicleCount) : ($unitPrice * $seatCount);
-
+        $subtotal = PlatformFees::roundUpToThousand(
+            $bookingMode === 'whole_car' ? ($unitPrice * $vehicleCount) : ($unitPrice * $seatCount),
+        );
         $referral = $this->referralCodes->resolveUsableCode(session('guest_referral_code'));
         $discountMeta = $this->referralCodes->discountMeta(
             $referral,
@@ -282,7 +275,7 @@ class GuestBookingController extends Controller
         );
         $discountPercent = $discountMeta['eligible'] ? $discountMeta['percent'] : 0.0;
         $total = $this->referralCodes->applyDiscount((float) $subtotal, $discountPercent);
-        $discountAmount = (int) round($subtotal - $total, 0);
+        $discountAmount = max(0, $subtotal - (int) $total);
 
         return response()->json(array_merge($quote, [
             'unit_price'           => $unitPrice,
@@ -297,7 +290,7 @@ class GuestBookingController extends Controller
             'referral_eligible'    => $discountMeta['eligible'] && $discountPercent > 0,
             'referral_attribution_only' => $discountMeta['attribution_only'] ?? false,
             'referral_ineligible_reason' => $discountMeta['reason'],
-            'total_after_discount' => (int) round($total, 0),
+            'total_after_discount' => (int) $total,
         ]));
     }
 
@@ -358,7 +351,6 @@ class GuestBookingController extends Controller
             'seat_count'      => ['nullable', 'integer', 'min:1', 'max:50'],
             'vehicle_count'   => ['nullable', 'integer', 'min:1', 'max:10'],
             'vehicle_capacity' => ['required', 'integer', Rule::in(VehicleCapacityOptions::enabled())],
-            'duplicate_booking_ack' => ['nullable', 'in:1'],
         ]);
 
         if ($validator->fails()) {
@@ -378,18 +370,6 @@ class GuestBookingController extends Controller
             $template = $this->resolveTemplateForCapacity($template, (int) $validated['vehicle_capacity']);
         } catch (InvalidArgumentException $e) {
             return $this->bookingFormError($e);
-        }
-
-        if (($validated['duplicate_booking_ack'] ?? '') !== '1') {
-            $duplicate = $this->duplicateBookings->findActiveSameRouteForTemplate(
-                $validated['contact_phone'],
-                $template,
-            );
-            if ($duplicate) {
-                return $this->bookingFormRedirect()
-                    ->withErrors(['booking' => 'duplicate_route'])
-                    ->withInput();
-            }
         }
 
         $pickupTimeRaw = trim((string) ($validated['pickup_time'] ?? ''));
@@ -544,6 +524,10 @@ class GuestBookingController extends Controller
             $field = 'pickup_time';
         } elseif (str_contains($message, 'khởi hành')) {
             $field = 'service_date';
+        } elseif (str_contains($message, 'cuốc chưa hoàn thành')) {
+            return $this->bookingFormRedirect()
+                ->withErrors(['booking' => 'active_booking'])
+                ->withInput();
         } elseif (str_contains($message, 'ghế') || str_contains($message, 'Chuyến không') || str_contains($message, 'Chuyến đã')) {
             $field = 'seat_numbers';
         }

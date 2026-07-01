@@ -3,8 +3,10 @@
 namespace App\Services;
 
 use App\Models\Booking;
-use App\Models\DriverProfile;
+use App\Models\DriverTripRequest;
+use App\Models\Schedule;
 use App\Models\TripReview;
+use App\Support\AuthIdentifier;
 
 class GuestTripWatchService
 {
@@ -52,7 +54,7 @@ class GuestTripWatchService
     /** @return list<array<string, mixed>> */
     public function visibleTrips(): array
     {
-        app(DriverTripRequestService::class)->escalateDriverSearchTimeouts();
+        app(DriverTripRequestService::class)->expireStale();
 
         $entries = $this->pruneWatchlist();
         if ($entries === []) {
@@ -64,7 +66,7 @@ class GuestTripWatchService
         $bookings = Booking::query()
             ->with([
                 'schedule.route',
-                'schedule.driver',
+                'schedule.driver.driverProfile',
                 'tripReview',
             ])
             ->whereIn('booking_reference', $refs)
@@ -148,6 +150,10 @@ class GuestTripWatchService
 
     private function shouldKeepInWatchlist(Booking $booking): bool
     {
+        if ($booking->isOperatorDismissed()) {
+            return false;
+        }
+
         if (in_array($booking->booking_status, ['cancelled', 'rejected'], true)
             || $booking->trip_status === 'cancelled') {
             return false;
@@ -230,23 +236,21 @@ class GuestTripWatchService
             return 'booked';
         }
 
-        if ($schedule->status === 'running') {
-            return 'running';
+        if ($schedule->driver_id) {
+            return match ($schedule->resolvedDriverStage()) {
+                Schedule::DRIVER_STAGE_RUNNING   => 'running',
+                Schedule::DRIVER_STAGE_PICKED_UP => 'picked_up',
+                Schedule::DRIVER_STAGE_AT_PICKUP => 'driver_at_pickup',
+                Schedule::DRIVER_STAGE_COMPLETED => 'completed',
+                default                          => 'driver_assigned',
+            };
         }
 
-        if ($schedule->departure_time && $schedule->departure_time <= now()) {
-            return 'running';
+        if ($booking->needs_operator_help_at) {
+            return 'needs_operator_help';
         }
 
-        if (! $schedule->driver_id) {
-            if ($booking->needs_operator_help_at) {
-                return 'needs_operator_help';
-            }
-
-            return 'searching_driver';
-        }
-
-        return 'driver_assigned';
+        return 'searching_driver';
     }
 
     public function canCancel(Booking $booking): bool
@@ -266,19 +270,15 @@ class GuestTripWatchService
     /** @return array<string, mixed> */
     private function serializeTrip(Booking $booking, string $contactPhone): array
     {
-        $booking->loadMissing('schedule.route', 'schedule.driver');
+        $booking->loadMissing('schedule.route', 'schedule.driver.driverProfile');
         $schedule = $booking->schedule;
         $progress = $this->progressKey($booking);
-        $driverName = $schedule?->driver_name
-            ?: $schedule?->driver?->name
-            ?: null;
+        $hasDriver = (int) ($schedule?->driver_id ?? 0) > 0;
+        $driverName = $hasDriver
+            ? ($schedule->driver?->name ?: ($schedule->driver_name ?: null))
+            : null;
 
-        $driverProfile = null;
-        if ($schedule?->driver_id) {
-            $driverProfile = DriverProfile::query()
-                ->where('user_id', $schedule->driver_id)
-                ->first();
-        }
+        $driverProfile = $hasDriver ? $schedule?->driver?->driverProfile : null;
 
         $vehicleLabel = $driverProfile?->vehicle_type;
         $vehicleSeats = $driverProfile?->vehicle_seats ? (int) $driverProfile->vehicle_seats : null;
@@ -298,7 +298,10 @@ class GuestTripWatchService
                 : '—',
             'service_date'       => $schedule?->departure_time?->format('d/m/Y H:i'),
             'driver_name'        => $driverName,
-            'driver_pending'     => $driverName === null,
+            'driver_initial'     => $driverName ? mb_substr($driverName, 0, 1) : null,
+            'driver_photo_url'   => $driverProfile?->photoUrl('photo_portrait'),
+            'vehicle_photo_url'  => $driverProfile?->firstVehiclePhotoUrl(),
+            'driver_pending'     => ! $hasDriver,
             'driver_distance_km' => $booking->driver_pickup_distance_km !== null
                 ? (float) $booking->driver_pickup_distance_km
                 : null,
@@ -314,8 +317,10 @@ class GuestTripWatchService
             'progress'           => $progress,
             'progress_label'     => match ($progress) {
                 'searching_driver'   => 'Đang tìm tài xế',
-                'needs_operator_help'=> 'Quản lý đang hỗ trợ gán tài xế',
+                'needs_operator_help'=> 'Đang tìm tài xế',
                 'driver_assigned'    => 'Đã có tài xế',
+                'driver_at_pickup'   => 'Tài xế đến điểm đón',
+                'picked_up'          => 'Đã đón khách',
                 'running'            => 'Đang chạy',
                 'completed'          => 'Hoàn thành',
                 default              => 'Đã đặt',
@@ -327,6 +332,96 @@ class GuestTripWatchService
             'expires_review_at'  => $expiresAt,
             'requires_cancel_reason' => app(\App\Services\BookingPhoneGuardService::class)
                 ->requiresCancelReason($contactPhone),
+            'wait_progress'          => $this->serializeWaitProgress($booking, $progress, $contactPhone),
+        ];
+    }
+
+    /** @return array<string, mixed>|null */
+    private function serializeWaitProgress(Booking $booking, string $progress, string $contactPhone): ?array
+    {
+        if ($progress === 'completed' && $this->canReview($booking)) {
+            if (! $booking->completed_at) {
+                return null;
+            }
+
+            $deadline = $booking->completed_at->copy()->addDays(self::REVIEW_WINDOW_DAYS);
+
+            return [
+                'kind'           => 'review',
+                'label'          => 'Thời gian đánh giá',
+                'hint'           => 'Gửi phản hồi trước khi hết hạn',
+                'started_at'     => $booking->completed_at->toIso8601String(),
+                'deadline_at'    => $deadline->toIso8601String(),
+                'total_seconds'  => self::REVIEW_WINDOW_DAYS * 86400,
+                'indeterminate'  => false,
+            ];
+        }
+
+        $booking->loadMissing('schedule');
+        if (! $booking->schedule || $booking->schedule->driver_id) {
+            return null;
+        }
+
+        $pendingRequest = DriverTripRequest::query()
+            ->where('schedule_id', $booking->schedule_id)
+            ->where('status', 'pending')
+            ->orderByDesc('created_at')
+            ->get()
+            ->first(function (DriverTripRequest $request) use ($contactPhone): bool {
+                $phone = trim((string) ($request->contact_phone ?? ''));
+
+                if ($phone === '') {
+                    return true;
+                }
+
+                return AuthIdentifier::normalizePhone($phone) === AuthIdentifier::normalizePhone($contactPhone);
+            });
+
+        if ($pendingRequest?->expires_at?->isFuture()) {
+            $started = $pendingRequest->created_at ?? now();
+            $totalSeconds = max(60, (int) $started->diffInSeconds($pendingRequest->expires_at));
+
+            return [
+                'kind'           => 'driver_accept',
+                'label'          => 'Chờ tài xế xác nhận',
+                'hint'           => 'Tài xế đang xem thông tin chuyến của bạn',
+                'started_at'     => $started->toIso8601String(),
+                'deadline_at'    => $pendingRequest->expires_at->toIso8601String(),
+                'total_seconds'  => $totalSeconds,
+                'indeterminate'  => false,
+            ];
+        }
+
+        if (! in_array($progress, ['searching_driver', 'needs_operator_help'], true)) {
+            return null;
+        }
+
+        $searchStarted = $booking->driver_search_started_at ?? $booking->created_at ?? now();
+        $escalationMinutes = DriverTripRequestService::OPERATOR_ESCALATION_MINUTES;
+        $escalationDeadline = $searchStarted->copy()->addMinutes($escalationMinutes);
+
+        if ($progress === 'searching_driver' && $escalationDeadline->isFuture()) {
+            return [
+                'kind'           => 'driver_search',
+                'label'          => 'Đang tìm tài xế',
+                'hint'           => 'Ưu tiên ghép tài xế gần điểm đón',
+                'started_at'     => $searchStarted->toIso8601String(),
+                'deadline_at'    => $escalationDeadline->toIso8601String(),
+                'total_seconds'  => $escalationMinutes * 60,
+                'indeterminate'  => false,
+            ];
+        }
+
+        $extendedStart = $booking->needs_operator_help_at ?? $searchStarted;
+
+        return [
+            'kind'           => 'driver_search_extended',
+            'label'          => 'Đang tìm tài xế',
+            'hint'           => 'Đang tiếp tục tìm phù hợp nhất cho bạn',
+            'started_at'     => $extendedStart->toIso8601String(),
+            'deadline_at'    => null,
+            'total_seconds'  => 0,
+            'indeterminate'  => true,
         ];
     }
 

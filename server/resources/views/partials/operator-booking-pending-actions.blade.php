@@ -17,23 +17,19 @@
         @else
             <span class="text-muted small">Chưa có tài xế</span>
         @endif
-        <form method="POST"
-              action="{{ route('operator.bookings.dismissStuck', $booking) }}"
-              data-confirm="Ẩn chuyến treo này khỏi danh sách? Hệ thống sẽ tự xóa sau {{ \App\Services\OperatorBookingDismissService::RETENTION_DAYS }} ngày."
-              data-confirm-title="Ẩn chuyến treo"
-              data-confirm-variant="danger"
-              data-confirm-ok="Ẩn">
-            @csrf
-            @method('DELETE')
-            <button type="submit" class="btn btn-sm btn-outline-secondary">Ẩn</button>
-        </form>
+        @include('partials.operator-booking-dismiss-form', ['booking' => $booking])
     </div>
 @elseif($booking->isInOperatorPendingQueue() && ! $booking->hasDriverAccepted())
-    @include('partials.operator-booking-assign', [
-        'booking' => $booking,
-        'drivers' => $drivers,
-        'bookingList' => 'pending',
-    ])
+    <div class="d-flex flex-column gap-2">
+        @include('partials.operator-booking-assign', [
+            'booking' => $booking,
+            'drivers' => $drivers,
+            'bookingList' => 'pending',
+        ])
+        @if($booking->isOperatorDismissible())
+            @include('partials.operator-booking-dismiss-form', ['booking' => $booking])
+        @endif
+    </div>
 @else
     <span class="text-muted">—</span>
 @endif

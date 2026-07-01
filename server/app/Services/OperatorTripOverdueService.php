@@ -25,6 +25,13 @@ class OperatorTripOverdueService
                 }
 
                 if ($booking->operator_help_reason === Booking::HELP_TRIP_OVERDUE) {
+                    if ($booking->schedule?->driver_id) {
+                        app(BookingWorkflowService::class)->handOffScheduleToOperator(
+                            $booking->schedule,
+                            Booking::HELP_TRIP_OVERDUE,
+                        );
+                    }
+
                     return;
                 }
 
@@ -36,6 +43,11 @@ class OperatorTripOverdueService
                     'needs_operator_help_at' => $booking->needs_operator_help_at ?? now(),
                     'operator_help_reason'   => Booking::HELP_TRIP_OVERDUE,
                 ]);
+
+                app(BookingWorkflowService::class)->handOffScheduleToOperator(
+                    $booking->schedule,
+                    Booking::HELP_TRIP_OVERDUE,
+                );
 
                 $escalated++;
             });

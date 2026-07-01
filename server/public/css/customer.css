@@ -3021,7 +3021,46 @@ body.modal-open .modal-backdrop.show {
 /* Guest trip watch — đánh giá sau chuyến */
 .guest-trip-watch {
     margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
 }
+
+.guest-orders-head {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+}
+
+.guest-orders-back {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .35rem .65rem;
+    border-radius: 999px;
+    border: 1px solid rgba(212, 175, 55, .28);
+    color: var(--tl-primary-light);
+    font-size: .8125rem;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.guest-orders-back:hover {
+    background: rgba(212, 175, 55, .1);
+    color: #fff;
+}
+
+.customer-page--orders {
+    padding-bottom: 5rem;
+}
+
+.guest-trip-watch-empty a {
+    color: var(--tl-primary-light);
+    font-weight: 600;
+}
+
+.customer-scroll-dock--three-tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .guest-trip-watch-info {
     display: flex;
     align-items: flex-start;
@@ -3069,10 +3108,152 @@ body.modal-open .modal-backdrop.show {
     transform: translateY(-6px);
 }
 .guest-trip-card-header {
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+.guest-trip-card-trip {
+    min-width: 0;
+}
+.guest-trip-wait {
     margin-bottom: 0.85rem;
+    padding: 0.9rem 1rem;
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.07) 0%, rgba(212, 175, 55, 0.08) 100%);
+    border: 1px solid rgba(212, 175, 55, 0.28);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.guest-trip-wait-head {
+    margin-bottom: 0.65rem;
+}
+.guest-trip-wait-copy {
+    min-width: 0;
+}
+.guest-trip-wait-label {
+    font-weight: 700;
+    font-size: 0.9375rem;
+    line-height: 1.3;
+    color: var(--tl-text, #1f2937);
+}
+.guest-trip-wait-time {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--tl-gold, #c9a227);
+    margin-top: 0.15rem;
+}
+.guest-trip-wait.is-review .guest-trip-wait-time {
+    color: #059669;
+}
+.guest-trip-wait-bar {
+    height: 5px;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.25);
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+}
+.guest-trip-wait-bar-fill {
+    height: 100%;
+    width: 0;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--tl-gold, #c9a227), #f5d76e);
+    transition: width 0.6s ease;
+}
+.guest-trip-wait.is-indeterminate .guest-trip-wait-bar-fill {
+    width: 35% !important;
+    background: linear-gradient(90deg, #38bdf8, #0ea5e9);
+    animation: guest-trip-wait-slide 1.6s ease-in-out infinite;
+}
+.guest-trip-wait.is-review .guest-trip-wait-bar-fill {
+    background: linear-gradient(90deg, #10b981, #34d399);
+}
+.guest-trip-wait.is-overdue .guest-trip-wait-time {
+    color: #d97706;
+}
+.guest-trip-wait-hint {
+    font-size: 0.78rem;
+    line-height: 1.4;
+    color: var(--tl-muted, #6b7280);
+}
+@keyframes guest-trip-wait-slide {
+    0% { transform: translateX(-120%); }
+    100% { transform: translateX(320%); }
+}
+.guest-trip-driver-panel {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 0.85rem;
+    padding: 0.85rem;
+    margin-bottom: 0.85rem;
+    border-radius: 10px;
+    background: rgba(212, 175, 55, 0.06);
+    border: 1px solid rgba(212, 175, 55, 0.22);
+}
+.guest-trip-driver-identity {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+.guest-trip-driver-avatar-wrap {
+    flex-shrink: 0;
+}
+.guest-trip-driver-avatar,
+.guest-trip-driver-avatar-fallback {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+.guest-trip-driver-avatar {
+    border: 2px solid rgba(212, 175, 55, 0.45);
+}
+.guest-trip-driver-avatar-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #b8860b, #d4af37);
+    color: #fff;
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+.guest-trip-driver-label {
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--tl-primary-light, #d4af37);
+    margin-bottom: 0.1rem;
+}
+.guest-trip-driver-name {
+    font-size: 1rem;
+    line-height: 1.25;
+}
+.guest-trip-driver-meta {
+    min-width: 0;
+}
+.guest-trip-vehicle-visual {
+    flex-shrink: 0;
+    width: 88px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(0, 0, 0, 0.2);
+}
+.guest-trip-vehicle-photo {
+    display: block;
+    width: 100%;
+    height: 64px;
+    object-fit: cover;
+}
+@media (max-width: 420px) {
+    .guest-trip-driver-panel {
+        flex-direction: column;
+    }
+    .guest-trip-vehicle-visual {
+        width: 100%;
+    }
+    .guest-trip-vehicle-photo {
+        height: 120px;
+    }
 }
 .guest-trip-card-code {
     font-size: 0.9rem;

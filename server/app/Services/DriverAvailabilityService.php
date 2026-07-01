@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Booking;
 use App\Models\DriverProfile;
 use App\Models\Schedule;
 use App\Models\ScheduleTemplate;
@@ -13,28 +14,128 @@ use InvalidArgumentException;
 
 class DriverAvailabilityService
 {
-    public const MIN_PICKUP_LEAD_MINUTES = 30; // Gợi ý mặc định khi khách không chọn giờ đón
+    public const MIN_PICKUP_LEAD_MINUTES = 30;
+
+    /** Thời gian nghỉ / quay về hub sau khi kết thúc chuyến trước khi nhận chuyến tiếp theo. */
+    public const MIN_TURNAROUND_MINUTES = 60;
+
+    /** Số chuyến tài xế đang phục vụ (chưa hoàn tất). */
+    public function activeTripCount(int $driverUserId, ?int $excludeScheduleId = null): int
+    {
+        return $this->activeSchedulesForDriver($driverUserId, $excludeScheduleId)->count();
+    }
 
     /**
-     * Tài xế bận khung giờ khi đã nhận chuyến (driver_id gán) cùng điểm đi/đến + giờ khởi hành và xe đã full ghế.
-     * Yêu cầu chờ xác nhận không làm tài xế bận.
+     * Trùng khung giờ với chuyến đang phục vụ — từ giờ đón (hoặc khởi hành) đến dự kiến đến.
+     * Không gán thêm tuyến khác (vd. Củ Chi + Vũng Tàu) khi tài xế còn chuyến chưa xong.
      */
-    public function isDriverBusyForSlot(
+    public function hasTripTimeConflict(
         int $driverUserId,
-        string $departureCity,
-        string $destinationCity,
+        Schedule $candidateSchedule,
+        ?Booking $candidateBooking = null,
+        ?int $excludeScheduleId = null,
+    ): bool {
+        $excludeId = $excludeScheduleId ?? (int) $candidateSchedule->id;
+
+        if ($this->hasOtherActiveScheduleConflict($driverUserId, (int) $candidateSchedule->id, $excludeId)) {
+            return true;
+        }
+
+        $candidateStart = $candidateBooking?->tripStartAt() ?? $candidateSchedule->departure_time;
+        $candidateEnd = $this->bookingBusyUntil($candidateBooking, $candidateSchedule);
+
+        if (! $candidateStart || ! $candidateEnd) {
+            return false;
+        }
+
+        return $this->hasTimeOverlapWithActiveTrips(
+            $driverUserId,
+            $candidateStart,
+            $candidateEnd,
+            $excludeScheduleId ?? (int) $candidateSchedule->id,
+        );
+    }
+
+    public function hasTripTimeConflictForTemplate(
+        int $driverUserId,
+        ScheduleTemplate $template,
         Carbon $departureTime,
     ): bool {
+        $template->loadMissing('route');
+
+        if ($this->activeSchedulesForDriver($driverUserId)->isNotEmpty()) {
+            return true;
+        }
+
+        $arrival = $this->expectedArrivalFor($departureTime, $template)
+            ->copy()
+            ->addMinutes(self::MIN_TURNAROUND_MINUTES);
+
+        return $this->hasTimeOverlapWithActiveTrips($driverUserId, $departureTime, $arrival);
+    }
+
+    /** Tài xế còn chuyến khác chưa đóng — chỉ phục vụ một chuyến tại một thời điểm. */
+    public function hasOtherActiveScheduleConflict(
+        int $driverUserId,
+        int $candidateScheduleId,
+        ?int $excludeScheduleId = null,
+    ): bool {
+        $exclude = $excludeScheduleId ?? $candidateScheduleId;
+
+        foreach ($this->activeSchedulesForDriver($driverUserId, $exclude) as $schedule) {
+            if ((int) $schedule->id !== $candidateScheduleId) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function assignmentConflictMessage(
+        int $driverUserId,
+        Schedule $candidateSchedule,
+        ?Booking $candidateBooking = null,
+        ?int $excludeScheduleId = null,
+    ): ?string {
+        $excludeId = $excludeScheduleId ?? (int) $candidateSchedule->id;
+
+        if ($this->hasOtherActiveScheduleConflict($driverUserId, (int) $candidateSchedule->id, $excludeId)) {
+            return 'Tài xế đang phục vụ chuyến khác — hệ thống sẽ gán tài xế khác.';
+        }
+
+        if ($this->hasTripTimeConflict($driverUserId, $candidateSchedule, $candidateBooking, $excludeScheduleId)) {
+            return 'Tài xế đang bận chuyến khác trùng khung giờ. Vui lòng chọn tài xế khác.';
+        }
+
+        return null;
+    }
+
+    public function canAcceptSchedule(
+        int $driverUserId,
+        Schedule $schedule,
+        ?Booking $booking = null,
+    ): bool {
+        return ! $this->hasTripTimeConflict($driverUserId, $schedule, $booking);
+    }
+
+    /** @return Collection<int, Schedule> */
+    public function activeSchedulesForDriver(int $driverUserId, ?int $excludeScheduleId = null): Collection
+    {
         return Schedule::query()
-            ->with(['route', 'vehicle', 'seatReservations'])
+            ->with(['route', 'bookings'])
             ->where('driver_id', $driverUserId)
             ->whereIn('status', ['scheduled', 'running'])
-            ->where('departure_time', $departureTime)
-            ->whereHas('route', fn ($q) => $q
-                ->where('departure', $departureCity)
-                ->where('destination', $destinationCity))
-            ->get()
-            ->contains(fn (Schedule $schedule): bool => $schedule->bookedSeatsCount() >= $schedule->capacity());
+            ->whereHas('bookings', fn ($q) => $q
+                ->whereNotIn('booking_status', ['cancelled', 'rejected'])
+                ->where('trip_status', '!=', 'completed'))
+            ->whereDoesntHave('bookings', fn ($q) => $q
+                ->whereNotIn('booking_status', ['cancelled', 'rejected'])
+                ->where(function ($q2): void {
+                    $q2->whereNotNull('needs_operator_help_at')
+                        ->orWhere('trip_status', 'awaiting_completion');
+                }))
+            ->when($excludeScheduleId, fn ($q) => $q->where('id', '!=', $excludeScheduleId))
+            ->get();
     }
 
     /** @return Collection<int, DriverProfile> */
@@ -48,8 +149,6 @@ class DriverAvailabilityService
     ): Collection {
         $template->loadMissing(['vehicle', 'route']);
         $departureTime = $this->resolveDepartureTime($template, $serviceDate, $preferredTime);
-        $departureCity = trim($pickupCity) ?: $template->route->departure;
-        $destinationCity = trim($dropoffCity) ?: $template->route->destination;
 
         $query = DriverProfile::query()
             ->operational()
@@ -66,11 +165,10 @@ class DriverAvailabilityService
         }
 
         return $drivers
-            ->filter(function (DriverProfile $profile) use ($departureCity, $destinationCity, $departureTime): bool {
-                return ! $this->isDriverBusyForSlot(
+            ->filter(function (DriverProfile $profile) use ($template, $departureTime): bool {
+                return ! $this->hasTripTimeConflictForTemplate(
                     (int) $profile->user_id,
-                    $departureCity,
-                    $destinationCity,
+                    $template,
                     $departureTime,
                 );
             })
@@ -173,7 +271,88 @@ class DriverAvailabilityService
         );
 
         if (! $available->contains(fn (DriverProfile $p): bool => (int) $p->user_id === (int) $profile->user_id)) {
-            throw new \InvalidArgumentException('Tài xế không còn rảnh cho khung giờ và tuyến này (có thể đã full ghế). Vui lòng chọn tài xế khác.');
+            throw new InvalidArgumentException('Tài xế không còn rảnh cho khung giờ này (đang phục vụ tuyến khác hoặc trùng giờ). Vui lòng chọn tài xế khác.');
         }
+    }
+
+    private function hasTimeOverlapWithActiveTrips(
+        int $driverUserId,
+        Carbon $candidateStart,
+        Carbon $candidateEnd,
+        ?int $excludeScheduleId = null,
+    ): bool {
+        foreach ($this->activeSchedulesForDriver($driverUserId, $excludeScheduleId) as $schedule) {
+            $busyStart = $this->scheduleTripStart($schedule);
+            $busyEnd = $this->scheduleBusyUntil($schedule);
+
+            if ($this->windowsOverlap($candidateStart, $candidateEnd, $busyStart, $busyEnd)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function scheduleTripStart(Schedule $schedule): Carbon
+    {
+        $schedule->loadMissing('bookings');
+
+        $starts = $schedule->driverRelevantBookings()
+            ->map(fn (Booking $booking) => $booking->tripStartAt())
+            ->filter()
+            ->sort()
+            ->values();
+
+        return $starts->first() ?? $schedule->departure_time;
+    }
+
+    private function scheduleBusyUntil(Schedule $schedule): Carbon
+    {
+        $schedule->loadMissing('bookings');
+
+        $ends = $schedule->driverRelevantBookings()
+            ->map(fn (Booking $booking): ?Carbon => $this->bookingBusyUntil($booking, $schedule))
+            ->filter()
+            ->values();
+
+        if ($ends->isNotEmpty()) {
+            return $ends->max();
+        }
+
+        return $schedule->expectedArrivalAt()->copy()->addMinutes(self::MIN_TURNAROUND_MINUTES);
+    }
+
+    private function bookingBusyUntil(?Booking $booking, Schedule $schedule): Carbon
+    {
+        if ($booking) {
+            $completion = $booking->expectedTripCompletionAt();
+
+            if ($completion) {
+                return $completion->copy()->addMinutes(self::MIN_TURNAROUND_MINUTES);
+            }
+        }
+
+        return $schedule->expectedArrivalAt()->copy()->addMinutes(self::MIN_TURNAROUND_MINUTES);
+    }
+
+    private function windowsOverlap(Carbon $startA, Carbon $endA, Carbon $startB, Carbon $endB): bool
+    {
+        return $startA->lt($endB) && $startB->lt($endA);
+    }
+
+    private function expectedArrivalFor(Carbon $departureTime, ScheduleTemplate $template): Carbon
+    {
+        $template->loadMissing('route');
+
+        if ($template->hasFixedDepartureTime() && $template->expected_arrival_time) {
+            return $template->expectedArrivalAt($departureTime->copy()->startOfDay());
+        }
+
+        $km = (int) ($template->route->distance_km ?? 0);
+        $minutes = $km > 0
+            ? (int) ceil($km / OperatorTripOverdueService::ASSUMED_SPEED_KMH * 60)
+            : 120;
+
+        return $departureTime->copy()->addMinutes($minutes);
     }
 }

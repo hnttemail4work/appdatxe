@@ -1,5 +1,5 @@
 /**
- * Customer booking — thanh điều hướng cuộn (không chuyển tab / reload).
+ * Customer booking — thanh điều hướng (cuộn trên trang đặt vé, chuyển trang cho Đơn đặt).
  */
 (function () {
     var root = document.querySelector('.customer-page');
@@ -8,7 +8,8 @@
         return;
     }
 
-    var sectionIds = ['booking-search-block', 'booking-results-main', 'guest-trip-watch-section'];
+    var isOrdersPage = root.classList.contains('customer-page--orders');
+    var sectionIds = ['booking-search-block', 'booking-results-main'];
     var scrollItems = dock.querySelectorAll('[data-scroll-target]');
 
     function scrollToSection(id) {
@@ -28,34 +29,43 @@
         });
     }
 
-    scrollItems.forEach(function (item) {
-        item.addEventListener('click', function (event) {
-            event.preventDefault();
-            var targetId = item.dataset.scrollTarget;
-            if (!targetId) {
-                return;
-            }
-            scrollToSection(targetId);
-            setActiveItem(targetId);
+    if (!isOrdersPage) {
+        scrollItems.forEach(function (item) {
+            item.addEventListener('click', function (event) {
+                event.preventDefault();
+                var targetId = item.dataset.scrollTarget;
+                if (!targetId) {
+                    return;
+                }
+                scrollToSection(targetId);
+                setActiveItem(targetId);
+            });
         });
-    });
 
-    if ('IntersectionObserver' in window) {
-        var observer = new IntersectionObserver(function (entries) {
-            var visible = entries
-                .filter(function (entry) { return entry.isIntersecting; })
-                .sort(function (a, b) { return b.intersectionRatio - a.intersectionRatio; });
-            if (visible.length && visible[0].target.id) {
-                setActiveItem(visible[0].target.id);
-            }
-        }, { root: null, rootMargin: '-40% 0px -45% 0px', threshold: [0, 0.15, 0.35, 0.55] });
+        if ('IntersectionObserver' in window) {
+            var observer = new IntersectionObserver(function (entries) {
+                var visible = entries
+                    .filter(function (entry) { return entry.isIntersecting; })
+                    .sort(function (a, b) { return b.intersectionRatio - a.intersectionRatio; });
+                if (visible.length && visible[0].target.id) {
+                    setActiveItem(visible[0].target.id);
+                }
+            }, { root: null, rootMargin: '-40% 0px -45% 0px', threshold: [0, 0.15, 0.35, 0.55] });
 
-        sectionIds.forEach(function (id) {
-            var el = document.getElementById(id);
-            if (el) {
-                observer.observe(el);
-            }
-        });
+            sectionIds.forEach(function (id) {
+                var el = document.getElementById(id);
+                if (el) {
+                    observer.observe(el);
+                }
+            });
+        }
+
+        if (window.location.hash === '#booking-results-main') {
+            window.setTimeout(function () {
+                scrollToSection('booking-results-main');
+                setActiveItem('booking-results-main');
+            }, 80);
+        }
     }
 
     function updateTrackBadge(count) {
@@ -75,50 +85,22 @@
         }
     }
 
-    function shouldShowTrackTab(tripCount, watchlistCount) {
-        var trips = Number(tripCount) || 0;
-        var watchlist = Number(watchlistCount);
-        if (Number.isNaN(watchlist)) {
-            watchlist = Number(window.__guestWatchlistCount) || 0;
-        }
-        return trips > 0 || watchlist > 0 || window.__bookingSuccessActive === true || window.__guestShowTrackTab === true;
-    }
-
-    function updateTrackVisibility(tripCount, watchlistCount) {
-        var show = shouldShowTrackTab(tripCount, watchlistCount);
-        var trackBtn = dock.querySelector('.customer-scroll-dock-item--track');
-        var sectionEl = document.getElementById('guest-trip-watch-section');
-
-        if (trackBtn) {
-            trackBtn.classList.toggle('d-none', !show);
-        }
-        dock.classList.toggle('customer-scroll-dock--two-tabs', !show);
-        if (sectionEl) {
-            sectionEl.classList.toggle('d-none', !show);
-        }
-        updateTrackBadge(tripCount);
-    }
-
     document.addEventListener('guesttrips:updated', function (event) {
         var detail = event.detail || {};
-        updateTrackVisibility(detail.count, detail.watchlist_count);
+        updateTrackBadge(detail.count);
     });
 
-    var viewOrderBtn = document.getElementById('booking-flash-view-order-btn');
-    if (viewOrderBtn) {
-        viewOrderBtn.addEventListener('click', function () {
-            scrollToSection('guest-trip-watch-section');
-            setActiveItem('guest-trip-watch-section');
-        });
+    if (!isOrdersPage) {
+        updateTrackBadge(window.__guestActiveOrdersCount);
     }
-
-    updateTrackVisibility(window.__guestActiveOrdersCount, window.__guestWatchlistCount);
 
     window.CustomerScrollDock = {
         scrollTo: scrollToSection,
         scrollToTrack: function () {
-            scrollToSection('guest-trip-watch-section');
-            setActiveItem('guest-trip-watch-section');
+            var url = window.__guestOrdersUrl;
+            if (url) {
+                window.location.href = url;
+            }
         },
         scrollToResults: function () {
             scrollToSection('booking-results-main');

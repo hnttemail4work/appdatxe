@@ -312,7 +312,10 @@
     }
 
     function roundToThousand(amount) {
-        return Math.round(amount / 1000) * 1000;
+        if (!amount || amount <= 0) {
+            return 0;
+        }
+        return Math.ceil(amount / 10000) * 10000;
     }
 
     function priceFromTemplate(template, bookingMode, tripType) {
@@ -1039,10 +1042,13 @@
         var vehicleCount = isWhole ? clampVehicleCount() : 1;
         var hasSeats = isStep1Ready();
         var subtotal = isWhole ? (price * vehicleCount) : (seatCount * price);
+        subtotal = roundToThousand(subtotal);
         var total = subtotal;
         if (lastQuoteReferral && lastQuoteReferral.eligible && lastQuoteReferral.total > 0) {
             total = lastQuoteReferral.total;
             subtotal = lastQuoteReferral.subtotal || subtotal;
+        } else {
+            total = subtotal;
         }
 
         if (seatSummaryText) {
@@ -1123,6 +1129,11 @@
                 phoneInput.addEventListener('input', function () {
                     fetchQuotePrice();
                 });
+                phoneInput.addEventListener('change', function () {
+                    guardActiveBookingForPhone(phoneInput.value, null, function (info) {
+                        blockActiveBooking(null, info);
+                    });
+                });
             }
             fetchQuotePrice();
         }
@@ -1159,8 +1170,6 @@
         activeOccupied = {};
         activeCapacity = 0;
         allowNativeSubmit = false;
-        var ackInput = document.getElementById('modal-duplicate-booking-ack');
-        if (ackInput) ackInput.value = '';
         setBookingStep(1);
     }
 
@@ -1608,6 +1617,12 @@
                 fetchQuotePrice();
                 updateSummary(activeTemplateId);
             }
+            var phoneInput = document.getElementById('modal-contact-phone');
+            if (phoneInput && phoneInput.value.trim()) {
+                guardActiveBookingForPhone(phoneInput.value, null, function (info) {
+                    blockActiveBooking(null, info);
+                });
+            }
         });
         bookingModal.addEventListener('hidden.bs.modal', resetBookingModal);
     }
@@ -1685,11 +1700,19 @@
             var isWhole = getBookingMode() === 'whole_car';
             var seatCount = isWhole ? (window.__seatPicks[activeTemplateId] || new Set()).size : clampSharedSeatCount();
 
-            checkDuplicateBeforeSubmit(function (isDuplicate, bookingInfo) {
-                if (isDuplicate) {
-                    promptDuplicateBooking(submitBtn, bookingInfo, function () {
-                        finalizeBookingSubmit(submitBtn);
-                    });
+            checkDuplicateBeforeSubmit(function (isBlocked, bookingInfo) {
+                if (isBlocked === null) {
+                    if (window.AppDialog) {
+                        window.AppDialog.alert('Không kiểm tra được đơn đang chạy. Vui lòng thử lại sau vài giây.');
+                    }
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = 'Xác nhận đặt vé';
+                    }
+                    return;
+                }
+                if (isBlocked) {
+                    blockActiveBooking(submitBtn, bookingInfo);
                     return;
                 }
                 finalizeBookingSubmit(submitBtn);
@@ -1697,30 +1720,54 @@
         });
     }
 
-    function checkDuplicateBeforeSubmit(callback) {
-        var ackInput = document.getElementById('modal-duplicate-booking-ack');
-        if (ackInput && ackInput.value === '1') {
-            callback(false);
-            return;
-        }
+    function checkDuplicateBeforeSubmit(callback, phoneOverride) {
         var phoneInput = document.getElementById('modal-contact-phone');
-        var phone = phoneInput ? phoneInput.value.trim() : '';
-        if (!checkDuplicateUrl || !phone || !activeTemplateId) {
-            callback(false);
+        var phone = phoneOverride != null
+            ? String(phoneOverride).trim()
+            : (phoneInput ? phoneInput.value.trim() : '');
+        if (!checkDuplicateUrl || !phone) {
+            callback(false, null);
             return;
         }
-        var params = new URLSearchParams({
-            template_id: activeTemplateId,
-            contact_phone: phone,
-        });
+        var params = new URLSearchParams({ contact_phone: phone });
+        if (activeTemplateId) {
+            params.set('template_id', activeTemplateId);
+        }
         fetch(checkDuplicateUrl + '?' + params.toString(), { headers: { Accept: 'application/json' } })
             .then(function (r) { return r.json(); })
             .then(function (data) {
-                callback(!!(data && data.duplicate), data && data.booking ? data.booking : null);
+                callback(!!(data && (data.active_booking || data.duplicate)), data && data.booking ? data.booking : null);
             })
             .catch(function () {
-                callback(false);
+                callback(null, null);
             });
+    }
+
+    function guardActiveBookingForPhone(phone, onClear, onBlocked) {
+        var trimmed = String(phone || '').trim();
+        if (!trimmed) {
+            if (typeof onClear === 'function') {
+                onClear();
+            }
+            return;
+        }
+
+        checkDuplicateBeforeSubmit(function (isBlocked, bookingInfo) {
+            if (isBlocked === null) {
+                return;
+            }
+            if (isBlocked) {
+                if (typeof onBlocked === 'function') {
+                    onBlocked(bookingInfo);
+                } else {
+                    blockActiveBooking(null, bookingInfo);
+                }
+                return;
+            }
+            if (typeof onClear === 'function') {
+                onClear();
+            }
+        }, trimmed);
     }
 
     function finalizeBookingSubmit(submitBtn) {
@@ -1759,39 +1806,36 @@
         });
     }
 
-    function promptDuplicateBooking(submitBtn, bookingInfo, onContinue) {
-        var routeLabel = bookingInfo && bookingInfo.route ? bookingInfo.route : 'tuyến này';
+    function blockActiveBooking(submitBtn, bookingInfo) {
+        var routeLabel = bookingInfo && bookingInfo.route ? bookingInfo.route : 'cuốc trước';
         var tripCode = bookingInfo && bookingInfo.trip_code ? bookingInfo.trip_code : '';
-        var message = 'Bạn đã có đơn đang chờ trên ' + routeLabel + '.';
+        var statusLabel = bookingInfo && bookingInfo.progress_label ? bookingInfo.progress_label : '';
+        var ordersUrl = window.__guestOrdersUrl || '/guest/orders';
+        var message = 'Bạn đang có một cuốc chưa hoàn thành (' + routeLabel;
         if (tripCode) {
-            message += ' Mã: ' + tripCode + '.';
+            message += ', mã ' + tripCode;
         }
-        message += ' Bạn vẫn muốn đặt thêm?';
+        if (statusLabel) {
+            message += ' — ' + statusLabel;
+        }
+        message += '). Hoàn thành hoặc hủy cuốc đó trước khi đặt cuốc mới.';
 
         if (window.AppDialog && window.AppDialog.confirm) {
             window.AppDialog.confirm({
-                title: 'Đặt xe trùng tuyến',
+                title: 'Chưa thể đặt thêm',
                 message: message,
-                confirmText: 'Đặt thêm',
-                cancelText: 'Quay lại',
+                confirmText: 'Xem đơn của tôi',
+                cancelText: 'Đóng',
             }).then(function (ok) {
                 if (ok) {
-                    var ackInput = document.getElementById('modal-duplicate-booking-ack');
-                    if (ackInput) ackInput.value = '1';
-                    onContinue();
-                } else if (submitBtn) {
-                    submitBtn.disabled = false;
-                    submitBtn.textContent = 'Xác nhận đặt vé';
+                    window.location.href = ordersUrl;
                 }
             });
-            return;
+        } else {
+            window.alert(message);
         }
 
-        if (window.confirm(message)) {
-            var ackInput = document.getElementById('modal-duplicate-booking-ack');
-            if (ackInput) ackInput.value = '1';
-            onContinue();
-        } else if (submitBtn) {
+        if (submitBtn) {
             submitBtn.disabled = false;
             submitBtn.textContent = 'Xác nhận đặt vé';
         }
@@ -2441,12 +2485,45 @@
             updateSummary(String(restore.template_id));
             setBookingStep(restore.step || 2);
             if (restore.duplicate_route && window.AppDialog) {
-                window.AppDialog.alert('Bạn đã có đơn đang chờ trên tuyến này. Bấm xác nhận lại và chọn «Đặt thêm» nếu vẫn muốn đặt.');
+                window.AppDialog.alert('Bạn đang có cuốc chưa hoàn thành. Hoàn thành hoặc hủy cuốc đó trước khi đặt cuốc mới.');
             }
         }, 350);
     }
 
     restoreBookingModalFromValidation();
+
+    function initPickupAddressAutocomplete() {
+        if (!window.GeocodeAddressAutocomplete) {
+            return;
+        }
+
+        window.GeocodeAddressAutocomplete.attach({
+            detailInputId: 'modal-pickup-detail',
+            latInputId: 'modal-pickup-lat',
+            lngInputId: 'modal-pickup-lng',
+            provinceInputId: 'modal-pickup',
+            onSelect: function () {
+                var detailEl = document.getElementById('modal-pickup-detail');
+                if (detailEl && window.FormFieldValidation && FormFieldValidation.clearInvalid) {
+                    FormFieldValidation.clearInvalid(detailEl);
+                }
+                updateSummary(activeTemplateId);
+            },
+        });
+
+        document.addEventListener('addressmap:applied', function (e) {
+            if (!e.detail || e.detail.targetInputId !== 'modal-pickup-detail') {
+                return;
+            }
+            var detailEl = document.getElementById('modal-pickup-detail');
+            if (detailEl && window.FormFieldValidation && FormFieldValidation.clearInvalid) {
+                FormFieldValidation.clearInvalid(detailEl);
+            }
+            updateSummary(activeTemplateId);
+        });
+    }
+
+    initPickupAddressAutocomplete();
 
     applyReferralPrefill();
     if (referralPrefill) {

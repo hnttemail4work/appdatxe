@@ -49,11 +49,6 @@ class User extends Authenticatable
         return $this->hasMany(DriverProfile::class, 'operator_id');
     }
 
-    public function inventoryItems()
-    {
-        return $this->hasMany(InventoryItem::class, 'operator_id');
-    }
-
     public function vehicles()
     {
         return $this->hasMany(Vehicle::class, 'operator_id');

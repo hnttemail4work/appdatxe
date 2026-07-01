@@ -89,18 +89,6 @@ class DriverWalletService
         });
     }
 
-    /** @deprecated Luồng kết chuyến đã bỏ. */
-    public function settleTrip(DriverTripSettlement $settlement, ?string $code): void
-    {
-        throw new InvalidArgumentException('Chức năng kết chuyến đã được gỡ bỏ.');
-    }
-
-    /** @deprecated Luồng kết chuyến đã bỏ. */
-    public function issueSettlementCode(DriverTripSettlement $settlement, int $operatorId): string
-    {
-        throw new InvalidArgumentException('Chức năng cấp mã kết chuyến đã được gỡ bỏ.');
-    }
-
     public function requestDeposit(DriverProfile $profile, int $amount): DriverWalletTransaction
     {
         if ($amount < DriverWalletConfig::MIN_DEPOSIT) {
@@ -183,7 +171,13 @@ class DriverWalletService
 
     public function canAcceptTrips(DriverProfile $profile): bool
     {
-        if (! $profile->isOperational()) {
+        $profile->loadMissing('user');
+
+        if ($profile->status !== 'active'
+            || $profile->isMissedTripLocked()
+            || ! $profile->user
+            || $profile->user->status !== 'active'
+            || $profile->user->role !== 'driver') {
             return false;
         }
 
@@ -421,18 +415,6 @@ class DriverWalletService
             ->where('status', 'pending')
             ->latest()
             ->get();
-    }
-
-    /** @deprecated */
-    public function confirmSettlementTransfer(DriverTripSettlement $settlement, ?string $transferRef = null): void
-    {
-        throw new InvalidArgumentException('Chức năng chuyển phí đã được gỡ bỏ.');
-    }
-
-    /** @deprecated */
-    public function approveUnderThresholdSettlement(DriverTripSettlement $settlement, int $operatorId): void
-    {
-        throw new InvalidArgumentException('Chức năng kết chuyến đã được gỡ bỏ.');
     }
 
     private function refreshWalletGate(DriverWallet $wallet): void

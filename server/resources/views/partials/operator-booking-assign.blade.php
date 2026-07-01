@@ -105,10 +105,68 @@
         <button type="submit" class="btn btn-primary btn-sm text-nowrap">Đổi TX</button>
     </form>
 @elseif($booking->schedule->driver)
-    {{ $booking->schedule->driver->name }}
-    @if($booking->driver_pickup_distance_km !== null)
-        <span class="small text-muted">({{ DriverProximityService::formatDistanceLabel((float) $booking->driver_pickup_distance_km) }} lúc nhận chuyến)</span>
+    @php
+        $assignedProfile = $booking->schedule->assignedDriverProfile
+            ?? $booking->schedule->driver?->driverProfile;
+        $distanceText = $booking->driver_pickup_distance_km !== null
+            ? DriverProximityService::formatDistanceLabel((float) $booking->driver_pickup_distance_km) . ' lúc nhận chuyến'
+            : null;
+    @endphp
+    @if($assignedProfile)
+        @include('partials.booking-driver-brief', [
+            'profile' => $assignedProfile,
+            'distanceLabel' => $distanceText,
+            'compact' => true,
+        ])
+    @else
+        {{ $booking->schedule->driver->name }}
+        @if($distanceText)
+            <span class="small text-muted">({{ $distanceText }})</span>
+        @endif
     @endif
 @else
     <span class="text-muted">—</span>
+@endif
+
+@php
+    $mergeCandidates = (($booking->booking_mode ?? 'shared') === 'shared'
+        && ! in_array($booking->booking_status, ['cancelled', 'rejected'], true)
+        && ($schedule?->departure_time?->isFuture() ?? false))
+        ? app(\App\Services\TripConsolidationService::class)->mergeCandidatesFor($booking)
+        : collect();
+    $consolidation = app(\App\Services\TripConsolidationService::class);
+@endphp
+@if($mergeCandidates->isNotEmpty() && $schedule)
+    <div class="operator-merge-schedules mt-2 pt-2 border-top">
+        <div class="small text-muted mb-1">Gom ghép xe vào chuyến gần giờ (≤ {{ \App\Services\TripConsolidationService::POOL_WINDOW_MINUTES }} phút)
+            @if($schedule->driver_id || $mergeCandidates->contains(fn ($c) => (int) $c->driver_id > 0))
+                — <strong>có tài xế thì cần TX xác nhận</strong>
+            @endif
+            :
+        </div>
+        @foreach($mergeCandidates as $candidate)
+            @php $pendingMerge = $consolidation->pendingMergeForPair($candidate, $schedule); @endphp
+            @if($pendingMerge)
+                <span class="badge bg-warning text-dark mb-1 me-1">
+                    Chờ TX · {{ $candidate->departure_time->format('H:i') }} · {{ $candidate->shortTripCode() }}
+                </span>
+            @else
+            <form method="POST"
+                  action="{{ route('operator.schedules.merge', ['target' => $candidate->id, 'source' => $schedule->id]) }}"
+                  class="d-inline"
+                  data-confirm="Gom toàn bộ khách từ mã {{ $schedule->shortTripCode() }} sang chuyến {{ $candidate->departure_time->format('H:i') }} ({{ $candidate->shortTripCode() }})?{{ ((int) $candidate->driver_id > 0) ? ' Tài xế sẽ được hỏi xác nhận trước.' : '' }}"
+                  data-confirm-title="Gom chuyến"
+                  data-confirm-ok="Gom">
+                @csrf
+                <button type="submit" class="btn btn-sm btn-outline-secondary mb-1 me-1">
+                    {{ $candidate->departure_time->format('H:i') }} · {{ $candidate->shortTripCode() }}
+                    · {{ $candidate->activeGuestBookingsCount() }} khách
+                    @if($candidate->driver_id)
+                        · có TX
+                    @endif
+                </button>
+            </form>
+            @endif
+        @endforeach
+    </div>
 @endif

@@ -46,12 +46,6 @@ class PlatformFees
             : self::referralCommissionRepeatPercent();
     }
 
-    /** @deprecated Dùng referralCommissionFirstPercent() */
-    public static function referralCommissionPercent(): float
-    {
-        return self::referralCommissionFirstPercent();
-    }
-
     public static function roundTripDiscountPercent(): float
     {
         $setting = PlatformSetting::getValue('round_trip_discount_percentage', ['value' => 15]);
@@ -78,5 +72,32 @@ class PlatformFees
         $discount = self::roundTripDiscountPercent();
 
         return round(2 * (1 - $discount / 100), 4);
+    }
+
+    /** Bội số làm tròn giá hiển thị / tính vé (10.000đ — không có lẻ hàng nghìn). */
+    public const PRICE_ROUND_UNIT = 10_000;
+
+    /** Làm tròn lên bội {@see PRICE_ROUND_UNIT} (vd. 138.001 → 140.000). */
+    public static function roundUpToThousand(float|int $amount): int
+    {
+        if ($amount <= 0) {
+            return 0;
+        }
+
+        $unit = self::PRICE_ROUND_UNIT;
+
+        return (int) (ceil($amount / $unit) * $unit);
+    }
+
+    /** Làm tròn xuống bội {@see PRICE_ROUND_UNIT} — dùng sau giảm giá GT. */
+    public static function roundDownPrice(float|int $amount): int
+    {
+        if ($amount <= 0) {
+            return 0;
+        }
+
+        $unit = self::PRICE_ROUND_UNIT;
+
+        return (int) (floor($amount / $unit) * $unit);
     }
 }

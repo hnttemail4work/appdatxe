@@ -163,12 +163,15 @@ $showPendingActionsColumn = $bookingList === 'pending';
                                 'bookingList' => $bookingList,
                             ])
                         @else
-                            @php $profile = $booking->schedule->designatedDriverProfile(); @endphp
+                            @php
+                                $profile = $booking->schedule->assignedDriverProfile
+                                    ?? $booking->schedule->designatedDriverProfile();
+                            @endphp
                             @if($profile)
-                                <div>{{ $profile->user->name ?? '—' }}</div>
-                                @if($profile->driver_code)
-                                    <div class="cell-muted">{{ $profile->driver_code }}</div>
-                                @endif
+                                @include('partials.booking-driver-brief', [
+                                    'profile' => $profile,
+                                    'compact' => true,
+                                ])
                             @else
                                 —
                             @endif

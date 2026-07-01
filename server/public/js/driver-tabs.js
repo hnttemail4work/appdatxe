@@ -8,22 +8,31 @@
     }
 
     var baseUrl = root.dataset.driverTabsBase || window.location.pathname;
-    var validTabs = ['requests', 'trips', 'history', 'deposit'];
-    var activeTab = root.dataset.driverTabsActive || 'requests';
+    var validTabs = ['trips', 'history', 'deposit'];
+    var activeTab = root.dataset.driverTabsActive || 'trips';
 
     function isValidTab(tab) {
+        if (tab === 'requests') {
+            return true;
+        }
+
         return validTabs.indexOf(tab) !== -1;
+    }
+
+    function normalizeTab(tab) {
+        return tab === 'requests' ? 'trips' : tab;
     }
 
     function tabFromUrl() {
         var params = new URLSearchParams(window.location.search);
-        var tab = params.get('tab') || 'requests';
-        return isValidTab(tab) ? tab : 'requests';
+        var tab = normalizeTab(params.get('tab') || 'trips');
+        return isValidTab(tab) ? tab : 'trips';
     }
 
     function buildUrl(tab) {
+        tab = normalizeTab(tab);
         var params = new URLSearchParams(window.location.search);
-        if (tab === 'requests') {
+        if (tab === 'trips') {
             params.delete('tab');
         } else {
             params.set('tab', tab);
@@ -50,6 +59,7 @@
             return;
         }
 
+        tab = normalizeTab(tab);
         activeTab = tab;
         root.dataset.driverTabsActive = tab;
 
@@ -72,7 +82,7 @@
 
     document.querySelectorAll('[data-driver-tab]').forEach(function (trigger) {
         trigger.addEventListener('click', function (event) {
-            var tab = trigger.dataset.driverTab;
+            var tab = normalizeTab(trigger.dataset.driverTab || '');
             if (!isValidTab(tab)) {
                 return;
             }

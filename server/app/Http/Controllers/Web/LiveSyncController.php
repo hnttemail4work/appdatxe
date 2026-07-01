@@ -27,31 +27,33 @@ class LiveSyncController extends Controller
         $user = Auth::user();
         $profile = DriverProfile::query()->where('user_id', $user->id)->first();
 
-        $pendingIncoming = $this->driverRequests
-            ->tripCardsForDriver($user->id);
-
         $schedules = Schedule::query()
             ->with([
                 'route',
                 'vehicle',
                 'bookings' => fn ($q) => $q->whereNotIn('booking_status', ['cancelled', 'rejected'])->latest(),
             ])
-            ->where('driver_id', $user->id)
-            ->whereHas('bookings', fn ($q) => $q->whereNotIn('booking_status', ['cancelled', 'rejected']))
-            ->where('departure_time', '>=', now()->subHours(2))
+            ->forDriverActiveTrips($user->id)
             ->orderBy('departure_time')
             ->get()
+            ->filter(fn (Schedule $s): bool => $s->driverRelevantBookings()->isNotEmpty()
+                && $s->driverWorkflowPhase() !== 'settled'
+                && $s->isVisibleOnDriverDashboard())
             ->map(fn (Schedule $s) => [
                 'id'             => $s->id,
                 'route'          => $s->route->departure . ' → ' . $s->route->destination,
                 'departure_time' => $s->departure_time->format('H:i, d/m/Y'),
                 'status'         => $s->status,
+                'driver_stage'   => $s->resolvedDriverStage(),
+                'stage_label'    => $s->driver_id ? $s->bookingStatusLabel() : $s->statusLabel(),
+                'movement_deadline' => $s->driverMovementDeadlineLabel(),
+                'movement_deadline_at' => $s->driver_movement_deadline_at?->toIso8601String(),
                 'display_status' => $s->displayStatus(),
                 'status_label'   => $s->statusLabel(),
                 'seats_label'    => $s->seatsLabel(),
-                'passengers'     => $s->bookings->count(),
+                'passengers'     => $s->driverRelevantBookings()->count(),
                 'trip_total'     => number_format($s->tripRevenueTotal(), 0, ',', '.'),
-                'bookings'       => $s->bookings->map(fn (Booking $b) => [
+                'bookings'       => $s->driverRelevantBookings()->map(fn (Booking $b) => [
                     'passenger_name'   => $b->passenger_name,
                     'passenger_gender' => $b->passengerGenderLabel(),
                     'passenger_age'    => $b->passenger_age,
@@ -74,8 +76,12 @@ class LiveSyncController extends Controller
             'driver_code'       => $profile?->driver_code,
             'availability'      => $profile?->availability_status ?? 'off_duty',
             'availability_label'=> $profile?->displayStatusLabel() ?? 'Nghỉ',
-            'pending_requests'  => $pendingIncoming,
             'schedules'         => $schedules,
+            'pending_trip_requests' => $this->driverRequests->pendingGroupsForDriver($user->id)
+                ->map(fn (array $group): array => [
+                    'id' => $group['primary']->id,
+                ])
+                ->values(),
         ]);
     }
 }

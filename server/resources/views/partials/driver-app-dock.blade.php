@@ -3,7 +3,7 @@
     /** @var array<int, array{key: string, label: string, short?: string, badge?: int|string, hot?: bool}> $tabs */
     $activeKey = $activeKey ?? ($tabs[0]['key'] ?? '');
 @endphp
-<nav class="driver-app-dock" aria-label="Menu tài xế">
+<nav class="driver-app-dock" style="--driver-dock-tabs: {{ count($tabs) }};" aria-label="Menu tài xế">
     @foreach($tabs as $tab)
         @php
             $isActive = ($tab['key'] ?? '') === $activeKey;
@@ -17,9 +17,7 @@
                 aria-label="{{ $tab['label'] }}"
                 @if($isActive) aria-current="page" @endif>
             <span class="driver-dock-icon" aria-hidden="true">
-                @if($tabKey === 'requests')
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-                @elseif($tabKey === 'trips')
+                @if($tabKey === 'trips')
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M3 12h18M3 18h12"/></svg>
                 @elseif($tabKey === 'history')
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 2.5"/></svg>

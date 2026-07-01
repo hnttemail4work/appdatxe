@@ -268,11 +268,11 @@ class ReferralCodeService
     public function applyDiscount(float $subtotal, float $discountPercent): float
     {
         if ($discountPercent <= 0 || $subtotal <= 0) {
-            return round($subtotal, 2);
+            return (float) PlatformFees::roundUpToThousand($subtotal);
         }
 
         $discounted = $subtotal * (1 - $discountPercent / 100);
 
-        return (float) (floor($discounted / 1000) * 1000);
+        return (float) PlatformFees::roundDownPrice($discounted);
     }
 }

@@ -19,6 +19,17 @@ class GuestTripWatchController extends Controller
     ) {
     }
 
+    public function ordersPage()
+    {
+        $guestWatchlistCount = $this->watchlist->watchlistCount();
+        $guestActiveOrdersCount = count($this->watchlist->visibleTrips());
+
+        return view('guest.orders', compact(
+            'guestWatchlistCount',
+            'guestActiveOrdersCount',
+        ));
+    }
+
     public function index()
     {
         return response()->json([

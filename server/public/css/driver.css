@@ -158,6 +158,8 @@ body:has(.driver-page) {
 .driver-earnings-item {
     display: flex;
     flex-direction: column;
+    align-items: center;
+    text-align: center;
     gap: .1rem;
     padding: .45rem .4rem;
     border-radius: .55rem;
@@ -200,7 +202,7 @@ body:has(.driver-page) {
     bottom: 0;
     z-index: 1040;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(var(--driver-dock-tabs, 3), minmax(0, 1fr));
     gap: .15rem;
     padding: .35rem .45rem calc(.35rem + env(safe-area-inset-bottom, 0px));
     background: rgba(16, 16, 16, .96);
@@ -427,7 +429,9 @@ body:has(.driver-page) {
     border: 1px solid rgba(212, 175, 55, .2);
     border-radius: .85rem;
     background: linear-gradient(180deg, #1c1c1c 0%, #141414 100%);
-    overflow: hidden;
+    overflow: visible;
+    position: relative;
+    z-index: 5;
 }
 
 .driver-location-sheet-head {
@@ -485,6 +489,8 @@ body:has(.driver-page) {
 
 .driver-location-sheet-actions {
     padding: .65rem .75rem .75rem;
+    position: relative;
+    z-index: 2;
 }
 
 .driver-location-input-wrap {
@@ -492,6 +498,12 @@ body:has(.driver-page) {
     grid-template-columns: 1fr auto;
     gap: .45rem;
     align-items: stretch;
+    position: relative;
+}
+
+.driver-location-input-wrap .booking-address-suggest {
+    grid-column: 1 / -1;
+    z-index: 30;
 }
 
 .driver-location-input {
@@ -884,9 +896,20 @@ body:has(.driver-page) {
 .driver-passenger-head {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
-    gap: .35rem;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: .35rem .5rem;
     margin-bottom: .35rem;
+}
+
+.driver-passenger-head strong {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.driver-passenger-head .status-pill {
+    flex: 0 0 auto;
+    margin-left: auto;
 }
 
 .driver-info-line {
@@ -962,6 +985,9 @@ body:has(.driver-page) {
 @media (min-width: 768px) {
     .driver-page {
         padding-bottom: 2rem;
+        max-width: 28rem;
+        margin-left: auto;
+        margin-right: auto;
     }
 
     .driver-app-dock {
@@ -1202,7 +1228,20 @@ body:has(.driver-page) {
 
 .driver-trip-card--compact .driver-card-top-main {
     min-width: 0;
-    flex: 1;
+    flex: 1 1 auto;
+}
+
+.driver-trip-card--compact .driver-card-top-aside {
+    flex: 0 0 auto;
+    max-width: 42%;
+    margin-left: auto;
+}
+
+.driver-trip-card--compact .driver-card-top-aside .status-pill {
+    max-width: 100%;
+    white-space: normal;
+    text-align: right;
+    line-height: 1.2;
 }
 
 .driver-trip-card--compact.is-running {
@@ -1220,28 +1259,40 @@ body:has(.driver-page) {
 }
 
 .driver-card-actions--compact {
+    display: block;
     padding-top: .65rem;
     padding-bottom: .75rem;
     background: #141414;
 }
 
+.driver-workflow-compact {
+    width: 100%;
+    box-sizing: border-box;
+}
+
 .driver-workflow-compact-steps {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .3rem;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: .35rem;
     margin-bottom: .65rem;
+    width: 100%;
 }
 
 .driver-workflow-compact-step {
     font-size: .62rem;
     font-weight: 700;
-    line-height: 1.2;
-    padding: .2rem .45rem;
+    line-height: 1.25;
+    padding: .35rem .25rem;
     border-radius: 999px;
     background: rgba(255, 255, 255, .06);
     color: #9ca3af;
     border: 1px solid rgba(255, 255, 255, .1);
-    white-space: nowrap;
+    text-align: center;
+    white-space: normal;
+    min-height: 2.15rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .driver-workflow-compact-step.is-done {
@@ -1255,6 +1306,132 @@ body:has(.driver-page) {
     color: #e8c547;
     border-color: rgba(212, 175, 55, .38);
     box-shadow: 0 0 10px rgba(212, 175, 55, .1);
+}
+
+.driver-movement-deadline {
+    padding: 0.45rem 0.65rem;
+    border-radius: 0.45rem;
+    background: rgba(251, 191, 36, 0.12);
+    border: 1px solid rgba(251, 191, 36, 0.35);
+    font-weight: 600;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.driver-wait {
+    margin-bottom: 0.75rem;
+    padding: 0.75rem 0.85rem;
+    border-radius: 0.55rem;
+    background: rgba(251, 191, 36, 0.1);
+    border: 1px solid rgba(251, 191, 36, 0.32);
+}
+
+.driver-request-card > .driver-wait {
+    margin: 0 0 0.75rem;
+}
+
+.driver-wait--trip_accept {
+    background: rgba(56, 189, 248, 0.1);
+    border-color: rgba(56, 189, 248, 0.35);
+}
+
+.driver-wait--merge_confirm {
+    background: rgba(167, 139, 250, 0.1);
+    border-color: rgba(167, 139, 250, 0.35);
+}
+
+.driver-wait--complete_overdue,
+.driver-wait--movement_confirm.is-overdue {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.35);
+}
+
+.driver-wait-head {
+    margin-bottom: 0.55rem;
+}
+
+.driver-wait-label {
+    font-weight: 700;
+    font-size: 0.875rem;
+    line-height: 1.35;
+    color: #f5f5f5;
+}
+
+.driver-wait-time {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #e8c547;
+    margin-top: 0.15rem;
+}
+
+.driver-wait--trip_accept .driver-wait-time {
+    color: #38bdf8;
+}
+
+.driver-wait.is-overdue .driver-wait-time {
+    color: #fb923c;
+}
+
+.driver-wait-bar {
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
+    overflow: hidden;
+    margin-bottom: 0.45rem;
+}
+
+.driver-wait-bar-fill {
+    height: 100%;
+    width: 0;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #d4af37, #f5d76e);
+    transition: width 0.6s ease;
+}
+
+.driver-wait--trip_accept .driver-wait-bar-fill {
+    background: linear-gradient(90deg, #0ea5e9, #38bdf8);
+}
+
+.driver-wait--merge_confirm .driver-wait-bar-fill {
+    background: linear-gradient(90deg, #8b5cf6, #a78bfa);
+}
+
+.driver-wait.is-indeterminate .driver-wait-bar-fill {
+    width: 35% !important;
+    animation: driver-wait-slide 1.6s ease-in-out infinite;
+}
+
+.driver-wait-hint {
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: rgba(245, 245, 245, 0.72);
+}
+
+@keyframes driver-wait-slide {
+    0% { transform: translateX(-120%); }
+    100% { transform: translateX(320%); }
+}
+
+.driver-workflow-compact-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .45rem;
+    width: 100%;
+}
+
+.driver-workflow-compact-action {
+    min-width: 0;
+    margin: 0;
+}
+
+.driver-workflow-compact-action:only-child {
+    grid-column: 1 / -1;
+}
+
+.driver-workflow-compact-action .btn {
+    width: 100%;
+    min-height: 2.35rem;
+    font-weight: 600;
 }
 
 .driver-workflow-compact-panel {

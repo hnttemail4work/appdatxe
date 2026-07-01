@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Response;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -53,22 +55,38 @@ class GeocodeController extends Controller
 
     private function nominatimHeaders(): array
     {
+        $name = (string) config('app.name', 'App');
+        $email = (string) config('app.contact_email', 'noreply@localhost');
+
         return [
-            'User-Agent' => config('app.name') . ' (' . config('app.contact_email') . ')',
+            'User-Agent' => $name.' ('.$email.')',
         ];
     }
 
-    private function nominatimClient()
+    private function nominatimClient(): PendingRequest
     {
         $client = Http::timeout(10)->withHeaders($this->nominatimHeaders());
 
-        if (! config('app.geocode_verify_ssl', ! app()->environment('local'))) {
+        if (! (bool) config('app.geocode_verify_ssl', true)) {
             $client = $client->withOptions(['verify' => false]);
         }
 
         return $client;
     }
 
+    /** @param array<string, mixed> $params */
+    private function nominatimGet(string $url, array $params): ?Response
+    {
+        try {
+            $response = $this->nominatimClient()->get($url, $params);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return $response->successful() ? $response : null;
+    }
+
+    /** @param array<string, mixed> $data */
     private function formatAddress(array $data, ?float $lat = null, ?float $lon = null): string
     {
         if ($lat === null && isset($data['lat'])) {
@@ -93,6 +111,7 @@ class GeocodeController extends Controller
         );
     }
 
+    /** @param array<string, mixed> $addr */
     private function buildAddressFromParts(array $addr, ?float $lat = null, ?float $lon = null): string
     {
         $streetParts = array_filter([
@@ -127,6 +146,7 @@ class GeocodeController extends Controller
         return implode(', ', array_values(array_unique(array_filter($parts))));
     }
 
+    /** @param array<string, mixed> $addr */
     private function cityLabelForAddress(array $addr, ?float $lat, ?float $lon): string
     {
         if ($lat !== null && $lon !== null && $this->isInViewbox($lat, $lon, self::PROVINCE_VIEWBOXES['TP.HCM'])) {
@@ -151,18 +171,18 @@ class GeocodeController extends Controller
         if ($lat !== null && $lon !== null && $this->isInViewbox($lat, $lon, self::PROVINCE_VIEWBOXES['TP.HCM'])) {
             $display = preg_replace(
                 '/,?\s*Thành phố Thủ Đức\s*$/u',
-                ', ' . self::HCM_CITY_LABEL,
+                ', '.self::HCM_CITY_LABEL,
                 $display,
             ) ?? $display;
             $display = preg_replace(
                 '/,?\s*Thủ Đức\s*$/u',
-                ', ' . self::HCM_CITY_LABEL,
+                ', '.self::HCM_CITY_LABEL,
                 $display,
             ) ?? $display;
 
             if (! str_contains(mb_strtolower($display), 'hồ chí minh')
                 && ! str_contains(mb_strtolower($display), 'ho chi minh')) {
-                $display .= ', ' . self::HCM_CITY_LABEL;
+                $display .= ', '.self::HCM_CITY_LABEL;
             }
         }
 
@@ -203,7 +223,7 @@ class GeocodeController extends Controller
 
             if (! str_contains($lower, $labelLower)
                 && ! ($province === 'TP.HCM' && (str_contains($lower, 'ho chi minh') || str_contains($lower, 'hồ chí minh') || str_contains($lower, 'sài gòn') || str_contains($lower, 'sai gon')))) {
-                $text .= ', ' . $label;
+                $text .= ', '.$label;
             }
         }
 
@@ -214,6 +234,61 @@ class GeocodeController extends Controller
         return $text;
     }
 
+    private function viewboxCenter(string $viewbox): ?array
+    {
+        $parts = array_map('floatval', explode(',', $viewbox));
+        if (count($parts) !== 4) {
+            return null;
+        }
+
+        [$minLon, $maxLat, $maxLon, $minLat] = $parts;
+
+        return [($minLat + $maxLat) / 2, ($minLon + $maxLon) / 2];
+    }
+
+    private function distanceScore(float $lat, float $lon, string $viewbox): float
+    {
+        $center = $this->viewboxCenter($viewbox);
+        if (! $center) {
+            return 0.0;
+        }
+
+        $dlat = $lat - $center[0];
+        $dlon = $lon - $center[1];
+
+        return sqrt($dlat * $dlat + $dlon * $dlon);
+    }
+
+    /** @param array<string, mixed> $item */
+    private function isLowQualitySearchHit(array $item, string $address): bool
+    {
+        $type = (string) ($item['type'] ?? '');
+        $class = (string) ($item['class'] ?? '');
+
+        if ($class === 'boundary' && str_starts_with($type, 'administrative')) {
+            return true;
+        }
+
+        if (in_array($type, ['country', 'state', 'region', 'county'], true)) {
+            return true;
+        }
+
+        return mb_strlen(trim($address)) < 6;
+    }
+
+    /** @param array<string, mixed> $params */
+    private function nominatimSearch(array $params): array
+    {
+        $response = $this->nominatimGet('https://nominatim.openstreetmap.org/search', $params);
+        if ($response === null) {
+            return [];
+        }
+
+        $payload = $response->json();
+
+        return is_array($payload) ? $payload : [];
+    }
+
     public function reverse(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -221,26 +296,24 @@ class GeocodeController extends Controller
             'lon' => ['required', 'numeric', 'between:-180,180'],
         ]);
 
-        try {
-            $response = $this->nominatimClient()->get('https://nominatim.openstreetmap.org/reverse', [
-                'lat' => $validated['lat'],
-                'lon' => $validated['lon'],
-                'format' => 'json',
-                'addressdetails' => 1,
-                'accept-language' => 'vi',
-                'zoom' => 18,
-            ]);
-        } catch (\Throwable) {
-            return response()->json(['message' => 'Không lấy được địa chỉ.'], 502);
-        }
+        $response = $this->nominatimGet('https://nominatim.openstreetmap.org/reverse', [
+            'lat' => $validated['lat'],
+            'lon' => $validated['lon'],
+            'format' => 'json',
+            'addressdetails' => 1,
+            'accept-language' => 'vi',
+            'zoom' => 18,
+        ]);
 
-        if (! $response->successful()) {
+        if ($response === null) {
             return response()->json(['message' => 'Không lấy được địa chỉ.'], 502);
         }
 
         $data = $response->json();
+        /** @var array<string, mixed> $payload */
+        $payload = is_array($data) ? $data : [];
         $address = $this->formatAddress(
-            is_array($data) ? $data : [],
+            $payload,
             (float) $validated['lat'],
             (float) $validated['lon'],
         );
@@ -277,62 +350,112 @@ class GeocodeController extends Controller
 
         if ($province !== '' && isset(self::PROVINCE_VIEWBOXES[$province])) {
             $params['viewbox'] = self::PROVINCE_VIEWBOXES[$province];
-            $params['bounded'] = 0;
+            $params['bounded'] = 1;
         }
 
-        try {
-            $response = $this->nominatimClient()->get('https://nominatim.openstreetmap.org/search', $params);
-        } catch (\Throwable) {
-            return response()->json(['results' => []]);
-        }
+        $raw = $this->nominatimSearch($params);
+        $results = $this->mapSearchResults($raw, $province);
 
-        if (! $response->successful()) {
-            return response()->json(['results' => []]);
+        if ($results === [] && $province !== '' && isset(self::PROVINCE_VIEWBOXES[$province])) {
+            $loose = $this->nominatimSearch([
+                'q' => $this->buildSearchQuery($validated['q'], $province),
+                'format' => 'json',
+                'countrycodes' => 'vn',
+                'limit' => 12,
+                'addressdetails' => 1,
+                'accept-language' => 'vi',
+                'viewbox' => self::PROVINCE_VIEWBOXES[$province],
+                'bounded' => 0,
+            ]);
+            $results = $this->mapSearchResults($loose, $province);
         }
-
-        $results = $this->mapSearchResults($response->json());
 
         if ($results === [] && $province !== '') {
-            try {
-                $fallback = $this->nominatimClient()->get('https://nominatim.openstreetmap.org/search', [
-                    'q' => $this->buildSearchQuery($validated['q']),
-                    'format' => 'json',
-                    'countrycodes' => 'vn',
-                    'limit' => 8,
-                    'addressdetails' => 1,
-                    'accept-language' => 'vi',
-                ]);
-                if ($fallback->successful()) {
-                    $results = $this->mapSearchResults($fallback->json());
-                }
-            } catch (\Throwable) {
-                // ignore fallback errors
-            }
+            $fallback = $this->nominatimSearch([
+                'q' => $this->buildSearchQuery($validated['q']),
+                'format' => 'json',
+                'countrycodes' => 'vn',
+                'limit' => 12,
+                'addressdetails' => 1,
+                'accept-language' => 'vi',
+            ]);
+            $results = $this->mapSearchResults($fallback, $province);
         }
 
         return response()->json(['results' => $results]);
     }
 
-    private function mapSearchResults(mixed $payload): array
+    /** @param list<array<string, mixed>> $payload
+     * @return list<array{address: string, lat: float, lon: float}>
+     */
+    private function mapSearchResults(array $payload, string $province = ''): array
     {
-        return collect(is_array($payload) ? $payload : [])
-            ->map(function ($item) {
-                if (! is_array($item)) {
-                    return null;
-                }
+        $viewbox = ($province !== '' && isset(self::PROVINCE_VIEWBOXES[$province]))
+            ? self::PROVINCE_VIEWBOXES[$province]
+            : null;
 
-                $address = $this->formatAddress($item);
+        /** @var list<array{address: string, lat: float, lon: float, _importance: float, _key: string}> $candidates */
+        $candidates = [];
 
-                return [
-                    'address' => $address,
-                    'lat' => isset($item['lat']) ? (float) $item['lat'] : null,
-                    'lon' => isset($item['lon']) ? (float) $item['lon'] : null,
-                ];
-            })
-            ->filter(fn (?array $item) => $item && $item['address'] !== '' && $item['lat'] !== null && $item['lon'] !== null)
-            ->unique('address')
-            ->values()
-            ->take(6)
-            ->all();
+        foreach ($payload as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+
+            $lat = isset($row['lat']) ? (float) $row['lat'] : null;
+            $lon = isset($row['lon']) ? (float) $row['lon'] : null;
+            $address = $this->formatAddress($row);
+
+            if ($address === '' || $lat === null || $lon === null) {
+                continue;
+            }
+
+            if ($this->isLowQualitySearchHit($row, $address)) {
+                continue;
+            }
+
+            if ($viewbox !== null && ! $this->isInViewbox($lat, $lon, $viewbox)) {
+                continue;
+            }
+
+            $candidates[] = [
+                'address' => $address,
+                'lat' => $lat,
+                'lon' => $lon,
+                '_importance' => (float) ($row['importance'] ?? 0),
+                '_key' => round($lat, 4).','.round($lon, 4),
+            ];
+        }
+
+        $unique = [];
+        foreach ($candidates as $candidate) {
+            $unique[$candidate['_key']] = $candidate;
+        }
+        $candidates = array_values($unique);
+
+        usort($candidates, function (array $a, array $b) use ($viewbox): int {
+            $importance = $b['_importance'] <=> $a['_importance'];
+            if ($importance !== 0) {
+                return $importance;
+            }
+
+            if ($viewbox !== null) {
+                return $this->distanceScore($a['lat'], $a['lon'], $viewbox)
+                    <=> $this->distanceScore($b['lat'], $b['lon'], $viewbox);
+            }
+
+            return 0;
+        });
+
+        $results = [];
+        foreach (array_slice($candidates, 0, 6) as $candidate) {
+            $results[] = [
+                'address' => $candidate['address'],
+                'lat' => $candidate['lat'],
+                'lon' => $candidate['lon'],
+            ];
+        }
+
+        return $results;
     }
 }

@@ -10,7 +10,7 @@ class OperatorBookingDismissService
 {
     public const RETENTION_DAYS = 30;
 
-    public function dismissStuckTrip(Booking $booking, int $operatorId): void
+    public function dismissFromOperatorQueue(Booking $booking, int $operatorId): void
     {
         if (! Booking::supportsOperatorDismiss()) {
             throw new InvalidArgumentException('Hệ thống chưa cập nhật migration — liên hệ quản trị.');
@@ -22,11 +22,23 @@ class OperatorBookingDismissService
             throw new InvalidArgumentException('Không có quyền xử lý đơn này.');
         }
 
-        if (! $booking->isTripOverdueStuck()) {
-            throw new InvalidArgumentException('Chỉ có thể ẩn chuyến treo (quá hạn hoàn thành).');
+        if (! $booking->isOperatorDismissible()) {
+            throw new InvalidArgumentException('Không thể ẩn đơn này.');
         }
 
-        $booking->update(['operator_dismissed_at' => now()]);
+        if ($booking->isTripOverdueStuck()) {
+            $booking->update(['operator_dismissed_at' => now()]);
+
+            return;
+        }
+
+        app(BookingWorkflowService::class)->cancelUnfulfilledForOperatorDismiss($booking);
+    }
+
+    /** @deprecated Use {@see dismissFromOperatorQueue()} */
+    public function dismissStuckTrip(Booking $booking, int $operatorId): void
+    {
+        $this->dismissFromOperatorQueue($booking, $operatorId);
     }
 
     /** Xóa hẳn đơn đã ẩn quá hạn lưu trữ. */

@@ -31,6 +31,28 @@ class ScheduleLifecycleService
         $this->purgeEmptyExpiredDaySchedules($now);
         $this->deactivateStaleEmptyOffers($now);
         $this->advanceStatuses($now);
+        $this->handOffStaleOperatorTrips();
+        app(TripConsolidationService::class)->autoConsolidateOpenSchedules();
+        app(TripConsolidationService::class)->expireStaleMergeRequests();
+    }
+
+    /** Chuyến quá hạn / chờ đóng — gỡ khỏi tài xế, chỉ quản lý xử lý. */
+    private function handOffStaleOperatorTrips(): void
+    {
+        $workflow = app(BookingWorkflowService::class);
+
+        Schedule::query()
+            ->whereNotNull('driver_id')
+            ->whereHas('bookings', fn ($q) => $q
+                ->whereNotIn('booking_status', ['cancelled', 'rejected'])
+                ->where(function ($q2): void {
+                    $q2->where('trip_status', 'awaiting_completion')
+                        ->orWhereNotNull('needs_operator_help_at');
+                }))
+            ->each(fn (Schedule $schedule) => $workflow->handOffScheduleToOperator(
+                $schedule,
+                \App\Models\Booking::HELP_TRIP_OVERDUE,
+            ));
     }
 
     /** Tạo hoặc tái sử dụng chuyến theo nhu cầu khi khách đặt vé. */
@@ -39,6 +61,9 @@ class ScheduleLifecycleService
         string $serviceDate,
         ?string $pickupTime = null,
         bool $alwaysCreate = false,
+        int $seatsNeeded = 1,
+        ?float $pickupLat = null,
+        ?float $pickupLng = null,
     ): Schedule {
         $template->loadMissing(['vehicle', 'route']);
         $date = ServiceDate::parse($serviceDate);
@@ -58,6 +83,19 @@ class ScheduleLifecycleService
 
             if ($schedule) {
                 return $schedule;
+            }
+
+            $pooled = app(TripConsolidationService::class)->findPoolableSchedule(
+                $template,
+                $serviceDate,
+                $departure,
+                max($seatsNeeded, 1),
+                $pickupLat,
+                $pickupLng,
+            );
+
+            if ($pooled) {
+                return $pooled;
             }
         } else {
             $departure = $this->nextAvailableDeparture($template, $serviceDate, $departure);
@@ -167,8 +205,15 @@ class ScheduleLifecycleService
                     return;
                 }
 
-                if ($schedule->status === 'scheduled' && $schedule->departure_time <= $now) {
-                    $schedule->update(['status' => 'running']);
+                // Chỉ tài xế bấm "Bắt đầu chạy" mới chuyển running — không tự chuyển theo giờ khởi hành.
+                if ($schedule->status === 'running'
+                    && in_array($schedule->driver_stage, [
+                        null,
+                        Schedule::DRIVER_STAGE_ASSIGNED,
+                        Schedule::DRIVER_STAGE_AT_PICKUP,
+                        Schedule::DRIVER_STAGE_PICKED_UP,
+                    ], true)) {
+                    $schedule->update(['status' => 'scheduled']);
                 }
             });
     }

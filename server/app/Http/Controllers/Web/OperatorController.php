@@ -5,14 +5,15 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\DriverProfile;
-use App\Models\DriverTripSettlement;
 use App\Models\DriverWalletTransaction;
+use App\Models\Schedule;
 use App\Models\User;
 use App\Services\DriverTripRequestService;
 use App\Services\DriverWalletService;
 use App\Services\OperatorBookingDismissService;
 use App\Services\OperatorTripOverdueService;
 use App\Services\ScheduleLifecycleService;
+use App\Services\TripConsolidationService;
 use App\Support\PageList;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -82,7 +83,7 @@ class OperatorController extends Controller
                 'schedule.route',
                 'schedule.vehicle',
                 'schedule.template',
-                'schedule.driver',
+                'schedule.driver.driverProfile.user',
                 'schedule.driverTripRequests',
                 'appliedReferralCode',
                 'tripReview',
@@ -162,46 +163,32 @@ class OperatorController extends Controller
     public function dismissStuckBooking(Booking $booking)
     {
         try {
-            app(OperatorBookingDismissService::class)->dismissStuckTrip($booking, (int) Auth::id());
+            app(OperatorBookingDismissService::class)->dismissFromOperatorQueue($booking, (int) Auth::id());
         } catch (InvalidArgumentException $e) {
             return back()->withErrors(['booking' => $e->getMessage()]);
         }
 
         return redirect()->route('operator.dashboard', ['list' => 'pending'])
-            ->with('success', 'Đã ẩn chuyến treo. Hệ thống sẽ tự xóa sau ' . OperatorBookingDismissService::RETENTION_DAYS . ' ngày.');
+            ->with('success', 'Đã ẩn đơn. Hệ thống sẽ tự xóa sau ' . OperatorBookingDismissService::RETENTION_DAYS . ' ngày.');
     }
 
-    /** @deprecated Luồng kết chuyến đã bỏ. */
-    public function issueSettlementCode(DriverTripSettlement $settlement)
+    /** Gom khách ghép xe từ chuyến nguồn sang chuyến đích (cùng tuyến, gần giờ). */
+    public function mergeSchedules(Schedule $target, Schedule $source)
     {
-        $settlement->loadMissing('wallet.driverProfile');
-        if ((int) $settlement->wallet->driverProfile->operator_id !== Auth::id()) {
-            abort(403);
-        }
-
         try {
-            $code = $this->driverWallet->issueSettlementCode($settlement, Auth::id());
+            $pending = app(TripConsolidationService::class)->mergeSchedules($target, $source, (int) Auth::id());
         } catch (InvalidArgumentException $e) {
-            return back()->withErrors(['wallet' => $e->getMessage()]);
+            return back()->withErrors(['merge' => $e->getMessage()]);
         }
 
-        return back()->with('success', 'Đã cấp mã kết chuyến: ' . $code . ' — gửi cho tài xế (hiệu lực 24 giờ).');
-    }
-
-    public function approveSettlement(DriverTripSettlement $settlement)
-    {
-        $settlement->loadMissing('wallet.driverProfile');
-        if ((int) $settlement->wallet->driverProfile->operator_id !== Auth::id()) {
-            abort(403);
+        if ($pending) {
+            return back()->with(
+                'success',
+                'Đã gửi yêu cầu gom chuyến — chờ tài xế xác nhận (tài xế có thể hỏi khách trước khi đồng ý).',
+            );
         }
 
-        try {
-            $this->driverWallet->approveUnderThresholdSettlement($settlement, Auth::id());
-        } catch (InvalidArgumentException $e) {
-            return back()->withErrors(['wallet' => $e->getMessage()]);
-        }
-
-        return back()->with('success', 'Đã xác nhận kết chuyến — tài xế có thể nhận cuốc mới.');
+        return back()->with('success', 'Đã gom chuyến — khách ghép xe dùng chung mã ' . ($target->fresh()->shortTripCode() ?: 'chuyến') . '.');
     }
 
     public function approveDeposit(DriverWalletTransaction $transaction)

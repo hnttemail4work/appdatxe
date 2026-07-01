@@ -3,11 +3,11 @@
 $bookings = $schedule->driverRelevantBookings();
 $phase = $schedule->driverWorkflowPhase();
 $showActions = $showActions ?? true;
-$needsAction = $showActions && $phase === 'active';
-$isRunning = $phase === 'active';
+$needsAction = $showActions && in_array($phase, ['upcoming', 'active'], true);
+$isRunning = in_array($phase, ['upcoming', 'active'], true);
 @endphp
 
-<article class="driver-trip-card driver-trip-card--compact {{ $needsAction ? 'is-action' : '' }} {{ $isRunning ? 'is-running' : '' }}">
+<article class="driver-trip-card driver-trip-card--compact {{ $needsAction ? 'is-action' : '' }} {{ $isRunning ? 'is-running' : '' }}" data-schedule-id="{{ $schedule->id }}">
     <div class="driver-card-top">
         <div class="driver-card-top-main">
             @include('partials.driver-route-head', [
@@ -26,7 +26,9 @@ $isRunning = $phase === 'active';
                 </div>
             @endif
         </div>
-        <span class="status-pill status-pill--{{ $schedule->driverWorkflowColor() }}">{{ $schedule->driverWorkflowLabel() }}</span>
+        <div class="driver-card-top-aside">
+            <span class="status-pill status-pill--{{ $schedule->driverWorkflowColor() }}">{{ $schedule->driverWorkflowLabel() }}</span>
+        </div>
     </div>
 
     <div class="driver-card-body driver-card-body--compact">

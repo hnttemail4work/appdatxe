@@ -56,6 +56,7 @@ Route::get('resolve-route', [GuestBookingController::class, 'resolveRoute'])->na
 Route::post('bookings', [GuestBookingController::class, 'store'])->name('booking.store');
 Route::get('bookings', fn () => redirect()->route('home'));
 Route::get('cancellation-reasons', [CancellationReasonController::class, 'index'])->name('cancellationReasons.index');
+Route::get('guest/orders', [GuestTripWatchController::class, 'ordersPage'])->name('guest.orders');
 Route::get('guest/trip-watch', [GuestTripWatchController::class, 'index'])->name('guest.tripWatch');
 Route::post('guest/trip-reviews', [GuestTripWatchController::class, 'store'])->middleware('throttle:12,1')->name('guest.tripReviews.store');
 Route::post('guest/bookings/cancel', [GuestTripWatchController::class, 'cancelBooking'])->middleware('throttle:12,1')->name('guest.bookings.cancel');
@@ -80,8 +81,11 @@ Route::middleware(['auth', 'role:driver'])->group(function () {
     Route::redirect('driver/profile', '/driver/dashboard');
     Route::patch('driver/availability', [DriverController::class, 'updateAvailability'])->name('driver.availability.update');
     Route::post('driver/bookings/{booking}/complete', [DriverController::class, 'completeTrip'])->name('driver.bookings.complete');
+    Route::post('driver/schedules/{schedule}/advance', [DriverController::class, 'advanceSchedule'])->name('driver.schedules.advance');
     Route::post('driver/schedules/{schedule}/complete', [DriverController::class, 'completeSchedule'])->name('driver.schedules.complete');
     Route::post('driver/schedules/{schedule}/cancel', [DriverController::class, 'cancelSchedule'])->name('driver.schedules.cancel');
+    Route::post('driver/merge-requests/{mergeRequest}/accept', [DriverController::class, 'acceptMergeRequest'])->name('driver.mergeRequests.accept');
+    Route::post('driver/merge-requests/{mergeRequest}/reject', [DriverController::class, 'rejectMergeRequest'])->name('driver.mergeRequests.reject');
     Route::post('driver/wallet/deposit', [DriverWalletController::class, 'deposit'])->name('driver.wallet.deposit');
     Route::redirect('driver/wallet', '/driver/dashboard?tab=trips')->name('driver.wallet');
 });
@@ -90,6 +94,7 @@ Route::middleware(['auth', 'role:driver'])->group(function () {
 Route::middleware(['auth', 'role:operator'])->group(function () {
     Route::get('operator/dashboard',                   [OperatorController::class, 'dashboard'])->name('operator.dashboard');
     Route::post('operator/bookings/{booking}/assign', [OperatorController::class, 'confirmAndAssignBooking'])->name('operator.bookings.assign');
+    Route::post('operator/schedules/{target}/merge/{source}', [OperatorController::class, 'mergeSchedules'])->name('operator.schedules.merge');
     Route::delete('operator/bookings/lo', [OperatorController::class, 'bulkDismissBookings'])->name('operator.bookings.bulkDismiss');
     Route::delete('operator/bookings/{booking}/dismiss-stuck', [OperatorController::class, 'dismissStuckBooking'])->name('operator.bookings.dismissStuck');
 

@@ -25,7 +25,9 @@ $revenue = $schedule->completedRevenueTotalFor($driverUserId);
                 </div>
             @endif
         </div>
-        <span class="status-pill status-pill--{{ $schedule->driverHistoryColorFor($driverUserId) }}">{{ $schedule->driverHistoryLabelFor($driverUserId) }}</span>
+        <div class="driver-card-top-aside">
+            <span class="status-pill status-pill--{{ $schedule->driverHistoryColorFor($driverUserId) }}">{{ $schedule->driverHistoryLabelFor($driverUserId) }}</span>
+        </div>
     </div>
 
     <div class="driver-card-body driver-card-body--compact">

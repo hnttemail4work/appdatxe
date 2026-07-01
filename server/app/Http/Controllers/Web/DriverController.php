@@ -8,6 +8,7 @@ use App\Models\DriverProfile;
 use App\Support\ProvinceResolver;
 use App\Models\DriverTripRequest;
 use App\Models\Schedule;
+use App\Models\ScheduleMergeRequest;
 use App\Support\DriverFieldRules;
 use App\Services\BookingWorkflowService;
 use App\Services\DriverMissedTripService;
@@ -16,6 +17,7 @@ use App\Services\DriverProfileSyncService;
 use App\Services\DriverTripRequestService;
 use App\Services\DriverWalletService;
 use App\Services\ScheduleLifecycleService;
+use App\Services\TripConsolidationService;
 use App\Support\PageList;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -62,13 +64,11 @@ class DriverController extends Controller
                 'tripSettlement',
                 'bookings' => fn ($q) => $q->orderByDesc('id'),
             ])
-            ->where('driver_id', $user->id)
-            ->whereNot('status', 'cancelled')
-            ->where('departure_time', '>=', now()->subHours(2))
-            ->whereHas('bookings', fn ($q) => $q->whereNotIn('booking_status', ['cancelled', 'rejected']))
+            ->forDriverActiveTrips($user->id)
             ->get()
             ->filter(fn (Schedule $schedule): bool => $schedule->driverRelevantBookings()->isNotEmpty()
-                && $schedule->driverWorkflowPhase() !== 'settled')
+                && $schedule->driverWorkflowPhase() !== 'settled'
+                && $schedule->isVisibleOnDriverDashboard())
             ->sortBy(fn (Schedule $schedule): string => $schedule->driverViewSortKey())
             ->values();
 
@@ -89,13 +89,17 @@ class DriverController extends Controller
 
         $tripHistory = PageList::paginateCollection($tripHistoryAll, $request, 'history_page');
 
-        $tripCardsAll = $this->driverRequests->tripCardsForDriver($user->id);
-        $tripCards = PageList::paginateCollection($tripCardsAll, $request, 'requests_page');
-        $pendingPassengerCount = $tripCardsAll->sum(fn (array $card): int => (int) ($card['passenger_count'] ?? 0));
-
         $tripActionCount = $tripSchedulesAll
-            ->filter(fn (Schedule $s): bool => $s->driverWorkflowPhase() === 'active')
+            ->filter(fn (Schedule $s): bool => in_array($s->driverWorkflowPhase(), ['upcoming', 'active'], true))
             ->count();
+
+        $pendingMergeRequests = app(TripConsolidationService::class)
+            ->pendingMergeRequestsForDriver($user->id);
+
+        $pendingTripRequestGroups = $this->driverRequests->pendingGroupsForDriver($user->id);
+
+        $tripActionCount += $pendingMergeRequests->count();
+        $tripActionCount += $pendingTripRequestGroups->count();
 
         $showTopUpBanner = $profile ? $this->driverWallet->shouldShowTopUpBanner($profile) : false;
         $revenueStats = $profile
@@ -109,8 +113,6 @@ class DriverController extends Controller
         return view('driver.dashboard', compact(
             'user',
             'profile',
-            'tripCards',
-            'pendingPassengerCount',
             'walletBlockReason',
             'driverWallet',
             'walletHistory',
@@ -119,7 +121,22 @@ class DriverController extends Controller
             'tripSchedules',
             'tripActionCount',
             'tripHistory',
+            'pendingMergeRequests',
+            'pendingTripRequestGroups',
         ));
+    }
+
+    public function advanceSchedule(Request $request, Schedule $schedule)
+    {
+        try {
+            $stage = $this->workflow->driverAdvanceScheduleStage($schedule, Auth::id());
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['booking' => $e->getMessage()]);
+        }
+
+        $label = $schedule->fresh()->driverStageLabel($stage);
+
+        return redirect()->route('driver.dashboard', ['tab' => 'trips'])->with('success', "Đã cập nhật: {$label}.");
     }
 
     public function acceptTripRequest(Request $request, DriverTripRequest $driverTripRequest)
@@ -152,7 +169,31 @@ class DriverController extends Controller
             return back()->withErrors(['driver_request' => $e->getMessage()]);
         }
 
-        return redirect()->route('driver.dashboard')->with('success', 'Đã từ chối yêu cầu nhận chuyến.');
+        return redirect()->route('driver.dashboard', ['tab' => 'trips'])->with('success', 'Đã từ chối yêu cầu nhận chuyến.');
+    }
+
+    public function acceptMergeRequest(Request $request, ScheduleMergeRequest $mergeRequest)
+    {
+        try {
+            app(TripConsolidationService::class)->acceptMergeRequest($mergeRequest, Auth::id());
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['merge' => $e->getMessage()]);
+        }
+
+        return redirect()->route('driver.dashboard', ['tab' => 'trips'])
+            ->with('success', 'Đã đồng ý gom chuyến — danh sách khách đã cập nhật trên chuyến của bạn.');
+    }
+
+    public function rejectMergeRequest(Request $request, ScheduleMergeRequest $mergeRequest)
+    {
+        try {
+            app(TripConsolidationService::class)->rejectMergeRequest($mergeRequest, Auth::id());
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['merge' => $e->getMessage()]);
+        }
+
+        return redirect()->route('driver.dashboard', ['tab' => 'trips'])
+            ->with('success', 'Đã từ chối gom chuyến — quản lý sẽ xử lý riêng.');
     }
 
     public function updateLocation(Request $request)
@@ -168,23 +209,27 @@ class DriverController extends Controller
         $address = trim((string) ($validated['address'] ?? ''));
 
         $profile->update([
-            'last_lat'         => $validated['lat'],
-            'last_lng'         => $validated['lng'],
-            'last_location_at' => now(),
-            'last_address'     => $address !== '' ? $address : null,
-            'last_province'    => ProvinceResolver::fromMapPick(
+            'last_lat'            => $validated['lat'],
+            'last_lng'            => $validated['lng'],
+            'last_location_at'    => now(),
+            'last_address'        => $address !== '' ? $address : null,
+            'last_province'       => ProvinceResolver::fromMapPick(
                 (float) $validated['lat'],
                 (float) $validated['lng'],
                 $address !== '' ? $address : null,
             ),
+            'availability_status' => ($profile->availability_status ?? 'off_duty') === 'on_trip'
+                ? 'on_trip'
+                : 'available',
         ]);
 
-        $this->driverRequests->retryWaitingBookings();
+        $assigned = $this->driverRequests->retryWaitingBookings();
 
         return response()->json([
             'ok'         => true,
             'address'    => $address !== '' ? $address : null,
             'updated_at' => $profile->last_location_at?->format('H:i, d/m/Y'),
+            'assigned'   => $assigned,
         ]);
     }
 

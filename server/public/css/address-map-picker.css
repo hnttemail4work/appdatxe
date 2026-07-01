@@ -21,6 +21,51 @@
     justify-content: center;
 }
 
+.booking-address-field,
+.driver-location-input-wrap,
+.geocode-address-field {
+    position: relative;
+}
+
+.booking-address-suggest {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% + 0.25rem);
+    z-index: 20;
+    max-height: 12rem;
+    overflow-y: auto;
+    border-radius: 0.5rem;
+    border: 1px solid rgba(212, 175, 55, 0.35);
+    background: #1a1a1a;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.booking-address-suggest-item {
+    display: block;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: #f3f4f6;
+    text-align: left;
+    padding: 0.55rem 0.75rem;
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    cursor: pointer;
+}
+
+.booking-address-suggest-item:hover,
+.booking-address-suggest-item:focus {
+    background: rgba(212, 175, 55, 0.12);
+    outline: none;
+}
+
+.booking-address-suggest-empty {
+    padding: 0.65rem 0.75rem;
+    font-size: 0.8125rem;
+    color: #9ca3af;
+}
+
 .address-map-picker-modal {
     z-index: 1070;
 }

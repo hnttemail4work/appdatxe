@@ -106,7 +106,4 @@ class VehicleCapacityOptions
 
         return $out;
     }
-
-    /** @deprecated Dùng {@see enabled()} */
-    public const STANDARD = self::DEFAULT_STANDARD;
 }

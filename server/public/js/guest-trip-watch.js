@@ -15,6 +15,22 @@
     var reloadTimer = null;
     var REFRESH_MS = Number(window.__guestTripReloadMs) > 0 ? Number(window.__guestTripReloadMs) : 180000;
 
+    function mountWaitProgress(card, wait) {
+        var slot = card.querySelector('[data-field="wait_progress_slot"]');
+        if (!slot) {
+            return;
+        }
+        slot.innerHTML = '';
+        if (!wait) {
+            slot.classList.add('d-none');
+            return;
+        }
+        slot.classList.remove('d-none');
+        if (window.WaitProgress && window.WaitProgress.create) {
+            slot.appendChild(window.WaitProgress.create(wait, 'guest'));
+        }
+    }
+
     function hasSearchingTrip(trips) {
         return trips.some(function (trip) {
             return trip.progress === 'searching_driver'
@@ -59,7 +75,7 @@
         pollTimer = window.setInterval(loadTrips, REFRESH_MS);
     }
 
-    function progressHtml(activeKey) {
+    function progressHtml(activeKey, activeLabel) {
         var steps = [
             { key: 'booked', label: 'Đã đặt' },
             { key: 'searching_driver', label: 'Đang tìm tài xế' },
@@ -67,10 +83,19 @@
             { key: 'running', label: 'Đang chạy' },
             { key: 'completed', label: 'Hoàn thành' },
         ];
-        var order = { booked: 0, searching_driver: 1, needs_operator_help: 1, driver_assigned: 2, running: 3, completed: 4 };
+        var order = {
+            booked: 0,
+            searching_driver: 1,
+            needs_operator_help: 1,
+            driver_assigned: 2,
+            driver_at_pickup: 2,
+            picked_up: 2,
+            running: 3,
+            completed: 4,
+        };
         var activeIdx = order[activeKey] ?? 0;
-        if (activeKey === 'needs_operator_help') {
-            steps[1].label = 'Quản lý hỗ trợ';
+        if (activeLabel && activeIdx === 2) {
+            steps[2].label = activeLabel;
         }
         var html = '<div class="guest-trip-progress-track">';
         steps.forEach(function (step, idx) {
@@ -273,25 +298,39 @@
         card.querySelector('[data-field="route"]').textContent = trip.route || '';
         card.querySelector('[data-field="service_date"]').textContent = trip.service_date ? 'Khởi hành: ' + trip.service_date : '';
 
+        var driverPanel = card.querySelector('[data-field="driver_panel"]');
         var driverEl = card.querySelector('[data-field="driver_name"]');
         var distanceEl = card.querySelector('[data-field="driver_distance"]');
         var vehicleEl = card.querySelector('[data-field="vehicle_info"]');
+        var avatarImg = card.querySelector('[data-field="driver_avatar"]');
+        var avatarFallback = card.querySelector('[data-field="driver_avatar_fallback"]');
+        var vehicleVisual = card.querySelector('[data-field="vehicle_visual"]');
+        var vehiclePhoto = card.querySelector('[data-field="vehicle_photo"]');
+
         if (trip.driver_pending) {
-            driverEl.textContent = trip.needs_operator_help
-                ? 'Quản lý đang hỗ trợ gán tài xế'
-                : 'Đang tìm kiếm tài xế';
-            driverEl.classList.add('text-muted');
-            if (distanceEl) {
-                distanceEl.classList.add('d-none');
-                distanceEl.textContent = '';
-            }
-            if (vehicleEl) {
-                vehicleEl.classList.add('d-none');
-                vehicleEl.textContent = '';
+            if (driverPanel) {
+                driverPanel.classList.add('d-none');
             }
         } else {
-            driverEl.textContent = trip.driver_name || '—';
-            driverEl.classList.remove('text-muted');
+            if (driverPanel) {
+                driverPanel.classList.remove('d-none');
+            }
+            if (driverEl) {
+                driverEl.textContent = trip.driver_name || '—';
+            }
+            if (avatarImg && avatarFallback) {
+                if (trip.driver_photo_url) {
+                    avatarImg.src = trip.driver_photo_url;
+                    avatarImg.alt = trip.driver_name ? 'Ảnh ' + trip.driver_name : 'Tài xế';
+                    avatarImg.classList.remove('d-none');
+                    avatarFallback.classList.add('d-none');
+                } else {
+                    avatarImg.classList.add('d-none');
+                    avatarImg.removeAttribute('src');
+                    avatarFallback.textContent = trip.driver_initial || (trip.driver_name ? trip.driver_name.charAt(0) : '?');
+                    avatarFallback.classList.remove('d-none');
+                }
+            }
             if (distanceEl) {
                 if (trip.driver_distance_label) {
                     distanceEl.textContent = 'Cách điểm đón ~' + trip.driver_distance_label + ' (lúc nhận chuyến)';
@@ -315,10 +354,23 @@
                 vehicleEl.classList.remove('d-none');
             } else if (vehicleEl) {
                 vehicleEl.classList.add('d-none');
+                vehicleEl.textContent = '';
+            }
+            if (vehicleVisual && vehiclePhoto) {
+                if (trip.vehicle_photo_url) {
+                    vehiclePhoto.src = trip.vehicle_photo_url;
+                    vehiclePhoto.alt = trip.vehicle_plate ? 'Xe ' + trip.vehicle_plate : 'Ảnh xe';
+                    vehicleVisual.classList.remove('d-none');
+                } else {
+                    vehicleVisual.classList.add('d-none');
+                    vehiclePhoto.removeAttribute('src');
+                }
             }
         }
 
-        card.querySelector('[data-field="progress_steps"]').innerHTML = progressHtml(trip.progress);
+        card.querySelector('[data-field="progress_steps"]').innerHTML = progressHtml(trip.progress, trip.progress_label);
+
+        mountWaitProgress(card, trip.wait_progress || null);
 
         var reviewForm = card.querySelector('[data-field="review_form"]');
         if (trip.can_review && reviewForm) {
@@ -349,13 +401,18 @@
 
     function renderEmptyState(watchlistCount) {
         var n = Number(watchlistCount) || 0;
-        if (n <= 0 && !window.__bookingSuccessActive) {
+        if (n <= 0 && !window.__bookingSuccessActive && !window.__guestOrdersPage) {
             return;
         }
         var empty = document.createElement('div');
         empty.className = 'guest-trip-watch-empty text-muted small py-2';
         empty.setAttribute('role', 'status');
-        empty.textContent = 'Đang tải thông tin đơn đặt…';
+        if (window.__guestOrdersPage && n <= 0) {
+            empty.innerHTML = 'Chưa có đơn nào trên trình duyệt này. '
+                + '<a href="' + (window.__customerHomeUrl || '/') + '">Đặt chuyến ngay</a>.';
+        } else {
+            empty.textContent = 'Đang tải thông tin đơn đặt…';
+        }
         listEl.appendChild(empty);
     }
 

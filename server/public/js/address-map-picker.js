@@ -215,11 +215,12 @@
     }
 
     function finishWithAddress(address) {
+        isResolving = false;
         var text = String(address || '').trim();
         if (latInputId && pendingLat !== null && pendingLng !== null) {
             applyCoords(pendingLat, pendingLng);
         }
-        applyAddress(text);
+
         document.dispatchEvent(new CustomEvent('addressmap:applied', {
             bubbles: true,
             detail: {
@@ -231,6 +232,8 @@
                 address: text,
             },
         }));
+
+        applyAddress(text);
         closePicker();
     }
 
@@ -270,6 +273,11 @@
                     return;
                 }
                 isResolving = false;
+                if (pendingLat !== null && pendingLng !== null) {
+                    var fallback = 'Vị trí đã chọn (' + pendingLat.toFixed(5) + ', ' + pendingLng.toFixed(5) + ')';
+                    finishWithAddress(fallback);
+                    return;
+                }
                 setPreview('Không đọc được địa chỉ. Thử tìm bằng ô trên hoặc chạm điểm khác.', false);
             });
     }
@@ -281,6 +289,7 @@
 
         pendingLat = lat;
         pendingLng = lng;
+        applyCoords(lat, lng);
 
         if (marker) {
             marker.setLatLng([lat, lng]);

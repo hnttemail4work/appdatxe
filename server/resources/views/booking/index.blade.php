@@ -22,7 +22,7 @@ $bookingRestoreModal = $errors->any() && old('template_id')
         'vehicle_count'    => old('vehicle_count', 1),
         'vehicle_capacity' => old('vehicle_capacity'),
         'step'             => 2,
-        'duplicate_route'  => $errors->first('booking') === 'duplicate_route',
+        'duplicate_route'  => $errors->first('booking') === 'active_booking',
     ]
     : null;
 
@@ -43,7 +43,6 @@ $offerItems = ($offers instanceof \Illuminate\Contracts\Pagination\Paginator)
 
 $guestWatchlistCount = $guestWatchlistCount ?? 0;
 $guestActiveOrdersCount = $guestActiveOrdersCount ?? 0;
-$guestShowTrackTab = $guestShowTrackTab ?? ($guestWatchlistCount > 0);
 
 $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, $pricingService) {
     $schedule = $offer->scheduleInfoForDate($filterServiceDate);
@@ -110,9 +109,11 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                     @endif
                     .
                 </p>
-                <button type="button" class="btn btn-sm btn-outline-light booking-flash-view-order" id="booking-flash-view-order-btn">
+                <a href="{{ route('guest.orders', ! empty($bookingSuccess['searching_driver']) ? ['searching' => 1] : []) }}"
+                   class="btn btn-sm btn-outline-light booking-flash-view-order"
+                   id="booking-flash-view-order-btn">
                     Xem tiến trình đơn đặt
-                </button>
+                </a>
             </div>
             @include('partials.flash-close')
         </div>
@@ -401,11 +402,10 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
             </div>
     </div>
 
-    <div id="guest-trip-watch-section" class="guest-trip-watch-section{{ ($guestShowTrackTab ?? false) ? '' : ' d-none' }}">
-        @include('partials.guest-trip-watch')
-    </div>
-
-    @include('partials.customer-scroll-dock')
+    @include('partials.customer-scroll-dock', [
+        'customerDockMode' => 'home',
+        'guestActiveOrdersCount' => $guestActiveOrdersCount,
+    ])
 </div>
 
 <div class="modal fade" id="bookingModal" tabindex="-1" aria-labelledby="modal-route" aria-hidden="true">
@@ -416,7 +416,6 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                 @csrf
                 <input type="hidden" name="template_id" id="modal-template-id">
                 <input type="hidden" name="vehicle_capacity" id="modal-vehicle-capacity" value="{{ old('vehicle_capacity') }}">
-                <input type="hidden" name="duplicate_booking_ack" id="modal-duplicate-booking-ack" value="{{ old('duplicate_booking_ack') }}">
 
                 <div class="modal-header border-0 p-0 booking-modal-header">
                     <div class="booking-modal-header-inner w-100">
@@ -498,7 +497,7 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                                         <div class="input-group address-map-input-group">
                                             <input type="text" name="pickup_detail" id="modal-pickup-detail" class="form-control" required
                                                    data-validate-label="Địa chỉ đón"
-                                                   placeholder="Nhập hoặc chọn trên bản đồ"
+                                                   placeholder="Nhập địa chỉ — chọn gợi ý hoặc bản đồ"
                                                    value="{{ old('pickup_detail') }}">
                                             <button type="button" class="btn btn-outline-primary address-map-trigger"
                                                     data-address-map-for="modal-pickup-detail"
@@ -514,6 +513,7 @@ $bookingTemplates = $offerItems->map(function ($offer) use ($filterServiceDate, 
                                                 </svg>
                                             </button>
                                         </div>
+                                        <div class="form-text">Gõ và chọn gợi ý địa chỉ, hoặc nút bản đồ — hệ thống cần tọa độ GPS để ghép tài xế.</div>
                                     </div>
                                 </div>
                                 <div class="booking-address-divider" aria-hidden="true"></div>
@@ -722,19 +722,19 @@ window.__referralHasCode = @json((bool) ($appliedReferral ?? null));
 window.__bookingReferralSuccess = @json($bookingReferralSuccess);
 window.__roundTripMultiplier = @json(\App\Support\PlatformFees::roundTripMultiplier());
 window.__guestTripWatchUrl = @json(route('guest.tripWatch'));
+window.__guestOrdersUrl = @json(route('guest.orders'));
 window.__guestTripReloadMs = @json(\App\Services\GuestTripWatchService::GUEST_PAGE_RELOAD_SECONDS * 1000);
 window.__guestTripSearchingReload = @json(! empty(session('booking_success.searching_driver')));
 window.__guestTripReviewUrl = @json(route('guest.tripReviews.store'));
 window.__guestTripCancelUrl = @json(route('guest.bookings.cancel'));
 window.__guestActiveOrdersCount = @json($guestActiveOrdersCount);
 window.__guestWatchlistCount = @json($guestWatchlistCount);
-window.__guestShowTrackTab = @json($guestShowTrackTab ?? false);
 window.__bookingSuccessActive = @json((bool) session('booking_success'));
 window.__cancellationReasonsUrl = @json(route('cancellationReasons.index'));
 </script>
+<script src="{{ asset('js/geocode-address-autocomplete.js') }}?v={{ filemtime(public_path('js/geocode-address-autocomplete.js')) }}"></script>
 <script src="{{ asset('js/customer-booking.js') }}?v={{ filemtime(public_path('js/customer-booking.js')) }}"></script>
 <script src="{{ asset('js/customer-scroll-dock.js') }}?v={{ filemtime(public_path('js/customer-scroll-dock.js')) }}"></script>
-<script src="{{ asset('js/guest-trip-watch.js') }}?v={{ filemtime(public_path('js/guest-trip-watch.js')) }}"></script>
 @if(session('booking_success.referral_code'))
 <script src="{{ asset('js/booking-referral-success.js') }}?v={{ filemtime(public_path('js/booking-referral-success.js')) }}"></script>
 @endif

@@ -14,7 +14,7 @@ use Illuminate\Support\Collection;
  *
  * Lọc: operational, Sẵn sàng, ví đủ, không bận; có tọa độ mới (auto-gán).
  * Khác tỉnh điểm đón: tối đa 20 km; cùng tỉnh: tối đa 50 km.
- * Ưu tiên: khoảng cách km → tài xế mới/chưa đạt 200k → ít dislike → nhiều like.
+ * Ưu tiên: ít chuyến đang chạy → khoảng cách km → tài xế mới → ít dislike → nhiều like.
  */
 class DriverProximityService
 {
@@ -57,15 +57,18 @@ class DriverProximityService
                     return false;
                 }
 
+                if (! $profile->isApproved()) {
+                    return false;
+                }
+
                 if (! $this->wallets->canAcceptTrips($profile)) {
                     return false;
                 }
 
-                if ($this->availability->isDriverBusyForSlot(
+                if ($this->availability->hasTripTimeConflict(
                     (int) $profile->user_id,
-                    $schedule->route->departure,
-                    $schedule->route->destination,
-                    $schedule->departure_time,
+                    $schedule,
+                    $booking,
                 )) {
                     return false;
                 }
@@ -86,7 +89,7 @@ class DriverProximityService
         }
 
         return $candidates
-            ->sortBy(fn (DriverProfile $p): array => $this->sortKey($p, $pickup))
+            ->sortBy(fn (DriverProfile $p): array => $this->sortKey($p, $pickup, $schedule, $booking))
             ->first();
     }
 
@@ -182,13 +185,12 @@ class DriverProximityService
             $eligible = false;
         }
 
-        if ($this->availability->isDriverBusyForSlot(
+        if ($this->availability->hasTripTimeConflict(
             (int) $profile->user_id,
-            $schedule->route->departure,
-            $schedule->route->destination,
-            $schedule->departure_time,
+            $schedule,
+            $booking,
         )) {
-            $hints[] = 'Bận khung giờ này';
+            $hints[] = 'Trùng giờ với chuyến đang chạy';
             $eligible = false;
         }
 
@@ -222,14 +224,16 @@ class DriverProximityService
     }
 
     /** @param array{lat: float, lng: float}|null $pickup */
-    private function sortKey(DriverProfile $profile, ?array $pickup): array
+    private function sortKey(DriverProfile $profile, ?array $pickup, Schedule $schedule, Booking $booking): array
     {
         $distance = $pickup && $profile->hasFreshLocation(self::LOCATION_MAX_AGE_MINUTES)
             ? $this->distanceKm($profile, $pickup)
             : 9999.0;
         $preThresholdRank = $this->wallets->isPreRevenueThreshold($profile) ? 0 : 1;
+        $activeTrips = $this->availability->activeTripCount((int) $profile->user_id);
 
         return [
+            $activeTrips,
             $distance,
             $preThresholdRank,
             (int) $profile->preference_dislikes,

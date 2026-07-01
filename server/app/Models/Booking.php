@@ -112,8 +112,8 @@ class Booking extends Model
 
     public function matchesContactPhone(string $phone): bool
     {
-        $stored = preg_replace('/\D+/', '', (string) $this->contact_phone);
-        $given = preg_replace('/\D+/', '', $phone);
+        $stored = \App\Support\AuthIdentifier::normalizePhone((string) $this->contact_phone);
+        $given = \App\Support\AuthIdentifier::normalizePhone($phone);
 
         return $stored !== '' && $stored === $given;
     }
@@ -267,6 +267,41 @@ class Booking extends Model
     {
         return $this->operator_help_reason === self::HELP_TRIP_OVERDUE
             && $this->isInOperatorPendingQueue();
+    }
+
+    /** Quản lý có thể ẩn khỏi hàng đợi — lưu 30 ngày rồi hệ thống xóa. */
+    public function isOperatorDismissible(): bool
+    {
+        if (! $this->isInOperatorPendingQueue()) {
+            return false;
+        }
+
+        if ($this->isTripOverdueStuck()) {
+            return true;
+        }
+
+        return ! $this->hasDriverAccepted()
+            && in_array($this->operator_help_reason, [
+                self::HELP_NO_DRIVER_IN_PROVINCE,
+                self::HELP_DRIVER_DECLINED,
+                self::HELP_SEARCH_TIMEOUT,
+            ], true);
+    }
+
+    public function isOperatorDismissed(): bool
+    {
+        return $this->operator_dismissed_at !== null;
+    }
+
+    public function operatorDismissConfirmMessage(): string
+    {
+        $days = \App\Services\OperatorBookingDismissService::RETENTION_DAYS;
+
+        if ($this->isTripOverdueStuck()) {
+            return "Ẩn chuyến treo này khỏi danh sách? Hệ thống sẽ tự xóa sau {$days} ngày.";
+        }
+
+        return "Ẩn đơn không gán được tài xế? Đơn sẽ hủy — khách có thể đặt lại. Hệ thống xóa bản ghi sau {$days} ngày.";
     }
 
     public function tripOverdueHelpLabel(): string
@@ -620,15 +655,14 @@ class Booking extends Model
         }
 
         $this->loadMissing('schedule');
-        if ($this->schedule
-            && ($this->schedule->status === 'running' || $this->schedule->departure_time <= now())) {
-            return 'Đang phục vụ';
+        if ($this->schedule?->driver_id) {
+            return $this->schedule->bookingStatusLabel();
         }
 
         return 'Sắp chạy';
     }
 
-    /** Nhãn theo dõi trên dashboard quản lý — có thêm bước kết chuyến / phí nền tảng. */
+    /** Nhãn theo dõi trên dashboard quản lý — đồng bộ khách / tài xế. */
     public function operatorMonitorLabel(): string
     {
         if ($this->isExpired()) {
@@ -656,9 +690,8 @@ class Booking extends Model
         }
 
         $this->loadMissing('schedule');
-        if ($this->schedule
-            && ($this->schedule->status === 'running' || $this->schedule->departure_time <= now())) {
-            return 'Đang phục vụ';
+        if ($this->schedule?->driver_id) {
+            return $this->schedule->bookingStatusLabel();
         }
 
         return 'Sắp chạy';
@@ -671,7 +704,29 @@ class Booking extends Model
 
     public function operatorMonitorColor(): string
     {
-        return $this->statusColorForLabel($this->operatorMonitorLabel());
+        if (in_array($this->booking_status, ['cancelled', 'rejected'], true)) {
+            return \App\Support\StatusBadge::DANGER;
+        }
+
+        if ($this->isExpired()) {
+            return \App\Support\StatusBadge::NEUTRAL;
+        }
+
+        if ($this->trip_status === 'completed') {
+            return \App\Support\StatusBadge::SUCCESS;
+        }
+
+        if (! $this->hasDriverAccepted()) {
+            return $this->needs_operator_help_at
+                ? \App\Support\StatusBadge::DANGER
+                : \App\Support\StatusBadge::PENDING;
+        }
+
+        $this->loadMissing('schedule');
+
+        return $this->schedule?->driver_id
+            ? $this->schedule->bookingStatusColor()
+            : \App\Support\StatusBadge::PENDING;
     }
 
     private function statusColorForLabel(string $label): string
@@ -683,7 +738,7 @@ class Booking extends Model
         return match ($label) {
             'Đã hủy', 'Từ chối'     => \App\Support\StatusBadge::DANGER,
             'Hoàn thành'            => \App\Support\StatusBadge::SUCCESS,
-            'Đang phục vụ'          => \App\Support\StatusBadge::GOLD,
+            'Đang phục vụ', 'Đang chạy', 'Đã đón khách', 'Tài xế đến điểm đón', 'Đã có tài xế' => \App\Support\StatusBadge::GOLD,
             'Chờ QL xác nhận', 'Chờ tài xế nhận', 'Đang tìm tài xế' => \App\Support\StatusBadge::PENDING,
             'Cần QL hỗ trợ'        => \App\Support\StatusBadge::DANGER,
             default                 => \App\Support\StatusBadge::NEUTRAL,
@@ -729,6 +784,10 @@ class Booking extends Model
 
         if (! $this->schedule) {
             return 'Sắp chạy';
+        }
+
+        if ($this->schedule->driver_id) {
+            return $this->schedule->bookingStatusLabel();
         }
 
         return match ($this->schedule->displayStatus()) {

@@ -118,9 +118,9 @@ class TripPricingService
 
     {
 
-        return $this->roundToThousand((int) round(
+        return $this->roundToThousand(
             self::REFERENCE_WHOLE_CAR * VehicleCapacityPricing::multiplierForCapacity($capacity),
-        ));
+        );
 
     }
 
@@ -130,7 +130,7 @@ class TripPricingService
 
     {
 
-        return $this->roundToThousand((int) round($wholeCarPrice * self::SHARED_TO_WHOLE_RATIO));
+        return $this->roundToThousand($wholeCarPrice * self::SHARED_TO_WHOLE_RATIO);
 
     }
 
@@ -142,7 +142,7 @@ class TripPricingService
 
         if ($entity->whole_car_price !== null) {
 
-            return (int) round((float) $entity->whole_car_price);
+            return $this->roundToThousand((float) $entity->whole_car_price);
 
         }
 
@@ -150,7 +150,7 @@ class TripPricingService
 
         if ($entity->seat_price !== null) {
 
-            return $this->roundToThousand((int) round((float) $entity->seat_price / self::SHARED_TO_WHOLE_RATIO));
+            return $this->roundToThousand((float) $entity->seat_price / self::SHARED_TO_WHOLE_RATIO);
 
         }
 
@@ -216,7 +216,7 @@ class TripPricingService
 
             if ($entity->seat_price !== null) {
 
-                return (int) round((float) $entity->seat_price);
+                return $this->roundToThousand((float) $entity->seat_price);
 
             }
 
@@ -252,11 +252,11 @@ class TripPricingService
 
         $fromDistance = $wholeFromDistance > 0
 
-            ? $this->roundToThousand((int) round($wholeFromDistance / max($entity->capacity(), 1)))
+            ? $this->roundToThousand($wholeFromDistance / max($entity->capacity(), 1))
 
             : 0;
 
-        $routeBase = (int) round((float) ($route->base_price ?? 0));
+        $routeBase = $this->roundToThousand((float) ($route->base_price ?? 0));
 
 
 
@@ -294,7 +294,7 @@ class TripPricingService
                 ? round(2 * (1 - $discountPercent / 100), 4)
                 : PlatformFees::roundTripMultiplier();
 
-            return $this->roundToThousand((int) round($oneWayPrice * $multiplier));
+            return $this->roundToThousand($oneWayPrice * $multiplier);
         }
 
         return $oneWayPrice;
@@ -328,7 +328,7 @@ class TripPricingService
 
             $tripTotal = (float) $this->priceForTripType($oneWay, $tripType, $this->tripDiscountPercent($entity));
 
-            return $tripTotal * $vehicleCount;
+            return (float) $this->roundToThousand($tripTotal * $vehicleCount);
 
         }
 
@@ -340,7 +340,7 @@ class TripPricingService
 
 
 
-        return round($unit * max($seatCount, 1), 2);
+        return (float) $this->roundToThousand((float) $unit * max($seatCount, 1));
 
     }
 
@@ -404,11 +404,11 @@ class TripPricingService
 
             : PlatformFees::kmRateUnder100();
 
-        $base = $this->roundToThousand((int) round($distanceKm * $rate));
+        $base = $this->roundToThousand($distanceKm * $rate);
 
-        return $this->roundToThousand((int) round(
+        return $this->roundToThousand(
             $base * VehicleCapacityPricing::multiplierForCapacity($capacity),
-        ));
+        );
 
     }
 
@@ -440,13 +440,13 @@ class TripPricingService
 
         $wholeOneWay = $this->wholeCarOneWayFromDistance($distanceKm, $seats);
 
-        $seatOneWay = $this->roundToThousand((int) round($wholeOneWay / $seats));
+        $seatOneWay = $this->roundToThousand($wholeOneWay / $seats);
 
         $multiplier = PlatformFees::roundTripMultiplier();
 
-        $wholeRound = $this->roundToThousand((int) round($wholeOneWay * $multiplier));
+        $wholeRound = $this->roundToThousand($wholeOneWay * $multiplier);
 
-        $seatRound = $this->roundToThousand((int) round($seatOneWay * $multiplier));
+        $seatRound = $this->roundToThousand($seatOneWay * $multiplier);
 
 
 
@@ -563,12 +563,9 @@ class TripPricingService
 
 
 
-    private function roundToThousand(int $amount): int
-
+    private function roundToThousand(int|float $amount): int
     {
-
-        return (int) (round($amount / 1000) * 1000);
-
+        return PlatformFees::roundUpToThousand($amount);
     }
 
 }

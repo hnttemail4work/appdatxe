@@ -54,9 +54,9 @@
     <link rel="stylesheet" href="{{ asset('css/app-dialog.css') }}?v={{ filemtime(public_path('css/app-dialog.css')) }}">
     @stack('styles')
 </head>
-<body class="app-shell @if(request()->routeIs('login', 'register')) app-shell--auth @endif @if(request()->routeIs('home', 'driver.dashboard')) app-shell--mobile-app @endif">
+<body class="app-shell @if(request()->routeIs('login', 'register')) app-shell--auth @endif @if(request()->routeIs('home', 'driver.dashboard', 'guest.orders')) app-shell--mobile-app @endif">
 @php
-    $isGuestBookingPage = request()->routeIs('home');
+    $isGuestBookingPage = request()->routeIs('home', 'guest.orders');
     $hidePublicNav = $isGuestBookingPage || request()->routeIs('admin.*');
     $minimalNav = auth()->check()
         && in_array(auth()->user()->role, ['operator', 'admin', 'driver'], true)
