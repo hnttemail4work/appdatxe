@@ -51,6 +51,16 @@ class VehicleDisplay
         );
     }
 
+    /** Nhãn xe trên trang đặt — chỉ số chỗ, không hiện loại xe (SUV/Sedan). */
+    public static function labelForOffer(?Vehicle $vehicle): string
+    {
+        if (! $vehicle || ! $vehicle->capacity) {
+            return '—';
+        }
+
+        return VehicleCapacityOptions::label((int) $vehicle->capacity);
+    }
+
     public static function compactLabel(?string $type, ?string $plate, ?int $capacity): string
     {
         $typeLabel = self::typeLabel($type);

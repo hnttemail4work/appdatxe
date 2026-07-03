@@ -114,4 +114,34 @@
             return activeTab;
         },
     };
+
+    function updateTripDockBadge() {
+        var tab = document.querySelector('.driver-dock-item[data-driver-tab="trips"]');
+        if (!tab) {
+            return;
+        }
+
+        var badge = tab.querySelector('.driver-dock-badge');
+        var total = document.querySelectorAll('[data-trip-request-id]:not([data-removing="1"])').length
+            + document.querySelectorAll('#driver-trips-list [data-schedule-id]').length;
+
+        if (total > 0) {
+            if (!badge) {
+                badge = document.createElement('span');
+                badge.className = 'driver-dock-badge is-hot';
+                tab.appendChild(badge);
+            }
+            badge.textContent = String(total);
+            badge.classList.remove('d-none');
+            badge.classList.add('is-hot');
+            return;
+        }
+
+        if (badge) {
+            badge.remove();
+        }
+    }
+
+    window.__driverUpdateTripDockBadge = updateTripDockBadge;
+    updateTripDockBadge();
 })();

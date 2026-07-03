@@ -4,10 +4,8 @@ namespace App\Support;
 
 use App\Models\DriverTripRequest;
 use App\Models\Schedule;
-use App\Models\ScheduleMergeRequest;
 use App\Services\DriverMovementConfirmService;
 use App\Services\DriverTripRequestService;
-use App\Services\TripConsolidationService;
 
 class DriverWaitProgress
 {
@@ -52,7 +50,7 @@ class DriverWaitProgress
             return [
                 'kind'          => 'movement_confirm',
                 'label'         => 'Đã quá hạn xác nhận di chuyển',
-                'hint'          => 'Bấm «Đến điểm đón» ngay — hệ thống có thể gỡ cuốc nếu quá lâu.',
+                'hint'          => 'Bấm «Đến điểm đón» để bắt đầu chuyến.',
                 'started_at'    => $assignedAt->toIso8601String(),
                 'deadline_at'   => $deadline->toIso8601String(),
                 'total_seconds' => max(60, (int) $assignedAt->diffInSeconds($deadline)),
@@ -67,31 +65,6 @@ class DriverWaitProgress
             'started_at'    => $assignedAt->toIso8601String(),
             'deadline_at'   => $deadline->toIso8601String(),
             'total_seconds' => max(60, (int) $assignedAt->diffInSeconds($deadline)),
-            'indeterminate' => false,
-        ];
-    }
-
-    /** @return array<string, mixed>|null */
-    public static function forMergeRequest(ScheduleMergeRequest $mergeRequest): ?array
-    {
-        if (! $mergeRequest->isPending() || ! $mergeRequest->expires_at?->isFuture()) {
-            return null;
-        }
-
-        $created = $mergeRequest->created_at ?? now();
-        $totalSeconds = max(
-            60,
-            (int) TripConsolidationService::MERGE_APPROVAL_HOURS * 3600,
-            (int) $created->diffInSeconds($mergeRequest->expires_at),
-        );
-
-        return [
-            'kind'          => 'merge_confirm',
-            'label'         => 'Chờ bạn xác nhận gom chuyến',
-            'hint'          => 'Đồng ý hoặc từ chối trước khi hết hạn.',
-            'started_at'    => $created->toIso8601String(),
-            'deadline_at'   => $mergeRequest->expires_at->toIso8601String(),
-            'total_seconds' => $totalSeconds,
             'indeterminate' => false,
         ];
     }
@@ -112,7 +85,7 @@ class DriverWaitProgress
 
         return [
             'kind'          => 'trip_accept',
-            'label'         => 'Chờ bạn nhận cuốc',
+            'label'         => 'Khách đang đợi bạn',
             'hint'          => 'Nhận hoặc từ chối — hệ thống sẽ gán chuyến cho tài xế khác nếu hết giờ.',
             'started_at'    => $started->toIso8601String(),
             'deadline_at'   => $request->expires_at->toIso8601String(),

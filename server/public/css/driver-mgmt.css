@@ -37,13 +37,13 @@
     padding-top: 0;
 }
 
-.driver-edit-panel .operator-nav-tabs {
+.driver-edit-panel .admin-nav-tabs {
     margin: 0 -1.25rem;
     padding: .75rem 1.25rem 0;
     border-bottom: 1px solid var(--tl-border);
 }
 
-.operator-nav-tabs .nav-link.active-parent {
+.admin-nav-tabs .nav-link.active-parent {
     color: var(--tl-primary);
     background: rgba(212, 175, 55, .12);
     border-bottom-color: var(--tl-primary);
@@ -285,6 +285,24 @@
 .driver-edit-actions,
 .driver-approval-actions--compact {
     position: relative;
+}
+
+.driver-mgmt-cancel-rate {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: .1rem;
+}
+
+.driver-mgmt-cancel-rate-reset .btn-link {
+    color: rgba(251, 191, 36, .9);
+    text-decoration: none;
+    font-size: .75rem;
+}
+
+.driver-mgmt-cancel-rate-reset .btn-link:hover {
+    color: #fcd34d;
+    text-decoration: underline;
 }
 
 .driver-reject-form textarea {

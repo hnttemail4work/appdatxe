@@ -17,10 +17,7 @@ class ScheduleTemplate extends Model
         'driver_name',
         'departure_time',
         'expected_arrival_time',
-        'seat_price',
         'whole_car_price',
-        'whole_car_round_trip_price',
-        'seat_round_trip_price',
         'duration_minutes',
         'status',
     ];
@@ -29,10 +26,7 @@ class ScheduleTemplate extends Model
     {
         return [
             'duration_minutes' => 'integer',
-            'seat_price'                 => 'decimal:2',
-            'whole_car_price'            => 'decimal:2',
-            'whole_car_round_trip_price' => 'decimal:2',
-            'seat_round_trip_price'      => 'decimal:2',
+            'whole_car_price'  => 'decimal:2',
         ];
     }
 
@@ -85,16 +79,6 @@ class ScheduleTemplate extends Model
         }
 
         return $this->departureAt($serviceDate)->copy()->addMinutes((int) ($this->duration_minutes ?? 720));
-    }
-
-    public function seatPrice(): float
-    {
-        if ($this->seat_price !== null) {
-            return (float) $this->seat_price;
-        }
-
-        return (float) app(\App\Services\TripPricingService::class)
-            ->sharedSeatFromWholeCar((int) $this->wholeCarPriceAmount());
     }
 
     public function wholeCarPriceAmount(): float

@@ -7,8 +7,7 @@ class RoleDashboard
     public static function route(string $role): string
     {
         return match ($role) {
-            'admin'    => route('admin.dashboard'),
-            'operator' => route('operator.dashboard'),
+            'admin' => route('admin.dashboard'),
             'driver'   => route('driver.dashboard'),
             default    => route('home'),
         };
@@ -23,8 +22,7 @@ class RoleDashboard
         }
 
         return match ($role) {
-            'admin'    => str_starts_with($path, '/admin'),
-            'operator' => str_starts_with($path, '/operator'),
+            'admin' => str_starts_with($path, '/admin'),
             'driver'   => str_starts_with($path, '/driver'),
             default    => $path === '/' || str_starts_with($path, '/dat-xe'),
         };

@@ -12,22 +12,18 @@ $phase = $phase ?? $schedule->driverWorkflowPhase();
 @else
     <div class="driver-passenger-list">
         @foreach($bookings as $booking)
-        @php
-            $mode = $booking->booking_mode ?? 'shared';
-            $modeBadge = \App\Support\StatusBadge::bookingMode($mode);
-        @endphp
         <div class="driver-passenger-item {{ ! $loop->last ? 'driver-passenger-item--split' : '' }}">
             <div class="driver-passenger-head">
                 <strong>{{ $booking->passenger_name ?: 'Hành khách' }}</strong>
-                <span class="status-pill status-pill--{{ $modeBadge }}">{{ $booking->bookingModeLabel() }}</span>
+                <span class="status-pill status-pill--gold">{{ $booking->bookingModeLabel() }}</span>
             </div>
             @if($booking->passengerProfileDetail())
                 <div class="driver-info-line">{{ $booking->passengerProfileDetail() }}</div>
             @endif
             <div class="driver-info-line"><span class="driver-info-k">Đón</span> {{ $booking->pickupTimeLabel() ?? '—' }} · {{ $booking->driverPickupDetailLabel() }}</div>
             <div class="driver-info-line"><span class="driver-info-k">Trả</span> {{ $booking->driverDropoffDetailLabel() }}</div>
-            @if(($booking->booking_mode ?? 'shared') === 'shared' && ($label = $booking->seatCountLabel()))
-                <div class="driver-info-line">{{ $label }}</div>
+            @if($booking->vehicleBookingLabel())
+                <div class="driver-info-line">{{ $booking->vehicleBookingLabel() }}</div>
             @endif
             @if($booking->notes)
                 <div class="driver-info-line driver-info-line--note">{{ $booking->notes }}</div>

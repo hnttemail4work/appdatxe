@@ -130,10 +130,7 @@ class DriverAvailabilityService
                 ->where('trip_status', '!=', 'completed'))
             ->whereDoesntHave('bookings', fn ($q) => $q
                 ->whereNotIn('booking_status', ['cancelled', 'rejected'])
-                ->where(function ($q2): void {
-                    $q2->whereNotNull('needs_operator_help_at')
-                        ->orWhere('trip_status', 'awaiting_completion');
-                }))
+                ->where('trip_status', 'awaiting_completion'))
             ->when($excludeScheduleId, fn ($q) => $q->where('id', '!=', $excludeScheduleId))
             ->get();
     }
@@ -350,9 +347,145 @@ class DriverAvailabilityService
 
         $km = (int) ($template->route->distance_km ?? 0);
         $minutes = $km > 0
-            ? (int) ceil($km / OperatorTripOverdueService::ASSUMED_SPEED_KMH * 60)
+            ? (int) ceil($km / \App\Services\DriverMovementConfirmService::ASSUMED_SPEED_KMH * 60)
             : 120;
 
         return $departureTime->copy()->addMinutes($minutes);
+    }
+    /** GPS mới hoặc tài xế đang mở tab Sẵn sàng — đủ để ghép cuốc. */
+    public function hasAssignableLocation(
+        DriverProfile $profile,
+        int $maxAgeMinutes = DriverProximityService::LOCATION_MAX_AGE_MINUTES,
+    ): bool {
+        if ($profile->last_lat === null || $profile->last_lng === null || ! $profile->last_location_at) {
+            return false;
+        }
+
+        if ($profile->hasFreshLocation($maxAgeMinutes)) {
+            return true;
+        }
+
+        return ($profile->availability_status ?? 'off_duty') === 'available'
+            && Cache::has($this->webPresenceKey((int) $profile->user_id));
+    }
+
+    public function enforceWebPresenceIdleFor(DriverProfile $profile): void
+    {
+        if (($profile->availability_status ?? 'off_duty') !== 'available') {
+            return;
+        }
+
+        if ($this->activeTripCount((int) $profile->user_id) > 0) {
+            return;
+        }
+
+        if (Cache::has($this->webPresenceKey((int) $profile->user_id))) {
+            return;
+        }
+
+        if ($profile->hasFreshLocation(self::WEB_PRESENCE_MINUTES)) {
+            $this->touchWebPresence((int) $profile->user_id);
+
+            return;
+        }
+
+        $this->markOffDuty($profile);
+    }
+
+    public function touchWebPresence(int $driverUserId): void
+    {
+        Cache::put(
+            $this->webPresenceKey($driverUserId),
+            1,
+            now()->addMinutes(self::WEB_PRESENCE_MINUTES),
+        );
+    }
+
+    public function forgetWebPresence(int $driverUserId): void
+    {
+        Cache::forget($this->webPresenceKey($driverUserId));
+    }
+
+    private function webPresenceKey(int $driverUserId): string
+    {
+        return 'driver_web_presence:' . $driverUserId;
+    }
+
+    public function syncAfterTripAssigned(int $driverUserId): void
+    {
+        DriverProfile::query()
+            ->where('user_id', $driverUserId)
+            ->where('availability_status', '!=', 'off_duty')
+            ->update(['availability_status' => 'on_trip']);
+    }
+
+    /** Sau khi hoàn thành chuyến — về sẵn sàng trừ khi tài xế đang tạm nghỉ. */
+    public function syncAfterTripCompleted(int $driverUserId): void
+    {
+        $profile = DriverProfile::query()->where('user_id', $driverUserId)->first();
+
+        if (! $profile || ($profile->availability_status ?? '') === 'off_duty') {
+            return;
+        }
+
+        $status = $this->activeTripCount($driverUserId) > 0 ? 'on_trip' : 'available';
+
+        if ($profile->availability_status !== $status) {
+            $profile->update(['availability_status' => $status]);
+        }
+    }
+
+    public function markOffDuty(DriverProfile $profile): void
+    {
+        $this->forgetWebPresence((int) $profile->user_id);
+
+        app(DriverTripRequestService::class)->releasePendingRequestsOnOffDuty((int) $profile->user_id);
+
+        $profile->update([
+            'availability_status' => 'off_duty',
+            'last_lat'            => null,
+            'last_lng'            => null,
+            'last_location_at'    => null,
+            'last_address'        => null,
+            'last_province'       => null,
+        ]);
+    }
+
+    public function markAvailable(DriverProfile $profile): void
+    {
+        if ($this->activeTripCount((int) $profile->user_id) > 0) {
+            $profile->update(['availability_status' => 'on_trip']);
+
+            return;
+        }
+
+        $profile->update(['availability_status' => 'available']);
+        $this->touchWebPresence((int) $profile->user_id);
+    }
+
+    /** Đăng nhập lại — bắt bật Sẵn sàng + GPS mới (tránh dùng vị trí cũ). */
+    public function resetForWebLogin(DriverProfile $profile): void
+    {
+        $this->forgetWebPresence((int) $profile->user_id);
+
+        if ($this->activeTripCount((int) $profile->user_id) > 0) {
+            return;
+        }
+
+        if (($profile->availability_status ?? 'off_duty') !== 'off_duty') {
+            $this->markOffDuty($profile);
+        }
+    }
+
+    /** Đăng xuất / hết phiên — tắt Sẵn sàng và xóa vị trí. */
+    public function endWebSession(DriverProfile $profile): void
+    {
+        if ($this->activeTripCount((int) $profile->user_id) > 0) {
+            $this->forgetWebPresence((int) $profile->user_id);
+
+            return;
+        }
+
+        $this->markOffDuty($profile);
     }
 }

@@ -44,13 +44,13 @@
     background: rgba(212, 175, 55, .12);
     border-bottom-color: #d4af37;
 }
-.operator-nav-tabs .nav-link {
+.admin-nav-tabs .nav-link {
     text-decoration: none;
 }
-.operator-nav-tabs .nav-link.active {
+.admin-nav-tabs .nav-link.active {
     pointer-events: none;
 }
-.operator-nav-tabs + .screen-tabs-wrap {
+.admin-nav-tabs + .screen-tabs-wrap {
     margin-top: 1rem;
     padding-top: .75rem;
     border-top: 1px solid #e2e8f0;

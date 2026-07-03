@@ -11,7 +11,7 @@
     $walletHistory = $walletHistory ?? collect();
     $tripSchedules = $tripSchedules ?? collect();
     $tripActionCount = $tripActionCount ?? 0;
-    $revenueStats = $revenueStats ?? ['day' => 0, 'week' => 0];
+    $revenueStats = $revenueStats ?? ['day' => 0, 'month' => 0];
 
     $driverDefaultTab = request('tab');
     if (! in_array($driverDefaultTab, ['trips', 'history', 'deposit'], true)) {
@@ -19,12 +19,18 @@
     }
 
     $tripHistory = $tripHistory ?? collect();
-    $pendingMergeRequests = $pendingMergeRequests ?? collect();
     $pendingTripRequestGroups = $pendingTripRequestGroups ?? collect();
 
     $driverLocationAddress = $profile?->last_address;
     $driverLocationUpdated = ($profile?->last_location_at ?? null)?->format('H:i, d/m/Y');
-    $driverLocationReady = $profile && $profile->hasFreshLocation();
+    $availabilityStatus = $profile?->availability_status ?? 'off_duty';
+    $driverOnTrip = ($driverOnTrip ?? false)
+        || $tripSchedules->contains(fn ($schedule) => in_array($schedule->driverWorkflowPhase(), ['upcoming', 'active'], true));
+    $driverPaused = $availabilityStatus === 'off_duty';
+    $driverLocationReady = ! $driverPaused && $profile && $profile->hasFreshLocation();
+    $driverNeedsLocationShare = $profile && ! $driverOnTrip && ! $driverPaused && ! $driverLocationReady;
+
+    $heroStatus = $profile ? $profile->heroStatusMeta($driverOnTrip) : ['key' => 'offline', 'label' => ''];
 @endphp
 
 <div class="driver-page" data-driver-tabs data-driver-tabs-active="{{ $driverDefaultTab }}" data-driver-tabs-base="{{ route('driver.dashboard') }}" data-wait-progress-root>
@@ -34,6 +40,7 @@
             ? number_format($driverWallet->balance, 0, ',', '.') . ' đ'
             : '—';
         $driverInitial = mb_strtoupper(mb_substr($user->name, 0, 1));
+        $driverPhotoUrl = $profile->photoUrl('photo_portrait');
         $driverDockTabs = [
             ['key' => 'trips', 'label' => 'Chuyến đang chạy', 'short' => 'Chuyến', 'badge' => $tripActionCount, 'hot' => $tripActionCount > 0],
             ['key' => 'history', 'label' => 'Lịch sử chạy', 'short' => 'Lịch sử'],
@@ -43,18 +50,49 @@
 
     <header class="driver-hero mb-3">
         <div class="driver-hero-profile">
-            <div class="driver-avatar" aria-hidden="true">{{ $driverInitial }}</div>
+            <div class="driver-avatar">
+                @if($driverPhotoUrl)
+                    <img src="{{ $driverPhotoUrl }}" alt="" class="driver-avatar-img" loading="lazy" decoding="async">
+                @else
+                    <span class="driver-avatar-fallback" aria-hidden="true">{{ $driverInitial }}</span>
+                @endif
+            </div>
             <div class="driver-hero-copy">
-                <p class="driver-hero-eyebrow">Tài xế</p>
-                <div class="driver-hero-title-row">
-                    <h1 class="driver-hero-name">{{ $user->name }}</h1>
-                    @if($profile->driver_code)
-                        <span class="driver-meta-code driver-hero-code">{{ $profile->driver_code }}</span>
-                    @endif
+                <div class="driver-hero-topbar">
+                    <div class="driver-hero-intro">
+                        <p class="driver-hero-eyebrow">Xin chào tài xế</p>
+                        <div class="driver-hero-title-row">
+                            <h1 class="driver-hero-name">{{ $user->name }}</h1>
+                            @if($profile->driver_code)
+                                <span class="driver-hero-code-wrap">
+                                    <span class="driver-hero-code-label">Mã tx:</span>
+                                    <span class="driver-meta-code driver-hero-code">{{ $profile->driver_code }}</span>
+                                </span>
+                            @endif
+                        </div>
+                    </div>
+                    <div class="driver-activity-control">
+                        <label class="driver-activity-toggle {{ $driverOnTrip ? 'is-locked' : '' }}"
+                               for="driver-availability-input"
+                               id="driver-activity-toggle-label">
+                            <input type="checkbox"
+                                   class="driver-activity-toggle-input"
+                                   id="driver-availability-input"
+                                   @checked(! $driverPaused)
+                                   @disabled($driverOnTrip)
+                                   @if($driverOnTrip) aria-describedby="driver-hero-status-label" @endif>
+                            <span class="driver-activity-switch" aria-hidden="true">
+                                <span class="driver-activity-switch-off">Tắt</span>
+                                <span class="driver-activity-switch-knob"></span>
+                                <span class="driver-activity-switch-on">Bật</span>
+                            </span>
+                        </label>
+                    </div>
                 </div>
-                <div class="driver-status-pill driver-status-pill--{{ $driverLocationReady ? 'online' : 'offline' }}">
-                    <span class="driver-status-dot" aria-hidden="true"></span>
-                    <span>{{ $driverLocationReady ? 'Sẵn sàng nhận chuyến' : 'Cập nhật vị trí để nhận chuyến' }}</span>
+                <div class="driver-hero-meta-row">
+                    <div class="driver-status-pill driver-status-pill--{{ $heroStatus['key'] }}" id="driver-hero-status-pill" role="status">
+                        <span id="driver-hero-status-label">{{ $heroStatus['label'] }}</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -64,8 +102,8 @@
                 <span class="driver-earnings-value">{{ number_format($revenueStats['day'] ?? 0, 0, ',', '.') }} đ</span>
             </div>
             <div class="driver-earnings-item">
-                <span class="driver-earnings-label">Tuần này</span>
-                <span class="driver-earnings-value">{{ number_format($revenueStats['week'] ?? 0, 0, ',', '.') }} đ</span>
+                <span class="driver-earnings-label">Tháng này</span>
+                <span class="driver-earnings-value">{{ number_format($revenueStats['month'] ?? 0, 0, ',', '.') }} đ</span>
             </div>
         <a href="{{ route('driver.dashboard', ['tab' => 'deposit']) }}" class="driver-earnings-item driver-earnings-item--wallet" data-driver-tab="deposit">
                 <span class="driver-earnings-label">Số dư ví</span>
@@ -74,25 +112,19 @@
         </div>
     </header>
 
-    @if($profile->isMissedTripLocked() || ($showTopUpBanner ?? false) || ($walletBlockReason ?? null))
+    @if($profile->isMissedTripLocked() || ($walletNotice ?? null) || ($walletBlockReason ?? null))
     <div class="driver-notice-stack mb-3">
         @if($profile->isMissedTripLocked())
             <div class="driver-notice driver-notice-danger">
                 <strong>Tài khoản tạm khóa</strong> — không nhận chuyến được. Liên hệ quản lý để mở khóa.
             </div>
         @endif
-        @if($showTopUpBanner ?? false)
+        @if($walletNotice ?? null)
             <div class="driver-notice driver-notice-warning driver-notice--topup">
-                <span class="driver-notice-topup-text">
-                @if($walletBlockReason)
-                    {{ $walletBlockReason }}
-                @elseif(! $profile->isWalletActivated())
-                    Cần nạp ví tối thiểu {{ \App\Support\DriverWalletConfig::minDepositFormatted() }} để kích hoạt tài khoản.
-                @else
-                    Chưa đủ điều kiện nhận chuyến.
-                @endif
-                </span>
-                <a href="{{ route('driver.dashboard', ['tab' => 'deposit']) }}" class="driver-notice-topup-link" data-driver-tab="deposit">nạp ví ngay →</a>
+                <span class="driver-notice-topup-text">{{ $walletNotice['message'] }}</span>
+                <a href="{{ route('driver.dashboard', ['tab' => $walletNotice['cta_tab']]) }}"
+                   class="driver-notice-topup-link"
+                   data-driver-tab="{{ $walletNotice['cta_tab'] }}">{{ $walletNotice['cta_label'] }} →</a>
             </div>
         @elseif($walletBlockReason)
             <div class="driver-notice driver-notice-warning">
@@ -102,43 +134,51 @@
     </div>
     @endif
 
-    <section class="driver-location-sheet mb-3" id="driver-location-bar" aria-label="Vị trí hiện tại">
-        <div class="driver-location-sheet-head">
-            <div class="driver-location-sheet-icon" aria-hidden="true">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-                    <circle cx="12" cy="10" r="3"/>
-                </svg>
+    <section class="driver-location-sheet mb-3{{ $driverNeedsLocationShare ? ' driver-location-sheet--needs-share' : '' }}" id="driver-location-bar" aria-label="Vị trí hiện tại"
+             data-driver-paused="{{ $driverPaused ? '1' : '0' }}"
+             data-driver-on-trip="{{ $driverOnTrip ? '1' : '0' }}"
+             data-needs-location="{{ $driverNeedsLocationShare ? '1' : '0' }}">
+        @if($driverNeedsLocationShare)
+            <div class="driver-location-share-prompt" id="driver-location-share-prompt" role="status">
+                Chọn hoặc nhập vị trí trên bản đồ để nhận cuốc gần bạn.
             </div>
+        @endif
+        <div class="driver-location-sheet-top {{ $driverPaused ? 'is-disabled' : '' }}">
+            <div class="driver-location-province-wrap">
+                <label class="driver-location-field-label" for="driver-location-province">Khu vực hoạt động</label>
+                <select id="driver-location-province" class="form-select form-select-sm driver-province-select"
+                        @disabled($driverPaused)>
+                    @include('partials.province-options', ['selected' => $profile->last_province ?? 'TP.HCM'])
+                </select>
+            </div>
+        </div>
+        <div class="driver-location-sheet-head">
             <div class="driver-location-sheet-body">
-                <div class="driver-location-sheet-row">
-                    <span class="driver-location-sheet-label">Vị trí hiện tại</span>
-                    <span class="driver-location-status driver-location-status--{{ $driverLocationReady ? 'ok' : 'idle' }}"
-                          id="driver-location-status">{{ $driverLocationReady ? 'Sẵn sàng' : 'Chưa có' }}</span>
-                </div>
-                <p class="driver-location-address {{ $driverLocationAddress ? '' : 'is-empty' }}" id="driver-location-address">
-                    {{ $driverLocationAddress ?: 'Chọn vị trí để hệ thống gán chuyến gần bạn' }}
-                </p>
+                <span class="driver-location-sheet-label">Vị trí hiện tại</span>
+                <p class="driver-location-address {{ $driverLocationAddress ? '' : 'is-empty' }}" id="driver-location-address">{{ $driverLocationAddress }}</p>
                 <p class="driver-location-meta" id="driver-location-meta">
-                    @if($driverLocationUpdated)
+                    @if($driverLocationUpdated && ! $driverPaused && ! $driverNeedsLocationShare)
                         Cập nhật {{ $driverLocationUpdated }}
                     @endif
                 </p>
             </div>
         </div>
-        <div class="driver-location-sheet-actions">
+        <div class="driver-location-sheet-actions {{ $driverPaused ? 'is-disabled' : '' }}">
             <div class="driver-location-input-wrap">
                 <input type="text" id="driver-location-detail" class="form-control driver-location-input"
                        value="{{ $driverLocationReady ? ($driverLocationAddress ?? '') : '' }}"
-                       placeholder="Gõ địa chỉ — chọn gợi ý hoặc bản đồ" autocomplete="off">
+                       placeholder="{{ $driverPaused ? 'Bật Hoạt động để cập nhật vị trí' : '' }}"
+                       autocomplete="off"
+                       @disabled($driverPaused)>
                 <button type="button" class="driver-location-map-btn address-map-trigger"
                         data-address-map-for="driver-location-detail"
                         data-address-map-lat="driver-location-lat"
                         data-address-map-lng="driver-location-lng"
-                        data-address-map-default-province="TP.HCM"
-                        data-address-map-label="Chọn vị trí trên bản đồ"
-                        aria-label="Chọn vị trí trên bản đồ" title="Ghim trên bản đồ">
+                        data-address-map-province="driver-location-province"
+                        data-address-map-mode="driver"
+                        data-address-map-label="Chọn vị trí hoạt động"
+                        aria-label="Chọn vị trí trên bản đồ" title="Ghim trên bản đồ"
+                        @disabled($driverPaused)>
                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
                          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
@@ -171,21 +211,12 @@
                     @endforeach
                 </div>
             @endif
-            @if($pendingMergeRequests->isNotEmpty())
-                <div class="driver-trips-list mb-3" id="driver-merge-requests-list">
-                    @foreach($pendingMergeRequests as $mergeRequest)
-                        @include('partials.driver-merge-request-card', ['mergeRequest' => $mergeRequest])
-                    @endforeach
-                </div>
-            @endif
             @include('partials.driver-empty-state', [
                 'icon' => 'route',
-                'title' => ($pendingTripRequestGroups->isNotEmpty() || $pendingMergeRequests->isNotEmpty()) ? 'Chưa có chuyến khác' : 'Chưa có chuyến',
+                'title' => $pendingTripRequestGroups->isNotEmpty() ? 'Chưa có chuyến khác' : 'Chưa có chuyến',
                 'hint' => $pendingTripRequestGroups->isNotEmpty()
                     ? 'Xử lý cuốc chờ nhận phía trên trước.'
-                    : ($pendingMergeRequests->isNotEmpty()
-                    ? 'Xử lý yêu cầu gom chuyến phía trên trước.'
-                    : 'Hệ thống sẽ tự đẩy chuyến khi có khách gần bạn. Giữ trạng thái Sẵn sàng và cập nhật vị trí.'),
+                    : 'Hệ thống sẽ tự đẩy chuyến khi có khách gần bạn. Giữ trạng thái Sẵn sàng và cập nhật vị trí.',
             ])
         @else
             @if($pendingTripRequestGroups->isNotEmpty())
@@ -199,16 +230,6 @@
                             'schedule' => $group['schedule'],
                             'passengers' => $group['passengers'],
                         ])
-                    @endforeach
-                </div>
-            @endif
-            @if($pendingMergeRequests->isNotEmpty())
-                <div class="driver-panel-toolbar">
-                    <h2 class="driver-panel-title">Yêu cầu gom chuyến</h2>
-                </div>
-                <div class="driver-trips-list mb-3" id="driver-merge-requests-list">
-                    @foreach($pendingMergeRequests as $mergeRequest)
-                        @include('partials.driver-merge-request-card', ['mergeRequest' => $mergeRequest])
                     @endforeach
                 </div>
             @endif
@@ -275,12 +296,17 @@
 @push('scripts')
 <script>
 window.__driverLocationUrl = @json(route('driver.location.update'));
+window.__driverAvailabilityUrl = @json(route('driver.availability.update'));
 window.__geocodeReverseUrl = @json(route('geocode.reverse'));
 window.__geocodeSearchUrl = @json(route('geocode.search'));
+window.__driverDashboardUrl = @json(route('driver.dashboard', ['tab' => 'trips']));
 </script>
 <script src="{{ asset('js/geocode-address-autocomplete.js') }}?v={{ filemtime(public_path('js/geocode-address-autocomplete.js')) }}"></script>
 <script src="{{ asset('js/address-map-picker.js') }}?v={{ filemtime(public_path('js/address-map-picker.js')) }}"></script>
 <script src="{{ asset('js/driver-location-save.js') }}?v={{ filemtime(public_path('js/driver-location-save.js')) }}"></script>
+<script src="{{ asset('js/driver-availability-toggle.js') }}?v={{ filemtime(public_path('js/driver-availability-toggle.js')) }}"></script>
+<script src="{{ asset('js/driver-trip-request-actions.js') }}?v={{ filemtime(public_path('js/driver-trip-request-actions.js')) }}"></script>
+<script src="{{ asset('js/driver-workflow-actions.js') }}?v={{ filemtime(public_path('js/driver-workflow-actions.js')) }}"></script>
 <script>
 (function () {
     if (window.GeocodeAddressAutocomplete) {
@@ -288,7 +314,8 @@ window.__geocodeSearchUrl = @json(route('geocode.search'));
             detailInputId: 'driver-location-detail',
             latInputId: 'driver-location-lat',
             lngInputId: 'driver-location-lng',
-            defaultProvince: 'TP.HCM',
+            provinceInputId: 'driver-location-province',
+            defaultProvince: @json($profile->last_province ?? 'TP.HCM'),
         });
     }
 })();
@@ -296,42 +323,5 @@ window.__geocodeSearchUrl = @json(route('geocode.search'));
 <script src="{{ asset('js/wait-progress.js') }}?v={{ filemtime(public_path('js/wait-progress.js')) }}"></script>
 <script src="{{ asset('js/driver-tabs.js') }}?v={{ filemtime(public_path('js/driver-tabs.js')) }}"></script>
 <script src="{{ asset('js/driver-wallet-deposit.js') }}?v={{ filemtime(public_path('js/driver-wallet-deposit.js')) }}"></script>
-<script>
-(function () {
-    var syncUrl = @json(route('driver.liveSync'));
-    var tripsTab = document.getElementById('driver-section-trips');
-    if (!tripsTab || tripsTab.hidden) {
-        return;
-    }
-
-    var knownIds = Array.prototype.map.call(
-        document.querySelectorAll('[data-schedule-id], [data-trip-request-id]'),
-        function (el) {
-            return el.hasAttribute('data-schedule-id')
-                ? 's-' + el.getAttribute('data-schedule-id')
-                : 'r-' + el.getAttribute('data-trip-request-id');
-        }
-    );
-
-    function poll() {
-        fetch(syncUrl, { headers: { 'Accept': 'application/json' } })
-            .then(function (r) { return r.json(); })
-            .then(function (data) {
-                var remoteIds = [];
-                if (Array.isArray(data.schedules)) {
-                    data.schedules.forEach(function (s) { remoteIds.push('s-' + String(s.id)); });
-                }
-                if (Array.isArray(data.pending_trip_requests)) {
-                    data.pending_trip_requests.forEach(function (r) { remoteIds.push('r-' + String(r.id)); });
-                }
-                var hasNew = remoteIds.some(function (id) { return knownIds.indexOf(id) === -1; });
-                if (hasNew) {
-                    window.location.reload();
-                }
-            }).catch(function () {});
-    }
-
-    setInterval(poll, 15000);
-})();
-</script>
+<script src="{{ asset('js/driver-late-pickup.js') }}?v={{ filemtime(public_path('js/driver-late-pickup.js')) }}"></script>
 @endpush

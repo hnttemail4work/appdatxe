@@ -1,127 +1,127 @@
-/* Trạng thái — nền đặc, chữ đậm cùng tông màu (đọc rõ trên nền trắng lẫn tối) */
-.status-pill {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: .25rem;
-    padding: .28rem .62rem;
-    border-radius: 999px;
-    font-size: .68rem;
-    font-weight: 700;
-    letter-spacing: .02em;
-    line-height: 1.25;
-    border: 1px solid transparent;
-    white-space: nowrap;
-    vertical-align: middle;
-}
-
-.status-pill--neutral {
-    background: #f3f4f6;
-    color: #374151;
-    border-color: #d1d5db;
-}
-
-.status-pill--gold {
-    background: #fef3c7;
-    color: #92400e;
-    border-color: #f59e0b;
-}
-
-.status-pill--pending {
-    background: #fef9c3;
-    color: #a16207;
-    border-color: #eab308;
-}
-
-.status-pill--success {
-    background: #dcfce7;
-    color: #166534;
-    border-color: #4ade80;
-}
-
-.status-pill--danger {
-    background: #fee2e2;
-    color: #991b1b;
-    border-color: #f87171;
-}
-
-.status-pill--info {
-    background: #fef3c7;
-    color: #78350f;
-    border-color: #d4af37;
-}
-
-.status-pill--accent {
-    background: linear-gradient(135deg, #fde68a 0%, #fef3c7 100%);
-    color: #78350f;
-    border-color: #d4af37;
-    box-shadow: 0 1px 4px rgba(212, 175, 55, .2);
-}
-
-/* Tương thích badge Bootstrap cũ */
-.badge.bg-primary,
-.badge.bg-gold {
-    background: #fef3c7 !important;
-    color: #92400e !important;
-    border: 1px solid #f59e0b;
-    font-weight: 700;
-}
-
-.badge.bg-success {
-    background: #dcfce7 !important;
-    color: #166534 !important;
-    border: 1px solid #4ade80;
-    font-weight: 700;
-}
-
-.badge.bg-danger {
-    background: #fee2e2 !important;
-    color: #991b1b !important;
-    border: 1px solid #f87171;
-    font-weight: 700;
-}
-
-.badge.bg-warning,
-.badge.bg-warning.text-dark {
-    background: #fef9c3 !important;
-    color: #a16207 !important;
-    border: 1px solid #eab308;
-    font-weight: 700;
-}
-
-.badge.bg-secondary {
-    background: #f3f4f6 !important;
-    color: #374151 !important;
-    border: 1px solid #d1d5db;
-    font-weight: 600;
-}
-
-.badge.bg-info,
-.badge.bg-info.text-dark {
-    background: #fef3c7 !important;
-    color: #78350f !important;
-    border: 1px solid #d4af37;
-    font-weight: 600;
-}
-
-.badge.bg-light,
-.badge.bg-light.text-dark,
-.badge.bg-light.text-muted {
-    background: #f3f4f6 !important;
-    color: #4b5563 !important;
-    border: 1px solid #d1d5db !important;
-    font-weight: 600;
-}
-
-.badge.rounded-pill {
-    padding-left: .65rem;
-    padding-right: .65rem;
-}
-
-/* Nhãn trong tab nav — gọn hơn */
-.screen-tabs .status-pill,
-.operator-nav-tabs .status-pill {
-    font-size: .62rem;
-    padding: .15rem .42rem;
-    vertical-align: middle;
-}
+/* Trạng thái — nền đặc, chữ đậm cùng tông màu (đọc rõ trên nền trắng lẫn tối) */
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .25rem;
+    padding: .28rem .62rem;
+    border-radius: 999px;
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: .02em;
+    line-height: 1.25;
+    border: 1px solid transparent;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.status-pill--neutral {
+    background: #f3f4f6;
+    color: #374151;
+    border-color: #d1d5db;
+}
+
+.status-pill--gold {
+    background: #fef3c7;
+    color: #92400e;
+    border-color: #f59e0b;
+}
+
+.status-pill--pending {
+    background: #fef9c3;
+    color: #a16207;
+    border-color: #eab308;
+}
+
+.status-pill--success {
+    background: #dcfce7;
+    color: #166534;
+    border-color: #4ade80;
+}
+
+.status-pill--danger {
+    background: #fee2e2;
+    color: #991b1b;
+    border-color: #f87171;
+}
+
+.status-pill--info {
+    background: #fef3c7;
+    color: #78350f;
+    border-color: #d4af37;
+}
+
+.status-pill--accent {
+    background: linear-gradient(135deg, #fde68a 0%, #fef3c7 100%);
+    color: #78350f;
+    border-color: #d4af37;
+    box-shadow: 0 1px 4px rgba(212, 175, 55, .2);
+}
+
+/* Tương thích badge Bootstrap cũ */
+.badge.bg-primary,
+.badge.bg-gold {
+    background: #fef3c7 !important;
+    color: #92400e !important;
+    border: 1px solid #f59e0b;
+    font-weight: 700;
+}
+
+.badge.bg-success {
+    background: #dcfce7 !important;
+    color: #166534 !important;
+    border: 1px solid #4ade80;
+    font-weight: 700;
+}
+
+.badge.bg-danger {
+    background: #fee2e2 !important;
+    color: #991b1b !important;
+    border: 1px solid #f87171;
+    font-weight: 700;
+}
+
+.badge.bg-warning,
+.badge.bg-warning.text-dark {
+    background: #fef9c3 !important;
+    color: #a16207 !important;
+    border: 1px solid #eab308;
+    font-weight: 700;
+}
+
+.badge.bg-secondary {
+    background: #f3f4f6 !important;
+    color: #374151 !important;
+    border: 1px solid #d1d5db;
+    font-weight: 600;
+}
+
+.badge.bg-info,
+.badge.bg-info.text-dark {
+    background: #fef3c7 !important;
+    color: #78350f !important;
+    border: 1px solid #d4af37;
+    font-weight: 600;
+}
+
+.badge.bg-light,
+.badge.bg-light.text-dark,
+.badge.bg-light.text-muted {
+    background: #f3f4f6 !important;
+    color: #4b5563 !important;
+    border: 1px solid #d1d5db !important;
+    font-weight: 600;
+}
+
+.badge.rounded-pill {
+    padding-left: .65rem;
+    padding-right: .65rem;
+}
+
+/* Nhãn trong tab nav — gọn hơn */
+.screen-tabs .status-pill,
+.admin-nav-tabs .status-pill {
+    font-size: .62rem;
+    padding: .15rem .42rem;
+    vertical-align: middle;
+}

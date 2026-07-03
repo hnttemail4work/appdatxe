@@ -64,6 +64,7 @@ class DriverWalletService
 
         return DB::transaction(function () use ($wallet, $schedule, $bookings, $revenue): DriverTripSettlement {
             $locked = DriverWallet::query()->lockForUpdate()->findOrFail($wallet->id);
+            $category = $this->resolveSettlementCategory($revenue, $locked);
 
             $settlement = DriverTripSettlement::query()->create([
                 'driver_wallet_id'    => $locked->id,
@@ -71,7 +72,7 @@ class DriverWalletService
                 'booking_id'          => $bookings->first()->id,
                 'revenue_amount'      => $revenue,
                 'platform_fee_amount' => 0,
-                'category'            => 'completed',
+                'category'            => $category,
                 'status'              => 'completed',
                 'driver_settled_at'   => now(),
             ]);
@@ -223,10 +224,10 @@ class DriverWalletService
 
     public function needsTopUpNotice(DriverProfile $profile): bool
     {
-        return $this->shouldShowTopUpBanner($profile);
+        return $this->walletNoticeForDriver($profile) !== null;
     }
 
-    /** Chưa đạt ngưỡng doanh thu 100k — chưa bật cổng ví. */
+    /** Chưa đạt ngưỡng doanh thu 200k — chưa bật cổng ví. */
     public function isPreRevenueThreshold(DriverProfile $profile): bool
     {
         $wallet = $this->walletFor($profile);
@@ -236,21 +237,102 @@ class DriverWalletService
 
     public function shouldShowTopUpBanner(DriverProfile $profile): bool
     {
+        return $this->walletNoticeForDriver($profile) !== null;
+    }
+
+    /**
+     * Thông báo ví sau ngưỡng doanh thu — nạp kích hoạt hoặc duy trì số dư.
+     *
+     * @return array{message: string, cta_label: string, cta_tab: string, variant: string}|null
+     */
+    public function walletNoticeForDriver(DriverProfile $profile): ?array
+    {
+        $wallet = $this->walletFor($profile);
+        $threshold = DriverWalletConfig::revenueThresholdShortLabel();
+
+        if ($wallet->wallet_gate_enabled) {
+            if (! $wallet->wallet_activated_at) {
+                return [
+                    'message'   => 'Doanh thu đã đạt ' . $threshold
+                        . ' — cần nạp ví tối thiểu ' . DriverWalletConfig::minDepositFormatted()
+                        . ' để kích hoạt và tiếp tục nhận cuốc.',
+                    'cta_label' => 'Nạp ví ngay',
+                    'cta_tab'   => 'deposit',
+                    'variant'   => 'warning',
+                ];
+            }
+
+            if ($wallet->balance <= DriverWalletConfig::MIN_BALANCE) {
+                return [
+                    'message'   => 'Doanh thu đã đạt ' . $threshold
+                        . ' — cần giữ số dư trên ' . DriverWalletConfig::minBalanceFormatted()
+                        . ' để nhận cuốc mới.',
+                    'cta_label' => 'Nạp ví ngay',
+                    'cta_tab'   => 'deposit',
+                    'variant'   => 'warning',
+                ];
+            }
+
+            return null;
+        }
+
+        if ($this->driverLifetimeRevenue($profile) >= DriverWalletConfig::REVENUE_THRESHOLD) {
+            return [
+                'message'   => 'Doanh thu đã vượt ' . $threshold
+                    . ' — cần nạp ví tối thiểu ' . DriverWalletConfig::minDepositFormatted()
+                    . ' để tiếp tục nhận cuốc.',
+                'cta_label' => 'Nạp ví ngay',
+                'cta_tab'   => 'deposit',
+                'variant'   => 'warning',
+            ];
+        }
+
+        return null;
+    }
+
+    /** Đồng bộ kết chuyến thiếu và bật cổng ví theo doanh thu tích lũy. */
+    public function reconcileWallet(DriverProfile $profile): DriverWallet
+    {
         $wallet = $this->walletFor($profile);
 
-        if ($this->isPreRevenueThreshold($profile)) {
-            return false;
+        Schedule::query()
+            ->where('driver_id', $profile->user_id)
+            ->where('status', 'completed')
+            ->whereDoesntHave('tripSettlement')
+            ->orderBy('id')
+            ->each(fn (Schedule $schedule) => $this->onScheduleCompleted($schedule));
+
+        $expectedRevenue = (int) DriverTripSettlement::query()
+            ->where('driver_wallet_id', $wallet->id)
+            ->where('status', 'completed')
+            ->sum('revenue_amount');
+
+        $expectedCount = (int) DriverTripSettlement::query()
+            ->where('driver_wallet_id', $wallet->id)
+            ->where('status', 'completed')
+            ->count();
+
+        if ($wallet->cumulative_revenue !== $expectedRevenue
+            || $wallet->completed_settlements_count !== $expectedCount) {
+            $wallet->update([
+                'cumulative_revenue'          => $expectedRevenue,
+                'completed_settlements_count' => $expectedCount,
+            ]);
         }
 
-        if (! $wallet->wallet_activated_at) {
-            return true;
-        }
+        $wallet = $wallet->fresh();
+        $this->refreshWalletGate($wallet);
+        $this->refreshAcceptBlock($wallet->fresh());
 
-        if (! $wallet->wallet_gate_enabled) {
-            return false;
-        }
+        return $wallet->fresh();
+    }
 
-        return $wallet->balance <= DriverWalletConfig::MIN_BALANCE;
+    public function driverLifetimeRevenue(DriverProfile $profile): int
+    {
+        return (int) Booking::query()
+            ->where('trip_status', 'completed')
+            ->whereHas('schedule', fn ($q) => $q->where('driver_id', $profile->user_id))
+            ->sum('total_price');
     }
 
     public function settlementBlockReason(DriverProfile $profile): ?string
@@ -281,12 +363,9 @@ class DriverWalletService
 
     public function driverRevenueStats(DriverProfile $profile): array
     {
-        $weekStart = now()->startOfWeek(\Carbon\Carbon::MONDAY)->startOfDay();
-        $weekEnd = now()->endOfWeek(\Carbon\Carbon::SUNDAY)->endOfDay();
-
         return [
-            'day'  => $this->driverRevenueBetween($profile, now()->startOfDay(), now()->endOfDay()),
-            'week' => $this->driverRevenueBetween($profile, $weekStart, $weekEnd),
+            'day'   => $this->driverRevenueBetween($profile, now()->startOfDay(), now()->endOfDay()),
+            'month' => $this->driverRevenueBetween($profile, now()->startOfMonth(), now()->endOfMonth()),
         ];
     }
 
@@ -415,6 +494,19 @@ class DriverWalletService
             ->where('status', 'pending')
             ->latest()
             ->get();
+    }
+
+    private function resolveSettlementCategory(int $revenue, DriverWallet $wallet): string
+    {
+        if ($revenue < DriverWalletConfig::REVENUE_THRESHOLD) {
+            return 'under_threshold';
+        }
+
+        if ($wallet->cumulative_revenue < DriverWalletConfig::REVENUE_THRESHOLD) {
+            return 'first_over_threshold';
+        }
+
+        return 'over_threshold';
     }
 
     private function refreshWalletGate(DriverWallet $wallet): void

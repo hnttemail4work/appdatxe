@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\DriverProfile;
-use App\Models\MerchantProfile;
 use App\Models\User;
 use App\Support\DriverFieldRules;
 use Illuminate\Http\Request;
@@ -21,46 +20,6 @@ class RegistrationService
     public function driverRules(): array
     {
         return DriverFieldRules::registrationRules();
-    }
-
-    /** @return array<string, mixed> */
-    public function operatorRules(): array
-    {
-        return [
-            'name'                  => ['required', 'string', 'max:255'],
-            'email'                 => ['nullable', 'email', 'max:255', 'unique:users,email'],
-            'phone'                 => ['required', 'string', 'max:30'],
-            'password'              => ['required', 'string', 'min:8', 'confirmed'],
-            'password_confirmation' => ['required', 'string', 'min:8'],
-        ];
-    }
-
-    public function registerOperator(array $validated, int $approvedBy): User
-    {
-        return DB::transaction(function () use ($validated, $approvedBy): User {
-            $email = filled($validated['email'] ?? null)
-                ? trim((string) $validated['email'])
-                : null;
-
-            $user = User::query()->create([
-                'name'     => $validated['name'],
-                'email'    => $email,
-                'password' => Hash::make($validated['password']),
-                'phone'    => $validated['phone'],
-                'role'     => 'operator',
-                'status'   => 'active',
-            ]);
-
-            MerchantProfile::query()->create([
-                'user_id'      => $user->id,
-                'company_name' => $validated['name'],
-                'kyc_status'   => 'approved',
-                'approved_by'  => $approvedBy,
-                'approved_at'  => now(),
-            ]);
-
-            return $user;
-        });
     }
 
     public function registerDriver(array $validated, Request $request): User

@@ -1,572 +1,106 @@
 <?php
 
-
-
 namespace App\Services;
 
-
-
 use App\Models\Schedule;
-
 use App\Models\ScheduleTemplate;
-
 use App\Models\TripRoute;
-
-use App\Support\PlatformFees;
-
-use App\Support\RouteDistanceCatalog;
-
 use App\Support\LocationCatalog;
-
+use App\Support\RouteDistanceCatalog;
 use App\Support\VehicleCapacityPricing;
 
-
-
-/** Giá vé theo km (admin) và giá cấu hình trên từng chuyến. */
-
+/** Giá thuê cả xe một chiều theo km / cấu hình template. */
 class TripPricingService
 {
-    /** Giá cả xe mốc cho xe 4 chỗ (một chiều) — fallback khi chưa cấu hình giá. */
-
     public const REFERENCE_WHOLE_CAR = 1_000_000;
-
     public const REFERENCE_CAPACITY = 4;
 
-
-
-    /** 150k / 1tr — giá một ghế ghép so với cả xe. */
-
-    public const SHARED_TO_WHOLE_RATIO = 0.15;
-
-
-
     /** @return array<string, mixed> */
-
     public function quote(
-
         ScheduleTemplate $template,
-
-        string $tripType,
-
         ?string $pickup = null,
-
         ?string $dropoff = null,
-
-        string $bookingMode = 'shared',
-
     ): array {
-
         $template->loadMissing(['route', 'vehicle']);
-
-        $oneWaySeat = $this->oneWaySeatPrice($template, $pickup, $dropoff);
-
-        $oneWayWhole = $this->oneWayWholeCarPrice($template, $pickup, $dropoff);
-
+        $wholeCar = $this->oneWayWholeCarPrice($template, $pickup, $dropoff);
         $distance = $this->resolveDistanceKm($template->route, $pickup, $dropoff);
 
-
-
-        $isWholeCar = $bookingMode === 'whole_car';
-        $oneWayUnit = $isWholeCar ? $oneWayWhole : $oneWaySeat;
-        $discount = $this->tripDiscountPercent($template);
-
-        if ($tripType === 'round_trip' && $this->hasExplicitRoundTripPricing($template)) {
-            $wholeUnit = (int) ($template->whole_car_round_trip_price ?? $this->priceForTripType($oneWayWhole, $tripType, $discount));
-            $sharedUnit = (int) ($template->seat_round_trip_price ?? $this->priceForTripType($oneWaySeat, $tripType, $discount));
-            $unit = $isWholeCar ? $wholeUnit : $sharedUnit;
-        } else {
-            $unit = $this->priceForTripType($oneWayUnit, $tripType, $discount);
-            $sharedUnit = $this->priceForTripType($oneWaySeat, $tripType, $discount);
-            $wholeUnit = $this->priceForTripType($oneWayWhole, $tripType, $discount);
-        }
-
-
-
         return [
-
-            'distance_km'             => $distance,
-
-            'one_way_seat_price'      => $oneWaySeat,
-
-            'one_way_whole_car_price' => $oneWayWhole,
-
-            'seat_price'              => $isWholeCar ? $wholeUnit : $sharedUnit,
-
-            'shared_seat_price'       => $sharedUnit,
-
-            'whole_car_price'         => $wholeUnit,
-
-            'booking_mode'            => $bookingMode,
-
-            'trip_type'               => $tripType,
-
-            'rate_per_km'             => $distance > 0 ? (int) round($oneWaySeat / $distance) : null,
-
-            'round_trip_savings'      => $tripType === 'round_trip'
-
-                ? max($oneWayUnit * 2 - $unit, 0)
-
-                : 0,
-
+            'distance_km'      => $distance,
+            'whole_car_price'  => $wholeCar,
+            'unit_price'       => $wholeCar,
         ];
-
     }
-
-
-
-    public function defaultWholeCarPrice(int $capacity): int
-
-    {
-
-        return $this->roundToThousand(
-            self::REFERENCE_WHOLE_CAR * VehicleCapacityPricing::multiplierForCapacity($capacity),
-        );
-
-    }
-
-
-
-    public function sharedSeatFromWholeCar(int $wholeCarPrice): int
-
-    {
-
-        return $this->roundToThousand($wholeCarPrice * self::SHARED_TO_WHOLE_RATIO);
-
-    }
-
-
-
-    public function wholeCarPrice(ScheduleTemplate|Schedule $entity): int
-
-    {
-
-        if ($entity->whole_car_price !== null) {
-
-            return $this->roundToThousand((float) $entity->whole_car_price);
-
-        }
-
-
-
-        if ($entity->seat_price !== null) {
-
-            return $this->roundToThousand((float) $entity->seat_price / self::SHARED_TO_WHOLE_RATIO);
-
-        }
-
-
-
-        $entity->loadMissing('vehicle');
-
-
-
-        return $this->defaultWholeCarPrice($entity->capacity());
-
-    }
-
-
-
-    public function oneWayWholeCarPrice(
-
-        ScheduleTemplate|Schedule $entity,
-
-        ?string $pickup = null,
-
-        ?string $dropoff = null,
-
-    ): int {
-
-        if ($this->hasExplicitPricing($entity)) {
-
-            return $this->wholeCarPrice($entity);
-
-        }
-
-
-
-        $entity->loadMissing(['route', 'vehicle']);
-
-        $distance = $this->resolveDistanceKm($entity->route, $pickup, $dropoff);
-
-        if ($distance > 0) {
-
-            return $this->wholeCarOneWayFromDistance($distance, $entity->capacity());
-
-        }
-
-
-
-        return $this->defaultWholeCarPrice($entity->capacity());
-
-    }
-
-
-
-    public function oneWaySeatPrice(
-
-        ScheduleTemplate|Schedule $entity,
-
-        ?string $pickup = null,
-
-        ?string $dropoff = null,
-
-    ): int {
-
-        if ($this->hasExplicitPricing($entity)) {
-
-            if ($entity->seat_price !== null) {
-
-                return $this->roundToThousand((float) $entity->seat_price);
-
-            }
-
-
-
-            return $this->sharedSeatFromWholeCar($this->wholeCarPrice($entity));
-
-        }
-
-
-
-        $entity->loadMissing('route');
-
-        $route = $entity->route;
-
-
-
-        if (! $route) {
-
-            return 0;
-
-        }
-
-
-
-        $distance = $this->resolveDistanceKm($route, $pickup, $dropoff);
-
-        $wholeFromDistance = $distance > 0
-            ? $this->wholeCarOneWayFromDistance($distance, $entity->capacity())
-            : 0;
-
-        $entity->loadMissing('vehicle');
-
-        $fromDistance = $wholeFromDistance > 0
-
-            ? $this->roundToThousand($wholeFromDistance / max($entity->capacity(), 1))
-
-            : 0;
-
-        $routeBase = $this->roundToThousand((float) ($route->base_price ?? 0));
-
-
-
-        if ($fromDistance <= 0) {
-
-            return max($routeBase, 0);
-
-        }
-
-
-
-        if ($routeBase <= 0) {
-
-            return $fromDistance;
-
-        }
-
-
-
-        return (int) min($routeBase, $fromDistance);
-
-    }
-
-
-
-    public function seatPriceForTripType(int $oneWaySeatPrice, string $tripType, ?float $discountPercent = null): int
-    {
-        return $this->priceForTripType($oneWaySeatPrice, $tripType, $discountPercent);
-    }
-
-    public function priceForTripType(int $oneWayPrice, string $tripType, ?float $discountPercent = null): int
-    {
-        if ($tripType === 'round_trip') {
-            $multiplier = $discountPercent !== null
-                ? round(2 * (1 - $discountPercent / 100), 4)
-                : PlatformFees::roundTripMultiplier();
-
-            return $this->roundToThousand($oneWayPrice * $multiplier);
-        }
-
-        return $oneWayPrice;
-    }
-
-
 
     public function bookingTotal(
-
         ScheduleTemplate|Schedule $entity,
-
-        string $tripType,
-
-        string $bookingMode,
-
-        int $seatCount,
-
         ?string $pickup = null,
-
         ?string $dropoff = null,
-
-        int $vehicleCount = 1,
-
     ): float {
+        return (float) $this->oneWayWholeCarPrice($entity, $pickup, $dropoff);
+    }
 
-        $vehicleCount = max($vehicleCount, 1);
+    public function oneWayWholeCarPrice(ScheduleTemplate|Schedule $entity, ?string $pickup = null, ?string $dropoff = null): int
+    {
+        $entity->loadMissing(['route', 'vehicle']);
+        $configured = (int) ($entity->whole_car_price ?? 0);
 
-        if ($bookingMode === 'whole_car') {
-
-            $oneWay = $this->oneWayWholeCarPrice($entity, $pickup, $dropoff);
-
-            $tripTotal = (float) $this->priceForTripType($oneWay, $tripType, $this->tripDiscountPercent($entity));
-
-            return (float) $this->roundToThousand($tripTotal * $vehicleCount);
-
+        if ($configured > 0) {
+            return $this->roundToThousand($configured);
         }
 
-
-
-        $oneWay = $this->oneWaySeatPrice($entity, $pickup, $dropoff);
-
-        $unit = $this->priceForTripType($oneWay, $tripType, $this->tripDiscountPercent($entity));
-
-
-
-        return (float) $this->roundToThousand((float) $unit * max($seatCount, 1));
-
-    }
-
-
-
-    public function resolveDistanceKm(
-
-        TripRoute $route,
-
-        ?string $pickup = null,
-
-        ?string $dropoff = null,
-
-    ): int {
-
-        if ($pickup && $dropoff
-
-            && LocationCatalog::isAllowed($pickup)
-
-            && LocationCatalog::isAllowed($dropoff)
-
-        ) {
-
-            return LocationCatalog::distanceBetween($pickup, $dropoff);
-
+        $distanceKm = $this->resolveDistanceKm($entity->route, $pickup, $dropoff);
+        if ($distanceKm > 0) {
+            return $this->wholeCarOneWayFromDistance($distanceKm, $entity->capacity());
         }
 
+        $routeBase = $this->roundToThousand((float) ($entity->route->base_price ?? 0));
 
+        return max($routeBase, 0);
+    }
 
-        if ($route->distance_km) {
+    public function wholeCarOneWayFromDistance(float $distanceKm, int $capacity): int
+    {
+        $perKm = self::REFERENCE_WHOLE_CAR / max(self::REFERENCE_CAPACITY, 1);
+        $base = $distanceKm * $perKm;
+        $multiplier = VehicleCapacityPricing::multiplierForCapacity($capacity);
 
-            return (int) $route->distance_km;
+        return $this->roundToThousand($base * $multiplier);
+    }
 
+    public function resolveDistanceKm(?TripRoute $route, ?string $pickup = null, ?string $dropoff = null): float
+    {
+        if (! $route) {
+            return 0.0;
         }
 
+        $pickup = $pickup ?: $route->departure;
+        $dropoff = $dropoff ?: $route->destination;
 
-
-        return RouteDistanceCatalog::resolveKm($route->departure, $route->destination);
-
-    }
-
-
-
-    /** Giá cả xe một chiều theo km và bảng giá admin. */
-
-    public function wholeCarOneWayFromDistance(int $distanceKm, int $capacity = 4): int
-
-    {
-
-        if ($distanceKm <= 0) {
-
-            return 0;
-
+        $catalog = RouteDistanceCatalog::resolveKm($pickup, $dropoff);
+        if ($catalog > 0) {
+            return $catalog;
         }
 
-
-
-        $rate = $distanceKm > 100
-
-            ? PlatformFees::kmRateOver100()
-
-            : PlatformFees::kmRateUnder100();
-
-        $base = $this->roundToThousand($distanceKm * $rate);
-
-        return $this->roundToThousand(
-            $base * VehicleCapacityPricing::multiplierForCapacity($capacity),
-        );
-
-    }
-
-
-
-    /**
-     * Gợi ý giá khi quản lý tạo chuyến — chia ghế từ giá cả xe.
-     *
-     * @return array{
-     *   distance_km: int,
-     *   rate_per_km: int,
-     *   whole_car_one_way: int,
-     *   seat_one_way: int,
-     *   whole_car_round: int,
-     *   seat_round: int,
-     * }
-     */
-    public function suggestOfferPrices(int $distanceKm, int $seats): array
-
-    {
-
-        $seats = max($seats, 1);
-
-        $rate = $distanceKm > 100
-
-            ? PlatformFees::kmRateOver100()
-
-            : PlatformFees::kmRateUnder100();
-
-        $wholeOneWay = $this->wholeCarOneWayFromDistance($distanceKm, $seats);
-
-        $seatOneWay = $this->roundToThousand($wholeOneWay / $seats);
-
-        $multiplier = PlatformFees::roundTripMultiplier();
-
-        $wholeRound = $this->roundToThousand($wholeOneWay * $multiplier);
-
-        $seatRound = $this->roundToThousand($seatOneWay * $multiplier);
-
-
-
-        return [
-
-            'distance_km'       => $distanceKm,
-
-            'rate_per_km'       => $rate,
-
-            'whole_car_one_way' => $wholeOneWay,
-
-            'seat_one_way'      => $seatOneWay,
-
-            'whole_car_round'   => $wholeRound,
-
-            'seat_round'        => $seatRound,
-
-        ];
-
-    }
-
-
-
-    public function roundTripHint(int $oneWaySeatPrice, ?float $discountPercent = null): int
-    {
-        return $this->priceForTripType($oneWaySeatPrice, 'round_trip', $discountPercent);
-    }
-
-
-
-    public function tripTypeLabel(string $tripType): string
-
-    {
-
-        return $tripType === 'round_trip' ? 'Khứ hồi (2 chiều)' : 'Một chiều';
-
-    }
-
-    /**
-     * Khoảng giá cả xe (một chiều) theo các loại xe đã cấu hình trên tuyến.
-     *
-     * @param  iterable<ScheduleTemplate>  $templatesOnRoute
-     * @return array{min: int, max: int}
-     */
-    public function wholeCarPriceRangeForRoute(iterable $templatesOnRoute): array
-    {
-        $prices = [];
-        foreach ($templatesOnRoute as $template) {
-            $prices[] = $this->oneWayWholeCarPrice($template);
+        if ($pickup === $route->departure && $dropoff === $route->destination) {
+            return (float) ($route->distance_km ?? 0);
         }
 
-        if ($prices === []) {
-            return ['min' => 0, 'max' => 0];
-        }
-
-        return [
-            'min' => min($prices),
-            'max' => max($prices),
-        ];
+        return LocationCatalog::estimateDistanceKm($pickup, $dropoff);
     }
 
-    public function formatWholeCarRange(int $min, int $max): string
+    public function defaultWholeCarPrice(int $capacity): int
     {
-        $minFormatted = number_format($min, 0, ',', '.');
-
-        if ($min === $max) {
-            return $minFormatted . ' đ';
-        }
-
-        return $minFormatted . ' ~ ' . number_format($max, 0, ',', '.') . ' đ';
+        return $this->wholeCarOneWayFromDistance(100, $capacity);
     }
 
-    /** @return array{min: int, max: int} */
-    public function seatPriceRangeForTemplate(ScheduleTemplate $template): array
+    public function roundToThousand(float $amount): int
     {
-        $oneWay = $this->oneWaySeatPrice($template);
-        $roundTrip = (int) $this->quote($template, 'round_trip', null, null, 'shared')['shared_seat_price'];
-
-        return [
-            'min' => min($oneWay, $roundTrip),
-            'max' => max($oneWay, $roundTrip),
-        ];
+        return (int) (ceil($amount / 1000) * 1000);
     }
 
-    public function formatSeatRange(int $min, int $max): string
+    public function tripTypeLabel(string $tripType = 'one_way'): string
     {
-        return $this->formatWholeCarRange($min, $max);
+        return 'Thuê xe';
     }
-
-    private function hasExplicitRoundTripPricing(ScheduleTemplate|Schedule $entity): bool
-    {
-        return $entity->whole_car_round_trip_price !== null
-            || $entity->seat_round_trip_price !== null;
-    }
-
-    private function tripDiscountPercent(ScheduleTemplate|Schedule $entity): ?float
-    {
-        $entity->loadMissing('route');
-
-        if (! $entity->route || $entity->route->round_trip_discount_percent === null) {
-            return null;
-        }
-
-        return (float) $entity->route->round_trip_discount_percent;
-    }
-
-    private function hasExplicitPricing(ScheduleTemplate|Schedule $entity): bool
-
-    {
-
-        return $entity->whole_car_price !== null || $entity->seat_price !== null;
-
-    }
-
-
-
-    private function roundToThousand(int|float $amount): int
-    {
-        return PlatformFees::roundUpToThousand($amount);
-    }
-
 }
-

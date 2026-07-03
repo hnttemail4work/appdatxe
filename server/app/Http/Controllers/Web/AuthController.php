@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Models\DriverProfile;
+use App\Services\DriverAvailabilityService;
 use App\Services\RegistrationService;
 use App\Support\RoleDashboard;
 use App\Support\WebAuth;
@@ -13,8 +15,10 @@ use InvalidArgumentException;
 
 class AuthController extends Controller
 {
-    public function __construct(private readonly RegistrationService $registration)
-    {
+    public function __construct(
+        private readonly RegistrationService $registration,
+        private readonly DriverAvailabilityService $driverAvailability,
+    ) {
     }
 
     public function showLogin()
@@ -39,6 +43,13 @@ class AuthController extends Controller
 
         Auth::login($user, $request->boolean('remember'));
         $request->session()->regenerate();
+
+        if ($user->role === 'driver') {
+            $profile = DriverProfile::query()->where('user_id', $user->id)->first();
+            if ($profile) {
+                $this->driverAvailability->resetForWebLogin($profile);
+            }
+        }
 
         if ($user->status !== 'active') {
             Auth::logout();
@@ -83,6 +94,14 @@ class AuthController extends Controller
 
         if ($user->status === 'active') {
             Auth::login($user);
+            $request->session()->regenerate();
+
+            if ($user->role === 'driver') {
+                $profile = DriverProfile::query()->where('user_id', $user->id)->first();
+                if ($profile) {
+                    $this->driverAvailability->resetForWebLogin($profile);
+                }
+            }
 
             return redirect(RoleDashboard::route($user->role))
                 ->with('success', 'Đăng ký thành công. Chào mừng bạn đến với ' . config('app.name') . '!');
@@ -94,6 +113,14 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
+        $user = Auth::user();
+        if ($user && $user->role === 'driver') {
+            $profile = DriverProfile::query()->where('user_id', $user->id)->first();
+            if ($profile) {
+                $this->driverAvailability->endWebSession($profile);
+            }
+        }
+
         Auth::guard('web')->logout();
 
         $request->session()->invalidate();

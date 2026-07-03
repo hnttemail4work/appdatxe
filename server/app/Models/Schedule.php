@@ -15,14 +15,14 @@ class Schedule extends Model
         'driver_name',
         'departure_time',
         'expected_arrival_at',
-        'seat_price',
         'whole_car_price',
         'service_date',
-        'available_seats',
         'status',
         'driver_stage',
         'driver_assigned_at',
         'driver_movement_deadline_at',
+        'driver_late_pickup_prompt_at',
+        'driver_late_pickup_continue_deadline_at',
         'trip_code',
     ];
 
@@ -33,10 +33,10 @@ class Schedule extends Model
             'expected_arrival_at' => 'datetime',
             'driver_assigned_at' => 'datetime',
             'driver_movement_deadline_at' => 'datetime',
+            'driver_late_pickup_prompt_at' => 'datetime',
+            'driver_late_pickup_continue_deadline_at' => 'datetime',
             'service_date'   => 'date',
-            'seat_price'      => 'decimal:2',
             'whole_car_price' => 'decimal:2',
-            'available_seats' => 'integer',
         ];
     }
 
@@ -74,11 +74,6 @@ class Schedule extends Model
     public function tripSettlement()
     {
         return $this->hasOne(DriverTripSettlement::class);
-    }
-
-    public function seatReservations()
-    {
-        return $this->hasMany(SeatReservation::class);
     }
 
     public function driverTripRequests()
@@ -138,16 +133,6 @@ class Schedule extends Model
         return implode(', ', $parts);
     }
 
-    public function seatPrice(): float
-    {
-        if ($this->seat_price !== null) {
-            return (float) $this->seat_price;
-        }
-
-        return (float) app(\App\Services\TripPricingService::class)
-            ->sharedSeatFromWholeCar((int) $this->wholeCarPriceAmount());
-    }
-
     public function wholeCarPriceAmount(): float
     {
         if ($this->whole_car_price !== null) {
@@ -163,10 +148,12 @@ class Schedule extends Model
             return (int) $this->active_reservations_count;
         }
 
-        return $this->seatReservations()
-            ->whereIn('status', ['held', 'booked'])
-            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
-            ->count();
+        $hasActive = $this->bookings()
+            ->whereNotIn('booking_status', ['cancelled', 'rejected'])
+            ->whereNotIn('trip_status', ['completed', 'cancelled'])
+            ->exists();
+
+        return $hasActive ? $this->capacity() : 0;
     }
 
     public function bookedSeatsCount(): int
@@ -187,7 +174,12 @@ class Schedule extends Model
             return false;
         }
 
-        return $this->departure_time > now() && $this->bookedSeatsCount() < $this->capacity();
+        $hasActive = $this->bookings()
+            ->whereNotIn('booking_status', ['cancelled', 'rejected'])
+            ->whereNotIn('trip_status', ['completed', 'cancelled'])
+            ->exists();
+
+        return $this->departure_time > now() && ! $hasActive;
     }
 
     public function expectedArrivalAt(): \Carbon\Carbon
@@ -477,32 +469,10 @@ class Schedule extends Model
         return 'upcoming';
     }
 
-    /** Tài xế có thể hủy trước khi khách lên xe. */
+    /** Tài xế không hủy sau khi đã nhận cuốc — chỉ từ chối trước khi nhận. */
     public function driverCanCancelTrip(): bool
     {
-        if ($this->status === 'cancelled' || (int) $this->driver_id < 1) {
-            return false;
-        }
-
-        if (! in_array($this->resolvedDriverStage(), [self::DRIVER_STAGE_ASSIGNED, self::DRIVER_STAGE_AT_PICKUP], true)) {
-            return false;
-        }
-
-        $bookings = $this->driverRelevantBookings();
-
-        if ($bookings->isEmpty()) {
-            return false;
-        }
-
-        if ($bookings->contains(fn (Booking $b): bool => $b->trip_status === 'completed')) {
-            return false;
-        }
-
-        if ($bookings->contains(fn (Booking $b): bool => $b->trip_status === 'awaiting_completion')) {
-            return false;
-        }
-
-        return $bookings->contains(fn (Booking $b): bool => ! in_array($b->booking_status, ['cancelled', 'rejected'], true));
+        return false;
     }
 
     /** Hệ thống đã qua giờ kết thúc dự kiến — tài xế cần bấm hoàn thành. */
@@ -670,10 +640,7 @@ class Schedule extends Model
             ->whereHas('bookings', fn ($q) => $q->whereNotIn('booking_status', ['cancelled', 'rejected']))
             ->whereDoesntHave('bookings', fn ($q) => $q
                 ->whereNotIn('booking_status', ['cancelled', 'rejected'])
-                ->where(function ($q2): void {
-                    $q2->whereNotNull('needs_operator_help_at')
-                        ->orWhere('trip_status', 'awaiting_completion');
-                }));
+                ->where('trip_status', 'awaiting_completion'));
     }
 
     /** Ẩn trên dashboard tài xế — chỉ quản lý xử lý. */
@@ -688,8 +655,7 @@ class Schedule extends Model
         }
 
         return ! $this->driverRelevantBookings()->contains(
-            fn (Booking $booking): bool => $booking->needs_operator_help_at !== null
-                || $booking->trip_status === 'awaiting_completion',
+            fn (Booking $booking): bool => $booking->trip_status === 'awaiting_completion',
         );
     }
 

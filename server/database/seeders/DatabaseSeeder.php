@@ -3,7 +3,6 @@
 namespace Database\Seeders;
 
 use App\Models\DriverProfile;
-use App\Models\MerchantProfile;
 use App\Models\PlatformSetting;
 use App\Models\ScheduleTemplate;
 use App\Models\TripRoute;
@@ -25,28 +24,6 @@ class DatabaseSeeder extends Seeder
                 'phone'    => '0981952856',
                 'role'     => 'admin',
                 'status'   => 'active',
-            ],
-        );
-
-        $operator = User::query()->firstOrCreate(
-            ['email' => 'vantam.quanly@gmail.com'],
-            [
-                'name'     => 'Nguyễn Văn Tâm',
-                'password' => Hash::make('password'),
-                'phone'    => '0900000001',
-                'role'     => 'operator',
-                'status'   => 'active',
-            ],
-        );
-
-        MerchantProfile::query()->firstOrCreate(
-            ['user_id' => $operator->id],
-            [
-                'company_name' => 'Tam Long Limo',
-                'tax_code'     => '0123456789',
-                'kyc_status'   => 'approved',
-                'approved_by'  => $admin->id,
-                'approved_at'  => now(),
             ],
         );
 
@@ -87,7 +64,7 @@ class DatabaseSeeder extends Seeder
         $vehicle = Vehicle::query()->firstOrCreate(
             ['license_plate' => '51A-12345'],
             [
-                'operator_id' => $operator->id,
+                'operator_id' => $admin->id,
                 'type'        => 'limousine',
                 'capacity'    => 9,
                 'status'      => 'active',
@@ -97,7 +74,7 @@ class DatabaseSeeder extends Seeder
         $vehicle2 = Vehicle::query()->firstOrCreate(
             ['license_plate' => '51B-67890'],
             [
-                'operator_id' => $operator->id,
+                'operator_id' => $admin->id,
                 'type'        => 'sedan',
                 'capacity'    => 4,
                 'status'      => 'active',
@@ -107,7 +84,7 @@ class DatabaseSeeder extends Seeder
         $vehicle7 = Vehicle::query()->firstOrCreate(
             ['license_plate' => '51C-11111'],
             [
-                'operator_id' => $operator->id,
+                'operator_id' => $admin->id,
                 'type'        => 'suv',
                 'capacity'    => 7,
                 'status'      => 'active',
@@ -117,7 +94,7 @@ class DatabaseSeeder extends Seeder
         $vehicle16 = Vehicle::query()->firstOrCreate(
             ['license_plate' => '51D-22222'],
             [
-                'operator_id' => $operator->id,
+                'operator_id' => $admin->id,
                 'type'        => 'limousine',
                 'capacity'    => 16,
                 'status'      => 'active',
@@ -139,7 +116,7 @@ class DatabaseSeeder extends Seeder
         $driverProfile = DriverProfile::query()->firstOrCreate(
             ['user_id' => $driverUser->id],
             [
-                'operator_id'         => $operator->id,
+                'operator_id'         => $admin->id,
                 'license_number'      => '12345678901',
                 'license_class'       => 'D',
                 'license_expiry'      => now()->addYears(3)->toDateString(),
@@ -147,10 +124,46 @@ class DatabaseSeeder extends Seeder
                 'status'              => 'active',
                 'approval_status'     => 'approved',
                 'availability_status' => 'available',
+                'last_lat'            => 10.7777605,
+                'last_lng'            => 106.7011286,
+                'last_location_at'    => now(),
+                'last_address'        => 'Pasteur, Phường Sài Gòn, Thành phố Hồ Chí Minh',
+                'last_province'       => 'TP.HCM',
             ],
         );
 
-        // Chỉ 2 chuyến mẫu — quản lý tự tạo thêm trên dashboard
+        // Tài xế 2
+        $driverUser2 = User::query()->firstOrCreate(
+            ['phone' => '1000000002'],
+            [
+                'name'     => 'Tài xế 1000000002',
+                'email'    => 'driver1000000002@appdatxe.test',
+                'password' => Hash::make('password'),
+                'role'     => 'driver',
+                'status'   => 'active',
+            ],
+        );
+
+        DriverProfile::query()->firstOrCreate(
+            ['user_id' => $driverUser2->id],
+            [
+                'operator_id'         => $admin->id,
+                'license_number'      => '10000000021',
+                'license_class'       => 'D',
+                'license_expiry'      => now()->addYears(3)->toDateString(),
+                'experience_years'    => 5,
+                'status'              => 'active',
+                'approval_status'     => 'approved',
+                'availability_status' => 'off_duty',
+                'last_lat'            => 10.7795000,
+                'last_lng'            => 106.6990000,
+                'last_location_at'    => now(),
+                'last_address'        => 'Pasteur, Phường Sài Gòn, Thành phố Hồ Chí Minh',
+                'last_province'       => 'TP.HCM',
+            ],
+        );
+
+        // Chỉ 2 chuyến mẫu — admin tự tạo thêm trên dashboard
         $routes = TripRoute::query()
             ->whereIn('departure', ['TP.HCM'])
             ->whereIn('destination', ['Vũng Tàu', 'Đà Lạt'])
@@ -175,7 +188,6 @@ class DatabaseSeeder extends Seeder
             foreach ($entries as $entry) {
                 $capacity = (int) $entry['vehicle']->capacity;
                 $wholeCar = $pricing->defaultWholeCarPrice($capacity);
-                $seatPrice = $pricing->sharedSeatFromWholeCar($wholeCar);
 
                 ScheduleTemplate::query()->updateOrCreate(
                     [
@@ -187,7 +199,6 @@ class DatabaseSeeder extends Seeder
                         'driver_id'       => null,
                         'driver_name'     => 'Chờ khách đặt',
                         'whole_car_price' => $wholeCar,
-                        'seat_price'      => $seatPrice,
                         'status'          => 'active',
                     ],
                 );

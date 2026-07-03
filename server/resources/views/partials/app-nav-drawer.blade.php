@@ -5,17 +5,7 @@
     <div class="offcanvas-body">
         <button type="button" class="btn-close btn-close-white app-nav-drawer-close" data-bs-dismiss="offcanvas" aria-label="Đóng menu"></button>
         @if($minimalNav ?? false)
-            @if(auth()->user()->role === 'operator')
-                <div class="app-nav-drawer-user mb-3">
-                    <div class="app-nav-drawer-user-role">Quản lý</div>
-                    <div class="app-nav-drawer-user-name">{{ auth()->user()->name }}</div>
-                </div>
-                @if(request()->routeIs('operator.tripOffers.*'))
-                    <a href="{{ route('operator.dashboard') }}" class="app-nav-drawer-link">Quản lý</a>
-                @else
-                    <a href="{{ route('operator.tripOffers.create') }}" class="app-nav-drawer-link">Tạo chuyến</a>
-                @endif
-            @elseif(auth()->user()->role === 'admin')
+            @if(auth()->user()->role === 'admin')
                 <div class="app-nav-drawer-user mb-3">
                     <div class="app-nav-drawer-user-role">Quản trị</div>
                     <div class="app-nav-drawer-user-name">{{ auth()->user()->name }}</div>

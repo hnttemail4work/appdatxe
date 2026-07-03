@@ -42,7 +42,6 @@ class DuplicateBookingServiceTest extends TestCase
             'driver_name'     => 'Chờ phân bổ',
             'departure_time'  => now()->addDay(),
             'service_date'    => now()->addDay()->toDateString(),
-            'available_seats' => 4,
             'status'          => 'scheduled',
             'trip_code'       => 'GTDUP' . uniqid(),
         ]);
@@ -52,9 +51,6 @@ class DuplicateBookingServiceTest extends TestCase
             'passenger_name'    => 'Khách Test',
             'passenger_gender'  => 'male',
             'schedule_id'       => $schedule->id,
-            'seat_numbers'      => ['1'],
-            'trip_type'         => 'one_way',
-            'booking_mode'      => 'shared',
             'booking_reference' => 'BK-DUP-' . uniqid(),
             'total_price'       => 200000,
             'payment_status'    => 'unpaid',

@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::table('bookings', function (Blueprint $table): void {
             if (! Schema::hasColumn('bookings', 'driver_pickup_distance_km')) {
-                $table->decimal('driver_pickup_distance_km', 6, 1)->nullable()->after('pickup_lng');
+                $table->decimal('driver_pickup_distance_km', 6, 1)->nullable();
             }
         });
     }

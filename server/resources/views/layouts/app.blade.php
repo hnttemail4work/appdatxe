@@ -54,16 +54,16 @@
     <link rel="stylesheet" href="{{ asset('css/app-dialog.css') }}?v={{ filemtime(public_path('css/app-dialog.css')) }}">
     @stack('styles')
 </head>
-<body class="app-shell @if(request()->routeIs('login', 'register')) app-shell--auth @endif @if(request()->routeIs('home', 'driver.dashboard', 'guest.orders')) app-shell--mobile-app @endif">
+<body class="app-shell @if(request()->routeIs('login', 'register')) app-shell--auth @endif @if(request()->routeIs('home', 'driver.dashboard')) app-shell--mobile-app @endif">
 @php
-    $isGuestBookingPage = request()->routeIs('home', 'guest.orders');
+    $isGuestBookingPage = request()->routeIs('home');
     $hidePublicNav = $isGuestBookingPage || request()->routeIs('admin.*');
     $minimalNav = auth()->check()
-        && in_array(auth()->user()->role, ['operator', 'admin', 'driver'], true)
+        && in_array(auth()->user()->role, ['admin', 'driver'], true)
         && ! $isGuestBookingPage;
     $brandHref = route('home');
-    if (auth()->check() && in_array(auth()->user()->role, ['operator', 'driver'], true)) {
-        $brandHref = \App\Support\RoleDashboard::route(auth()->user()->role);
+    if (auth()->check() && auth()->user()->role === 'driver') {
+        $brandHref = \App\Support\RoleDashboard::route('driver');
     }
 @endphp
 <nav class="navbar navbar-expand-lg app-navbar navbar-dark">
@@ -74,17 +74,7 @@
         </a>
         @if($minimalNav)
         <div class="app-navbar-desktop d-none d-lg-flex ms-auto align-items-center gap-2 gap-md-3 flex-wrap justify-content-end">
-            @if(auth()->user()->role === 'operator')
-                <div class="navbar-console-user text-end">
-                    <div class="navbar-console-role">Quản lý</div>
-                    <div class="navbar-console-name">{{ auth()->user()->name }}</div>
-                </div>
-                @if(request()->routeIs('operator.tripOffers.*'))
-                    <a href="{{ route('operator.dashboard') }}" class="btn btn-sm btn-outline-primary">Quản lý</a>
-                @else
-                    <a href="{{ route('operator.tripOffers.create') }}" class="btn btn-sm btn-outline-primary">Tạo chuyến</a>
-                @endif
-            @elseif(auth()->user()->role === 'admin')
+            @if(auth()->user()->role === 'admin')
                 <div class="navbar-console-user text-end">
                     <div class="navbar-console-role">Quản trị</div>
                     <div class="navbar-console-name">{{ auth()->user()->name }}</div>
@@ -95,13 +85,7 @@
             @include('partials.logout-button')
         </div>
         <div class="app-navbar-mobile d-flex d-lg-none ms-auto align-items-center gap-2">
-            @if(auth()->user()->role === 'operator')
-                @if(request()->routeIs('operator.tripOffers.*'))
-                    <a href="{{ route('operator.dashboard') }}" class="btn btn-sm btn-outline-primary">Quản lý</a>
-                @else
-                    <a href="{{ route('operator.tripOffers.create') }}" class="btn btn-sm btn-outline-primary">Tạo chuyến</a>
-                @endif
-            @elseif(auth()->user()->role === 'driver')
+            @if(auth()->user()->role === 'driver')
                 @include('partials.driver-emergency-call')
             @endif
             @include('partials.logout-button')

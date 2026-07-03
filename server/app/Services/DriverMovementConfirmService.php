@@ -215,7 +215,7 @@ class DriverMovementConfirmService
 
             $locked->update([
                 'driver_id'                   => null,
-                'driver_name'                 => null,
+                'driver_name'                 => 'Chờ phân bổ',
                 'driver_stage'                => null,
                 'driver_assigned_at'          => null,
                 'driver_movement_deadline_at' => null,

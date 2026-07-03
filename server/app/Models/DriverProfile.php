@@ -12,6 +12,7 @@ class DriverProfile extends Model
         'license_number', 'license_class', 'license_expiry', 'experience_years',
         'status', 'approval_status', 'rejection_reason', 'rejection_reason_at', 'availability_status', 'notes',
         'preference_likes', 'preference_dislikes',
+        'cuoc_offer_count', 'cuoc_reject_count', 'cancel_rate_percent',
         'last_lat', 'last_lng', 'last_location_at', 'last_province', 'last_address',
         'missed_trip_strikes', 'missed_trip_locked_at',
         'bank_name', 'bank_account',
@@ -56,6 +57,24 @@ class DriverProfile extends Model
             'on_trip'   => 'Đang chạy',
             default     => 'Nghỉ',
         };
+    }
+
+    /** Trạng thái pill trên hero tài xế — đồng bộ với availability + vị trí. */
+    public function heroStatusMeta(bool $onTrip = false): array
+    {
+        if ($onTrip) {
+            return ['key' => 'busy', 'label' => 'Đang chạy chuyến'];
+        }
+
+        if (($this->availability_status ?? 'off_duty') === 'off_duty') {
+            return ['key' => 'offline', 'label' => 'Tạm nghỉ'];
+        }
+
+        if ($this->hasFreshLocation()) {
+            return ['key' => 'online', 'label' => 'Sẵn sàng'];
+        }
+
+        return ['key' => 'offline', 'label' => 'Cập nhật vị trí để nhận chuyến'];
     }
 
     /** Một nhãn trạng thái duy nhất (gộp tài khoản + làm việc). */
@@ -132,7 +151,25 @@ class DriverProfile extends Model
             'last_lng' => 'float',
             'last_location_at' => 'datetime',
             'rejection_reason_at' => 'datetime',
+            'cuoc_offer_count' => 'integer',
+            'cuoc_reject_count' => 'integer',
+            'cancel_rate_percent' => 'float',
         ];
+    }
+
+    public function cancelRatePercent(): float
+    {
+        return round((float) ($this->cancel_rate_percent ?? 0), 1);
+    }
+
+    public function cancelRateLabel(): string
+    {
+        return number_format($this->cancelRatePercent(), 1, ',', '.') . '%';
+    }
+
+    public function hasCancelRate(): bool
+    {
+        return $this->cancelRatePercent() > 0;
     }
 
     public function hasFreshLocation(int $maxAgeMinutes = 15): bool

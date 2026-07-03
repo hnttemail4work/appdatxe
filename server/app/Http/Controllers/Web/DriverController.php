@@ -8,16 +8,16 @@ use App\Models\DriverProfile;
 use App\Support\ProvinceResolver;
 use App\Models\DriverTripRequest;
 use App\Models\Schedule;
-use App\Models\ScheduleMergeRequest;
 use App\Support\DriverFieldRules;
 use App\Services\BookingWorkflowService;
+use App\Services\DriverAvailabilityService;
+use App\Services\DriverLatePickupService;
 use App\Services\DriverMissedTripService;
 use App\Services\DriverPhotoService;
 use App\Services\DriverProfileSyncService;
 use App\Services\DriverTripRequestService;
 use App\Services\DriverWalletService;
 use App\Services\ScheduleLifecycleService;
-use App\Services\TripConsolidationService;
 use App\Support\PageList;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -32,8 +32,11 @@ class DriverController extends Controller
         private readonly BookingWorkflowService $workflow,
         private readonly ScheduleLifecycleService $scheduleLifecycle,
         private readonly DriverTripRequestService $driverRequests,
+        private readonly DriverAvailabilityService $driverAvailability,
         private readonly DriverMissedTripService $missedTrips,
+        private readonly DriverCancelRateService $cancelRates,
         private readonly DriverWalletService $driverWallet,
+        private readonly DriverLatePickupService $latePickup,
     ) {
     }
 
@@ -41,12 +44,25 @@ class DriverController extends Controller
     {
         $this->scheduleLifecycle->sync();
         $this->driverRequests->expireStale();
+        $this->driverRequests->retryWaitingBookingsWithoutExpire();
         $this->driverWallet->enforceDeadlines();
 
         $user    = Auth::user();
         $profile = DriverProfile::query()->where('user_id', $user->id)->with('operator')->first();
+        $driverWallet = null;
+        $walletNotice = null;
+
+        if ($profile) {
+            $this->driverAvailability->enforceWebPresenceIdleFor($profile);
+            $profile = $profile->fresh(['operator']);
+            if (($profile->availability_status ?? 'off_duty') === 'available') {
+                $this->driverAvailability->touchWebPresence((int) $profile->user_id);
+            }
+            $driverWallet = $this->driverWallet->reconcileWallet($profile);
+            $walletNotice = $this->driverWallet->walletNoticeForDriver($profile);
+        }
+
         $walletBlockReason = $profile ? $this->driverWallet->acceptBlockReason($profile) : null;
-        $driverWallet = $profile ? $this->driverWallet->walletFor($profile) : null;
         if ($driverWallet) {
             $driverWallet->load([
                 'settlements.schedule.route',
@@ -55,7 +71,6 @@ class DriverController extends Controller
                 'transactions' => fn ($q) => $q->where('type', 'deposit')->latest(),
             ]);
         }
-
 
         $tripSchedulesAll = Schedule::query()
             ->with([
@@ -89,22 +104,15 @@ class DriverController extends Controller
 
         $tripHistory = PageList::paginateCollection($tripHistoryAll, $request, 'history_page');
 
-        $tripActionCount = $tripSchedulesAll
-            ->filter(fn (Schedule $s): bool => in_array($s->driverWorkflowPhase(), ['upcoming', 'active'], true))
-            ->count();
+        $tripActionCount = $this->driverRequests->tripActionCountForDriver($user->id);
+        $driverOnTrip = $tripActionCount > 0;
 
-        $pendingMergeRequests = app(TripConsolidationService::class)
-            ->pendingMergeRequestsForDriver($user->id);
+        $pendingTripRequestGroups = $this->driverRequests->visiblePendingGroupsForDriver($user->id);
 
-        $pendingTripRequestGroups = $this->driverRequests->pendingGroupsForDriver($user->id);
-
-        $tripActionCount += $pendingMergeRequests->count();
-        $tripActionCount += $pendingTripRequestGroups->count();
-
-        $showTopUpBanner = $profile ? $this->driverWallet->shouldShowTopUpBanner($profile) : false;
+        $showTopUpBanner = $walletNotice !== null;
         $revenueStats = $profile
             ? $this->driverWallet->driverRevenueStats($profile)
-            : ['day' => 0, 'week' => 0];
+            : ['day' => 0, 'month' => 0];
         $walletHistoryAll = $driverWallet
             ? $this->driverWallet->walletActivityHistory($driverWallet)
             : collect();
@@ -117,11 +125,12 @@ class DriverController extends Controller
             'driverWallet',
             'walletHistory',
             'showTopUpBanner',
+            'walletNotice',
             'revenueStats',
             'tripSchedules',
             'tripActionCount',
+            'driverOnTrip',
             'tripHistory',
-            'pendingMergeRequests',
             'pendingTripRequestGroups',
         ));
     }
@@ -131,69 +140,73 @@ class DriverController extends Controller
         try {
             $stage = $this->workflow->driverAdvanceScheduleStage($schedule, Auth::id());
         } catch (InvalidArgumentException $e) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+
             return back()->withErrors(['booking' => $e->getMessage()]);
         }
 
         $label = $schedule->fresh()->driverStageLabel($stage);
+        $message = "Đã cập nhật: {$label}.";
 
-        return redirect()->route('driver.dashboard', ['tab' => 'trips'])->with('success', "Đã cập nhật: {$label}.");
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok'       => true,
+                'redirect' => route('driver.dashboard', ['tab' => 'trips']),
+                'message'  => $message,
+            ]);
+        }
+
+        return redirect()->route('driver.dashboard', ['tab' => 'trips'])->with('success', $message);
     }
 
     public function acceptTripRequest(Request $request, DriverTripRequest $driverTripRequest)
     {
         try {
-            $this->driverRequests->accept($driverTripRequest, Auth::id());
+            $this->driverRequests->accept($driverTripRequest, (int) Auth::id());
         } catch (InvalidArgumentException $e) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+
             return back()->withErrors(['driver_request' => $e->getMessage()]);
+        }
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok'       => true,
+                'redirect' => route('driver.dashboard', ['tab' => 'trips']),
+                'message'  => 'Đã nhận chuyến. Xem tab Chuyến đang chạy để theo dõi.',
+            ]);
         }
 
         return redirect()->route('driver.dashboard', ['tab' => 'trips'])->with('success', 'Đã nhận chuyến. Xem tab Xem chuyến để theo dõi.');
     }
 
-    public function claimBooking(Request $request, Booking $booking)
-    {
-        try {
-            $this->driverRequests->claimBooking($booking, Auth::id());
-        } catch (InvalidArgumentException $e) {
-            return back()->withErrors(['driver_request' => $e->getMessage()]);
-        }
-
-        return redirect()->route('driver.dashboard', ['tab' => 'trips'])->with('success', 'Đã nhận cuốc — khách sẽ thấy thông tin tài xế.');
-    }
-
     public function rejectTripRequest(Request $request, DriverTripRequest $driverTripRequest)
     {
         try {
-            $this->driverRequests->reject($driverTripRequest, Auth::id());
+            $this->driverRequests->reject($driverTripRequest, (int) Auth::id());
         } catch (InvalidArgumentException $e) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+
             return back()->withErrors(['driver_request' => $e->getMessage()]);
         }
 
+        $profile = DriverProfile::query()->where('user_id', Auth::id())->first();
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok'                  => true,
+                'availability'        => $profile?->availability_status ?? 'off_duty',
+                'message'             => 'Đã từ chối cuốc — đã tắt Sẵn sàng.',
+            ]);
+        }
+
         return redirect()->route('driver.dashboard', ['tab' => 'trips'])->with('success', 'Đã từ chối yêu cầu nhận chuyến.');
-    }
-
-    public function acceptMergeRequest(Request $request, ScheduleMergeRequest $mergeRequest)
-    {
-        try {
-            app(TripConsolidationService::class)->acceptMergeRequest($mergeRequest, Auth::id());
-        } catch (InvalidArgumentException $e) {
-            return back()->withErrors(['merge' => $e->getMessage()]);
-        }
-
-        return redirect()->route('driver.dashboard', ['tab' => 'trips'])
-            ->with('success', 'Đã đồng ý gom chuyến — danh sách khách đã cập nhật trên chuyến của bạn.');
-    }
-
-    public function rejectMergeRequest(Request $request, ScheduleMergeRequest $mergeRequest)
-    {
-        try {
-            app(TripConsolidationService::class)->rejectMergeRequest($mergeRequest, Auth::id());
-        } catch (InvalidArgumentException $e) {
-            return back()->withErrors(['merge' => $e->getMessage()]);
-        }
-
-        return redirect()->route('driver.dashboard', ['tab' => 'trips'])
-            ->with('success', 'Đã từ chối gom chuyến — quản lý sẽ xử lý riêng.');
     }
 
     public function updateLocation(Request $request)
@@ -206,24 +219,33 @@ class DriverController extends Controller
 
         $profile = DriverProfile::query()->where('user_id', Auth::id())->firstOrFail();
 
+        if (($profile->availability_status ?? 'off_duty') === 'off_duty') {
+            return response()->json([
+                'message' => 'Bật «Sẵn sàng» trước khi cập nhật vị trí.',
+            ], 422);
+        }
+
         $address = trim((string) ($validated['address'] ?? ''));
 
         $profile->update([
-            'last_lat'            => $validated['lat'],
-            'last_lng'            => $validated['lng'],
-            'last_location_at'    => now(),
-            'last_address'        => $address !== '' ? $address : null,
-            'last_province'       => ProvinceResolver::fromMapPick(
+            'last_lat'         => $validated['lat'],
+            'last_lng'         => $validated['lng'],
+            'last_location_at' => now(),
+            'last_address'     => $address !== '' ? $address : null,
+            'last_province'    => ProvinceResolver::fromMapPick(
                 (float) $validated['lat'],
                 (float) $validated['lng'],
                 $address !== '' ? $address : null,
             ),
-            'availability_status' => ($profile->availability_status ?? 'off_duty') === 'on_trip'
-                ? 'on_trip'
-                : 'available',
         ]);
 
-        $assigned = $this->driverRequests->retryWaitingBookings();
+        $this->driverAvailability->syncAfterTripCompleted((int) $profile->user_id);
+        $profile = $profile->fresh();
+
+        $this->driverAvailability->touchWebPresence((int) $profile->user_id);
+
+        $this->driverRequests->expireStale();
+        $assigned = $this->driverRequests->resumeDriverMatchingAfterAvailability($profile->fresh());
 
         return response()->json([
             'ok'         => true,
@@ -236,13 +258,47 @@ class DriverController extends Controller
     public function updateAvailability(Request $request)
     {
         $validated = $request->validate([
-            'availability_status' => ['required', Rule::in(['available', 'on_trip', 'off_duty'])],
+            'availability_status' => ['required', Rule::in(['available', 'off_duty'])],
         ]);
 
         $profile = DriverProfile::query()->where('user_id', Auth::id())->firstOrFail();
-        $profile->update($validated);
 
-        return redirect()->route('driver.dashboard')->with('success', 'Đã cập nhật trạng thái hoạt động.');
+        if ($this->driverAvailability->activeTripCount((int) $profile->user_id) > 0) {
+            $message = 'Đang chạy chuyến — hoàn thành chuyến trước khi tạm nghỉ.';
+
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $message], 422);
+            }
+
+            return back()->withErrors(['availability' => $message]);
+        }
+
+        if ($validated['availability_status'] === 'off_duty') {
+            $this->driverAvailability->markOffDuty($profile);
+        } else {
+            $this->driverAvailability->markAvailable($profile->fresh());
+            $this->driverRequests->resumeDriverMatchingAfterAvailability($profile->fresh());
+        }
+
+        $profile = $profile->fresh();
+        $pendingTripRequestCount = $this->driverRequests->visiblePendingGroupsForDriver((int) $profile->user_id)->count();
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok'                    => true,
+                'availability_status'   => $profile->availability_status,
+                'location_cleared'      => $validated['availability_status'] === 'off_duty',
+                'pending_trip_requests' => $pendingTripRequestCount,
+                'needs_location'        => $validated['availability_status'] === 'available',
+            ]);
+        }
+
+        return redirect()->route('driver.dashboard')->with(
+            'success',
+            $validated['availability_status'] === 'off_duty'
+                ? 'Đã tạm nghỉ — vị trí đã được xóa.'
+                : 'Đã bật sẵn sàng.',
+        );
     }
 
     /** Tài xế báo hoàn thành chuyến — tất cả vé trên cùng chuyến xe. */
@@ -266,12 +322,24 @@ class DriverController extends Controller
         try {
             $count = $this->workflow->driverCompleteSchedule($schedule, Auth::id());
         } catch (InvalidArgumentException $e) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+
             return back()->withErrors(['booking' => $e->getMessage()]);
         }
 
         $message = $count > 1
             ? "Đã hoàn thành chuyến ({$count} vé)."
             : 'Đã hoàn thành chuyến.';
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok'       => true,
+                'redirect' => route('driver.dashboard', ['tab' => 'trips']),
+                'message'  => $message,
+            ]);
+        }
 
         return redirect()->route('driver.dashboard')->with('success', $message);
     }
@@ -289,10 +357,46 @@ class DriverController extends Controller
                 (int) $validated['cancellation_reason_id'],
             );
         } catch (InvalidArgumentException $e) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+
             return back()->withErrors(['booking' => $e->getMessage()]);
         }
 
-        return redirect()->route('driver.dashboard')->with('success', 'Đã hủy chuyến. Quản lý sẽ được thông báo qua hệ thống.');
+        $profile = DriverProfile::query()->where('user_id', Auth::id())->first();
+        $message = ($profile && $profile->isMissedTripLocked())
+            ? 'Đã hủy chuyến. Tài khoản đã bị khóa do hủy 3 lần liên tiếp trong ngày — liên hệ quản lý để mở khóa.'
+            : 'Đã hủy chuyến. Quản lý sẽ được thông báo qua hệ thống.';
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok'       => true,
+                'redirect' => route('driver.dashboard', ['tab' => 'trips']),
+                'message'  => $message,
+            ]);
+        }
+
+        return redirect()->route('driver.dashboard')->with('success', $message);
+    }
+
+    public function latePickupContinue(Request $request, Schedule $schedule)
+    {
+        try {
+            $this->latePickup->confirmContinue($schedule, Auth::id());
+        } catch (InvalidArgumentException $e) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+
+            return back()->withErrors(['booking' => $e->getMessage()]);
+        }
+
+        if ($request->expectsJson()) {
+            return response()->json(['ok' => true]);
+        }
+
+        return redirect()->route('driver.dashboard')->with('success', 'Đã xác nhận — tiếp tục đến điểm đón.');
     }
 
     public function index(Request $request)
@@ -302,14 +406,23 @@ class DriverController extends Controller
             : 'all';
 
         $query = DriverProfile::query()
-            ->with(['user', 'operator'])
-            ->forOperatorManagement(Auth::id());
+            ->with(['user', 'operator']);
 
-        if ($filter === 'pending') {
-            $query->pendingForOperator(Auth::id());
-        } elseif ($filter === 'rejected') {
-            $query->where('approval_status', 'rejected')
-                ->whereHas('user', fn ($q) => $q->where('role', 'driver'));
+        if (Auth::user()->role === 'admin') {
+            if ($filter === 'pending') {
+                $query->pendingApproval();
+            } elseif ($filter === 'rejected') {
+                $query->where('approval_status', 'rejected')
+                    ->whereHas('user', fn ($q) => $q->where('role', 'driver'));
+            }
+        } else {
+            $query->forOperatorManagement(Auth::id());
+            if ($filter === 'pending') {
+                $query->pendingForOperator(Auth::id());
+            } elseif ($filter === 'rejected') {
+                $query->where('approval_status', 'rejected')
+                    ->whereHas('user', fn ($q) => $q->where('role', 'driver'));
+            }
         }
 
         $drivers = PageList::paginateCollection(
@@ -319,9 +432,11 @@ class DriverController extends Controller
             $request,
         );
 
-        $pendingCount = DriverProfile::pendingCountForOperator(Auth::id());
+        $pendingCount = Auth::user()->role === 'admin'
+            ? (int) DriverProfile::query()->pendingApproval()->count()
+            : DriverProfile::pendingCountForOperator(Auth::id());
 
-        return view('operator.drivers.index', compact('drivers', 'filter', 'pendingCount'));
+        return view('admin.drivers.index', compact('drivers', 'filter', 'pendingCount'));
     }
 
     public function edit(Request $request, DriverProfile $driverProfile)
@@ -341,7 +456,7 @@ class DriverController extends Controller
         $walletHistoryAll = $this->driverWallet->walletActivityHistory($driverWallet);
         $walletHistory = PageList::paginateCollection($walletHistoryAll, $request, 'history_page');
 
-        return view('operator.drivers.edit', [
+        return view('admin.drivers.edit', [
             'driver'          => $driverProfile,
             'driverWallet'    => $driverWallet,
             'pendingDeposits' => $pendingDeposits,
@@ -375,7 +490,7 @@ class DriverController extends Controller
         $this->profileSync->fillUserFromValidated($driverProfile, $validated);
 
         return redirect()
-            ->route('operator.drivers.edit', $driverProfile)
+            ->route('admin.drivers.edit', $driverProfile)
             ->with('success', 'Đã cập nhật thông tin tài xế.');
     }
 
@@ -387,7 +502,7 @@ class DriverController extends Controller
 
         $this->profileSync->setAccountStatus($driverProfile, 'inactive');
 
-        return redirect()->route('operator.drivers')->with('success', 'Đã vô hiệu hoá tài xế.');
+        return redirect()->route('admin.drivers')->with('success', 'Đã vô hiệu hoá tài xế.');
     }
 
     public function uploadPhotos(Request $request, DriverProfile $driverProfile)
@@ -407,7 +522,7 @@ class DriverController extends Controller
         }
 
         return redirect()
-            ->route('operator.drivers.edit', $driverProfile)
+            ->route('admin.drivers.edit', $driverProfile)
             ->with('success', 'Đã cập nhật ảnh tài xế.');
     }
 
@@ -424,8 +539,8 @@ class DriverController extends Controller
         $this->profileSync->approve($driverProfile, Auth::id());
 
         return redirect()
-            ->route('operator.drivers')
-            ->with('success', 'Đã duyệt tài xế — trạng thái Sẵn sàng nhận chuyến.');
+            ->route('admin.drivers')
+            ->with('success', 'Đã duyệt tài xế — trạng thái Sẵn sàng.');
     }
 
     public function reject(Request $request, DriverProfile $driverProfile)
@@ -477,26 +592,25 @@ class DriverController extends Controller
         return back()->with('success', 'Đã mở khóa tài xế. Số lần bỏ lỡ chuyến đã được reset.');
     }
 
+    public function resetCancelRate(DriverProfile $driverProfile)
+    {
+        if (! $this->canManageDriver($driverProfile)) {
+            abort(403);
+        }
+
+        $this->cancelRates->reset($driverProfile);
+
+        return back()->with('success', 'Đã đặt lại tỷ lệ hủy cuốc về 0%.');
+    }
+
     private function canManageDriver(DriverProfile $driverProfile): bool
     {
-        if (Auth::user()->role !== 'operator') {
-            return false;
-        }
-
-        if ($driverProfile->operator_id === Auth::id()) {
-            return true;
-        }
-
-        return $driverProfile->operator_id === null
-            && ($driverProfile->isPendingApproval() || $driverProfile->isRejected());
+        return Auth::user()->role === 'admin';
     }
 
     private function canApproveDriver(DriverProfile $driverProfile): bool
     {
-        if (Auth::user()->role !== 'operator') {
-            return false;
-        }
-
-        return $driverProfile->operator_id === null || $driverProfile->operator_id === Auth::id();
+        return Auth::user()->role === 'admin'
+            && ($driverProfile->isPendingApproval() || $driverProfile->operator_id === null);
     }
 }

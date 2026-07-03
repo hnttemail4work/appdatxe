@@ -51,6 +51,21 @@ $currentOrder = $order[$highlightStage] ?? 0;
 
     @include('partials.wait-progress', ['waitProgress' => $waitProgress, 'variant' => 'driver'])
 
+    @php
+        $latePickupPrompt = app(\App\Services\DriverLatePickupService::class)->latePickupPromptPayload($schedule);
+    @endphp
+    @if($latePickupPrompt && ($latePickupPrompt['active'] ?? false))
+        <div class="driver-late-pickup-banner mb-2" data-schedule-id="{{ $schedule->id }}" data-late-pickup-banner>
+            <strong>{{ $latePickupPrompt['message'] }}</strong>
+            <p class="mb-2 small">{{ $latePickupPrompt['hint'] }}</p>
+            <button type="button"
+                    class="btn btn-warning btn-sm driver-late-pickup-continue"
+                    data-continue-url="{{ $latePickupPrompt['continue_url'] }}">
+                Tiếp tục
+            </button>
+        </div>
+    @endif
+
     <div class="driver-workflow-compact-steps">
 
         @foreach($steps as $step)
@@ -139,7 +154,7 @@ $currentOrder = $order[$highlightStage] ?? 0;
 
                     @csrf
 
-                    <button class="btn btn-success btn-sm">{{ $pendingClosure ? 'Xác nhận hoàn thành' : ($nextAction ?: 'Hoàn thành chuyến') }}</button>
+                    <button type="submit" class="btn btn-success btn-sm">{{ $pendingClosure ? 'Xác nhận hoàn thành' : ($nextAction ?: 'Hoàn thành chuyến') }}</button>
 
                 </form>
 
@@ -151,7 +166,7 @@ $currentOrder = $order[$highlightStage] ?? 0;
 
                     @csrf
 
-                    <button class="btn btn-primary btn-sm">{{ $nextAction }}</button>
+                    <button type="submit" class="btn btn-primary btn-sm">{{ $nextAction }}</button>
 
                 </form>
 

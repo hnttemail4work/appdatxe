@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\DriverCancelRateService;
 use Illuminate\Database\Eloquent\Model;
 
 class DriverTripRequest extends Model
@@ -21,6 +22,15 @@ class DriverTripRequest extends Model
             'expires_at'   => 'datetime',
             'responded_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::created(function (DriverTripRequest $request): void {
+            if ($request->driver_id) {
+                app(DriverCancelRateService::class)->recordOfferForUserId((int) $request->driver_id);
+            }
+        });
     }
 
     public function schedule()

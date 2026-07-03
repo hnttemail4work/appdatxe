@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\Schedule;
 use App\Models\ScheduleTemplate;
-use App\Models\SeatReservation;
 use App\Models\DriverTripRequest;
 use App\Services\DriverMissedTripService;
 use App\Services\DriverTripRequestService;
@@ -24,35 +23,11 @@ class ScheduleLifecycleService
         $this->expireStaleHolds();
         app(BookingWorkflowService::class)->expireStaleBookings();
         $this->expireStaleDriverRequests();
-        app(GuestTripWatchService::class)->expireStaleDriverSearches();
-        app(OperatorBookingDismissService::class)->purgeExpiredDismissals();
         $this->backfillExpectedArrivals();
         $this->cancelEmptyStaleSchedules($now);
         $this->purgeEmptyExpiredDaySchedules($now);
         $this->deactivateStaleEmptyOffers($now);
         $this->advanceStatuses($now);
-        $this->handOffStaleOperatorTrips();
-        app(TripConsolidationService::class)->autoConsolidateOpenSchedules();
-        app(TripConsolidationService::class)->expireStaleMergeRequests();
-    }
-
-    /** Chuyến quá hạn / chờ đóng — gỡ khỏi tài xế, chỉ quản lý xử lý. */
-    private function handOffStaleOperatorTrips(): void
-    {
-        $workflow = app(BookingWorkflowService::class);
-
-        Schedule::query()
-            ->whereNotNull('driver_id')
-            ->whereHas('bookings', fn ($q) => $q
-                ->whereNotIn('booking_status', ['cancelled', 'rejected'])
-                ->where(function ($q2): void {
-                    $q2->where('trip_status', 'awaiting_completion')
-                        ->orWhereNotNull('needs_operator_help_at');
-                }))
-            ->each(fn (Schedule $schedule) => $workflow->handOffScheduleToOperator(
-                $schedule,
-                \App\Models\Booking::HELP_TRIP_OVERDUE,
-            ));
     }
 
     /** Tạo hoặc tái sử dụng chuyến theo nhu cầu khi khách đặt vé. */
@@ -84,19 +59,6 @@ class ScheduleLifecycleService
             if ($schedule) {
                 return $schedule;
             }
-
-            $pooled = app(TripConsolidationService::class)->findPoolableSchedule(
-                $template,
-                $serviceDate,
-                $departure,
-                max($seatsNeeded, 1),
-                $pickupLat,
-                $pickupLng,
-            );
-
-            if ($pooled) {
-                return $pooled;
-            }
         } else {
             $departure = $this->nextAvailableDeparture($template, $serviceDate, $departure);
         }
@@ -110,10 +72,8 @@ class ScheduleLifecycleService
                 'driver_name'         => 'Chờ phân bổ',
                 'departure_time'      => $departure,
                 'expected_arrival_at' => $this->expectedArrivalFrom($template, $departure, $date),
-                'seat_price'          => $template->seat_price,
                 'whole_car_price'     => $template->whole_car_price,
                 'service_date'        => $serviceDate,
-                'available_seats'     => $template->vehicle->capacity,
                 'status'              => 'scheduled',
                 'trip_code'           => TripCode::generate(),
             ]);
@@ -261,32 +221,18 @@ class ScheduleLifecycleService
 
     private function expireStaleDriverRequests(): void
     {
-        app(DriverTripRequestService::class)->expireStale();
+        $service = app(DriverTripRequestService::class);
+        $service->expireStale();
+        $service->retryWaitingBookingsWithoutExpire();
     }
 
-    /** Xóa ghế đã hết hạn / đã nhả để có thể đặt lại cùng schedule + số ghế. */
     public function purgeInactiveSeatReservations(Schedule $schedule, array $seatNumbers): void
     {
-        if ($seatNumbers === []) {
-            return;
-        }
-
-        $normalized = array_map(fn ($seat): string => (string) $seat, $seatNumbers);
-
-        SeatReservation::query()
-            ->where('schedule_id', $schedule->id)
-            ->whereIn('seat_number', $normalized)
-            ->whereIn('status', ['expired', 'released'])
-            ->delete();
     }
 
-    /** @return array<int, string> seat_number => status (held|booked) */
+    /** @return array<int, string> */
     public function occupiedSeatMap(Schedule $schedule): array
     {
-        return $schedule->seatReservations()
-            ->whereIn('status', ['held', 'booked'])
-            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
-            ->pluck('status', 'seat_number')
-            ->all();
+        return [];
     }
 }

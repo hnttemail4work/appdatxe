@@ -1,5 +1,5 @@
 /**
- * Map picker — search + map pin, sync search field, fill detail input, close & unload.
+ * Map picker — search + map pin, preview selection, confirm to apply.
  */
 (function () {
     var LEAFLET_CSS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
@@ -29,11 +29,18 @@
         return;
     }
 
+    var modalDialogEl = modalEl.querySelector('.modal-dialog');
     var canvasEl = document.getElementById('address-map-canvas');
     var previewEl = document.getElementById('address-map-preview');
     var titleEl = document.getElementById('addressMapPickerTitle');
     var searchInput = document.getElementById('address-map-search');
     var searchResultsEl = document.getElementById('address-map-search-results');
+    var confirmBtn = document.getElementById('address-map-confirm');
+    var confirmStatusEl = document.getElementById('address-map-confirm-status');
+    var provinceWrapEl = document.getElementById('address-map-province-wrap');
+    var modalProvinceEl = document.getElementById('address-map-province');
+    var driverToolbarEl = document.getElementById('address-map-driver-toolbar');
+    var myLocationBtn = document.getElementById('address-map-my-location');
     var reverseUrl = window.__geocodeReverseUrl || '';
     var searchUrl = window.__geocodeSearchUrl || '';
 
@@ -42,16 +49,20 @@
     var marker = null;
     var targetInputId = null;
     var provinceInputId = null;
+    var sheetProvinceInputId = null;
     var defaultProvince = '';
+    var pickerMode = 'default';
     var latInputId = null;
     var lngInputId = null;
     var pendingLat = null;
     var pendingLng = null;
+    var pendingAddress = '';
     var reverseAbort = null;
     var searchAbort = null;
     var isResolving = false;
     var leafletAssetsPromise = null;
     var searchTimer = null;
+    var provinceChangeHandler = null;
 
     function loadStylesheet(href) {
         return new Promise(function (resolve, reject) {
@@ -103,15 +114,168 @@
         }
     }
 
+    function isDriverMode() {
+        return pickerMode === 'driver';
+    }
+
+    function activeProvinceInputId() {
+        if (isDriverMode() && modalProvinceEl) {
+            return 'address-map-province';
+        }
+        return provinceInputId;
+    }
+
     function provinceName() {
-        var provinceEl = provinceInputId ? document.getElementById(provinceInputId) : null;
+        var id = activeProvinceInputId();
+        var provinceEl = id ? document.getElementById(id) : null;
         var fromInput = provinceEl ? String(provinceEl.value || '').trim() : '';
         return fromInput || defaultProvince || '';
+    }
+
+    var PROVINCE_FOCUS_ZOOM = 15;
+    var DRIVER_FOCUS_ZOOM = 16;
+
+    function focusZoomLevel() {
+        return isDriverMode() ? DRIVER_FOCUS_ZOOM : PROVINCE_FOCUS_ZOOM;
     }
 
     function provinceCenter() {
         return PROVINCE_CENTERS[provinceName()] || PROVINCE_CENTERS['TP.HCM'];
     }
+
+    function focusMapOnProvince() {
+        if (!mapInstance) {
+            return;
+        }
+        mapInstance.setView(provinceCenter(), focusZoomLevel());
+    }
+
+    function hideAddressSuggestions() {
+        document.querySelectorAll('.booking-address-suggest').forEach(function (el) {
+            el.classList.add('d-none');
+            el.innerHTML = '';
+        });
+        document.querySelectorAll('.geocode-suggest-open').forEach(function (el) {
+            el.classList.remove('geocode-suggest-open');
+        });
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    function syncDriverProvinceUi(show) {
+        if (provinceWrapEl) {
+            provinceWrapEl.classList.toggle('d-none', !show);
+        }
+        if (driverToolbarEl) {
+            driverToolbarEl.classList.toggle('d-none', !show);
+        }
+        if (modalDialogEl) {
+            modalDialogEl.classList.toggle('modal-lg', !!show);
+        }
+        modalEl.classList.toggle('address-map-picker-modal--driver', !!show);
+    }
+
+    function syncModalProvinceFromSheet() {
+        if (!isDriverMode() || !modalProvinceEl) {
+            return;
+        }
+        var sheetProvinceEl = sheetProvinceInputId ? document.getElementById(sheetProvinceInputId) : null;
+        var value = sheetProvinceEl && sheetProvinceEl.value
+            ? sheetProvinceEl.value
+            : (defaultProvince || 'TP.HCM');
+        modalProvinceEl.value = value;
+    }
+
+    function syncSheetProvinceFromModal() {
+        if (!isDriverMode() || !modalProvinceEl || !sheetProvinceInputId) {
+            return;
+        }
+        var sheetProvinceEl = document.getElementById(sheetProvinceInputId);
+        if (sheetProvinceEl && modalProvinceEl.value) {
+            sheetProvinceEl.value = modalProvinceEl.value;
+            sheetProvinceEl.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    }
+
+    function unbindProvinceChange() {
+        if (!provinceChangeHandler || !modalProvinceEl) {
+            provinceChangeHandler = null;
+            return;
+        }
+        modalProvinceEl.removeEventListener('change', provinceChangeHandler);
+        provinceChangeHandler = null;
+    }
+
+    function bindProvinceChange() {
+        unbindProvinceChange();
+        if (!isDriverMode() || !modalProvinceEl) {
+            return;
+        }
+        provinceChangeHandler = function () {
+            hideSearchResults();
+            if (!mapInstance) {
+                return;
+            }
+            if (!marker && pendingLat === null) {
+                focusMapOnProvince();
+            }
+            var q = searchInput ? searchInput.value.trim() : '';
+            if (q.length >= 2) {
+                searchAddress(q);
+            }
+        };
+        modalProvinceEl.addEventListener('change', provinceChangeHandler);
+    }
+
+    function locateMe() {
+        if (!navigator.geolocation) {
+            setPreview('Trình duyệt không hỗ trợ GPS — chọn thủ công trên bản đồ.', false);
+            return;
+        }
+        if (isResolving) {
+            return;
+        }
+        setPreview('Đang lấy vị trí GPS...', true);
+        navigator.geolocation.getCurrentPosition(
+            function (pos) {
+                placeMarker(pos.coords.latitude, pos.coords.longitude, true);
+            },
+            function () {
+                setPreview('Không lấy được GPS — chọn điểm trên bản đồ hoặc tìm địa chỉ.', false);
+            },
+            { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
+        );
+    }
+
+
 
     function mapCenter() {
         var latEl = latInputId ? document.getElementById(latInputId) : null;
@@ -131,6 +295,30 @@
         if (!previewEl) return;
         previewEl.textContent = text;
         previewEl.classList.toggle('is-loading', !!loading);
+    }
+
+    function requiresCoords() {
+        return !!(latInputId && lngInputId);
+    }
+
+    function updateConfirmButton() {
+        if (!confirmBtn) {
+            return;
+        }
+        var hasAddress = String(pendingAddress || '').trim() !== '';
+        var coordsOk = !requiresCoords() || (pendingLat !== null && pendingLng !== null);
+        var canConfirm = !isResolving && hasAddress && coordsOk;
+        confirmBtn.disabled = !canConfirm;
+
+        if (confirmStatusEl) {
+            if (isResolving) {
+                confirmStatusEl.textContent = 'Đang lấy địa chỉ...';
+                confirmStatusEl.classList.remove('d-none');
+            } else {
+                confirmStatusEl.textContent = '';
+                confirmStatusEl.classList.add('d-none');
+            }
+        }
     }
 
     function hideSearchResults() {
@@ -167,15 +355,21 @@
         }
         destroyMap();
         unloadLeafletAssets();
+        unbindProvinceChange();
+        syncDriverProvinceUi(false);
         isResolving = false;
         targetInputId = null;
         provinceInputId = null;
+        sheetProvinceInputId = null;
         defaultProvince = '';
+        pickerMode = 'default';
         latInputId = null;
         lngInputId = null;
         pendingLat = null;
         pendingLng = null;
+        pendingAddress = '';
         hideSearchResults();
+        updateConfirmButton();
     }
 
     function applyCoords(lat, lng) {
@@ -205,7 +399,6 @@
         var input = targetInputId ? document.getElementById(targetInputId) : null;
         if (input) {
             input.value = text;
-            input.dispatchEvent(new Event('input', { bubbles: true }));
             input.dispatchEvent(new Event('change', { bubbles: true }));
         }
     }
@@ -220,6 +413,8 @@
         if (latInputId && pendingLat !== null && pendingLng !== null) {
             applyCoords(pendingLat, pendingLng);
         }
+
+        syncSheetProvinceFromModal();
 
         document.dispatchEvent(new CustomEvent('addressmap:applied', {
             bubbles: true,
@@ -237,12 +432,40 @@
         closePicker();
     }
 
+    function coordsFallbackLabel() {
+        if (pendingLat === null || pendingLng === null) {
+            return '';
+        }
+        return 'Vị trí đã chọn (' + pendingLat.toFixed(5) + ', ' + pendingLng.toFixed(5) + ')';
+    }
+
+    function previewResolvedAddress(address) {
+        isResolving = false;
+        var text = String(address || '').trim();
+        if (!text) {
+            text = coordsFallbackLabel();
+        }
+        pendingAddress = text;
+        if (searchInput) {
+            searchInput.value = text;
+        }
+        setPreview(text ? text : 'Chưa có địa chỉ — thử chọn điểm khác.', false);
+        updateConfirmButton();
+    }
+
     function resolveLocation(lat, lng) {
-        if (!reverseUrl || isResolving) {
+        if (!reverseUrl) {
+            previewResolvedAddress(coordsFallbackLabel());
+            return;
+        }
+
+        if (isResolving) {
             return;
         }
 
         isResolving = true;
+        pendingAddress = '';
+        updateConfirmButton();
         hideSearchResults();
         if (reverseAbort) {
             reverseAbort.abort();
@@ -266,30 +489,24 @@
                 if (!address) {
                     throw new Error('empty_address');
                 }
-                finishWithAddress(address);
+                previewResolvedAddress(address);
             })
             .catch(function (err) {
                 if (err && err.name === 'AbortError') {
                     return;
                 }
-                isResolving = false;
-                if (pendingLat !== null && pendingLng !== null) {
-                    var fallback = 'Vị trí đã chọn (' + pendingLat.toFixed(5) + ', ' + pendingLng.toFixed(5) + ')';
-                    finishWithAddress(fallback);
-                    return;
-                }
-                setPreview('Không đọc được địa chỉ. Thử tìm bằng ô trên hoặc chạm điểm khác.', false);
+                previewResolvedAddress(coordsFallbackLabel());
             });
     }
 
-    function placeMarker(lat, lng, moveView) {
+    function placeMarker(lat, lng, moveView, options) {
+        options = options || {};
         if (!mapInstance || !window.L || isResolving) {
             return;
         }
 
         pendingLat = lat;
         pendingLng = lng;
-        applyCoords(lat, lng);
 
         if (marker) {
             marker.setLatLng([lat, lng]);
@@ -298,15 +515,41 @@
             marker.on('dragend', function () {
                 if (isResolving) return;
                 var pos = marker.getLatLng();
-                resolveLocation(pos.lat, pos.lng);
+                placeMarker(pos.lat, pos.lng, false);
             });
         }
 
         if (moveView) {
-            mapInstance.setView([lat, lng], Math.max(mapInstance.getZoom(), 16));
+            mapInstance.setView([lat, lng], Math.max(mapInstance.getZoom(), isDriverMode() ? 17 : 16));
+        }
+
+        if (options.address) {
+            previewResolvedAddress(options.address);
+            return;
         }
 
         resolveLocation(lat, lng);
+    }
+
+    function confirmSelection() {
+        if (isResolving || confirmBtn?.disabled) {
+            return;
+        }
+
+        var text = String(pendingAddress || '').trim();
+        if (!text && pendingLat !== null && pendingLng !== null) {
+            text = coordsFallbackLabel();
+        }
+        if (!text) {
+            setPreview('Chọn điểm trên bản đồ hoặc từ kết quả tìm kiếm trước khi xác nhận.', false);
+            return;
+        }
+        if (requiresCoords() && (pendingLat === null || pendingLng === null)) {
+            setPreview('Chọn điểm trên bản đồ trước khi xác nhận.', false);
+            return;
+        }
+
+        finishWithAddress(text);
     }
 
     function renderSearchResults(results) {
@@ -329,11 +572,14 @@
             btn.textContent = item.address;
             btn.addEventListener('click', function () {
                 if (isResolving) return;
+                hideSearchResults();
                 if (item.lat != null && item.lon != null) {
-                    pendingLat = item.lat;
-                    pendingLng = item.lon;
+                    placeMarker(item.lat, item.lon, true, { address: item.address });
+                } else {
+                    pendingLat = null;
+                    pendingLng = null;
+                    previewResolvedAddress(item.address);
                 }
-                finishWithAddress(item.address);
             });
             searchResultsEl.appendChild(btn);
         });
@@ -380,7 +626,7 @@
         mapInstance = window.L.map(canvasEl, {
             zoomControl: true,
             attributionControl: true,
-        }).setView(center, 14);
+        }).setView(center, isDriverMode() ? DRIVER_FOCUS_ZOOM : 14);
 
         window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
@@ -391,6 +637,7 @@
             placeMarker(e.latlng.lat, e.latlng.lng, false);
         });
 
+        var placedExisting = false;
         if (latInputId && lngInputId) {
             var latEl = document.getElementById(latInputId);
             var lngEl = document.getElementById(lngInputId);
@@ -398,28 +645,34 @@
                 var existingLat = parseFloat(latEl.value);
                 var existingLng = parseFloat(lngEl.value);
                 if (!isNaN(existingLat) && !isNaN(existingLng)) {
-                    pendingLat = existingLat;
-                    pendingLng = existingLng;
-                    marker = window.L.marker([existingLat, existingLng], { draggable: true }).addTo(mapInstance);
-                    marker.on('dragend', function () {
-                        if (isResolving) return;
-                        var pos = marker.getLatLng();
-                        resolveLocation(pos.lat, pos.lng);
-                    });
+                    placedExisting = true;
+                    var existingAddress = document.getElementById(targetInputId);
+                    var existingText = existingAddress ? String(existingAddress.value || '').trim() : '';
+                    placeMarker(existingLat, existingLng, false, existingText ? { address: existingText } : undefined);
                 }
             }
+        }
+
+        if (!placedExisting) {
+            focusMapOnProvince();
         }
     }
 
     function openPicker(btn) {
         targetInputId = btn.getAttribute('data-address-map-for') || '';
         provinceInputId = btn.getAttribute('data-address-map-province') || '';
+        sheetProvinceInputId = provinceInputId;
         defaultProvince = btn.getAttribute('data-address-map-default-province') || '';
+        pickerMode = btn.getAttribute('data-address-map-mode') || 'default';
         latInputId = btn.getAttribute('data-address-map-lat') || '';
         lngInputId = btn.getAttribute('data-address-map-lng') || '';
         if (!targetInputId) {
             return;
         }
+
+        syncDriverProvinceUi(isDriverMode());
+        syncModalProvinceFromSheet();
+        bindProvinceChange();
 
         var label = btn.getAttribute('data-address-map-label') || 'Chọn điểm trên bản đồ';
         if (titleEl) {
@@ -427,7 +680,12 @@
         }
 
         isResolving = false;
+        pendingLat = null;
+        pendingLng = null;
+        pendingAddress = '';
+        updateConfirmButton();
         hideSearchResults();
+        hideAddressSuggestions();
 
         var existing = document.getElementById(targetInputId);
         var existingValue = existing ? String(existing.value || '').trim() : '';
@@ -435,9 +693,17 @@
             searchInput.value = existingValue;
         }
 
+        var provinceLabel = provinceName();
+        var provinceHint = provinceLabel
+            ? (isDriverMode()
+                ? ('Chọn vị trí hoạt động trong khu vực ' + provinceLabel + '.')
+                : ('Chọn điểm trong khu vực ' + provinceLabel + '.'))
+            : (isDriverMode()
+                ? 'Chọn khu vực, ghim vị trí hoạt động hoặc dùng GPS.'
+                : 'Chạm bản đồ hoặc tìm địa chỉ, rồi bấm Xác nhận.');
         setPreview(existingValue
-            ? 'Chỉnh địa chỉ hoặc chạm bản đồ để chọn lại.'
-            : 'Gõ tìm hoặc chạm bản đồ — địa chỉ tự điền và đóng.', false);
+            ? ('Chỉnh ghim hoặc tìm lại — ' + provinceHint)
+            : provinceHint, false);
 
         loadLeafletAssets()
             .then(function () {
@@ -467,6 +733,14 @@
         e.preventDefault();
         openPicker(btn);
     });
+
+    if (confirmBtn) {
+        confirmBtn.addEventListener('click', confirmSelection);
+    }
+
+    if (myLocationBtn) {
+        myLocationBtn.addEventListener('click', locateMe);
+    }
 
     if (searchInput) {
         searchInput.addEventListener('input', function () {
@@ -508,6 +782,6 @@
         if (searchInput) {
             searchInput.value = '';
         }
-        setPreview('Gõ tìm hoặc chạm bản đồ — địa chỉ tự điền và đóng.', false);
+        setPreview('Chạm bản đồ hoặc tìm địa chỉ, rồi bấm Xác nhận.', false);
     });
 })();

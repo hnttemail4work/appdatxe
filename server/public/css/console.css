@@ -83,27 +83,6 @@
     display: block;
 }
 
-.booking-qr-open-btn {
-    padding: 0.2rem !important;
-    line-height: 0;
-}
-
-.booking-qr-open-btn__canvas {
-    display: inline-block;
-    padding: 2px;
-    background: #fff;
-    border-radius: 0.35rem;
-    line-height: 0;
-}
-
-.booking-qr-open-btn__canvas img,
-.booking-qr-open-btn__canvas canvas {
-    display: block;
-    width: 44px !important;
-    height: 44px !important;
-    pointer-events: none;
-}
-
 .console-table-actions form {
     display: inline;
     margin: 0;
@@ -129,26 +108,6 @@
 .console-table-sm td {
     padding: 0.4rem 0.5rem;
     font-size: 0.875rem;
-}
-
-.trip-offer-capacity-section {
-    border: 1px solid transparent;
-    border-radius: 0.65rem;
-    padding: 0.75rem;
-    margin-bottom: 0.5rem;
-    transition: border-color 0.15s ease, background-color 0.15s ease;
-}
-
-.trip-offer-capacity-section.has-validation-error {
-    border-color: var(--tl-danger);
-    background: #fef2f2;
-}
-
-.capacity-validation-error {
-    color: var(--tl-danger);
-    font-size: 0.875rem;
-    font-weight: 500;
-    margin: 0 0 0.75rem;
 }
 
 body:has(.console-page) {

@@ -2,7 +2,7 @@
 
 @section('console')
 @php
-$allowedAdminTabs = ['operators', 'referrals', 'referral-costs', 'fees', 'settings', 'revenue', 'routes', 'cancel-reasons'];
+$allowedAdminTabs = ['referrals', 'fees', 'settings', 'routes'];
 $tabFromRequest = request('tab');
 if ($tabFromRequest === 'bank') {
     $tabFromRequest = 'settings';
@@ -13,17 +13,13 @@ if ($tabFromCookie === 'bank') {
 }
 $adminDefaultTab = in_array($tabFromRequest, $allowedAdminTabs, true)
     ? $tabFromRequest
-    : (in_array($tabFromCookie, $allowedAdminTabs, true) ? $tabFromCookie : null);
-if ($adminDefaultTab === null) {
-    $adminDefaultTab = ($errors->has('name') || $errors->has('phone')) && ! $errors->has('email')
-        ? (request()->has('commission_percent') ? 'referrals' : 'operators')
-        : (($errors->has('bank_name') || $errors->has('bank_bin') || $errors->has('banner_image')) ? 'settings'
-        : ($errors->has('label') && $errors->has('audience') ? 'cancel-reasons' : 'operators'));
-}
+    : (in_array($tabFromCookie, $allowedAdminTabs, true) ? $tabFromCookie : 'routes');
 @endphp
 @include('partials.console-hero', [
     'title' => 'Quản trị hệ thống',
 ])
+
+@include('partials.admin-nav-tabs', ['active' => 'config'])
 
 <div class="row g-4 mb-4">
     <div class="col-12">
@@ -33,103 +29,12 @@ if ($adminDefaultTab === null) {
                     'prefix' => 'admin-main',
                     'activeKey' => $adminDefaultTab,
                     'tabs' => [
-                        ['key' => 'operators', 'label' => 'Quản lý', 'badge' => $operators->total()],
+                        ['key' => 'routes', 'label' => 'Điểm đi / đến'],
                         ['key' => 'referrals', 'label' => 'Mã giới thiệu', 'badge' => $referralCodes->total()],
-                        ['key' => 'referral-costs', 'label' => 'Chi phí người GT', 'badge' => $referralCostTrips->total() ?: null],
-                        ['key' => 'fees', 'label' => 'Phí & giá'],
-                        ['key' => 'settings', 'label' => 'Cài đặt'],
-                        ['key' => 'revenue', 'label' => 'Doanh thu'],
-                        ['key' => 'routes', 'label' => 'Điểm đến'],
-                        ['key' => 'cancel-reasons', 'label' => 'Lý do hủy', 'badge' => ($cancellationReasonList ?? collect())->count()],
+                        ['key' => 'fees', 'label' => 'Tính tiền'],
+                        ['key' => 'settings', 'label' => 'Ngân hàng'],
                     ],
                 ])
-
-                @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'operators', 'active' => $adminDefaultTab === 'operators'])
-                <form method="POST" action="{{ route('admin.operators.store') }}" class="console-form mb-4 pb-3 border-bottom">
-                    @csrf
-                    <div class="row g-3">
-                        <div class="col-md-12">
-                            <label class="form-label" for="operator-name">Họ tên <span class="text-danger">*</span></label>
-                            <input type="text" name="name" id="operator-name" class="form-control @error('name') is-invalid @enderror"
-                                   value="{{ old('name') }}" required autocomplete="name">
-                            @error('name')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label" for="operator-email">Email <span class="text-muted fw-normal">(tuỳ chọn)</span></label>
-                            <input type="email" name="email" id="operator-email" class="form-control @error('email') is-invalid @enderror"
-                                   value="{{ old('email') }}" autocomplete="email">
-                            @error('email')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label" for="operator-phone">Số điện thoại <span class="text-danger">*</span></label>
-                            <input type="tel" name="phone" id="operator-phone" class="form-control @error('phone') is-invalid @enderror"
-                                   value="{{ old('phone') }}" required autocomplete="tel">
-                            @error('phone')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label" for="operator-password">Mật khẩu <span class="text-danger">*</span></label>
-                            <input type="password" name="password" id="operator-password"
-                                   class="form-control @error('password') is-invalid @enderror"
-                                   minlength="8" required autocomplete="new-password">
-                            @error('password')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label" for="operator-password-confirmation">Nhập lại mật khẩu <span class="text-danger">*</span></label>
-                            <input type="password" name="password_confirmation" id="operator-password-confirmation"
-                                   class="form-control @error('password_confirmation') is-invalid @enderror"
-                                   minlength="8" required autocomplete="new-password">
-                            @error('password_confirmation')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                        </div>
-                    </div>
-                    <button class="btn btn-primary px-4 fw-semibold mt-3">Tạo quản lý</button>
-                </form>
-                <h6 class="fw-semibold mb-3">Danh sách quản lý</h6>
-                @if($operators->isEmpty())
-                    <div class="console-empty py-4"><p class="mb-0">Chưa có quản lý nào.</p></div>
-                @else
-                    <div class="console-table-wrap">
-                        <table class="console-table">
-                            <thead>
-                                <tr>
-                                    <th>Họ tên</th>
-                                    <th>Email</th>
-                                    <th>SĐT</th>
-                                    <th>Trạng thái</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach($operators as $op)
-                                <tr>
-                                    <td class="cell-primary">{{ $op->name }}</td>
-                                    <td class="cell-muted">
-                                        @if(filled($op->email) && ! str_ends_with($op->email, '@noemail.local'))
-                                            {{ $op->email }}
-                                        @else
-                                            —
-                                        @endif
-                                    </td>
-                                    <td class="cell-muted">{{ $op->phone ?? '—' }}</td>
-                                    <td>
-                                        <form method="POST" action="{{ route('admin.users.status', $op) }}" class="d-flex gap-1 align-items-center">
-                                            @csrf @method('PATCH')
-                                            <select name="status" class="form-select form-select-sm" style="width:130px">
-                                                @foreach(['active', 'suspended'] as $st)
-                                                    <option value="{{ $st }}" {{ ($op->status === $st || ($st === 'suspended' && $op->status === 'inactive')) ? 'selected' : '' }}>
-                                                        {{ $st === 'active' ? 'Hoạt động' : 'Tạm ngưng' }}
-                                                    </option>
-                                                @endforeach
-                                            </select>
-                                            <button class="btn btn-sm btn-outline-primary">Lưu</button>
-                                        </form>
-                                    </td>
-                                </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                    @include('partials.pagination', ['paginator' => $operators])
-                @endif
-                @include('partials.screen-tab-pane-end')
 
                 @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'referrals', 'active' => $adminDefaultTab === 'referrals'])
                 <form method="POST" action="{{ route('admin.referrers.store') }}" class="console-form mb-4">
@@ -272,46 +177,6 @@ if ($adminDefaultTab === null) {
                 @include('partials.referral-qr-modal')
                 @include('partials.screen-tab-pane-end')
 
-                @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'referral-costs', 'active' => $adminDefaultTab === 'referral-costs'])
-                <p class="text-muted small mb-3">
-                    Chi phí hoa hồng người giới thiệu theo từng cuốc hoàn thành trong tháng {{ \Carbon\Carbon::parse($revenueSummary['from'])->format('m/Y') }}.
-                    Tổng: <strong>{{ number_format($revenueSummary['referral_cost'], 0, ',', '.') }} đ</strong>.
-                </p>
-                @if($referralCostTrips->isEmpty())
-                    <div class="console-empty py-4"><p class="mb-0">Chưa có cuốc nào ghi nhận chi phí giới thiệu.</p></div>
-                @else
-                    <div class="console-table-wrap">
-                        <table class="console-table">
-                            <thead>
-                                <tr>
-                                    <th>Mã chuyến</th>
-                                    <th>Mã GT</th>
-                                    <th>Người giới thiệu</th>
-                                    <th>Khách</th>
-                                    <th class="text-end">% HH</th>
-                                    <th class="text-end">Chi phí</th>
-                                    <th>Hoàn tất</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach($referralCostTrips as $booking)
-                                <tr>
-                                    <td class="cell-primary"><code>{{ $booking->schedule?->shortTripCode() ?? '—' }}</code></td>
-                                    <td><span class="driver-meta-code">{{ $booking->appliedReferralCode?->code ?? '—' }}</span></td>
-                                    <td class="small">{{ $booking->appliedReferralCode?->name ?? '—' }}</td>
-                                    <td class="small cell-muted">{{ $booking->passenger_name }}<br>{{ $booking->contact_phone }}</td>
-                                    <td class="text-end">{{ number_format($booking->appliedReferralCode?->commissionPercent() ?? 0, 1) }}%</td>
-                                    <td class="text-end fw-semibold">{{ number_format($booking->referralCommissionAmount(), 0, ',', '.') }} đ</td>
-                                    <td class="cell-muted small">{{ $booking->completed_at?->format('d/m/Y H:i') ?? '—' }}</td>
-                                </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                    @include('partials.pagination', ['paginator' => $referralCostTrips])
-                @endif
-                @include('partials.screen-tab-pane-end')
-
                 @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'settings', 'active' => $adminDefaultTab === 'settings'])
 
                 <div class="mb-4 pb-4 border-bottom border-secondary">
@@ -357,93 +222,6 @@ if ($adminDefaultTab === null) {
                 </div>
                 @endif
                 </div>
-
-                <div>
-                    <h3 class="h6 fw-bold text-uppercase text-muted mb-2" style="letter-spacing:.04em">Banner trang đặt vé</h3>
-                    <p class="text-muted small mb-3">
-                        Ảnh hiển thị thay cho dòng «Đặt vé xe liên tỉnh» trên trang khách đặt chuyến. Khuyến nghị ngang ≥ 1200px.
-                    </p>
-                    @if($bookingBannerUrl ?? null)
-                    <div class="mb-3">
-                        <label class="form-label d-block">Banner hiện tại</label>
-                        <img src="{{ $bookingBannerUrl }}" alt="Banner trang đặt vé" class="rounded border admin-booking-banner-preview">
-                    </div>
-                    @endif
-                    <form method="POST" action="{{ route('admin.bookingBanner.update') }}" class="console-form mb-3" enctype="multipart/form-data">
-                        @csrf
-                        <div class="row g-3 align-items-end">
-                            <div class="col-md-8">
-                                <label class="form-label" for="banner-image">Ảnh banner</label>
-                                <input type="file" name="banner_image" id="banner-image"
-                                       class="form-control @error('banner_image') is-invalid @enderror"
-                                       accept="image/jpeg,image/png,image/webp,image/*" required>
-                                @error('banner_image')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
-                            </div>
-                            <div class="col-md-4">
-                                <button type="submit" class="btn btn-primary fw-semibold w-100">Lưu banner</button>
-                            </div>
-                        </div>
-                    </form>
-                    @if($bookingBannerUrl ?? null)
-                    <form method="POST" action="{{ route('admin.bookingBanner.destroy') }}"
-                          data-confirm="Xóa banner và dùng lại giao diện mặc định?"
-                          data-confirm-title="Xóa banner"
-                          data-confirm-variant="danger"
-                          data-confirm-ok="Xóa">
-                        @csrf
-                        @method('DELETE')
-                        <button type="submit" class="btn btn-outline-danger btn-sm">Xóa banner</button>
-                    </form>
-                    @endif
-                </div>
-                @include('partials.screen-tab-pane-end')
-
-                @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'revenue', 'active' => $adminDefaultTab === 'revenue'])
-                <p class="text-muted small mb-3">
-                    Tháng {{ \Carbon\Carbon::parse($revenueSummary['from'])->format('m/Y') }} —
-                    tổng {{ number_format($revenueSummary['total_trips']) }} chuyến ghi nhận,
-                    tỷ lệ hoàn thành <strong>{{ number_format($revenueSummary['completion_rate'], 1) }}%</strong>.
-                </p>
-                <div class="row g-3 mb-4">
-                    <div class="col-6 col-md-3">
-                        @include('partials.console-stat', ['icon' => '₫', 'value' => number_format($revenueSummary['total_revenue'], 0, ',', '.') . ' đ', 'label' => 'Tổng doanh thu', 'tone' => 'primary'])
-                    </div>
-                    <div class="col-6 col-md-3">
-                        @include('partials.console-stat', ['icon' => 'GT', 'value' => number_format($revenueSummary['referral_cost'], 0, ',', '.') . ' đ', 'label' => 'Phí giới thiệu', 'tone' => 'warning'])
-                    </div>
-                    <div class="col-6 col-md-3">
-                        @include('partials.console-stat', ['icon' => 'TX', 'value' => number_format($revenueSummary['driver_revenue'], 0, ',', '.') . ' đ', 'label' => 'Thu nhập tài xế', 'tone' => 'info'])
-                    </div>
-                    <div class="col-6 col-md-3">
-                        @include('partials.console-stat', ['icon' => '∑', 'value' => number_format($revenueSummary['net_revenue'], 0, ',', '.') . ' đ', 'label' => 'Doanh thu thực tế', 'tone' => 'success'])
-                    </div>
-                </div>
-
-                @if($revenueByRoute->isNotEmpty())
-                <div class="mb-4">
-                    <h6 class="fw-semibold mb-2">Tuyến doanh thu cao (chuyến thành công)</h6>
-                    <div class="console-table-wrap">
-                        <table class="console-table console-table-sm">
-                            <thead>
-                                <tr>
-                                    <th>Tuyến</th>
-                                    <th class="text-end">Chuyến</th>
-                                    <th class="text-end">Doanh thu</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach($revenueByRoute as $row)
-                                <tr>
-                                    <td>{{ $row->route_label }}</td>
-                                    <td class="text-end">{{ $row->trips }}</td>
-                                    <td class="text-end cell-muted">{{ number_format($row->revenue, 0, ',', '.') }} đ</td>
-                                </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                @endif
                 @include('partials.screen-tab-pane-end')
 
                 @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'fees', 'active' => $adminDefaultTab === 'fees'])
@@ -585,7 +363,7 @@ if ($adminDefaultTab === null) {
                 @include('partials.screen-tab-pane-end')
 
                 @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'routes', 'active' => $adminDefaultTab === 'routes'])
-                <p class="text-muted small mb-3">Danh sách điểm đến từ TP.HCM — dùng cho form đặt vé và tự điền km/giá khi quản lý tạo chuyến.</p>
+                <p class="text-muted small mb-3">Danh sách điểm đến từ TP.HCM — dùng cho form đặt vé.</p>
 
                 <form method="POST" action="{{ route('admin.destinations.store') }}" class="console-form mb-4">
                     @csrf
@@ -668,10 +446,6 @@ if ($adminDefaultTab === null) {
                     </div>
                     <button class="btn btn-primary px-4 fw-semibold mt-3">Lưu quãng đường</button>
                 </form>
-                @include('partials.screen-tab-pane-end')
-
-                @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'cancel-reasons', 'active' => $adminDefaultTab === 'cancel-reasons'])
-                @include('partials.admin-cancellation-reasons', ['reasons' => $cancellationReasonList ?? collect()])
                 @include('partials.screen-tab-pane-end')
 
                 @include('partials.screen-tabs-end')

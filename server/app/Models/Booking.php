@@ -9,14 +9,6 @@ use Illuminate\Support\Facades\Schema;
 
 class Booking extends Model
 {
-    public const HELP_SEARCH_TIMEOUT = 'search_timeout';
-
-    public const HELP_NO_DRIVER_IN_PROVINCE = 'no_driver_in_province';
-
-    public const HELP_DRIVER_DECLINED = 'driver_declined';
-
-    public const HELP_TRIP_OVERDUE = 'trip_not_completed';
-
     protected static function booted(): void
     {
         static::updated(function (Booking $booking): void {
@@ -40,11 +32,6 @@ class Booking extends Model
         'passenger_age',
         'schedule_id',
         'assigned_driver_id',
-        'seat_numbers',
-        'trip_type',
-        'booking_mode',
-        'vehicle_count',
-        'vehicle_capacity',
         'booking_reference',
         'applied_referral_code_id',
         'total_price',
@@ -79,7 +66,6 @@ class Booking extends Model
     protected function casts(): array
     {
         return [
-            'seat_numbers'   => 'array',
             'passenger_age'  => 'integer',
             'pickup_lat'     => 'float',
             'pickup_lng'     => 'float',
@@ -90,8 +76,6 @@ class Booking extends Model
             'needs_operator_help_at' => 'datetime',
             'operator_dismissed_at' => 'datetime',
             'repeat_cancel_flag' => 'boolean',
-            'vehicle_count'    => 'integer',
-            'vehicle_capacity' => 'integer',
             'confirmed_at'   => 'datetime',
             'completed_at'   => 'datetime',
             'cancelled_at'   => 'datetime',
@@ -102,7 +86,7 @@ class Booking extends Model
 
     public function tripTypeLabel(): string
     {
-        return app(\App\Services\TripPricingService::class)->tripTypeLabel($this->trip_type ?? 'one_way');
+        return app(\App\Services\TripPricingService::class)->tripTypeLabel();
     }
 
     public function contactPhone(): ?string
@@ -242,7 +226,7 @@ class Booking extends Model
             return 120;
         }
 
-        return (int) ceil($km / \App\Services\OperatorTripOverdueService::ASSUMED_SPEED_KMH * 60);
+        return (int) ceil($km / \App\Services\DriverMovementConfirmService::ASSUMED_SPEED_KMH * 60);
     }
 
     public function expectedTripCompletionAt(): ?\Carbon\Carbon
@@ -263,62 +247,9 @@ class Booking extends Model
         return $expected !== null && now()->greaterThan($expected);
     }
 
-    public function isTripOverdueStuck(): bool
-    {
-        return $this->operator_help_reason === self::HELP_TRIP_OVERDUE
-            && $this->isInOperatorPendingQueue();
-    }
-
-    /** Quản lý có thể ẩn khỏi hàng đợi — lưu 30 ngày rồi hệ thống xóa. */
-    public function isOperatorDismissible(): bool
-    {
-        if (! $this->isInOperatorPendingQueue()) {
-            return false;
-        }
-
-        if ($this->isTripOverdueStuck()) {
-            return true;
-        }
-
-        return ! $this->hasDriverAccepted()
-            && in_array($this->operator_help_reason, [
-                self::HELP_NO_DRIVER_IN_PROVINCE,
-                self::HELP_DRIVER_DECLINED,
-                self::HELP_SEARCH_TIMEOUT,
-            ], true);
-    }
-
     public function isOperatorDismissed(): bool
     {
         return $this->operator_dismissed_at !== null;
-    }
-
-    public function operatorDismissConfirmMessage(): string
-    {
-        $days = \App\Services\OperatorBookingDismissService::RETENTION_DAYS;
-
-        if ($this->isTripOverdueStuck()) {
-            return "Ẩn chuyến treo này khỏi danh sách? Hệ thống sẽ tự xóa sau {$days} ngày.";
-        }
-
-        return "Ẩn đơn không gán được tài xế? Đơn sẽ hủy — khách có thể đặt lại. Hệ thống xóa bản ghi sau {$days} ngày.";
-    }
-
-    public function tripOverdueHelpLabel(): string
-    {
-        $expected = $this->expectedTripCompletionAt();
-        $km = $this->tripDistanceKm();
-        $label = 'Chuyến treo — quá hạn hoàn thành';
-
-        if ($expected) {
-            $label .= ' (dự kiến trước ' . $expected->format('H:i, d/m/Y') . ')';
-        }
-
-        if ($km > 0) {
-            $label .= ' · ~' . $km . ' km @ 30 km/h';
-        }
-
-        return $label;
     }
 
     /** Chỉ chi tiết trả — nếu trống thì báo liên hệ khách. */
@@ -480,11 +411,6 @@ class Booking extends Model
         return $this->expired_at !== null;
     }
 
-    public function seatReservations()
-    {
-        return $this->hasMany(SeatReservation::class);
-    }
-
     public function referralCode()
     {
         return $this->hasOne(ReferralCode::class)->where('type', ReferralCode::TYPE_BOOKING_TEMP);
@@ -528,53 +454,16 @@ class Booking extends Model
         return $this->schedule && (bool) $this->schedule->driver_id;
     }
 
-    public function needsOperatorConfirmation(): bool
-    {
-        return $this->isInOperatorPendingQueue();
-    }
-
-    public function isInOperatorPendingQueue(): bool
-    {
-        return $this->needs_operator_help_at !== null
-            && ! in_array($this->booking_status, ['cancelled', 'rejected'], true)
-            && $this->trip_status !== 'completed'
-            && ! $this->isExpired();
-    }
-
-    public function isAwaitingAutoDriverAssign(): bool
-    {
-        return ! $this->hasDriverAccepted()
-            && $this->needs_operator_help_at === null
-            && ! in_array($this->booking_status, ['cancelled', 'rejected'], true)
-            && $this->trip_status !== 'completed'
-            && ! $this->isExpired();
-    }
-
-    public function operatorHelpReasonLabel(): ?string
-    {
-        return match ($this->operator_help_reason) {
-            self::HELP_SEARCH_TIMEOUT => 'Quá ' . \App\Services\DriverTripRequestService::OPERATOR_ESCALATION_MINUTES . ' phút chưa có tài xế',
-            self::HELP_NO_DRIVER_IN_PROVINCE => 'Không tìm được tài xế đủ điều kiện gần điểm đón',
-            self::HELP_DRIVER_DECLINED => 'Tài xế từ chối / hết hạn — không gán lại được',
-            self::HELP_TRIP_OVERDUE => $this->tripOverdueHelpLabel(),
-            default => $this->needs_operator_help_at ? 'Cần quản lý gán tài xế thủ công' : null,
-        };
-    }
-
     public function bookingModeLabel(): string
     {
-        return match ($this->booking_mode) {
-            'whole_car' => 'Đặt cả xe',
-            default     => 'Ghép xe',
-        };
+        return 'Thuê xe';
     }
 
     public function seatCount(): int
     {
-        return count($this->seat_numbers ?? []);
+        return 1;
     }
 
-    /** Tổng tiền đơn theo loại đặt (cả xe / ghép × số ghế × loại chuyến). */
     public function chargedTotal(): float
     {
         $stored = (float) $this->total_price;
@@ -586,45 +475,21 @@ class Booking extends Model
 
         return app(\App\Services\TripPricingService::class)->bookingTotal(
             $this->schedule,
-            $this->trip_type ?? 'one_way',
-            $this->booking_mode ?? 'shared',
-            max($this->seatCount(), 1),
             $this->pickup_address,
             $this->dropoff_address,
-            max((int) ($this->vehicle_count ?? 1), 1),
         );
     }
 
     public function vehicleBookingLabel(): string
     {
-        $capacity = (int) ($this->vehicle_capacity ?? $this->schedule?->capacity() ?? 0);
-        $count = max((int) ($this->vehicle_count ?? 1), 1);
-        $capacityLabel = $capacity > 0
-            ? \App\Support\VehicleCapacityOptions::label($capacity)
-            : 'xe';
+        $this->loadMissing('schedule.vehicle');
 
-        if (($this->booking_mode ?? 'shared') === 'whole_car' && $count > 1) {
-            return $count . ' × ' . $capacityLabel;
-        }
-
-        if ($capacity > 0) {
-            return $capacityLabel;
-        }
-
-        return '';
+        return \App\Support\VehicleDisplay::labelFromVehicle($this->schedule?->vehicle);
     }
 
     public function seatCountLabel(): string
     {
-        if (($this->booking_mode ?? 'shared') === 'whole_car') {
-            $count = max((int) ($this->vehicle_count ?? 1), 1);
-
-            return $count > 1 ? ($count . ' xe') : 'Cả xe';
-        }
-
-        $count = $this->seatCount();
-
-        return $count > 0 ? $count . ' ghế' : '';
+        return 'Cả xe';
     }
 
     /** Nhãn trạng thái thống nhất — luồng mới: khách → tài xế nhận → thu tiền trực tiếp. */
@@ -647,10 +512,6 @@ class Booking extends Model
         }
 
         if (! $this->hasDriverAccepted()) {
-            if ($this->needs_operator_help_at) {
-                return 'Cần QL hỗ trợ';
-            }
-
             return 'Đang tìm tài xế';
         }
 
@@ -682,10 +543,6 @@ class Booking extends Model
         }
 
         if (! $this->hasDriverAccepted()) {
-            if ($this->needs_operator_help_at) {
-                return 'Cần QL hỗ trợ';
-            }
-
             return 'Đang tìm tài xế';
         }
 
@@ -717,9 +574,7 @@ class Booking extends Model
         }
 
         if (! $this->hasDriverAccepted()) {
-            return $this->needs_operator_help_at
-                ? \App\Support\StatusBadge::DANGER
-                : \App\Support\StatusBadge::PENDING;
+            return \App\Support\StatusBadge::PENDING;
         }
 
         $this->loadMissing('schedule');
@@ -808,8 +663,7 @@ class Booking extends Model
             $q->whereNotIn('booking_status', ['cancelled', 'rejected'])
                 ->orWhereNotNull('expired_at')
                 ->orWhere('cancelled_by', 'driver')
-                ->orWhere('cancelled_by', 'system')
-                ->orWhereNotNull('needs_operator_help_at');
+                ->orWhere('cancelled_by', 'system');
 
             if (Schema::hasColumn('bookings', 'repeat_cancel_flag')) {
                 $q->orWhere(function (Builder $q2): void {
@@ -832,10 +686,6 @@ class Booking extends Model
             return 'cancelled';
         }
 
-        if ($this->isInOperatorPendingQueue()) {
-            return 'pending';
-        }
-
         if ($this->trip_status === 'completed') {
             $this->loadMissing('tripReview');
 
@@ -853,11 +703,6 @@ class Booking extends Model
     public function scopeOperatorListBucket(Builder $query, string $bucket): Builder
     {
         return match ($bucket) {
-            'pending' => $query
-                ->whereNotIn('booking_status', ['cancelled', 'rejected'])
-                ->where('trip_status', '!=', 'completed')
-                ->whereNull('expired_at')
-                ->whereNotNull('needs_operator_help_at'),
             'cancelled' => $query->where(function (Builder $q): void {
                 $q->whereIn('booking_status', ['cancelled', 'rejected'])
                     ->orWhere('trip_status', 'cancelled');
@@ -873,7 +718,6 @@ class Booking extends Model
             default => $query
                 ->whereNotIn('booking_status', ['cancelled', 'rejected'])
                 ->where('trip_status', '!=', 'completed')
-                ->whereNull('needs_operator_help_at')
                 ->whereHas('schedule', fn (Builder $s) => $s->whereNotNull('driver_id')),
         };
     }

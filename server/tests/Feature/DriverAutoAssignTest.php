@@ -151,7 +151,6 @@ class DriverAutoAssignTest extends TestCase
             'driver_name'     => '',
             'departure_time'  => $departure,
             'service_date'    => $departure->toDateString(),
-            'available_seats' => 4,
             'status'          => 'scheduled',
             'trip_code'       => 'AT' . strtoupper(substr(uniqid(), -5)),
         ]);
@@ -161,9 +160,6 @@ class DriverAutoAssignTest extends TestCase
             'passenger_name'    => 'Khách AutoAssign',
             'passenger_gender'  => 'male',
             'schedule_id'       => $schedule->id,
-            'seat_numbers'      => ['1'],
-            'trip_type'         => 'one_way',
-            'booking_mode'      => 'shared',
             'booking_reference' => 'BK-AUTO-' . uniqid(),
             'total_price'       => 200000,
             'payment_status'    => 'unpaid',

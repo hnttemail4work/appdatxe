@@ -11,15 +11,20 @@
     var targetId = 'driver-location-detail';
     var addressLine = document.getElementById('driver-location-address');
     var metaLine = document.getElementById('driver-location-meta');
-    var statusPill = document.getElementById('driver-location-status');
+    var locationBar = document.getElementById('driver-location-bar');
     var sending = false;
 
-    function setStatus(state, text) {
-        if (!statusPill) {
+    function isPaused() {
+        return locationBar && locationBar.getAttribute('data-driver-paused') === '1';
+    }
+
+    function setHeroReady(ready) {
+        if (!ready || isPaused()) {
             return;
         }
-        statusPill.textContent = text;
-        statusPill.className = 'driver-location-status driver-location-status--' + state;
+        if (window.DriverAvailabilityToggle && window.DriverAvailabilityToggle.refreshHeroStatus) {
+            window.DriverAvailabilityToggle.refreshHeroStatus(false);
+        }
     }
 
     function setAddressLine(text) {
@@ -27,7 +32,7 @@
             return;
         }
         var value = String(text || '').trim();
-        addressLine.textContent = value || 'Chọn vị trí để nhận cuốc gần bạn';
+        addressLine.textContent = value;
         addressLine.classList.toggle('is-empty', value === '');
     }
 
@@ -38,12 +43,12 @@
     }
 
     function saveLocation(lat, lng, address) {
-        if (sending || lat == null || lng == null || lat === '' || lng === '') {
+        if (sending || isPaused() || lat == null || lng == null || lat === '' || lng === '') {
             return;
         }
 
         sending = true;
-        setStatus('pending', 'Đang lưu…');
+        setMetaLine('Đang lưu…');
 
         fetch(url, {
             method: 'POST',
@@ -66,16 +71,19 @@
             })
             .then(function (result) {
                 if (!result.ok || !result.data || !result.data.ok) {
-                    setStatus('warn', 'Chưa lưu được');
+                    setMetaLine('Chưa lưu được — thử lại.');
                     return;
                 }
                 var data = result.data;
                 setAddressLine(data.address || address);
                 setMetaLine(data.updated_at ? ('Cập nhật ' + data.updated_at) : '');
-                setStatus('ok', 'Sẵn sàng');
+                setHeroReady(true);
+                if (window.DriverAvailabilityToggle && window.DriverAvailabilityToggle.clearLocationSharePrompt) {
+                    window.DriverAvailabilityToggle.clearLocationSharePrompt();
+                }
             })
             .catch(function () {
-                setStatus('warn', 'Lỗi mạng');
+                setMetaLine('Lỗi mạng — thử lại.');
             })
             .finally(function () {
                 sending = false;
@@ -88,7 +96,7 @@
             return;
         }
         if (detail.lat == null || detail.lng == null) {
-            setStatus('warn', 'Chưa có tọa độ — chọn trên bản đồ');
+            setMetaLine('Chưa có tọa độ — chọn trên bản đồ');
             return;
         }
         saveLocation(detail.lat, detail.lng, detail.address);

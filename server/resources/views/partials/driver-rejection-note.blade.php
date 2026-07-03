@@ -8,8 +8,8 @@
                 <div class="text-muted small">Ghi nhận {{ $driver->rejection_reason_at->format('d/m/Y H:i') }}</div>
             @endif
         </div>
-        @if(auth()->user()->role === 'operator')
-        <form method="POST" action="{{ route('operator.drivers.rejection-note.destroy', $driver) }}"
+        @if(auth()->user()->role === 'admin')
+        <form method="POST" action="{{ route('admin.drivers.rejection-note.destroy', $driver) }}"
               data-confirm="Xóa ghi chú từ chối này?"
               data-confirm-title="Xóa ghi chú"
               data-confirm-variant="danger"

@@ -8,7 +8,7 @@ use App\Models\Vehicle;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
-/** Chỉ giữ 2 chuyến mẫu để test — quản lý tự tạo thêm sau. */
+/** Chỉ giữ 2 chuyến mẫu để test — admin tự tạo thêm sau. */
 class ResetTestTripsSeeder extends Seeder
 {
     public function run(): void
@@ -24,8 +24,8 @@ class ResetTestTripsSeeder extends Seeder
             DB::table('schedules')->delete();
             DB::table('schedule_templates')->delete();
 
-            $operator = DB::table('users')->where('role', 'operator')->value('id');
-            $vehicle = Vehicle::query()->where('operator_id', $operator)->first()
+            $ownerId = DB::table('users')->where('role', 'admin')->value('id');
+            $vehicle = Vehicle::query()->where('operator_id', $ownerId)->first()
                 ?? Vehicle::query()->first();
 
             if (! $vehicle) {

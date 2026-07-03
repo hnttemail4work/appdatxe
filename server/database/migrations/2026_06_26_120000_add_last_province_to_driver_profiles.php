@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::table('driver_profiles', function (Blueprint $table): void {
             if (! Schema::hasColumn('driver_profiles', 'last_province')) {
-                $table->string('last_province', 100)->nullable()->after('last_location_at');
+                $table->string('last_province', 100)->nullable();
             }
         });
     }

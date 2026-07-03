@@ -49,6 +49,16 @@
         var timer = null;
         var searchAbort = null;
         var coordsLocked = !!(latEl && latEl.value && lngEl && lngEl.value);
+        var lockedDetailValue = coordsLocked ? String(detailEl.value || '').trim() : '';
+        var suppressSuggestUntilType = coordsLocked;
+
+        function lockCoords(addressText) {
+            coordsLocked = true;
+            suppressSuggestUntilType = true;
+            lockedDetailValue = String(addressText || detailEl.value || '').trim();
+            detailEl.setAttribute('data-address-locked', '1');
+            hideSuggest();
+        }
 
         function clearCoords() {
             if (latEl) {
@@ -58,11 +68,99 @@
                 lngEl.value = '';
             }
             coordsLocked = false;
+            lockedDetailValue = '';
+            detailEl.removeAttribute('data-address-locked');
+        }
+
+        function showSuggest() {
+            if (coordsLocked || suppressSuggestUntilType) {
+                return;
+            }
+            fieldWrap.classList.add('geocode-suggest-open');
+            suggestEl.classList.remove('d-none');
         }
 
         function hideSuggest() {
             suggestEl.innerHTML = '';
             suggestEl.classList.add('d-none');
+            fieldWrap.classList.remove('geocode-suggest-open');
+        }
+
+        function allowTypingSearch(event, query) {
+            if (suppressSuggestUntilType) {
+                return false;
+            }
+
+            if (coordsLocked) {
+                if (!event.isTrusted) {
+                    return false;
+                }
+                if (query === lockedDetailValue) {
+                    return false;
+                }
+                clearCoords();
+            }
+
+            return true;
+        }
+
+        function runSuggestSearch(query) {
+            if (coordsLocked || suppressSuggestUntilType || query.length < 2) {
+                hideSuggest();
+                return;
+            }
+
+            if (timer) {
+                window.clearTimeout(timer);
+            }
+
+            timer = window.setTimeout(function () {
+                if (searchAbort) {
+                    searchAbort.abort();
+                }
+                searchAbort = new AbortController();
+
+                var url = searchUrl
+                    + '?q=' + encodeURIComponent(query)
+                    + '&province=' + encodeURIComponent(provinceName(options.provinceInputId, options.defaultProvince || ''));
+
+                fetch(url, {
+                    signal: searchAbort.signal,
+                    headers: { Accept: 'application/json' },
+                })
+                    .then(function (r) { return r.ok ? r.json() : { results: [] }; })
+                    .then(function (data) {
+                        if (coordsLocked || suppressSuggestUntilType) {
+                            hideSuggest();
+                            return;
+                        }
+
+                        var results = (data && data.results) || [];
+                        suggestEl.innerHTML = '';
+
+                        if (!results.length) {
+                            var empty = document.createElement('div');
+                            empty.className = 'booking-address-suggest-empty';
+                            empty.textContent = 'Không thấy địa chỉ phù hợp — thử thêm quận/huyện hoặc chọn trên bản đồ.';
+                            suggestEl.appendChild(empty);
+                            showSuggest();
+                            return;
+                        }
+
+                        results.forEach(function (item) {
+                            var btn = document.createElement('button');
+                            btn.type = 'button';
+                            btn.className = 'booking-address-suggest-item';
+                            btn.textContent = item.address;
+                            btn.addEventListener('click', function () {
+                                applySuggestion(item);
+                            });
+                            suggestEl.appendChild(btn);
+                        });
+                        showSuggest();
+                    })
+                    .catch(function () {});
+            }, 400);
         }
 
         function applySuggestion(item) {
@@ -74,8 +172,7 @@
                 lngEl.value = String(item.lon);
                 lngEl.dispatchEvent(new Event('change', { bubbles: true }));
             }
-            coordsLocked = true;
-            hideSuggest();
+            lockCoords(item.address);
 
             dispatchApplied({
                 targetInputId: options.detailInputId,
@@ -91,66 +188,13 @@
             }
         }
 
-        detailEl.addEventListener('input', function () {
-            if (!coordsLocked) {
-                clearCoords();
-            }
-            coordsLocked = false;
-
-            var q = detailEl.value.trim();
-            if (timer) {
-                window.clearTimeout(timer);
-            }
-            if (q.length < 2) {
-                hideSuggest();
-                return;
-            }
-
-            timer = window.setTimeout(function () {
-                if (searchAbort) {
-                    searchAbort.abort();
-                }
-                searchAbort = new AbortController();
-
-                var url = searchUrl
-                    + '?q=' + encodeURIComponent(q)
-                    + '&province=' + encodeURIComponent(provinceName(options.provinceInputId, options.defaultProvince || ''));
-
-                fetch(url, {
-                    signal: searchAbort.signal,
-                    headers: { Accept: 'application/json' },
-                })
-                    .then(function (r) { return r.ok ? r.json() : { results: [] }; })
-                    .then(function (data) {
-                        var results = (data && data.results) || [];
-                        suggestEl.innerHTML = '';
-
-                        if (!results.length) {
-                            var empty = document.createElement('div');
-                            empty.className = 'booking-address-suggest-empty';
-                            empty.textContent = 'Không thấy địa chỉ phù hợp — thử thêm quận/huyện hoặc chọn trên bản đồ.';
-                            suggestEl.appendChild(empty);
-                            suggestEl.classList.remove('d-none');
-                            return;
-                        }
-
-                        results.forEach(function (item) {
-                            var btn = document.createElement('button');
-                            btn.type = 'button';
-                            btn.className = 'booking-address-suggest-item';
-                            btn.textContent = item.address;
-                            btn.addEventListener('click', function () {
-                                applySuggestion(item);
-                            });
-                            suggestEl.appendChild(btn);
-                        });
-                        suggestEl.classList.remove('d-none');
-                    })
-                    .catch(function () {});
-            }, 400);
-        });
-
         detailEl.addEventListener('keydown', function (e) {
+            if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                suppressSuggestUntilType = false;
+            }
+            if (coordsLocked && e.key !== 'Escape' && e.key !== 'Tab') {
+                hideSuggest();
+            }
             if (e.key === 'Enter') {
                 var first = suggestEl.querySelector('.booking-address-suggest-item');
                 if (first) {
@@ -163,10 +207,28 @@
             }
         });
 
+        detailEl.addEventListener('input', function (e) {
+            var q = detailEl.value.trim();
+
+            if (!allowTypingSearch(e, q)) {
+                hideSuggest();
+                return;
+            }
+
+            runSuggestSearch(q);
+        });
+
+        detailEl.addEventListener('focus', function () {
+            hideSuggest();
+        });
+
+        detailEl.addEventListener('blur', function () {
+            window.setTimeout(hideSuggest, 150);
+        });
+
         document.addEventListener('addressmap:applied', function (e) {
             if (e.detail && e.detail.targetInputId === options.detailInputId) {
-                coordsLocked = true;
-                hideSuggest();
+                lockCoords(e.detail.address || detailEl.value);
             }
         });
 
@@ -179,3 +241,4 @@
 
     window.GeocodeAddressAutocomplete = { attach: attach };
 })();
+

@@ -3,10 +3,10 @@
     $rejectFormId = 'driver-reject-form-' . $driver->id;
 @endphp
 
-@if($driver->isPendingApproval() && auth()->user()->role === 'operator' && ($driver->operator_id === null || $driver->operator_id === auth()->id()))
+@if($driver->isPendingApproval() && auth()->user()->role === 'admin')
 
 <div class="driver-approval-actions {{ $compact ? 'driver-approval-actions--compact' : '' }}">
-    <form method="POST" action="{{ route('operator.drivers.approve', $driver) }}" class="d-inline">
+    <form method="POST" action="{{ route('admin.drivers.approve', $driver) }}" class="d-inline">
         @csrf
         <button class="btn btn-sm btn-primary">Duyệt</button>
     </form>
@@ -19,7 +19,7 @@
     </button>
 
     <form method="POST"
-          action="{{ route('operator.drivers.reject', $driver) }}"
+          action="{{ route('admin.drivers.reject', $driver) }}"
           id="{{ $rejectFormId }}"
           class="driver-reject-form d-none {{ $compact ? '' : 'mt-3' }}"
           data-driver-reject-form>

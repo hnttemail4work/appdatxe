@@ -44,5 +44,3 @@ $activated = (bool) $wallet->wallet_activated_at;
         'qrElementId' => $walletQrId,
     ])
 @endif
-
-@include('partials.driver-wallet-history', ['walletHistory' => $walletHistory])

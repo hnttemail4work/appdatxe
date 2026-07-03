@@ -129,3 +129,26 @@
 .address-map-canvas .leaflet-control-attribution {
     font-size: 9px;
 }
+
+.address-map-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0.5rem;
+}
+
+.address-map-picker-modal .modal-footer {
+    display: flex;
+    gap: 0.5rem;
+}
+
+#address-map-confirm {
+    margin-left: auto;
+}
+
+.address-map-picker-modal .modal-footer .btn {
+    min-width: 5.5rem;
+}
+
+.address-map-picker-modal--driver .address-map-canvas {
+    height: 20rem;
+}

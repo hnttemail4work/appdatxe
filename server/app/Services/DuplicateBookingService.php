@@ -69,9 +69,7 @@ class DuplicateBookingService
                 ? $booking->schedule->route->departure . ' → ' . $booking->schedule->route->destination
                 : '—',
             'service_date'      => $booking->schedule?->departure_time?->format('d/m/Y H:i'),
-            'vehicle_capacity'  => $booking->vehicle_capacity,
-            'vehicle_count'     => (int) ($booking->vehicle_count ?? 1),
-            'booking_mode'      => $booking->booking_mode,
+            'vehicle_label'     => $booking->vehicleBookingLabel(),
             'progress_label'    => $booking->primaryStatusLabel(),
         ];
     }
