@@ -109,4 +109,53 @@ class DuplicateBookingServiceTest extends TestCase
         $service->assertCanBook('0909123456');
         $this->assertNull($service->findActiveBooking('0909123456'));
     }
+
+    public function test_past_pickup_booking_does_not_block(): void
+    {
+        $booking = $this->seedBooking('0909123456', [
+            'pickup_time' => now()->subHours(2)->format('H:i:s'),
+        ]);
+
+        $booking->schedule->update([
+            'service_date'   => now()->toDateString(),
+            'departure_time' => now()->subHours(2),
+        ]);
+
+        $service = app(DuplicateBookingService::class);
+
+        $service->assertCanBook('0909123456');
+        $this->assertNull($service->findActiveBooking('0909123456'));
+    }
+
+    public function test_booking_with_driver_still_blocks_before_pickup(): void
+    {
+        $driver = User::factory()->create(['role' => 'driver']);
+        $booking = $this->seedBooking('0909123456', [
+            'pickup_time' => now()->addHours(2)->format('H:i:s'),
+        ]);
+
+        $booking->schedule->update([
+            'driver_id'      => $driver->id,
+            'service_date'   => now()->toDateString(),
+            'departure_time' => now()->addHours(2),
+        ]);
+
+        $service = app(DuplicateBookingService::class);
+
+        $this->assertNotNull($service->findActiveBooking('0909123456'));
+        $this->expectException(InvalidArgumentException::class);
+        $service->assertCanBook('0909123456');
+    }
+
+    public function test_pending_without_driver_before_pickup_still_blocks(): void
+    {
+        $this->seedBooking('0909123456', [
+            'pickup_time' => now()->addHours(2)->format('H:i:s'),
+        ]);
+
+        $service = app(DuplicateBookingService::class);
+
+        $this->expectException(InvalidArgumentException::class);
+        $service->assertCanBook('0909123456');
+    }
 }

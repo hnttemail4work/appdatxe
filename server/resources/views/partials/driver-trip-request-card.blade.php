@@ -11,6 +11,7 @@ $waitProgress = DriverWaitProgress::forTripRequest($tripRequest);
 $tripTotal = (float) $passengers->sum(fn (\App\Models\Booking $b) => (float) $b->total_price);
 $expiresLabel = $tripRequest->acceptTimeRemainingLabel();
 $primaryBooking = $passengers->first();
+$pickupAt = $primaryBooking?->tripStartAt();
 @endphp
 
 <article class="driver-request-card driver-action-card driver-trip-request-card driver-request-card--incoming"
@@ -27,7 +28,11 @@ $primaryBooking = $passengers->first();
                 @endif
             </div>
             <div class="driver-request-card__schedule">
-                {{ $schedule->departure_time->format('H:i, d/m/Y') }}
+                @if($pickupAt)
+                    Giờ đón: <strong>{{ $pickupAt->format('H:i, d/m/Y') }}</strong>
+                @else
+                    {{ $schedule->departure_time->format('H:i, d/m/Y') }}
+                @endif
                 @if($passengers->count() > 0)
                     · {{ $passengers->count() }} khách
                 @endif
@@ -46,8 +51,8 @@ $primaryBooking = $passengers->first();
 
     <div class="driver-request-card__route">
         @include('partials.driver-route-head', [
-            'from' => $schedule->route->departure ?? '',
-            'to' => $schedule->route->destination ?? '',
+            'from' => $schedule->routeDepartureLabel(),
+            'to' => $schedule->routeDestinationLabel(),
         ])
     </div>
 

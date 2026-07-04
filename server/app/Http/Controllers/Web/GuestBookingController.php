@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Models\ReferralCode;
-use App\Models\ScheduleTemplate;
+use App\Services\BookingBrowserGuardService;
 use App\Services\BookingPhoneGuardService;
 use App\Services\BookingWorkflowService;
 use App\Services\DuplicateBookingService;
@@ -13,10 +13,9 @@ use App\Services\ScheduleLifecycleService;
 use App\Services\TripListingService;
 use App\Services\TripPricingService;
 use App\Support\DepartureTimeDisplay;
-use App\Support\PageList;
-use App\Support\PlatformFees;
 use App\Support\SouthernProvinces;
 use App\Support\ServiceDate;
+use App\Support\VehicleCapacityOptions;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use InvalidArgumentException;
@@ -31,6 +30,7 @@ class GuestBookingController extends Controller
         private readonly ReferralCodeService $referralCodes,
         private readonly BookingPhoneGuardService $phoneGuard,
         private readonly DuplicateBookingService $duplicateBookings,
+        private readonly BookingBrowserGuardService $browserGuard,
     ) {
     }
 
@@ -38,8 +38,12 @@ class GuestBookingController extends Controller
     {
         $this->scheduleLifecycle->sync();
 
-        $offers = PageList::paginateCollection($this->tripListing->listActiveTemplates(), $request);
-        $defaultServiceDate = ServiceDate::today();
+        $driverOffers = $this->tripListing->listBookableOffers()
+            ->map(fn ($profile) => $this->tripListing->serializeOffer($profile))
+            ->values();
+        $defaultPickupAt = now()->addHour();
+        $defaultServiceDate = $defaultPickupAt->toDateString();
+        $defaultPickupTime = $defaultPickupAt->format('H:i');
 
         $prefillReferral = strtoupper(trim((string) $request->query('ref', '')));
         $appliedReferral = $prefillReferral !== ''
@@ -68,50 +72,108 @@ class GuestBookingController extends Controller
         }
 
         $referralDiscountMeta = $this->referralCodes->discountMeta($appliedReferral);
+        $browserCancelCount = (int) $request->session()->get('guest_browser_cancel_count', 0);
 
         return view('booking.index', compact(
-            'offers',
+            'driverOffers',
             'defaultServiceDate',
+            'defaultPickupTime',
             'prefillReferral',
             'appliedReferral',
             'pendingReferral',
             'referralDiscountMeta',
+            'browserCancelCount',
         ));
     }
 
     public function checkDuplicateBooking(Request $request)
     {
+        $this->workflow->expirePastPickupWithoutDriver();
+
         $validated = $request->validate([
-            'contact_phone' => ['required', 'string', 'max:30'],
+            'contact_phone'      => ['nullable', 'string', 'max:30'],
+            'booking_browser_id' => ['nullable', 'string', 'max:128'],
         ]);
 
-        $active = $this->duplicateBookings->findActiveBooking($validated['contact_phone']);
+        $browserId = trim((string) ($validated['booking_browser_id'] ?? $request->header('X-Booking-Browser-Id', '')));
+        $phone = trim((string) ($validated['contact_phone'] ?? ''));
+
+        if ($browserId === '' && $phone === '') {
+            return response()->json(['message' => 'Thiếu thông tin kiểm tra.'], 422);
+        }
+
+        if ($browserId !== '') {
+            if ($this->browserGuard->isCancelBlocked($browserId)) {
+                return response()->json([
+                    'duplicate'      => true,
+                    'reason'         => 'browser_cancel',
+                    'active_booking' => false,
+                    'message'        => $this->browserGuard->blockMessage(),
+                ]);
+            }
+
+            $browserActive = $this->browserGuard->findActiveBooking($browserId);
+
+            if ($browserActive) {
+                return response()->json([
+                    'duplicate'      => true,
+                    'reason'         => 'browser',
+                    'active_booking' => true,
+                    'message'        => $this->browserGuard->activeBookingBlockMessage(),
+                    'booking'        => $this->duplicateBookings->serializeDuplicate($browserActive),
+                ]);
+            }
+        }
+
+        if ($phone !== '') {
+            $phoneActive = $this->duplicateBookings->findActiveBooking($phone);
+
+            if ($phoneActive) {
+                return response()->json([
+                    'duplicate'      => true,
+                    'reason'         => 'phone',
+                    'active_booking' => true,
+                    'booking'        => $this->duplicateBookings->serializeDuplicate($phoneActive),
+                ]);
+            }
+        }
 
         return response()->json([
-            'duplicate'      => $active !== null,
-            'active_booking' => $active !== null,
-            'booking'        => $active ? $this->duplicateBookings->serializeDuplicate($active) : null,
+            'duplicate'      => false,
+            'active_booking' => false,
+            'booking'        => null,
         ]);
     }
 
     public function quotePrice(Request $request)
     {
         $validated = $request->validate([
-            'template_id'     => ['required', 'exists:schedule_templates,id'],
-            'pickup_address'  => ['nullable', 'string', 'max:255', SouthernProvinces::inRule()],
-            'dropoff_address' => ['nullable', 'string', 'max:255', SouthernProvinces::inRule()],
-            'contact_phone'   => ['nullable', 'string', 'max:30'],
+            'template_id'        => ['nullable', 'exists:schedule_templates,id'],
+            'vehicle_id'         => ['nullable', 'exists:vehicles,id'],
+            'driver_profile_id'  => ['nullable', 'exists:driver_profiles,id'],
+            'pickup_address'     => ['required', 'string', 'max:255', SouthernProvinces::inRule()],
+            'dropoff_address'    => ['required', 'string', 'max:255', SouthernProvinces::inRule()],
+            'contact_phone'      => ['nullable', 'string', 'max:30'],
         ]);
 
-        $template = ScheduleTemplate::query()
-            ->where('status', 'active')
-            ->with(['route', 'vehicle'])
-            ->findOrFail($validated['template_id']);
+        if (empty($validated['template_id']) && empty($validated['vehicle_id']) && empty($validated['driver_profile_id'])) {
+            return response()->json(['message' => 'Thiếu thông tin tài xế.'], 422);
+        }
+
+        $template = $this->tripListing->resolveTemplate(
+            isset($validated['driver_profile_id']) ? (int) $validated['driver_profile_id'] : null,
+            isset($validated['vehicle_id']) ? (int) $validated['vehicle_id'] : null,
+            isset($validated['template_id']) ? (int) $validated['template_id'] : null,
+        );
+
+        if (! $template || ! $template->vehicle) {
+            return response()->json(['message' => 'Xe không khả dụng.'], 422);
+        }
 
         $quote = $this->pricing->quote(
             $template,
-            $validated['pickup_address'] ?? null,
-            $validated['dropoff_address'] ?? null,
+            $validated['pickup_address'],
+            $validated['dropoff_address'],
         );
 
         $subtotal = (int) $quote['whole_car_price'];
@@ -134,16 +196,23 @@ class GuestBookingController extends Controller
             'referral_ineligible_reason'=> $discountMeta['reason'],
             'total_after_discount'      => (int) $total,
             'template_id'               => $template->id,
+            'vehicle_id'                => $template->vehicle_id,
             'vehicle_label'             => \App\Support\VehicleDisplay::labelFromVehicle($template->vehicle),
+            'license_plate'             => $template->vehicle->license_plate,
+            'capacity_label'            => VehicleCapacityOptions::label((int) $template->vehicle->capacity),
         ]));
     }
 
     public function store(Request $request)
     {
+        $this->workflow->expirePastPickupWithoutDriver();
+
         $validator = Validator::make($request->all(), [
-            'template_id'      => ['required', 'exists:schedule_templates,id'],
+            'template_id'       => ['nullable', 'exists:schedule_templates,id'],
+            'vehicle_id'        => ['nullable', 'exists:vehicles,id'],
+            'driver_profile_id' => ['nullable', 'exists:driver_profiles,id'],
             'service_date'     => ['required', 'date', 'after_or_equal:today'],
-            'pickup_time'      => ['nullable', 'string', 'max:8'],
+            'pickup_time'      => ['required', 'string', 'max:8', 'regex:/^\d{1,2}:\d{2}$/'],
             'passenger_name'   => ['required', 'string', 'max:255'],
             'passenger_gender' => ['nullable', 'in:male,female'],
             'passenger_age'    => ['nullable', 'integer', 'min:1', 'max:120'],
@@ -156,6 +225,12 @@ class GuestBookingController extends Controller
             'pickup_lng'       => ['nullable', 'numeric', 'between:-180,180'],
             'notes'            => ['nullable', 'string', 'max:500'],
             'referral_code'    => ['nullable', 'string', 'max:32'],
+            'booking_browser_id' => ['nullable', 'string', 'max:128'],
+        ], [
+            'service_date.required'       => 'Vui lòng chọn ngày đi.',
+            'service_date.after_or_equal' => 'Ngày đi phải từ hôm nay trở đi.',
+            'pickup_time.required'        => 'Vui lòng chọn giờ đón.',
+            'pickup_time.regex'           => 'Giờ đón không hợp lệ.',
         ]);
 
         if ($validator->fails()) {
@@ -166,6 +241,12 @@ class GuestBookingController extends Controller
 
         $validated = $validator->validated();
 
+        if (empty($validated['template_id']) && empty($validated['vehicle_id']) && empty($validated['driver_profile_id'])) {
+            return $this->bookingFormRedirect()
+                ->withErrors(['booking' => 'Vui lòng chọn tài xế.'])
+                ->withInput();
+        }
+
         $referralInput = strtoupper(trim((string) ($validated['referral_code'] ?? '')));
         if ($referralInput !== '') {
             $code = $this->referralCodes->resolveUsableCode($referralInput);
@@ -174,10 +255,17 @@ class GuestBookingController extends Controller
             }
         }
 
-        $template = ScheduleTemplate::query()
-            ->where('status', 'active')
-            ->with(['route', 'vehicle'])
-            ->findOrFail($validated['template_id']);
+        $template = $this->tripListing->resolveTemplate(
+            isset($validated['driver_profile_id']) ? (int) $validated['driver_profile_id'] : null,
+            isset($validated['vehicle_id']) ? (int) $validated['vehicle_id'] : null,
+            isset($validated['template_id']) ? (int) $validated['template_id'] : null,
+        );
+
+        if (! $template) {
+            return $this->bookingFormRedirect()
+                ->withErrors(['booking' => 'Tài xế không khả dụng.'])
+                ->withInput();
+        }
 
         $pickupTime = ! empty($validated['pickup_time'])
             ? DepartureTimeDisplay::storageValue($validated['pickup_time'])
@@ -189,6 +277,25 @@ class GuestBookingController extends Controller
         $passengerAge = isset($validated['passenger_age']) ? (int) $validated['passenger_age'] : null;
         $pickupLat = isset($validated['pickup_lat']) ? (float) $validated['pickup_lat'] : null;
         $pickupLng = isset($validated['pickup_lng']) ? (float) $validated['pickup_lng'] : null;
+        $browserId = trim((string) ($validated['booking_browser_id'] ?? $request->header('X-Booking-Browser-Id', '')));
+
+        try {
+            $this->browserGuard->assertCanBook($browserId !== '' ? $browserId : null);
+        } catch (InvalidArgumentException $e) {
+            return $this->bookingFormError($e);
+        }
+
+        if ((int) $request->session()->get('guest_browser_cancel_count', 0) >= BookingBrowserGuardService::CANCEL_BLOCK_LIMIT) {
+            return $this->bookingFormRedirect()
+                ->withErrors(['booking' => $this->browserGuard->blockMessage()])
+                ->withInput();
+        }
+
+        try {
+            $this->duplicateBookings->assertCanBook($validated['contact_phone']);
+        } catch (InvalidArgumentException $e) {
+            return $this->bookingFormError($e);
+        }
 
         try {
             $this->phoneGuard->assertCanBook($validated['contact_phone']);
@@ -220,16 +327,26 @@ class GuestBookingController extends Controller
 
         session()->forget('guest_referral_code');
 
+        $this->browserGuard->recordActiveBooking($browserId, $booking);
+
         $booking->loadMissing(['schedule', 'referralCode', 'appliedReferralCode']);
         $issuedReferral = $booking->referralCode;
 
-        return redirect()->route('home')->with('booking_success', [
+        $successPayload = [
             'trip_code'         => $booking->schedule->shortTripCode(),
             'booking_reference' => $booking->booking_reference,
             'passenger_name'    => $validated['passenger_name'],
             'contact_phone'     => $validated['contact_phone'],
             'referral_code'     => $issuedReferral?->code,
-        ]);
+        ];
+
+        if ($issuedReferral) {
+            $successPayload['referral_url'] = $issuedReferral->landingUrl();
+            $successPayload['referral_discount_percent'] = $issuedReferral->customerDiscountPercent();
+            $successPayload['referral_pending'] = $issuedReferral->status === \App\Models\ReferralCode::STATUS_PENDING;
+        }
+
+        return redirect()->route('home')->with('booking_success', $successPayload);
     }
 
     private function bookingFormRedirect(): \Illuminate\Http\RedirectResponse
@@ -246,6 +363,10 @@ class GuestBookingController extends Controller
             $field = 'pickup_time';
         } elseif (str_contains($message, 'khởi hành')) {
             $field = 'service_date';
+        } elseif (str_contains($message, 'cuốc chưa hoàn thành')) {
+            $field = 'booking';
+        } elseif (str_contains($message, 'phiên trình duyệt')) {
+            $field = 'booking';
         } elseif (str_contains($message, 'SĐT') || str_contains($message, 'điện thoại')) {
             $field = 'contact_phone';
         }

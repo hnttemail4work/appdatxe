@@ -10,6 +10,10 @@ use InvalidArgumentException;
 
 class DuplicateBookingService
 {
+    public function __construct(
+        private readonly GuestBookingDriverStatusService $driverStatus,
+    ) {
+    }
     /** Đơn còn hiệu lực theo SĐT — chưa hủy / chưa hoàn tất (mọi tuyến). */
     public function findActiveBooking(string $contactPhone, ?string $excludeReference = null): ?Booking
     {
@@ -22,7 +26,8 @@ class DuplicateBookingService
         return $this->activeBookingQuery($excludeReference)
             ->orderByDesc('created_at')
             ->get()
-            ->first(fn (Booking $booking): bool => $this->normalizeContactPhone((string) $booking->contact_phone) === $normalized);
+            ->first(fn (Booking $booking): bool => $this->normalizeContactPhone((string) $booking->contact_phone) === $normalized
+                && $booking->blocksGuestRebooking());
     }
 
     public function assertCanBook(string $contactPhone, ?string $excludeReference = null): void
@@ -61,6 +66,7 @@ class DuplicateBookingService
     public function serializeDuplicate(Booking $booking): array
     {
         $booking->loadMissing('schedule.route');
+        $driver = $this->driverStatus->build($booking);
 
         return [
             'booking_reference' => $booking->booking_reference,
@@ -71,6 +77,12 @@ class DuplicateBookingService
             'service_date'      => $booking->schedule?->departure_time?->format('d/m/Y H:i'),
             'vehicle_label'     => $booking->vehicleBookingLabel(),
             'progress_label'    => $booking->primaryStatusLabel(),
+            'has_driver'        => $booking->hasDriverAccepted(),
+            'driver_distance_km' => $driver['distance_km'] ?? null,
+            'driver_distance_label' => $driver['distance_label'] ?? null,
+            'driver_eta_label' => $driver['eta_label'] ?? null,
+            'driver_proximity_hint' => $driver['proximity_hint'] ?? null,
+            'driver'            => $driver,
         ];
     }
 

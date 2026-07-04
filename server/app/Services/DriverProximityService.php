@@ -159,6 +159,42 @@ class DriverProximityService
         return round($this->distanceKm($profile, $pickup), 1);
     }
 
+    /**
+     * Cập nhật khoảng cách đến điểm đón cho các chuyến tài xế đang đi đón.
+     *
+     * @return list<array{trip_code: string, distance_km: float, distance_label: string}>
+     */
+    public function refreshAssignedPickupDistances(DriverProfile $profile): array
+    {
+        $profile->refresh();
+        $results = [];
+
+        foreach ($this->availability->activeSchedulesForDriver((int) $profile->user_id) as $schedule) {
+            if (! in_array($schedule->resolvedDriverStage(), [
+                Schedule::DRIVER_STAGE_ASSIGNED,
+                Schedule::DRIVER_STAGE_AT_PICKUP,
+            ], true)) {
+                continue;
+            }
+
+            foreach ($schedule->driverRelevantBookings() as $booking) {
+                $distance = $this->snapshotPickupDistance($booking, $profile);
+                if ($distance === null) {
+                    continue;
+                }
+
+                $booking->update(['driver_pickup_distance_km' => $distance]);
+                $results[] = [
+                    'trip_code'      => $schedule->shortTripCode() ?? '—',
+                    'distance_km'    => $distance,
+                    'distance_label' => self::formatDistanceLabel($distance),
+                ];
+            }
+        }
+
+        return $results;
+    }
+
     /** @return array{distance_km: ?float, distance_label: ?string, auto_assign_eligible: bool, hint: ?string} */
     public function assignDiagnostics(DriverProfile $profile, Booking $booking, Schedule $schedule): array
     {

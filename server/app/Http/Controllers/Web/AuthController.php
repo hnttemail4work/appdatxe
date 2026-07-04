@@ -47,7 +47,11 @@ class AuthController extends Controller
         if ($user->role === 'driver') {
             $profile = DriverProfile::query()->where('user_id', $user->id)->first();
             if ($profile) {
-                $this->driverAvailability->resetForWebLogin($profile);
+                try {
+                    $this->driverAvailability->resetForWebLogin($profile);
+                } catch (\Throwable) {
+                    // Không chặn đăng nhập nếu đồng bộ trạng thái tài xế lỗi.
+                }
             }
         }
 
@@ -64,7 +68,11 @@ class AuthController extends Controller
         }
 
         $role = $user->role;
-        $redirect = RoleDashboard::route($role);
+        $redirect = match ($role) {
+            'admin'  => '/admin/dashboard',
+            'driver' => '/driver/dashboard',
+            default  => '/',
+        };
 
         $intended = $request->session()->pull('url.intended');
         if ($intended && RoleDashboard::urlAllowedForRole($intended, $role)) {

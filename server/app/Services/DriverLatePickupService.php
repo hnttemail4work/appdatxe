@@ -112,10 +112,31 @@ class DriverLatePickupService
 
         return [
             'active'       => $schedule->driver_late_pickup_continue_deadline_at->isFuture(),
-            'message'      => 'Khách đang đợi bạn' . ($etaLabel ? ' — dự kiến bạn đến trong ' . $etaLabel : '') . '.',
-            'hint'         => 'Bấm Tiếp tục để xác nhận và tiếp tục chuyến.',
+            'message'      => 'Đã đến giờ đón — vui lòng đến điểm đón khách' . ($etaLabel ? ' (dự kiến ' . $etaLabel . ')' : '') . '.',
+            'hint'         => 'Bấm «Đến điểm đón» khi bạn đến điểm đón khách.',
             'deadline_at'  => $schedule->driver_late_pickup_continue_deadline_at->toIso8601String(),
             'continue_url' => route('driver.schedules.latePickupContinue', $schedule),
+        ];
+    }
+
+    /** Nhắc tài xế di chuyển khi đến lúc cần xuất phát (theo km + giờ đón). */
+    public function departReminderPayload(Schedule $schedule): ?array
+    {
+        if ($schedule->resolvedDriverStage() !== Schedule::DRIVER_STAGE_ASSIGNED
+            || $schedule->driver_late_pickup_prompt_at) {
+            return null;
+        }
+
+        $booking = $schedule->driverRelevantBookings()->first();
+        if (! $booking || ! $this->shouldDepartForPickup($booking)) {
+            return null;
+        }
+
+        $etaLabel = $this->etaLabel($schedule, $booking);
+
+        return [
+            'message' => 'Vui lòng di chuyển đến điểm đón' . ($etaLabel ? ' — dự kiến ' . $etaLabel : '') . '.',
+            'hint'    => 'Bấm «Đến điểm đón» khi bạn đến điểm đón khách.',
         ];
     }
 
@@ -198,11 +219,41 @@ class DriverLatePickupService
         return true;
     }
 
+    private function shouldDepartForPickup(Booking $booking): bool
+    {
+        $pickupAt = $booking->tripStartAt();
+
+        if (! $pickupAt instanceof Carbon) {
+            return false;
+        }
+
+        $booking->loadMissing('schedule');
+        $schedule = $booking->schedule;
+
+        if (! $schedule) {
+            return false;
+        }
+
+        $travelMinutes = $this->travelMinutesToPickup($schedule, $booking);
+        $departBy = $pickupAt->copy()->subMinutes($travelMinutes);
+
+        return now()->gte($departBy) && $pickupAt->isFuture();
+    }
+
     private function isPickupDue(Booking $booking): bool
     {
         $pickupAt = $booking->tripStartAt();
 
         return $pickupAt instanceof Carbon && $pickupAt->lte(now());
+    }
+
+    public function pickupEtaLabel(Schedule $schedule, Booking $booking): ?string
+    {
+        if (! $schedule->driver_id) {
+            return null;
+        }
+
+        return $this->etaLabel($schedule, $booking);
     }
 
     private function etaLabel(Schedule $schedule, ?Booking $booking): ?string
@@ -211,9 +262,23 @@ class DriverLatePickupService
             return null;
         }
 
+        $travelMinutes = $this->travelMinutesToPickup($schedule, $booking);
+
+        if ($travelMinutes < 60) {
+            return $travelMinutes . ' phút nữa';
+        }
+
+        $hours = (int) floor($travelMinutes / 60);
+        $mins = $travelMinutes % 60;
+
+        return $mins > 0 ? ($hours . ' giờ ' . $mins . ' phút nữa') : ($hours . ' giờ nữa');
+    }
+
+    private function travelMinutesToPickup(Schedule $schedule, Booking $booking): int
+    {
         $profile = DriverProfile::query()->where('user_id', $schedule->driver_id)->first();
         if (! $profile) {
-            return null;
+            return 1;
         }
 
         $distanceKm = max(0.5, (float) ($booking->driver_pickup_distance_km ?? 0));
@@ -224,15 +289,6 @@ class DriverLatePickupService
             }
         }
 
-        $travelMinutes = (int) max(1, ceil($distanceKm / DriverMovementConfirmService::ASSUMED_SPEED_KMH * 60));
-
-        if ($travelMinutes < 60) {
-            return $travelMinutes . ' phút nữa';
-        }
-
-        $hours = (int) floor($travelMinutes / 60);
-        $mins = $travelMinutes % 60;
-
-        return $mins > 0 ? ($hours . ' giờ ' . $mins . ' phút nữa') : ($hours . ' giờ nữa');
+        return (int) max(1, ceil($distanceKm / DriverMovementConfirmService::ASSUMED_SPEED_KMH * 60));
     }
 }

@@ -22,7 +22,8 @@
 
     var csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
     var sending = false;
-    var onTrip = locationBar.getAttribute('data-driver-on-trip') === '1';
+    var onTrip = locationBar.getAttribute('data-driver-trip-active') === '1';
+    var tripUpcoming = locationBar.getAttribute('data-driver-trip-upcoming') === '1';
     var sharePromptMessage = 'Chọn vị trí trên bản đồ để nhận cuốc gần bạn.';
 
     function hasLocationCoords() {
@@ -124,6 +125,9 @@
             if (onTrip) {
                 heroPill.className = 'driver-status-pill driver-status-pill--busy';
                 heroLabel.textContent = 'Đang chạy chuyến';
+            } else if (tripUpcoming) {
+                heroPill.className = 'driver-status-pill driver-status-pill--assigned';
+                heroLabel.textContent = 'Đã nhận cuốc';
             } else if (paused) {
                 heroPill.className = 'driver-status-pill driver-status-pill--offline';
                 heroLabel.textContent = 'Tạm nghỉ';
@@ -159,42 +163,6 @@
         setPaused(true);
     } else if (locationBar.getAttribute('data-needs-location') === '1') {
         focusLocationShare({ scroll: false });
-    }
-
-    if (toggle && locationBar.getAttribute('data-driver-paused') === '1') {
-        setPaused(true);
-    }
-
-    if (toggle && locationBar.getAttribute('data-driver-paused') === '1') {
-        setPaused(true);
-    }
-
-    if (toggle && locationBar.getAttribute('data-driver-paused') === '1') {
-        setPaused(true);
-    }
-
-    if (toggle && locationBar.getAttribute('data-driver-paused') === '1') {
-        setPaused(true);
-    }
-
-    if (toggle && locationBar.getAttribute('data-driver-paused') === '1') {
-        setPaused(true);
-    }
-
-    if (toggle && locationBar.getAttribute('data-driver-paused') === '1') {
-        setPaused(true);
-    }
-
-    if (toggle && locationBar.getAttribute('data-driver-paused') === '1') {
-        setPaused(true);
-    }
-
-    if (toggle && locationBar.getAttribute('data-driver-paused') === '1') {
-        setPaused(true);
-    }
-
-    if (toggle && locationBar.getAttribute('data-driver-paused') === '1') {
-        setPaused(true);
     }
 
     toggle.addEventListener('change', function () {
@@ -285,4 +253,4 @@
         clearLocationSharePrompt: clearLocationSharePrompt,
     };
 })();
-
+

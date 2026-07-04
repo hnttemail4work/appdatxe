@@ -3,8 +3,12 @@
  */
 (function () {
     var payload = window.__bookingReferralSuccess;
-    if (!payload || !payload.code || !payload.url) {
+    if (!payload || !payload.code) {
         return;
+    }
+
+    if (!payload.url) {
+        payload.url = window.location.origin + '/?ref=' + encodeURIComponent(payload.code);
     }
 
     var libLoading = false;
@@ -86,6 +90,16 @@
         link.click();
     }
 
+    function showModal() {
+        loadLib(function () {
+            renderQr(payload.url);
+            var modal = getModal();
+            if (modal) {
+                modal.show();
+            }
+        });
+    }
+
     function init() {
         document.getElementById('booking-referral-success-code').textContent = payload.code;
         document.getElementById('booking-referral-success-url').value = payload.url;
@@ -128,14 +142,17 @@
             downloadBtn.addEventListener('click', downloadQr);
         }
 
-        loadLib(function () {
-            renderQr(payload.url);
-            var modal = getModal();
-            if (modal) {
-                modal.show();
-            }
-        });
+        var reopenBtn = document.getElementById('booking-show-referral-qr');
+        if (reopenBtn) {
+            reopenBtn.addEventListener('click', showModal);
+        }
+
+        showModal();
     }
+
+    window.BookingReferralSuccess = {
+        show: showModal,
+    };
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);

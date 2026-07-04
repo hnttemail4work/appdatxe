@@ -9,7 +9,11 @@
                 <a href="{{ route('register') }}">Đăng ký tài xế</a>
             </p>
 
-            <form method="POST" action="{{ route('login') }}">
+            @error('login')
+                <div class="alert alert-danger py-2 small mb-3" role="alert">{{ $message }}</div>
+            @enderror
+
+            <form method="POST" action="/login" autocomplete="on">
                 @csrf
                 <div class="mb-3">
                     <label class="form-label">Số điện thoại</label>

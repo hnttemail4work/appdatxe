@@ -39,6 +39,7 @@ class ScheduleLifecycleService
         int $seatsNeeded = 1,
         ?float $pickupLat = null,
         ?float $pickupLng = null,
+        ?int $routeId = null,
     ): Schedule {
         $template->loadMissing(['vehicle', 'route']);
         $date = ServiceDate::parse($serviceDate);
@@ -47,12 +48,14 @@ class ScheduleLifecycleService
         $availability->assertPickupTimeAvailable($serviceDate, $pickupTime);
 
         $departure = $availability->resolveDepartureTime($template, $serviceDate, $pickupTime);
+        $resolvedRouteId = $routeId ?? $template->route_id;
 
         if (! $alwaysCreate) {
             $schedule = Schedule::query()
                 ->where('template_id', $template->id)
                 ->whereDate('service_date', $serviceDate)
                 ->where('departure_time', $departure)
+                ->when($resolvedRouteId, fn ($q) => $q->where('route_id', $resolvedRouteId))
                 ->where('status', 'scheduled')
                 ->first();
 
@@ -66,7 +69,7 @@ class ScheduleLifecycleService
         try {
             return Schedule::query()->create([
                 'template_id'         => $template->id,
-                'route_id'            => $template->route_id,
+                'route_id'            => $resolvedRouteId,
                 'vehicle_id'          => $template->vehicle_id,
                 'driver_id'           => null,
                 'driver_name'         => 'Chờ phân bổ',

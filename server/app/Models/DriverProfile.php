@@ -59,11 +59,15 @@ class DriverProfile extends Model
         };
     }
 
-    /** Trạng thái pill trên hero tài xế — đồng bộ với availability + vị trí. */
-    public function heroStatusMeta(bool $onTrip = false): array
+    /** Trạng thái pill trên hero tài xế — đồng bộ với availability + vị trí + chuyến đang phục vụ. */
+    public function heroStatusMeta(bool $onActiveTrip = false, bool $hasUpcomingTrip = false): array
     {
-        if ($onTrip) {
+        if ($onActiveTrip) {
             return ['key' => 'busy', 'label' => 'Đang chạy chuyến'];
+        }
+
+        if ($hasUpcomingTrip) {
+            return ['key' => 'assigned', 'label' => 'Đã nhận cuốc'];
         }
 
         if (($this->availability_status ?? 'off_duty') === 'off_duty') {

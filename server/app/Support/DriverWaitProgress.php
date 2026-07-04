@@ -4,7 +4,6 @@ namespace App\Support;
 
 use App\Models\DriverTripRequest;
 use App\Models\Schedule;
-use App\Services\DriverMovementConfirmService;
 use App\Services\DriverTripRequestService;
 
 class DriverWaitProgress
@@ -27,46 +26,7 @@ class DriverWaitProgress
             ];
         }
 
-        if ($schedule->resolvedDriverStage() !== Schedule::DRIVER_STAGE_ASSIGNED) {
-            return null;
-        }
-
-        $deadline = $schedule->driver_movement_deadline_at;
-        $assignedAt = $schedule->driver_assigned_at;
-
-        if (! $deadline && $assignedAt) {
-            $primary = $schedule->driverRelevantBookings()->first();
-            if ($primary) {
-                $deadline = app(DriverMovementConfirmService::class)
-                    ->computeDeadline($schedule, $primary, $assignedAt);
-            }
-        }
-
-        if (! $deadline || ! $assignedAt) {
-            return null;
-        }
-
-        if (! $deadline->isFuture()) {
-            return [
-                'kind'          => 'movement_confirm',
-                'label'         => 'Đã quá hạn xác nhận di chuyển',
-                'hint'          => 'Bấm «Đến điểm đón» để bắt đầu chuyến.',
-                'started_at'    => $assignedAt->toIso8601String(),
-                'deadline_at'   => $deadline->toIso8601String(),
-                'total_seconds' => max(60, (int) $assignedAt->diffInSeconds($deadline)),
-                'indeterminate' => true,
-            ];
-        }
-
-        return [
-            'kind'          => 'movement_confirm',
-            'label'         => 'Cần bấm «Đến điểm đón»',
-            'hint'          => 'Xác nhận bạn đang di chuyển đến điểm đón trước khi hết giờ.',
-            'started_at'    => $assignedAt->toIso8601String(),
-            'deadline_at'   => $deadline->toIso8601String(),
-            'total_seconds' => max(60, (int) $assignedAt->diffInSeconds($deadline)),
-            'indeterminate' => false,
-        ];
+        return null;
     }
 
     /** @return array<string, mixed>|null */

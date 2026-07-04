@@ -187,11 +187,6 @@
         });
     }
 
-    fetch('/csrf-token', { credentials: 'same-origin' })
-        .then(function (r) { return r.ok ? r.json() : null; })
-        .then(function (data) { syncCsrfToken(data && data.token); })
-        .catch(function () {});
-
     document.querySelectorAll('.logout-form').forEach(function (logoutForm) {
         logoutForm.addEventListener('submit', function (e) {
             if (logoutForm.dataset.logoutSubmitting === '1') {

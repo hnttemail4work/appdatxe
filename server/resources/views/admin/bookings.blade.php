@@ -6,7 +6,7 @@ $bookingList = $bookingList ?? 'active';
 $bookingListCounts = $bookingListCounts ?? ['active' => 0, 'completed' => 0, 'feedback' => 0, 'cancelled' => 0];
 
 $bookingListTabs = [
-    ['key' => 'active', 'label' => 'Đang chạy', 'badge' => $bookingListCounts['active'] ?? 0],
+    ['key' => 'active', 'label' => 'Chuyến đã', 'badge' => $bookingListCounts['active'] ?? 0],
     ['key' => 'completed', 'label' => 'Hoàn thành', 'badge' => $bookingListCounts['completed'] ?? 0],
     ['key' => 'feedback', 'label' => 'Phản hồi', 'badge' => $bookingListCounts['feedback'] ?? 0],
     ['key' => 'cancelled', 'label' => 'Đã hủy', 'badge' => $bookingListCounts['cancelled'] ?? 0],

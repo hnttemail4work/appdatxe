@@ -30,6 +30,7 @@ class BookingWorkflowService
         private readonly BookingPhoneGuardService $phoneGuard,
         private readonly CancellationReasonService $cancellationReasons,
         private readonly DuplicateBookingService $duplicateBookings,
+        private readonly BookingBrowserGuardService $browserGuard,
     ) {
     }
 
@@ -52,6 +53,15 @@ class BookingWorkflowService
     ): Booking {
         $template->loadMissing(['route', 'vehicle']);
 
+        $pickup = $pickupAddress ?: $template->route?->departure;
+        $dropoff = $dropoffAddress ?: $template->route?->destination;
+
+        if (! $pickup || ! $dropoff) {
+            throw new InvalidArgumentException('Vui lòng chọn điểm đi và điểm đến.');
+        }
+
+        $route = app(BookingRouteService::class)->resolve($pickup, $dropoff);
+
         $schedule = $this->scheduleLifecycle->resolveScheduleForBooking(
             $template,
             $serviceDate,
@@ -60,14 +70,15 @@ class BookingWorkflowService
             1,
             $pickupLat,
             $pickupLng,
+            $route->id,
         );
 
-        $pickup = $pickupAddress ?: $template->route->departure;
-        $dropoff = $dropoffAddress ?: $template->route->destination;
+        $pickup = $pickupAddress ?: $pickup;
+        $dropoff = $dropoffAddress ?: $dropoff;
 
         $existing = $this->findReusablePendingBooking($schedule, $contactPhone);
         if ($existing) {
-            return $this->refreshPendingBooking(
+            $booking = $this->refreshPendingBooking(
                 $existing,
                 $passengerName,
                 $pickupTime,
@@ -82,9 +93,15 @@ class BookingWorkflowService
                 $pickupLat,
                 $pickupLng,
             );
+            try {
+                $this->driverRequests->assignCatalogBooking($booking->fresh(['schedule.route', 'schedule.vehicle']), $template);
+            } catch (InvalidArgumentException) {
+            }
+
+            return $booking;
         }
 
-        return $this->duplicateBookings->withPhoneBookingLock($contactPhone, function () use (
+        $booking = $this->duplicateBookings->withPhoneBookingLock($contactPhone, function () use (
             $schedule,
             $contactPhone,
             $passengerName,
@@ -117,6 +134,14 @@ class BookingWorkflowService
                 $pickupLng,
             );
         });
+
+        try {
+            $this->driverRequests->assignCatalogBooking($booking->fresh(['schedule.route', 'schedule.vehicle']), $template);
+        } catch (InvalidArgumentException) {
+            // Đơn vẫn hiển thị admin — tài xế có thể nhận thủ công.
+        }
+
+        return $booking;
     }
 
     public function createBooking(
@@ -181,8 +206,6 @@ class BookingWorkflowService
 
             return $booking;
         });
-
-        $this->driverRequests->autoAssignForBooking($booking->fresh(['schedule.route', 'schedule.vehicle']));
 
         return $booking;
     }
@@ -251,6 +274,99 @@ class BookingWorkflowService
                 ]);
             }
         });
+
+        $this->browserGuard->clearActiveBookingForBooking($booking->fresh());
+    }
+
+    /** Quá giờ đón mà chưa có tài xế — hủy hệ thống để khách đặt lại, admin thấy tab Đã hủy. */
+    public function cancelPickupTimeout(Booking $booking): void
+    {
+        if (in_array($booking->booking_status, ['cancelled', 'rejected'], true)) {
+            return;
+        }
+
+        if ($booking->hasDriverAccepted()) {
+            return;
+        }
+
+        if (! $booking->isPastPickupTime()) {
+            return;
+        }
+
+        DB::transaction(function () use ($booking): void {
+            $before = $booking->toArray();
+            $schedule = $booking->schedule()->with(['vehicle', 'route'])->first();
+
+            $booking->update([
+                'booking_status'            => 'cancelled',
+                'trip_status'               => 'cancelled',
+                'payment_status'            => $booking->payment_status === 'paid' ? 'refunded' : 'unpaid',
+                'cancelled_at'              => now(),
+                'cancelled_by'              => 'system',
+                'cancellation_reason_label' => 'Quá giờ đón — không có tài xế',
+            ]);
+
+            if ($schedule) {
+                DriverTripRequest::query()
+                    ->where('schedule_id', $schedule->id)
+                    ->where('status', 'pending')
+                    ->update([
+                        'status'       => 'cancelled',
+                        'responded_at' => now(),
+                    ]);
+
+                $this->syncScheduleAvailability($schedule);
+            }
+
+            $this->audit($booking, null, 'booking_cancelled', $before, $booking->fresh()->toArray());
+        });
+
+        $this->browserGuard->clearActiveBookingForBooking($booking->fresh());
+    }
+
+    public function cancelPickupTimeoutIfDue(Booking $booking): bool
+    {
+        $booking = $booking->fresh(['schedule']);
+
+        if ($booking->hasDriverAccepted() || ! $booking->isPastPickupTime()) {
+            return false;
+        }
+
+        if (in_array($booking->booking_status, ['cancelled', 'rejected'], true)
+            || in_array($booking->trip_status, ['completed', 'cancelled'], true)) {
+            return false;
+        }
+
+        $this->cancelPickupTimeout($booking);
+
+        return true;
+    }
+
+    /** @return int Số đơn đã hủy vì quá giờ đón không có tài xế. */
+    public function expirePastPickupWithoutDriver(): int
+    {
+        $cancelled = 0;
+
+        Booking::query()
+            ->with('schedule')
+            ->whereNotIn('booking_status', ['cancelled', 'rejected'])
+            ->whereNotIn('trip_status', ['completed', 'cancelled'])
+            ->whereNull('expired_at')
+            ->when(
+                Schema::hasColumn('bookings', 'assigned_driver_id'),
+                fn ($q) => $q->whereNull('assigned_driver_id'),
+            )
+            ->whereHas('schedule', fn ($q) => $q->whereNull('driver_id'))
+            ->orderBy('id')
+            ->chunkById(50, function ($bookings) use (&$cancelled): void {
+                foreach ($bookings as $booking) {
+                    if ($this->cancelPickupTimeoutIfDue($booking)) {
+                        $cancelled++;
+                    }
+                }
+            });
+
+        return $cancelled;
     }
 
     /** Hết 15 phút tìm tài xế — hủy để khách đặt lại. */
@@ -291,6 +407,8 @@ class BookingWorkflowService
 
             $this->audit($booking, null, 'booking_cancelled', $before, $booking->fresh()->toArray());
         });
+
+        $this->browserGuard->clearActiveBookingForBooking($booking->fresh());
     }
 
     /** Ẩn đơn không gán được TX — hủy hệ thống để khách/TX không còn theo dõi. */
@@ -352,6 +470,8 @@ class BookingWorkflowService
                 }
             }
         });
+
+        $this->browserGuard->clearActiveBookingForBooking($booking->fresh());
     }
 
     /** Tài xế hủy chuyến — đã tắt sau khi nhận cuốc (chỉ từ chối trước khi nhận). */
@@ -564,6 +684,7 @@ class BookingWorkflowService
 
         $this->audit($booking, $driverUserId, 'driver_trip_completed', $before, $booking->fresh()->toArray());
         $this->referralCodes->activateForCompletedBooking($booking);
+        $this->browserGuard->clearActiveBookingForBooking($booking->fresh());
     }
 
     public function assertSeatsAvailable(Schedule $schedule, array $seats): void
@@ -668,6 +789,7 @@ class BookingWorkflowService
 
     public function expireStaleBookings(): void
     {
+        $this->expirePastPickupWithoutDriver();
     }
 
     private function assertContactPhone(Booking $booking, string $phone): void

@@ -12,8 +12,10 @@ use App\Support\VehicleCapacityPricing;
 /** Giá thuê cả xe một chiều theo km / cấu hình template. */
 class TripPricingService
 {
+    /** Giá tham chiếu: thuê cả xe 4 chỗ, ~100 km. */
     public const REFERENCE_WHOLE_CAR = 1_000_000;
     public const REFERENCE_CAPACITY = 4;
+    public const REFERENCE_DISTANCE_KM = 100;
 
     /** @return array<string, mixed> */
     public function quote(
@@ -22,6 +24,11 @@ class TripPricingService
         ?string $dropoff = null,
     ): array {
         $template->loadMissing(['route', 'vehicle']);
+
+        if ($pickup && $dropoff && $template->vehicle) {
+            return $this->quoteForVehicle($template->vehicle, $pickup, $dropoff);
+        }
+
         $wholeCar = $this->oneWayWholeCarPrice($template, $pickup, $dropoff);
         $distance = $this->resolveDistanceKm($template->route, $pickup, $dropoff);
 
@@ -43,6 +50,20 @@ class TripPricingService
     public function oneWayWholeCarPrice(ScheduleTemplate|Schedule $entity, ?string $pickup = null, ?string $dropoff = null): int
     {
         $entity->loadMissing(['route', 'vehicle']);
+        $capacity = $entity instanceof ScheduleTemplate
+            ? $entity->capacity()
+            : (int) ($entity->vehicle?->capacity ?? 4);
+
+        if ($pickup && $dropoff) {
+            $distanceKm = RouteDistanceCatalog::resolveKm($pickup, $dropoff);
+            if ($distanceKm <= 0) {
+                $distanceKm = (int) LocationCatalog::estimateDistanceKm($pickup, $dropoff);
+            }
+            if ($distanceKm > 0) {
+                return $this->wholeCarOneWayFromDistance($distanceKm, $capacity);
+            }
+        }
+
         $configured = (int) ($entity->whole_car_price ?? 0);
 
         if ($configured > 0) {
@@ -51,17 +72,39 @@ class TripPricingService
 
         $distanceKm = $this->resolveDistanceKm($entity->route, $pickup, $dropoff);
         if ($distanceKm > 0) {
-            return $this->wholeCarOneWayFromDistance($distanceKm, $entity->capacity());
+            return $this->wholeCarOneWayFromDistance($distanceKm, $capacity);
         }
 
-        $routeBase = $this->roundToThousand((float) ($entity->route->base_price ?? 0));
+        $routeBase = $this->roundToThousand((float) ($entity->route?->base_price ?? 0));
 
         return max($routeBase, 0);
     }
 
+    /** @return array<string, mixed> */
+    public function quoteForVehicle(
+        \App\Models\Vehicle $vehicle,
+        string $pickup,
+        string $dropoff,
+    ): array {
+        $pickup = trim($pickup);
+        $dropoff = trim($dropoff);
+        $distanceKm = RouteDistanceCatalog::resolveKm($pickup, $dropoff);
+        if ($distanceKm <= 0) {
+            $distanceKm = (int) LocationCatalog::estimateDistanceKm($pickup, $dropoff);
+        }
+
+        $wholeCar = $this->wholeCarOneWayFromDistance(max(1, $distanceKm), (int) $vehicle->capacity);
+
+        return [
+            'distance_km'     => $distanceKm,
+            'whole_car_price' => $wholeCar,
+            'unit_price'      => $wholeCar,
+        ];
+    }
+
     public function wholeCarOneWayFromDistance(float $distanceKm, int $capacity): int
     {
-        $perKm = self::REFERENCE_WHOLE_CAR / max(self::REFERENCE_CAPACITY, 1);
+        $perKm = self::REFERENCE_WHOLE_CAR / max(1, self::REFERENCE_DISTANCE_KM);
         $base = $distanceKm * $perKm;
         $multiplier = VehicleCapacityPricing::multiplierForCapacity($capacity);
 

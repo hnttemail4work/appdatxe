@@ -5,7 +5,7 @@
         </span>
         <span class="customer-scroll-dock-label">Trang</span>
     </button>
-    <button type="button" class="customer-scroll-dock-item customer-scroll-dock-item--primary" data-scroll-target="booking-results-main" aria-label="Danh sách chuyến có thể đặt">
+    <button type="button" class="customer-scroll-dock-item customer-scroll-dock-item--primary" data-scroll-target="booking-results-main" aria-label="Danh sách xe">
         <span class="customer-scroll-dock-icon" aria-hidden="true">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M3 12h18M3 18h12"/></svg>
         </span>

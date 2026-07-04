@@ -7,7 +7,7 @@
             <h2 class="mb-0">Đăng ký tài xế</h2>
         </div>
         <div class="card-body p-4 pt-3">
-            <form method="POST" action="{{ route('register') }}"
+            <form method="POST" action="/register"
                   id="driver-register-form" enctype="multipart/form-data" novalidate autocomplete="off">
                 @csrf
                 <input type="hidden" name="register_mode" value="driver">

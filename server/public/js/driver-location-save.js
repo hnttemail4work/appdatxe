@@ -76,7 +76,16 @@
                 }
                 var data = result.data;
                 setAddressLine(data.address || address);
-                setMetaLine(data.updated_at ? ('Cập nhật ' + data.updated_at) : '');
+                var meta = data.updated_at ? ('Cập nhật ' + data.updated_at) : '';
+                if (data.pickup_proximity_hint) {
+                    meta = (meta ? meta + ' · ' : '') + data.pickup_proximity_hint;
+                } else if (data.pickup_distance_label) {
+                    meta = (meta ? meta + ' · ' : '') + 'Cách điểm đón ~' + data.pickup_distance_label;
+                    if (data.pickup_eta_label) {
+                        meta += ' · dự kiến ' + data.pickup_eta_label;
+                    }
+                }
+                setMetaLine(meta);
                 setHeroReady(true);
                 if (window.DriverAvailabilityToggle && window.DriverAvailabilityToggle.clearLocationSharePrompt) {
                     window.DriverAvailabilityToggle.clearLocationSharePrompt();

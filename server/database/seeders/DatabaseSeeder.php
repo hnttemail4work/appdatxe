@@ -8,6 +8,7 @@ use App\Models\ScheduleTemplate;
 use App\Models\TripRoute;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Services\DriverCatalogService;
 use App\Services\TripPricingService;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -61,47 +62,7 @@ class DatabaseSeeder extends Seeder
             );
         }
 
-        $vehicle = Vehicle::query()->firstOrCreate(
-            ['license_plate' => '51A-12345'],
-            [
-                'operator_id' => $admin->id,
-                'type'        => 'limousine',
-                'capacity'    => 9,
-                'status'      => 'active',
-            ],
-        );
-
-        $vehicle2 = Vehicle::query()->firstOrCreate(
-            ['license_plate' => '51B-67890'],
-            [
-                'operator_id' => $admin->id,
-                'type'        => 'sedan',
-                'capacity'    => 4,
-                'status'      => 'active',
-            ],
-        );
-
-        $vehicle7 = Vehicle::query()->firstOrCreate(
-            ['license_plate' => '51C-11111'],
-            [
-                'operator_id' => $admin->id,
-                'type'        => 'suv',
-                'capacity'    => 7,
-                'status'      => 'active',
-            ],
-        );
-
-        $vehicle16 = Vehicle::query()->firstOrCreate(
-            ['license_plate' => '51D-22222'],
-            [
-                'operator_id' => $admin->id,
-                'type'        => 'limousine',
-                'capacity'    => 16,
-                'status'      => 'active',
-            ],
-        );
-
-        // Tài xế 1
+        // Tài xế 1 — mỗi tài xế một xe (đồng bộ catalog từ hồ sơ)
         $driverUser = User::query()->firstOrCreate(
             ['email' => 'driver@appdatxe.test'],
             [
@@ -129,6 +90,9 @@ class DatabaseSeeder extends Seeder
                 'last_location_at'    => now(),
                 'last_address'        => 'Pasteur, Phường Sài Gòn, Thành phố Hồ Chí Minh',
                 'last_province'       => 'TP.HCM',
+                'vehicle_license_plate' => '51C-11111',
+                'vehicle_type'          => 'suv',
+                'vehicle_seats'         => 7,
             ],
         );
 
@@ -144,7 +108,7 @@ class DatabaseSeeder extends Seeder
             ],
         );
 
-        DriverProfile::query()->firstOrCreate(
+        $driverProfile2 = DriverProfile::query()->firstOrCreate(
             ['user_id' => $driverUser2->id],
             [
                 'operator_id'         => $admin->id,
@@ -160,49 +124,36 @@ class DatabaseSeeder extends Seeder
                 'last_location_at'    => now(),
                 'last_address'        => 'Pasteur, Phường Sài Gòn, Thành phố Hồ Chí Minh',
                 'last_province'       => 'TP.HCM',
+                'vehicle_license_plate' => '51D-22222',
+                'vehicle_type'          => 'limousine',
+                'vehicle_seats'         => 16,
             ],
         );
 
-        // Chỉ 2 chuyến mẫu — admin tự tạo thêm trên dashboard
-        $routes = TripRoute::query()
-            ->whereIn('departure', ['TP.HCM'])
-            ->whereIn('destination', ['Vũng Tàu', 'Đà Lạt'])
-            ->get()
-            ->keyBy(fn ($r) => $r->departure . '|' . $r->destination);
+        $driverProfile->update([
+            'vehicle_license_plate' => '51C-11111',
+            'vehicle_type'          => 'suv',
+            'vehicle_seats'         => 7,
+            'approval_status'       => 'approved',
+            'status'                => 'active',
+        ]);
+        $driverProfile2->update([
+            'vehicle_license_plate' => '51D-22222',
+            'vehicle_type'          => 'limousine',
+            'vehicle_seats'         => 16,
+            'approval_status'       => 'approved',
+            'status'                => 'active',
+        ]);
 
-        $sampleTemplates = [
-            'TP.HCM|Vũng Tàu' => [
-                ['vehicle' => $vehicle7, 'time' => '06:00:00'],
-            ],
-            'TP.HCM|Đà Lạt' => [
-                ['vehicle' => $vehicle16, 'time' => '20:00:00'],
-            ],
-        ];
+        app(DriverCatalogService::class)->syncAllApprovedDrivers();
 
-        $pricing = app(TripPricingService::class);
+        Vehicle::query()
+            ->whereNotIn('license_plate', ['51C-11111', '51D-22222'])
+            ->update(['status' => 'inactive']);
 
-        foreach ($sampleTemplates as $routeKey => $entries) {
-            if (! $routes->has($routeKey)) {
-                continue;
-            }
-            foreach ($entries as $entry) {
-                $capacity = (int) $entry['vehicle']->capacity;
-                $wholeCar = $pricing->defaultWholeCarPrice($capacity);
-
-                ScheduleTemplate::query()->updateOrCreate(
-                    [
-                        'route_id'       => $routes[$routeKey]->id,
-                        'vehicle_id'     => $entry['vehicle']->id,
-                        'departure_time' => $entry['time'],
-                    ],
-                    [
-                        'driver_id'       => null,
-                        'driver_name'     => 'Chờ khách đặt',
-                        'whole_car_price' => $wholeCar,
-                        'status'          => 'active',
-                    ],
-                );
-            }
-        }
+        ScheduleTemplate::query()
+            ->whereNull('driver_id')
+            ->orWhereNotIn('driver_id', [$driverUser->id, $driverUser2->id])
+            ->update(['status' => 'inactive']);
     }
 }

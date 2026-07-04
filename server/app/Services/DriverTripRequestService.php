@@ -8,7 +8,10 @@ use App\Models\Booking;
 use App\Models\DriverProfile;
 use App\Models\DriverTripRequest;
 use App\Models\Schedule;
+use App\Models\ScheduleTemplate;
 use App\Models\TripLedger;
+use App\Support\ProvinceCenters;
+use App\Support\ProvinceResolver;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -98,8 +101,9 @@ class DriverTripRequestService
                 $this->tryReassignAfterDecline($request);
             });
 
-        $this->movementConfirm->expireOverdue();
         $this->expireAbandonedDriverSearches();
+
+        app(BookingWorkflowService::class)->expirePastPickupWithoutDriver();
 
         app(DriverLatePickupService::class)->processDuePrompts();
         app(DriverLatePickupService::class)->expireOverdueContinue();
@@ -293,6 +297,180 @@ class DriverTripRequestService
         }
 
         return null;
+    }
+
+    /** Khách chọn tài xế từ catalog — gửi cuốc thẳng tới tài xế đó (không dò proximity). */
+    public function assignCatalogBooking(Booking $booking, ScheduleTemplate $template): ?DriverTripRequest
+    {
+        $this->expireStale();
+
+        $template->loadMissing('driver');
+        $driverUserId = (int) ($template->driver_id ?? 0);
+
+        if ($driverUserId <= 0) {
+            return $this->autoAssignForBooking($booking);
+        }
+
+        $booking = $booking->fresh(['schedule.route', 'schedule.vehicle', 'schedule.template']);
+        $schedule = $booking->schedule;
+
+        if (! $schedule
+            || $schedule->driver_id
+            || in_array($booking->booking_status, ['cancelled', 'rejected'], true)
+            || $booking->isOperatorDismissed()) {
+            return null;
+        }
+
+        $this->ensureBookingPickupCoordinates($booking);
+        $this->markCatalogBookingSearching($booking);
+
+        $existing = DriverTripRequest::query()
+            ->where('schedule_id', $schedule->id)
+            ->where('contact_phone', $booking->contact_phone)
+            ->whereIn('status', ['pending', 'accepted'])
+            ->first();
+
+        if ($existing) {
+            return $existing;
+        }
+
+        $driver = DriverProfile::query()
+            ->where('user_id', $driverUserId)
+            ->with('user')
+            ->first();
+
+        if (! $driver?->isApproved()) {
+            return null;
+        }
+
+        if (($driver->availability_status ?? 'off_duty') === 'available') {
+            try {
+                return $this->pushCatalogBookingToDriver($schedule, $booking, $driver);
+            } catch (InvalidArgumentException) {
+                // Tài xế sẵn sàng nhưng chưa đủ điều kiện tự nhận — gửi cuốc chờ.
+            }
+        }
+
+        return $this->pushCatalogPendingRequest($schedule, $booking, $driver, catalog: true);
+    }
+
+    private function markCatalogBookingSearching(Booking $booking): void
+    {
+        if ($booking->driver_search_started_at && $booking->operator_confirmed_at) {
+            return;
+        }
+
+        $booking->update([
+            'driver_search_started_at' => $booking->driver_search_started_at ?? now(),
+            'operator_confirmed_at'    => $booking->operator_confirmed_at ?? now(),
+        ]);
+    }
+
+    private function ensureBookingPickupCoordinates(Booking $booking): void
+    {
+        if ($booking->pickup_lat !== null && $booking->pickup_lng !== null) {
+            return;
+        }
+
+        $coords = ProvinceCenters::forProvince(ProvinceResolver::fromBooking($booking));
+
+        if (! $coords) {
+            return;
+        }
+
+        $booking->update([
+            'pickup_lat' => $coords['lat'],
+            'pickup_lng' => $coords['lng'],
+        ]);
+        $booking->pickup_lat = $coords['lat'];
+        $booking->pickup_lng = $coords['lng'];
+    }
+
+    private function pushCatalogBookingToDriver(Schedule $schedule, Booking $booking, DriverProfile $driver): DriverTripRequest
+    {
+        $contactPhone = (string) $booking->contact_phone;
+
+        return DB::transaction(function () use ($schedule, $booking, $driver, $contactPhone): DriverTripRequest {
+            $schedule = Schedule::query()->lockForUpdate()->findOrFail($schedule->id);
+
+            if ($schedule->driver_id) {
+                throw new InvalidArgumentException('Chuyến đã có tài xế.');
+            }
+
+            $driver->loadMissing('user');
+
+            $blockReason = $this->wallets->acceptBlockReason($driver);
+            if ($blockReason) {
+                throw new InvalidArgumentException($blockReason);
+            }
+
+            $this->assertNoAssignmentConflict((int) $driver->user_id, $schedule, $booking);
+
+            DriverTripRequest::query()
+                ->where('schedule_id', $schedule->id)
+                ->where('status', 'pending')
+                ->update([
+                    'status'       => 'cancelled',
+                    'responded_at' => now(),
+                ]);
+
+            $request = DriverTripRequest::query()->create([
+                'schedule_id'   => $schedule->id,
+                'contact_phone' => $contactPhone,
+                'driver_id'     => $driver->user_id,
+                'status'        => 'accepted',
+                'responded_at'  => now(),
+                'expires_at'    => null,
+            ]);
+
+            $schedule->update([
+                'driver_id'    => $driver->user_id,
+                'driver_name'  => $driver->user->name,
+                'driver_stage' => Schedule::DRIVER_STAGE_ASSIGNED,
+            ]);
+
+            $this->anchorAllBookingsForAcceptedSchedule($schedule->fresh());
+
+            return $request;
+        });
+    }
+
+    private function pushCatalogPendingRequest(Schedule $schedule, Booking $booking, DriverProfile $driver, bool $catalog = false): DriverTripRequest
+    {
+        $contactPhone = (string) $booking->contact_phone;
+
+        return DB::transaction(function () use ($schedule, $booking, $driver, $contactPhone, $catalog): DriverTripRequest {
+            $schedule = Schedule::query()->lockForUpdate()->findOrFail($schedule->id);
+
+            if ($schedule->driver_id) {
+                throw new InvalidArgumentException('Chuyến đã có tài xế.');
+            }
+
+            if (! $catalog) {
+                $blockReason = $this->wallets->acceptBlockReason($driver);
+                if ($blockReason) {
+                    throw new InvalidArgumentException($blockReason);
+                }
+            }
+
+            $this->assertNoAssignmentConflict((int) $driver->user_id, $schedule, $booking);
+
+            DriverTripRequest::query()
+                ->where('schedule_id', $schedule->id)
+                ->where('status', 'pending')
+                ->update([
+                    'status'       => 'cancelled',
+                    'responded_at' => now(),
+                ]);
+
+            return DriverTripRequest::query()->create([
+                'schedule_id'   => $schedule->id,
+                'contact_phone' => $contactPhone,
+                'driver_id'     => $driver->user_id,
+                'status'        => 'pending',
+                'expires_at'    => now()->addMinutes(self::OPERATOR_INVITE_ACCEPT_MINUTES),
+            ]);
+        });
     }
 
     /** @param Collection<int, int> $excludeDriverUserIds */
@@ -1039,6 +1217,8 @@ class DriverTripRequestService
             $schedule->fresh(),
             $schedule->driverRelevantBookings()->first(),
         );
+
+        $this->availability->syncAfterTripAssigned($driverUserId);
     }
 
     private function anchorBookingForDriverAccept(

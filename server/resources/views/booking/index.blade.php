@@ -3,46 +3,44 @@
 @section('content')
 @php
 use App\Support\ServiceDate;
-use App\Support\VehicleDisplay;
-use App\Services\TripPricingService;
 
-$pricingService = app(TripPricingService::class);
 $defaultServiceDate = $defaultServiceDate ?? ServiceDate::today();
+$defaultPickupTime = $defaultPickupTime ?? now()->addHour()->format('H:i');
+$defaultPickup = old('pickup_address', 'TP.HCM');
+$defaultDropoff = old('dropoff_address', '');
 
-$bookingRestoreModal = $errors->any() && old('template_id')
-    ? ['template_id' => old('template_id'), 'step' => 2]
+$bookingRestoreModal = $errors->any() && (old('template_id') || old('vehicle_id') || old('driver_profile_id'))
+    ? [
+        'driver_profile_id' => old('driver_profile_id'),
+        'vehicle_id' => old('vehicle_id'),
+        'template_id' => old('template_id'),
+        'step' => 2,
+    ]
     : null;
 
 $bookingReferralSuccess = session('booking_success.referral_code')
     ? [
         'code' => session('booking_success.referral_code'),
-        'url' => session('booking_success.referral_url'),
+        'url' => session('booking_success.referral_url')
+            ?: route('home', ['ref' => session('booking_success.referral_code')]),
         'discount_percent' => session('booking_success.referral_discount_percent'),
         'pending' => session('booking_success.referral_pending', true),
     ]
     : null;
 
-$bookingTemplates = collect($offers instanceof \Illuminate\Contracts\Pagination\Paginator ? $offers->items() : ($offers ?? []))
-    ->map(fn ($offer) => app(\App\Services\TripListingService::class)->serializeOffer($offer, $defaultServiceDate))
-    ->values();
+$bookingTemplates = $driverOffers ?? collect();
 @endphp
 
 <div class="customer-page" id="booking-page-top">
-    @if(session('booking_success'))
-        @php $bookingSuccess = session('booking_success'); @endphp
-        <div class="booking-flash booking-flash-success mb-3 app-flash" id="booking-result-banner" role="alert" data-auto-dismiss="10000">
-            <div class="booking-flash-icon" aria-hidden="true">✓</div>
-            <div class="booking-flash-body">
-                <strong class="booking-flash-title">Đặt chuyến thành công!</strong>
-                <p class="mb-1">Mã chuyến: <span class="booking-ticket-code">{{ $bookingSuccess['trip_code'] ?? '—' }}</span></p>
-                @if(! empty($bookingSuccess['referral_code']))
-                <p class="mb-1 small">Mã giới thiệu: <span class="driver-meta-code">{{ $bookingSuccess['referral_code'] }}</span></p>
-                @endif
-                <p class="mb-0 small booking-flash-note">Tài xế sẽ gọi xác nhận — giữ máy <strong>{{ $bookingSuccess['contact_phone'] ?? '' }}</strong>.</p>
-            </div>
-            @include('partials.flash-close')
+    <div id="booking-browser-guard-banner" class="booking-flash booking-flash-warning mb-3 @if(($browserCancelCount ?? 0) < \App\Services\BookingBrowserGuardService::CANCEL_BLOCK_LIMIT) d-none @endif" role="alert">
+        <div class="booking-flash-icon" aria-hidden="true">!</div>
+        <div class="booking-flash-body">
+            <strong class="booking-flash-title">Chưa thể đặt cuốc mới</strong>
+            <p class="mb-0 small booking-browser-guard-text">{{ app(\App\Services\BookingBrowserGuardService::class)->blockMessage() }}</p>
         </div>
-    @endif
+    </div>
+
+    @include('partials.booking-active-session')
 
     @if($errors->any())
     <div class="alert alert-danger mb-3 booking-flash booking-flash-error app-flash" role="alert">
@@ -56,7 +54,6 @@ $bookingTemplates = collect($offers instanceof \Illuminate\Contracts\Pagination\
 
     <div class="customer-hero mb-4">
         <h1>Đặt xe liên tỉnh</h1>
-        <p>Chọn xe và đặt chuyến — tài xế sẽ liên hệ xác nhận.</p>
         @if($appliedReferral ?? null)
             <div class="small mt-2">
                 Giới thiệu: <strong>{{ $appliedReferral->name }}</strong>
@@ -71,46 +68,50 @@ $bookingTemplates = collect($offers instanceof \Illuminate\Contracts\Pagination\
     </div>
 
     <div id="booking-results-main" class="booking-results-main">
-        <h2 class="booking-list-title h5 mb-3">Xe sẵn sàng <span class="status-pill status-pill--gold">{{ $offers->total() }}</span></h2>
+        <h2 class="booking-list-title h5 mb-3">Danh sách tài xế <span class="status-pill status-pill--gold" id="vehicle-count">{{ $driverOffers->count() }}</span></h2>
 
         <div id="trips-list">
-            @forelse($offers as $offer)
+            @forelse($driverOffers as $offer)
             @php
-                $quote = $pricingService->quote($offer);
-                $vehiclePhotoUrl = VehicleDisplay::photoFromVehicle($offer->vehicle);
-                $vehicleLabel = VehicleDisplay::labelFromVehicle($offer->vehicle);
-                $priceLabel = number_format($quote['whole_car_price'], 0, ',', '.') . ' đ';
+                $vehiclePhotoUrl = $offer['vehicle_photo'] ?? null;
+                $capacityLabel = $offer['capacity_label'] ?? '—';
+                $driverName = $offer['driver_name'] ?? '—';
+                $bookingActionLabel = $offer['booking_action_label'] ?? 'Đặt sau';
+                $bookingActionTone = $offer['booking_action_tone'] ?? 'pending';
+                $typeLabel = $offer['type_label'] ?? '—';
+                $licensePlate = $offer['license_plate'] ?? '—';
+                $offerLabel = $offer['offer_label'] ?? collect([$driverName, $licensePlate, $typeLabel, $capacityLabel])->filter(fn ($p) => filled($p) && $p !== '—')->implode(' - ');
             @endphp
-            <article class="trip-card-pro" data-template-id="{{ $offer->id }}">
-                <div class="trip-card-layout">
+            <article class="trip-card-pro" data-driver-profile-id="{{ $offer['driver_profile_id'] }}">
+                <div class="trip-card-layout trip-card-layout--catalog">
                     <div class="trip-vehicle-thumb" aria-hidden="true">
                         @if($vehiclePhotoUrl)
                             <img src="{{ $vehiclePhotoUrl }}" alt="" class="trip-vehicle-photo" loading="lazy" decoding="async">
                         @else
-                            <div class="trip-vehicle-photo trip-vehicle-photo--empty">{{ strtoupper(substr($offer->vehicle->type ?? 'X', 0, 1)) }}</div>
+                            <div class="trip-vehicle-photo trip-vehicle-photo--empty">{{ strtoupper(substr($offer['vehicle_type'] ?? 'X', 0, 1)) }}</div>
                         @endif
                     </div>
                     <div class="trip-card-body">
-                        <div class="trip-route-line">
-                            <span class="city">{{ $offer->route->departure }}</span>
-                            <span class="arrow">→</span>
-                            <span class="city">{{ $offer->route->destination }}</span>
-                        </div>
-                        <div class="small text-muted mb-1">{{ $vehicleLabel }}</div>
-                        <div class="trip-card-prices">
-                            <span class="trip-price-amount">{{ $priceLabel }}</span>
+                        <div class="trip-card-head">
+                            <div class="trip-card-head-main">
+                                <div class="trip-card-plate trip-vehicle-plate">{{ $licensePlate }}</div>
+                                <div class="trip-card-driver-line">{{ $driverName }} · {{ $typeLabel }} · {{ $capacityLabel }}</div>
+                            </div>
+                            <span class="status-pill status-pill--{{ $bookingActionTone }}">{{ $bookingActionLabel }}</span>
                         </div>
                     </div>
                     <div class="trip-card-side">
                         <button type="button" class="btn btn-outline-primary btn-book fw-semibold"
                             data-open-booking
-                            data-template-id="{{ $offer->id }}"
-                            data-route="{{ $offer->route->departure }} → {{ $offer->route->destination }}"
-                            data-vehicle-label="{{ $vehicleLabel }}"
+                            data-driver-profile-id="{{ $offer['driver_profile_id'] }}"
+                            data-vehicle-id="{{ $offer['vehicle_id'] ?? '' }}"
+                            data-template-id="{{ $offer['template_id'] ?? '' }}"
+                            data-license-plate="{{ $offer['license_plate'] }}"
+                            data-capacity-label="{{ $capacityLabel }}"
+                            data-type-label="{{ $typeLabel }}"
                             data-vehicle-photo="{{ $vehiclePhotoUrl ?? '' }}"
-                            data-price="{{ $quote['whole_car_price'] }}"
-                            data-pickup-default="{{ $offer->route->departure }}"
-                            data-dropoff-default="{{ $offer->route->destination }}">
+                            data-driver-name="{{ $driverName }}"
+                            data-offer-label="{{ $offerLabel }}">
                             Đặt xe
                         </button>
                     </div>
@@ -118,13 +119,11 @@ $bookingTemplates = collect($offers instanceof \Illuminate\Contracts\Pagination\
             </article>
             @empty
             <div class="booking-empty-state">
-                <h3 class="h6 fw-bold">Chưa có xe</h3>
-                <p class="text-muted small mb-0">Liên hệ tổng đài {{ config('app.contact_phone') }}.</p>
+                <h3 class="h6 fw-bold">Chưa có tài xế</h3>
+                <p class="text-muted small mb-0">Chưa có tài xế đã duyệt với đủ thông tin xe. Liên hệ tổng đài {{ config('app.contact_phone') }}.</p>
             </div>
             @endforelse
         </div>
-
-        @include('partials.pagination', ['paginator' => $offers])
     </div>
 
     @include('partials.customer-scroll-dock')
@@ -137,6 +136,9 @@ $bookingTemplates = collect($offers instanceof \Illuminate\Contracts\Pagination\
             <form method="POST" action="{{ route('booking.store') }}" id="booking-form" class="booking-modal-form" novalidate>
                 @csrf
                 <input type="hidden" name="template_id" id="modal-template-id">
+                <input type="hidden" name="vehicle_id" id="modal-vehicle-id">
+                <input type="hidden" name="driver_profile_id" id="modal-driver-profile-id">
+                <input type="hidden" name="booking_browser_id" id="booking-browser-id" value="">
 
                 <div class="modal-header border-0 p-0 booking-modal-header">
                     <div class="booking-modal-header-inner w-100">
@@ -150,8 +152,8 @@ $bookingTemplates = collect($offers instanceof \Illuminate\Contracts\Pagination\
                         <div class="booking-trip-banner">
                             <div id="modal-vehicle-photo-wrap" class="booking-modal-vehicle-photo d-none"></div>
                             <div class="booking-trip-banner-copy">
-                                <div class="booking-trip-banner-route" id="modal-route">—</div>
-                                <div class="small text-muted" id="modal-vehicle-label">—</div>
+                                <div class="booking-trip-banner-route" id="modal-route"></div>
+                                <div class="small" id="modal-vehicle-meta"></div>
                             </div>
                         </div>
                     </div>
@@ -160,9 +162,29 @@ $bookingTemplates = collect($offers instanceof \Illuminate\Contracts\Pagination\
                 <div class="modal-body pt-0 booking-modal-body">
                     <div id="booking-step-1">
                         <div class="booking-sheet-section">
+                            <div class="booking-panel-label mb-3">Hành trình</div>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label" for="modal-pickup">Điểm đi <span class="text-danger">*</span></label>
+                                    <select name="pickup_address" id="modal-pickup" class="form-select" required>
+                                        <option value="">— Chọn tỉnh/thành —</option>
+                                        @include('partials.province-options', ['selected' => $defaultPickup])
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label" for="modal-dropoff">Điểm đến <span class="text-danger">*</span></label>
+                                    <select name="dropoff_address" id="modal-dropoff" class="form-select" required>
+                                        <option value="">— Chọn tỉnh/thành —</option>
+                                        @include('partials.province-options', ['selected' => $defaultDropoff])
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="booking-sheet-section">
                             <div class="row g-3">
                                 <div class="col-6">
-                                    <label class="form-label" for="modal-service-date">Ngày đi</label>
+                                    <label class="form-label" for="modal-service-date">Ngày đi <span class="text-danger">*</span></label>
                                     <input type="date" name="service_date" id="modal-service-date" class="form-control" required
                                            min="{{ now()->toDateString() }}" value="{{ old('service_date', $defaultServiceDate) }}">
                                 </div>
@@ -170,20 +192,18 @@ $bookingTemplates = collect($offers instanceof \Illuminate\Contracts\Pagination\
                                     @include('partials.vi-pickup-time-input', [
                                         'name' => 'pickup_time',
                                         'id' => 'modal-pickup-time',
-                                        'value' => old('pickup_time', ''),
+                                        'value' => old('pickup_time', $defaultPickupTime),
                                         'label' => 'Giờ đón',
-                                        'required' => false,
+                                        'required' => true,
                                     ])
                                 </div>
                             </div>
                         </div>
 
                         <div class="booking-sheet-section">
-                            <div class="booking-panel-label">Địa điểm</div>
-                            <input type="hidden" name="pickup_address" id="modal-pickup" value="{{ old('pickup_address') }}">
+                            <div class="booking-panel-label">Địa chỉ cụ thể</div>
                             <input type="hidden" name="pickup_lat" id="modal-pickup-lat" value="{{ old('pickup_lat') }}">
                             <input type="hidden" name="pickup_lng" id="modal-pickup-lng" value="{{ old('pickup_lng') }}">
-                            <input type="hidden" name="dropoff_address" id="modal-dropoff" value="{{ old('dropoff_address') }}">
 
                             <div class="booking-address-card">
                                 <div class="booking-address-row">
@@ -225,8 +245,8 @@ $bookingTemplates = collect($offers instanceof \Illuminate\Contracts\Pagination\
                         <div class="booking-sheet-section booking-summary-card">
                             <div class="d-flex justify-content-between align-items-start gap-3">
                                 <div>
-                                    <div class="fw-bold" id="modal-route-step2">—</div>
-                                    <div class="small text-muted" id="modal-vehicle-step2">—</div>
+                                    <div class="fw-bold" id="modal-route-step2"></div>
+                                    <div class="small text-muted" id="modal-vehicle-step2"></div>
                                 </div>
                                 <div class="text-end">
                                     <div class="small text-muted">Tổng tiền</div>
@@ -263,7 +283,10 @@ $bookingTemplates = collect($offers instanceof \Illuminate\Contracts\Pagination\
                 </div>
 
                 <div class="modal-footer border-0 booking-modal-footer" id="modal-footer-step1">
-                    <div class="booking-footer-price fw-semibold" id="modal-total-price-step1">0 đ</div>
+                    <div class="booking-footer-price-wrap text-end me-auto">
+                        <div class="small text-muted">Tạm tính</div>
+                        <div class="booking-footer-price fw-semibold" id="modal-total-price-step1"></div>
+                    </div>
                     <button type="button" class="btn btn-primary fw-semibold px-4" id="modal-next-btn">Tiếp tục</button>
                 </div>
                 <div class="modal-footer border-0 booking-modal-footer d-none" id="modal-footer-step2">
@@ -276,9 +299,6 @@ $bookingTemplates = collect($offers instanceof \Illuminate\Contracts\Pagination\
 </div>
 
 @include('partials.address-map-picker-modal')
-@if(session('booking_success.referral_code'))
-    @include('partials.booking-referral-success-modal')
-@endif
 @endsection
 
 @push('styles')
@@ -295,15 +315,18 @@ window.__geocodeSearchUrl = @json(route('geocode.search'));
 window.__bookingTemplates = @json($bookingTemplates);
 window.__bookingRestoreModal = @json($bookingRestoreModal);
 window.__defaultServiceDate = @json($defaultServiceDate);
+window.__defaultPickupTime = @json($defaultPickupTime);
 window.__referralDiscountPercent = @json($referralDiscountMeta['percent'] ?? 0);
 window.__referralHasCode = @json((bool) ($appliedReferral ?? null));
 window.__bookingReferralSuccess = @json($bookingReferralSuccess);
+window.__bookingSuccess = @json(session('booking_success'));
+window.__guestBrowserCancelCount = @json((int) ($browserCancelCount ?? session('guest_browser_cancel_count', 0)));
+window.__guestBrowserCancelBlockLimit = @json(\App\Services\BookingBrowserGuardService::CANCEL_BLOCK_LIMIT);
 </script>
+<script src="{{ asset('js/booking-browser-guard.js') }}?v={{ filemtime(public_path('js/booking-browser-guard.js')) }}"></script>
+<script src="{{ asset('js/booking-active-session.js') }}?v={{ filemtime(public_path('js/booking-active-session.js')) }}"></script>
 <script src="{{ asset('js/geocode-address-autocomplete.js') }}?v={{ filemtime(public_path('js/geocode-address-autocomplete.js')) }}"></script>
 <script src="{{ asset('js/customer-booking.js') }}?v={{ filemtime(public_path('js/customer-booking.js')) }}"></script>
 <script src="{{ asset('js/customer-scroll-dock.js') }}?v={{ filemtime(public_path('js/customer-scroll-dock.js')) }}"></script>
-@if(session('booking_success.referral_code'))
-<script src="{{ asset('js/booking-referral-success.js') }}?v={{ filemtime(public_path('js/booking-referral-success.js')) }}"></script>
-@endif
 <script src="{{ asset('js/address-map-picker.js') }}?v={{ filemtime(public_path('js/address-map-picker.js')) }}"></script>
 @endpush

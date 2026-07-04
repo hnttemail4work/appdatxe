@@ -91,6 +91,19 @@ class Schedule extends Model
                 ->first();
         }
 
+        $this->loadMissing('template');
+
+        if ($this->template?->driver_id) {
+            $catalogDriver = DriverProfile::query()
+                ->where('user_id', $this->template->driver_id)
+                ->with('user')
+                ->first();
+
+            if ($catalogDriver) {
+                return $catalogDriver;
+            }
+        }
+
         $pendingDriverId = $this->driverTripRequests()
             ->where('status', 'pending')
             ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
@@ -115,6 +128,28 @@ class Schedule extends Model
     public function shortTripCode(): string
     {
         return \App\Support\TripCode::short($this->trip_code);
+    }
+
+    public function routeDepartureLabel(): string
+    {
+        if ($this->route?->departure) {
+            return (string) $this->route->departure;
+        }
+
+        $booking = $this->driverRelevantBookings()->first();
+
+        return $booking?->pickup_address ? (string) $booking->pickup_address : '—';
+    }
+
+    public function routeDestinationLabel(): string
+    {
+        if ($this->route?->destination) {
+            return (string) $this->route->destination;
+        }
+
+        $booking = $this->driverRelevantBookings()->first();
+
+        return $booking?->dropoff_address ? (string) $booking->dropoff_address : '—';
     }
 
     public function tripMetaLabel(): string

@@ -23,6 +23,13 @@ class DriverProfileSyncService
             $profile->update($profileUpdates);
             $profile->user->update(['status' => $status]);
         });
+
+        $profile->refresh();
+        if ($status === 'active') {
+            app(DriverCatalogService::class)->syncCatalogForDriver($profile);
+        } else {
+            app(DriverCatalogService::class)->deactivateCatalogForDriver($profile);
+        }
     }
 
     public function approve(DriverProfile $profile, ?int $operatorId = null): void
@@ -43,6 +50,8 @@ class DriverProfileSyncService
             $profile->update($updates);
             $profile->user->update(['status' => 'active']);
         });
+
+        app(DriverCatalogService::class)->syncCatalogForDriver($profile->fresh());
     }
 
     public function reject(DriverProfile $profile, ?string $reason = null): void
@@ -58,6 +67,8 @@ class DriverProfileSyncService
             ]);
             $profile->user->update(['status' => 'inactive']);
         });
+
+        app(DriverCatalogService::class)->deactivateCatalogForDriver($profile->fresh());
     }
 
     public function clearRejectionNote(DriverProfile $profile): void
@@ -120,6 +131,9 @@ class DriverProfileSyncService
         if ($status !== null) {
             $this->setAccountStatus($profile, $status);
         }
+
+        $profile->refresh();
+        app(DriverCatalogService::class)->syncCatalogForDriver($profile);
     }
 
     /** @param  array<string, mixed>  $validated */
@@ -153,6 +167,7 @@ class DriverProfileSyncService
 
         if ($userData !== []) {
             $profile->user->update($userData);
+            app(DriverCatalogService::class)->syncCatalogForDriver($profile->fresh());
         }
     }
 }

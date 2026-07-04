@@ -10,11 +10,15 @@ use App\Support\DepartureTimeDisplay;
 use App\Support\ServiceDate;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use InvalidArgumentException;
 
 class DriverAvailabilityService
 {
     public const MIN_PICKUP_LEAD_MINUTES = 30;
+
+    /** Thời gian coi tài xế còn "online" trên web sau lần tương tác cuối. */
+    public const WEB_PRESENCE_MINUTES = 15;
 
     /** Thời gian nghỉ / quay về hub sau khi kết thúc chuyến trước khi nhận chuyến tiếp theo. */
     public const MIN_TURNAROUND_MINUTES = 60;

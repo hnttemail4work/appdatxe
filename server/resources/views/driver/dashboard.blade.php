@@ -24,13 +24,19 @@
     $driverLocationAddress = $profile?->last_address;
     $driverLocationUpdated = ($profile?->last_location_at ?? null)?->format('H:i, d/m/Y');
     $availabilityStatus = $profile?->availability_status ?? 'off_duty';
-    $driverOnTrip = ($driverOnTrip ?? false)
-        || $tripSchedules->contains(fn ($schedule) => in_array($schedule->driverWorkflowPhase(), ['upcoming', 'active'], true));
+    $driverTripActive = $driverTripActive ?? false;
+    $driverTripUpcoming = $driverTripUpcoming ?? false;
+    $driverOnTrip = $driverOnTrip ?? $driverTripActive;
     $driverPaused = $availabilityStatus === 'off_duty';
     $driverLocationReady = ! $driverPaused && $profile && $profile->hasFreshLocation();
-    $driverNeedsLocationShare = $profile && ! $driverOnTrip && ! $driverPaused && ! $driverLocationReady;
+    $driverNeedsLocationShare = $profile
+        && ! $driverPaused
+        && ! $driverLocationReady
+        && ($driverTripUpcoming || ! $driverOnTrip);
 
-    $heroStatus = $profile ? $profile->heroStatusMeta($driverOnTrip) : ['key' => 'offline', 'label' => ''];
+    $heroStatus = $profile
+        ? $profile->heroStatusMeta($driverTripActive, $driverTripUpcoming)
+        : ['key' => 'offline', 'label' => ''];
 @endphp
 
 <div class="driver-page" data-driver-tabs data-driver-tabs-active="{{ $driverDefaultTab }}" data-driver-tabs-base="{{ route('driver.dashboard') }}" data-wait-progress-root>
@@ -137,10 +143,16 @@
     <section class="driver-location-sheet mb-3{{ $driverNeedsLocationShare ? ' driver-location-sheet--needs-share' : '' }}" id="driver-location-bar" aria-label="Vị trí hiện tại"
              data-driver-paused="{{ $driverPaused ? '1' : '0' }}"
              data-driver-on-trip="{{ $driverOnTrip ? '1' : '0' }}"
+             data-driver-trip-active="{{ $driverTripActive ? '1' : '0' }}"
+             data-driver-trip-upcoming="{{ $driverTripUpcoming ? '1' : '0' }}"
              data-needs-location="{{ $driverNeedsLocationShare ? '1' : '0' }}">
         @if($driverNeedsLocationShare)
             <div class="driver-location-share-prompt" id="driver-location-share-prompt" role="status">
-                Chọn hoặc nhập vị trí trên bản đồ để nhận cuốc gần bạn.
+                @if($driverTripUpcoming)
+                    Chia sẻ vị trí để khách biết bạn còn bao nhiêu km đến điểm đón.
+                @else
+                    Chọn hoặc nhập vị trí trên bản đồ để nhận cuốc gần bạn.
+                @endif
             </div>
         @endif
         <div class="driver-location-sheet-top {{ $driverPaused ? 'is-disabled' : '' }}">

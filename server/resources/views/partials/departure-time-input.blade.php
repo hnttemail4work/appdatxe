@@ -1,4 +1,6 @@
 @php
+use App\Support\DepartureTimeDisplay;
+
 /** @var string $name */
 /** @var string $id */
 /** @var string|null $value */
@@ -9,13 +11,16 @@ $value = $value ?? '';
 $required = $required ?? true;
 $label = $label ?? 'Giờ khởi hành';
 $hint = $hint ?? '';
+$displayValue = $value !== '' && $value !== null
+    ? DepartureTimeDisplay::normalizeForClock($value)
+    : '';
 @endphp
 <label class="form-label" for="{{ $id }}">{{ $label }}@if($required) <span class="text-danger">*</span>@endif</label>
 <input type="time" name="{{ $name }}" id="{{ $id }}"
        class="form-control @error($name) is-invalid @enderror"
        @if($required) required @endif
        data-validate-label="{{ $label }}"
-       value="{{ $value }}">
+       value="{{ old($name, $displayValue) }}">
 @if(($name ?? 'departure_time') === 'departure_time' && $hint !== '')
 <div class="form-text">{{ $hint }}</div>
 @endif

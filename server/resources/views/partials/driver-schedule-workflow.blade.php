@@ -52,8 +52,16 @@ $currentOrder = $order[$highlightStage] ?? 0;
     @include('partials.wait-progress', ['waitProgress' => $waitProgress, 'variant' => 'driver'])
 
     @php
-        $latePickupPrompt = app(\App\Services\DriverLatePickupService::class)->latePickupPromptPayload($schedule);
+        $latePickup = app(\App\Services\DriverLatePickupService::class);
+        $departReminder = $latePickup->departReminderPayload($schedule);
+        $latePickupPrompt = $latePickup->latePickupPromptPayload($schedule);
     @endphp
+    @if($departReminder)
+        <div class="driver-pickup-reminder mb-2" role="status">
+            <strong>{{ $departReminder['message'] }}</strong>
+            <p class="mb-0 small">{{ $departReminder['hint'] }}</p>
+        </div>
+    @endif
     @if($latePickupPrompt && ($latePickupPrompt['active'] ?? false))
         <div class="driver-late-pickup-banner mb-2" data-schedule-id="{{ $schedule->id }}" data-late-pickup-banner>
             <strong>{{ $latePickupPrompt['message'] }}</strong>

@@ -123,6 +123,31 @@ class ReferralCodeService
         return preg_replace('/\D/', '', $phone);
     }
 
+    /** So khớp SĐT theo 9 số cuối (0xxx / +84xxx). */
+    public function phonesMatch(?string $a, ?string $b): bool
+    {
+        $da = self::normalizePhone((string) $a);
+        $db = self::normalizePhone((string) $b);
+
+        if ($da === '' || $db === '') {
+            return false;
+        }
+
+        $sa = strlen($da) >= 9 ? substr($da, -9) : $da;
+        $sb = strlen($db) >= 9 ? substr($db, -9) : $db;
+
+        return $sa === $sb;
+    }
+
+    public function isReferrerPhone(?ReferralCode $referral, ?string $contactPhone): bool
+    {
+        if (! $referral || $contactPhone === null || trim($contactPhone) === '') {
+            return false;
+        }
+
+        return $this->phonesMatch($referral->phone, $contactPhone);
+    }
+
     public function phoneHasUsedReferralBefore(string $contactPhone): bool
     {
         $digits = self::normalizePhone($contactPhone);
@@ -163,6 +188,10 @@ class ReferralCodeService
             return false;
         }
 
+        if ($this->isReferrerPhone($referral, $contactPhone)) {
+            return false;
+        }
+
         if ($referral->type === ReferralCode::TYPE_REFERRER) {
             return true;
         }
@@ -182,6 +211,10 @@ class ReferralCodeService
 
         if ($contactPhone === null || $contactPhone === '') {
             return true;
+        }
+
+        if ($this->isReferrerPhone($referral, $contactPhone)) {
+            return false;
         }
 
         return ! $this->phoneHasUsedReferralBefore($contactPhone);
@@ -223,6 +256,17 @@ class ReferralCodeService
                 ];
             }
 
+            if ($contactPhone !== null && $contactPhone !== '' && $this->isReferrerPhone($referral, $contactPhone)) {
+                return [
+                    'percent'          => 0.0,
+                    'eligible'         => false,
+                    'reason'           => 'SĐT đặt trùng với chủ mã giới thiệu — không áp dụng giảm giá.',
+                    'code'             => $referral->code,
+                    'type'             => $referral->type,
+                    'attribution_only' => true,
+                ];
+            }
+
             if ($contactPhone !== null && $contactPhone !== '' && $this->phoneHasUsedReferralBefore($contactPhone)) {
                 return [
                     'percent'          => 0.0,
@@ -238,6 +282,17 @@ class ReferralCodeService
                 'percent'          => $percent,
                 'eligible'         => true,
                 'reason'           => null,
+                'code'             => $referral->code,
+                'type'             => $referral->type,
+                'attribution_only' => false,
+            ];
+        }
+
+        if ($contactPhone !== null && $contactPhone !== '' && $this->isReferrerPhone($referral, $contactPhone)) {
+            return [
+                'percent'          => 0.0,
+                'eligible'         => false,
+                'reason'           => 'SĐT đặt trùng với chủ mã giới thiệu — không áp dụng giảm giá.',
                 'code'             => $referral->code,
                 'type'             => $referral->type,
                 'attribution_only' => false,

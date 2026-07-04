@@ -14,9 +14,15 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        // URL khớp host đang truy cập (127.0.0.1 vs localhost) — tránh lỗi CSRF 419
         if (! $this->app->runningInConsole() && request()->hasHeader('Host')) {
             URL::forceRootUrl(request()->getSchemeAndHttpHost());
+        }
+
+        if ($this->app->environment('local')) {
+            config([
+                'session.secure' => false,
+                'session.same_site' => 'lax',
+            ]);
         }
 
         if (! file_exists(public_path('storage')) && $this->app->environment('local')) {

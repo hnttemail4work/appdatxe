@@ -456,6 +456,18 @@ body:has(.driver-page) {
     color: #fde68a;
 }
 
+.driver-pickup-reminder {
+    padding: .65rem .75rem;
+    border-radius: .65rem;
+    background: rgba(59, 130, 246, .1);
+    border: 1px solid rgba(59, 130, 246, .25);
+    color: #dbeafe;
+}
+
+.driver-pickup-reminder strong {
+    color: #fff;
+}
+
 .driver-hero-title-row {
     display: flex;
     flex-wrap: wrap;
@@ -620,6 +632,12 @@ body:has(.driver-page) {
     background: rgba(59, 130, 246, .12);
     color: #93c5fd;
     border: 1px solid rgba(59, 130, 246, .25);
+}
+
+.driver-status-pill--assigned {
+    background: rgba(234, 179, 8, .12);
+    color: #fde68a;
+    border: 1px solid rgba(234, 179, 8, .25);
 }
 
 .driver-status-pill--busy {

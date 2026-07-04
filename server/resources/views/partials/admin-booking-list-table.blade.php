@@ -56,7 +56,6 @@ $showFeedbackColumn = $bookingList === 'feedback';
                     <th>Ghế</th>
                     <th>Tổng tiền</th>
                     <th>Giới thiệu</th>
-                    <th>Trạng thái</th>
                     @if($showFeedbackColumn)
                     <th>Phản hồi</th>
                     @endif
@@ -80,7 +79,7 @@ $showFeedbackColumn = $bookingList === 'feedback';
                         @include('partials.admin-booking-customer', ['booking' => $booking, 'showTripReview' => false])
                     </td>
                     <td>
-                        <div class="fw-semibold">{{ $booking->schedule->route->departure }} → {{ $booking->schedule->route->destination }}</div>
+                        <div class="fw-semibold">{{ $booking->schedule->routeDepartureLabel() }} → {{ $booking->schedule->routeDestinationLabel() }}</div>
                         @if($booking->schedule->shortTripCode())
                             <div class="cell-muted small">Mã chuyến: {{ $booking->schedule->shortTripCode() }}</div>
                         @endif
@@ -92,11 +91,8 @@ $showFeedbackColumn = $bookingList === 'feedback';
                         @else
                             <div class="cell-muted small">Giờ chạy: {{ $booking->schedule->departure_time->format('H:i') }}</div>
                         @endif
-                        @if($expectedComplete = $booking->expectedTripCompletionAt())
-                            <div class="cell-muted small">Dự kiến hoàn thành: {{ $expectedComplete->format('H:i, d/m/Y') }}</div>
-                        @endif
-                        @if($booking->trip_status === 'completed' && $booking->completed_at)
-                            <div class="cell-muted small">Hoàn thành: {{ $booking->completed_at->format('H:i, d/m/Y') }}</div>
+                        @if($bookingList === 'cancelled')
+                            @include('partials.booking-cancel-detail', ['booking' => $booking])
                         @endif
                     </td>
                     <td class="small">
@@ -120,7 +116,6 @@ $showFeedbackColumn = $bookingList === 'feedback';
                             —
                         @endif
                     </td>
-                    <td>@include('partials.booking-status-admin', ['booking' => $booking])</td>
                     @if($showFeedbackColumn)
                     <td class="small">
                         @if($review = $booking->tripReview)

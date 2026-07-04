@@ -218,6 +218,42 @@ class Booking extends Model
         return $this->schedule->departure_time?->copy();
     }
 
+    public function isPastPickupTime(): bool
+    {
+        $pickupAt = $this->tripStartAt();
+
+        return $pickupAt !== null && $pickupAt->lte(now());
+    }
+
+    /**
+     * Cuốc này còn chặn khách đặt thêm (SĐT / trình duyệt).
+     * Cho đặt lại khi: đã hủy, hoàn tất, hết hạn, admin ẩn, hoặc đã qua giờ đón.
+     */
+    public function blocksGuestRebooking(): bool
+    {
+        if (in_array($this->booking_status, ['cancelled', 'rejected'], true)) {
+            return false;
+        }
+
+        if (in_array($this->trip_status, ['completed', 'cancelled'], true)) {
+            return false;
+        }
+
+        if ($this->isExpired()) {
+            return false;
+        }
+
+        if (static::supportsOperatorDismiss() && $this->isOperatorDismissed()) {
+            return false;
+        }
+
+        if ($this->isPastPickupTime()) {
+            return false;
+        }
+
+        return true;
+    }
+
     public function expectedTripDurationMinutes(): int
     {
         $km = $this->tripDistanceKm();
@@ -451,7 +487,25 @@ class Booking extends Model
     {
         $this->loadMissing('schedule');
 
-        return $this->schedule && (bool) $this->schedule->driver_id;
+        return $this->resolveAssignedDriverId($this->schedule) !== null;
+    }
+
+    private function awaitingDriverLabel(): string
+    {
+        $this->loadMissing('schedule.template', 'schedule.driverTripRequests');
+
+        if ($this->schedule?->driverTripRequests
+            ?->where('status', 'pending')
+            ->filter(fn ($request) => $request->expires_at === null || $request->expires_at->isFuture())
+            ->isNotEmpty()) {
+            return 'Chờ tài xế nhận';
+        }
+
+        if ($this->schedule?->designatedDriverProfile()) {
+            return 'Chờ tài xế nhận';
+        }
+
+        return 'Đang tìm tài xế';
     }
 
     public function bookingModeLabel(): string
@@ -512,7 +566,7 @@ class Booking extends Model
         }
 
         if (! $this->hasDriverAccepted()) {
-            return 'Đang tìm tài xế';
+            return $this->awaitingDriverLabel();
         }
 
         $this->loadMissing('schedule');
@@ -543,7 +597,7 @@ class Booking extends Model
         }
 
         if (! $this->hasDriverAccepted()) {
-            return 'Đang tìm tài xế';
+            return $this->awaitingDriverLabel();
         }
 
         $this->loadMissing('schedule');
@@ -717,8 +771,7 @@ class Booking extends Model
                 ->whereHas('tripReview'),
             default => $query
                 ->whereNotIn('booking_status', ['cancelled', 'rejected'])
-                ->where('trip_status', '!=', 'completed')
-                ->whereHas('schedule', fn (Builder $s) => $s->whereNotNull('driver_id')),
+                ->where('trip_status', '!=', 'completed'),
         };
     }
 

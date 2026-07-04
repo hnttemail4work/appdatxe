@@ -11,10 +11,12 @@ use App\Models\Schedule;
 use App\Support\DriverFieldRules;
 use App\Services\BookingWorkflowService;
 use App\Services\DriverAvailabilityService;
-use App\Services\DriverLatePickupService;
+use App\Services\DriverCancelRateService;
 use App\Services\DriverMissedTripService;
 use App\Services\DriverPhotoService;
 use App\Services\DriverProfileSyncService;
+use App\Services\DriverProximityService;
+use App\Services\GuestBookingDriverStatusService;
 use App\Services\DriverTripRequestService;
 use App\Services\DriverWalletService;
 use App\Services\ScheduleLifecycleService;
@@ -37,6 +39,8 @@ class DriverController extends Controller
         private readonly DriverCancelRateService $cancelRates,
         private readonly DriverWalletService $driverWallet,
         private readonly DriverLatePickupService $latePickup,
+        private readonly DriverProximityService $proximity,
+        private readonly GuestBookingDriverStatusService $guestDriverStatus,
     ) {
     }
 
@@ -105,7 +109,13 @@ class DriverController extends Controller
         $tripHistory = PageList::paginateCollection($tripHistoryAll, $request, 'history_page');
 
         $tripActionCount = $this->driverRequests->tripActionCountForDriver($user->id);
-        $driverOnTrip = $tripActionCount > 0;
+        $driverTripActive = $tripSchedulesAll->contains(
+            fn (Schedule $schedule): bool => $schedule->driverWorkflowPhase() === 'active',
+        );
+        $driverTripUpcoming = $tripSchedulesAll->contains(
+            fn (Schedule $schedule): bool => $schedule->driverWorkflowPhase() === 'upcoming',
+        );
+        $driverOnTrip = $driverTripActive;
 
         $pendingTripRequestGroups = $this->driverRequests->visiblePendingGroupsForDriver($user->id);
 
@@ -130,6 +140,8 @@ class DriverController extends Controller
             'tripSchedules',
             'tripActionCount',
             'driverOnTrip',
+            'driverTripActive',
+            'driverTripUpcoming',
             'tripHistory',
             'pendingTripRequestGroups',
         ));
@@ -246,13 +258,35 @@ class DriverController extends Controller
 
         $this->driverRequests->expireStale();
         $assigned = $this->driverRequests->resumeDriverMatchingAfterAvailability($profile->fresh());
+        $pickupDistances = $this->proximity->refreshAssignedPickupDistances($profile);
+        $proximityPayload = $this->firstAssignedPickupPayload((int) $profile->user_id);
 
         return response()->json([
-            'ok'         => true,
-            'address'    => $address !== '' ? $address : null,
-            'updated_at' => $profile->last_location_at?->format('H:i, d/m/Y'),
-            'assigned'   => $assigned,
+            'ok'                    => true,
+            'address'               => $address !== '' ? $address : null,
+            'updated_at'            => $profile->last_location_at?->format('H:i, d/m/Y'),
+            'assigned'              => $assigned,
+            'pickup_distances'      => $pickupDistances,
+            'pickup_distance_label' => $proximityPayload['distance_label'] ?? ($pickupDistances[0]['distance_label'] ?? null),
+            'pickup_eta_label'      => $proximityPayload['eta_label'] ?? null,
+            'pickup_proximity_hint' => $proximityPayload['proximity_hint'] ?? null,
         ]);
+    }
+
+    /** @return array<string, mixed> */
+    private function firstAssignedPickupPayload(int $driverUserId): array
+    {
+        $schedule = $this->driverAvailability->activeSchedulesForDriver($driverUserId)->first();
+        if (! $schedule) {
+            return [];
+        }
+
+        $booking = $schedule->driverRelevantBookings()->first();
+        if (! $booking) {
+            return [];
+        }
+
+        return $this->guestDriverStatus->build($booking) ?? [];
     }
 
     public function updateAvailability(Request $request)
@@ -263,8 +297,9 @@ class DriverController extends Controller
 
         $profile = DriverProfile::query()->where('user_id', Auth::id())->firstOrFail();
 
-        if ($this->driverAvailability->activeTripCount((int) $profile->user_id) > 0) {
-            $message = 'Đang chạy chuyến — hoàn thành chuyến trước khi tạm nghỉ.';
+        if ($validated['availability_status'] === 'off_duty'
+            && $this->driverAvailability->activeTripCount((int) $profile->user_id) > 0) {
+            $message = 'Đang có chuyến — hoàn thành chuyến trước khi tạm nghỉ.';
 
             if ($request->expectsJson()) {
                 return response()->json(['message' => $message], 422);
