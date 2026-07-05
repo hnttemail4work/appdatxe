@@ -15,16 +15,12 @@ $phase = $phase ?? $schedule->driverWorkflowPhase();
         <div class="driver-passenger-item {{ ! $loop->last ? 'driver-passenger-item--split' : '' }}">
             <div class="driver-passenger-head">
                 <strong>{{ $booking->passenger_name ?: 'Hành khách' }}</strong>
-                <span class="status-pill status-pill--gold">{{ $booking->bookingModeLabel() }}</span>
             </div>
             @if($booking->passengerProfileDetail())
                 <div class="driver-info-line">{{ $booking->passengerProfileDetail() }}</div>
             @endif
             <div class="driver-info-line"><span class="driver-info-k">Đón</span> {{ $booking->pickupTimeLabel() ?? '—' }} · {{ $booking->driverPickupDetailLabel() }}</div>
             <div class="driver-info-line"><span class="driver-info-k">Trả</span> {{ $booking->driverDropoffDetailLabel() }}</div>
-            @if($booking->vehicleBookingLabel())
-                <div class="driver-info-line">{{ $booking->vehicleBookingLabel() }}</div>
-            @endif
             @if($booking->notes)
                 <div class="driver-info-line driver-info-line--note">{{ $booking->notes }}</div>
             @endif

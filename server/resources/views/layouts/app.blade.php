@@ -1,10 +1,28 @@
 <!DOCTYPE html>
+@php
+    use App\Support\AppBrandingSettings;
+
+    $appBrandName = AppBrandingSettings::appName();
+    $appBrandTitle = AppBrandingSettings::brandTitle();
+    $appBrandTagline = AppBrandingSettings::brandTagline();
+    $isGuestBookingPage = request()->routeIs('home', 'booking.trips');
+    $hidePublicNav = $isGuestBookingPage || request()->routeIs('about') || request()->routeIs('admin.*');
+    $minimalNav = auth()->check()
+        && in_array(auth()->user()->role, ['admin', 'driver'], true)
+        && ! $isGuestBookingPage;
+    $brandHref = route('home');
+    if (auth()->check() && auth()->user()->role === 'driver') {
+        $brandHref = \App\Support\RoleDashboard::route('driver');
+    }
+@endphp
 <html lang="vi" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ config('app.name') }}</title>
+    <title>{{ $appBrandName }}</title>
+    <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}?v={{ filemtime(public_path('favicon.svg')) }}">
+    <link rel="apple-touch-icon" href="{{ asset('favicon.svg') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -54,23 +72,14 @@
     <link rel="stylesheet" href="{{ asset('css/app-dialog.css') }}?v={{ filemtime(public_path('css/app-dialog.css')) }}">
     @stack('styles')
 </head>
-<body class="app-shell @if(request()->routeIs('login', 'register')) app-shell--auth @endif @if(request()->routeIs('home', 'driver.dashboard')) app-shell--mobile-app @endif">
-@php
-    $isGuestBookingPage = request()->routeIs('home');
-    $hidePublicNav = $isGuestBookingPage || request()->routeIs('admin.*');
-    $minimalNav = auth()->check()
-        && in_array(auth()->user()->role, ['admin', 'driver'], true)
-        && ! $isGuestBookingPage;
-    $brandHref = route('home');
-    if (auth()->check() && auth()->user()->role === 'driver') {
-        $brandHref = \App\Support\RoleDashboard::route('driver');
-    }
-@endphp
+<body class="app-shell @if(request()->routeIs('login', 'register')) app-shell--auth @endif @if(request()->routeIs('home', 'about', 'booking.trips', 'driver.dashboard')) app-shell--mobile-app @endif">
 <nav class="navbar navbar-expand-lg app-navbar navbar-dark">
     <div class="container app-navbar-inner">
-        <a class="navbar-brand app-brand-link" href="{{ $brandHref }}">
-            <span class="app-brand-mark" aria-hidden="true">TL</span>
-            <span class="app-brand-text">Limo</span>
+        <a class="navbar-brand app-brand-link app-brand-link--stacked" href="{{ $brandHref }}" aria-label="{{ $appBrandName }}">
+            <span class="app-brand-stack">
+                <span class="app-brand-title">{{ $appBrandTitle }}</span>
+                <span class="app-brand-tagline">{{ $appBrandTagline }}</span>
+            </span>
         </a>
         @if($minimalNav)
         <div class="app-navbar-desktop d-none d-lg-flex ms-auto align-items-center gap-2 gap-md-3 flex-wrap justify-content-end">
@@ -153,7 +162,7 @@
     <div class="container">
         <div class="row g-2 app-footer-grid">
             <div class="col-md-6">
-                <h6 class="text-white fw-bold mb-1">{{ config('app.name') }}</h6>
+                <h6 class="text-white fw-bold mb-1">{{ $appBrandName }}</h6>
                 <p class="small mb-0 app-footer-text">Nền tảng đặt vé xe khách liên tỉnh cao cấp.</p>
             </div>
             <div class="col-md-6">
@@ -163,7 +172,7 @@
             </div>
         </div>
         <hr class="border-secondary app-footer-divider">
-        <p class="small text-center mb-0 app-footer-copy">© Bản quyền thuộc về {{ config('app.name') }}.</p>
+        <p class="small text-center mb-0 app-footer-copy">© Bản quyền thuộc về {{ $appBrandName }}.</p>
     </div>
 </footer>
 

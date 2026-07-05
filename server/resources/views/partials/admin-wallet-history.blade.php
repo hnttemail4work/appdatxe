@@ -6,7 +6,6 @@ $walletHistory = $walletHistory ?? collect();
 <div class="console-panel-head px-0 pt-4 mt-2">
     <div class="console-panel-head-accent">
         <h2>Lịch sử giao dịch</h2>
-        <p class="subtitle mb-0">Nạp ví và phí nền tảng đã xử lý.</p>
     </div>
 </div>
 
@@ -20,6 +19,7 @@ $walletHistory = $walletHistory ?? collect();
                     <th>Tài xế</th>
                     <th>Loại</th>
                     <th>Số tiền</th>
+                    <th>Ảnh CK</th>
                     <th>Thời gian</th>
                     <th>Trạng thái</th>
                 </tr>
@@ -34,7 +34,9 @@ $walletHistory = $walletHistory ?? collect();
                         @endif
                     </td>
                     <td>
-                        {{ $item['label'] }}
+                        @if(! empty($item['reference']))
+                            <div class="cell-primary fw-semibold">{{ $item['reference'] }}</div>
+                        @endif
                         @if($item['meta'])
                             <div class="cell-muted small">{{ $item['meta'] }}</div>
                         @endif
@@ -46,16 +48,29 @@ $walletHistory = $walletHistory ?? collect();
                             −{{ number_format($item['amount'], 0, ',', '.') }} đ
                         @endif
                     </td>
+                    <td>
+                        @if(! empty($item['proof_image_url']))
+                            <a href="{{ $item['proof_image_url'] }}"
+                               class="wallet-deposit-proof-thumb"
+                               target="_blank"
+                               rel="noopener"
+                               title="Xem ảnh chuyển khoản">
+                                <img src="{{ $item['proof_image_url'] }}"
+                                     alt="Ảnh CK"
+                                     width="56"
+                                     height="56"
+                                     loading="lazy">
+                            </a>
+                        @else
+                            <span class="cell-muted small">—</span>
+                        @endif
+                    </td>
                     <td class="cell-muted small">{{ $item['at']->format('d/m/Y H:i') }}</td>
                     <td>
                         @if($item['kind'] === 'deposit')
                             @php
                                 $statusVariant = \App\Support\StatusBadge::depositStatus($item['status']);
-                                $statusLabel = match ($item['status']) {
-                                    'approved' => 'Đã cộng ví',
-                                    'rejected' => 'Từ chối',
-                                    default => 'Chờ duyệt',
-                                };
+                                $statusLabel = \App\Models\DriverWalletTransaction::statusLabelFor($item['status']);
                             @endphp
                             <span class="status-pill status-pill--{{ $statusVariant }}">{{ $statusLabel }}</span>
                         @else

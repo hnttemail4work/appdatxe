@@ -133,9 +133,21 @@
         el.classList.toggle('d-none', !text);
     }
 
+    function coordValue(id) {
+        var el = $(id);
+        if (!el || el.value === '') {
+            return '';
+        }
+        return el.value;
+    }
+
+    function isIntraCityRoute(route) {
+        return !!(route.pickup && route.dropoff && route.pickup === route.dropoff);
+    }
+
     function routeReady() {
         var route = modalRoute();
-        return !!(route.pickup && route.dropoff && route.pickup !== route.dropoff);
+        return !!(route.pickup && route.dropoff);
     }
 
     function syncRouteLabels() {
@@ -143,6 +155,29 @@
         var label = routeLabel(route.pickup, route.dropoff);
         setBannerText('modal-route', label);
         setBannerText('modal-route-step2', label);
+        syncIntraCityRequiredUI(route);
+    }
+
+    function syncIntraCityRequiredUI(route) {
+        route = route || modalRoute();
+        var intraCity = isIntraCityRoute(route);
+        var dropoffDetail = $('modal-dropoff-detail');
+        var dropoffRequired = $('modal-dropoff-required');
+        var hint = $('modal-intracity-hint');
+
+        if (dropoffDetail) {
+            if (intraCity) {
+                dropoffDetail.setAttribute('required', 'required');
+            } else {
+                dropoffDetail.removeAttribute('required');
+            }
+        }
+        if (dropoffRequired) {
+            dropoffRequired.classList.toggle('d-none', !intraCity);
+        }
+        if (hint) {
+            hint.classList.toggle('d-none', !intraCity);
+        }
     }
 
     function setStep(step) {
@@ -164,22 +199,52 @@
     }
 
     function updatePriceDisplay(total, data) {
-        var label = total > 0 ? formatMoney(total) : '';
-        ['modal-total-price', 'modal-total-price-step1'].forEach(function (id) {
-            var el = $(id);
-            if (!el) {
-                return;
+        var hasDiscount = !!(data && data.referral_eligible && data.referral_discount_amount > 0);
+        var subtotal = hasDiscount ? Number(data.subtotal || data.whole_car_price || 0) : 0;
+        var finalTotal = total > 0 ? total : (hasDiscount ? Number(data.total_after_discount || 0) : 0);
+        var discountNote = '';
+
+        if (hasDiscount) {
+            var pct = data.referral_discount_percent;
+            discountNote = 'Giảm ' + formatMoney(data.referral_discount_amount);
+            if (pct > 0) {
+                discountNote += ' (' + pct + '% — mã QR)';
             }
-            el.textContent = label;
-            el.classList.toggle('d-none', !label);
-        });
-        var disc = $('modal-referral-discount');
-        if (disc && data && data.referral_eligible && data.referral_discount_amount > 0) {
-            disc.textContent = 'Giảm ' + formatMoney(data.referral_discount_amount) + ' (mã GT)';
-            disc.classList.remove('d-none');
-        } else if (disc) {
-            disc.classList.add('d-none');
         }
+
+        [['modal-original-price-step1', 'modal-total-price-step1', 'modal-referral-discount-step1'],
+         ['modal-original-price', 'modal-total-price', 'modal-referral-discount']].forEach(function (group) {
+            var origEl = $(group[0]);
+            var totalEl = $(group[1]);
+            var discEl = $(group[2]);
+
+            if (origEl) {
+                if (hasDiscount && subtotal > 0) {
+                    origEl.textContent = formatMoney(subtotal);
+                    origEl.classList.remove('d-none');
+                } else {
+                    origEl.textContent = '';
+                    origEl.classList.add('d-none');
+                }
+            }
+
+            if (totalEl) {
+                var displayTotal = hasDiscount ? finalTotal : total;
+                totalEl.textContent = displayTotal > 0 ? formatMoney(displayTotal) : '';
+                totalEl.classList.toggle('d-none', displayTotal <= 0);
+                totalEl.classList.toggle('booking-price-discounted', hasDiscount && displayTotal > 0);
+            }
+
+            if (discEl) {
+                if (hasDiscount && discountNote) {
+                    discEl.textContent = discountNote;
+                    discEl.classList.remove('d-none');
+                } else {
+                    discEl.textContent = '';
+                    discEl.classList.add('d-none');
+                }
+            }
+        });
     }
 
     function quoteParams() {
@@ -189,6 +254,22 @@
             dropoff_address: route.dropoff,
             contact_phone: $('modal-contact-phone') ? $('modal-contact-phone').value : '',
         });
+        var pickupLat = coordValue('modal-pickup-lat');
+        var pickupLng = coordValue('modal-pickup-lng');
+        var dropoffLat = coordValue('modal-dropoff-lat');
+        var dropoffLng = coordValue('modal-dropoff-lng');
+        if (pickupLat) {
+            params.set('pickup_lat', pickupLat);
+        }
+        if (pickupLng) {
+            params.set('pickup_lng', pickupLng);
+        }
+        if (dropoffLat) {
+            params.set('dropoff_lat', dropoffLat);
+        }
+        if (dropoffLng) {
+            params.set('dropoff_lng', dropoffLng);
+        }
         if (ctx.driverProfileId) {
             params.set('driver_profile_id', ctx.driverProfileId);
         }
@@ -207,9 +288,12 @@
             updatePriceDisplay(0);
             return;
         }
-        if (route.pickup === route.dropoff) {
-            updatePriceDisplay(0);
-            return;
+        if (isIntraCityRoute(route)) {
+            if (!coordValue('modal-pickup-lat') || !coordValue('modal-pickup-lng')
+                || !coordValue('modal-dropoff-lat') || !coordValue('modal-dropoff-lng')) {
+                updatePriceDisplay(0);
+                return;
+            }
         }
         clearTimeout(quoteTimer);
         quoteTimer = setTimeout(function () {
@@ -289,6 +373,19 @@
             }
         }
 
+        var step2PhotoWrap = $('modal-step2-vehicle-photo-wrap');
+        if (step2PhotoWrap) {
+            if (ctx.vehiclePhoto) {
+                step2PhotoWrap.classList.remove('d-none');
+                step2PhotoWrap.removeAttribute('aria-hidden');
+                step2PhotoWrap.innerHTML = '<img src="' + ctx.vehiclePhoto + '" alt="" class="trip-vehicle-photo">';
+            } else {
+                step2PhotoWrap.classList.add('d-none');
+                step2PhotoWrap.setAttribute('aria-hidden', 'true');
+                step2PhotoWrap.innerHTML = '';
+            }
+        }
+
         if ($('modal-service-date') && window.__defaultServiceDate && !$('modal-service-date').value) {
             $('modal-service-date').value = window.__defaultServiceDate;
         }
@@ -316,10 +413,6 @@
             }
             return false;
         }
-        if (route.pickup === route.dropoff) {
-            alert('Điểm đi và điểm đến phải khác nhau.');
-            return false;
-        }
         var date = $('modal-service-date');
         var pickupTime = $('modal-pickup-time');
         var pickupDetail = $('modal-pickup-detail');
@@ -338,15 +431,74 @@
             return false;
         }
         if (!pickupDetail || !pickupDetail.value.trim()) {
-            alert('Vui lòng nhập điểm đón cụ thể.');
+            var pickupMsg = isIntraCityRoute(route)
+                ? 'Cùng tỉnh/thành — vui lòng chọn điểm đón cụ thể trên bản đồ.'
+                : 'Vui lòng chọn điểm đón cụ thể trên bản đồ.';
+            alert(pickupMsg);
+            if (pickupDetail) {
+                pickupDetail.focus();
+            }
             return false;
         }
+        var pickupLat = $('modal-pickup-lat');
+        var pickupLng = $('modal-pickup-lng');
+        if (!pickupLat || !pickupLng || !pickupLat.value || !pickupLng.value) {
+            notify('Vui lòng bấm ô điểm đón và ghim đúng vị trí trên bản đồ.');
+            if (pickupDetail) {
+                pickupDetail.focus();
+            }
+            return false;
+        }
+        if (isIntraCityRoute(route)) {
+            var dropoffDetail = $('modal-dropoff-detail');
+            var dropoffLat = $('modal-dropoff-lat');
+            var dropoffLng = $('modal-dropoff-lng');
+            if (!dropoffDetail || !dropoffDetail.value.trim()) {
+                alert('Cùng tỉnh/thành — vui lòng chọn điểm trả cụ thể trên bản đồ.');
+                if (dropoffDetail) {
+                    dropoffDetail.focus();
+                }
+                return false;
+            }
+            if (!dropoffLat || !dropoffLng || !dropoffLat.value || !dropoffLng.value) {
+                notify('Cùng tỉnh/thành — vui lòng chọn điểm trả trên bản đồ.');
+                if (dropoffDetail) {
+                    dropoffDetail.focus();
+                }
+                return false;
+            }
+        }
         return true;
+    }
+
+    function clearAddressField(prefix) {
+        var detailId = prefix + '-detail';
+        var detail = $(detailId);
+        if (detail) {
+            detail.value = '';
+        }
+        clearAddressCoords(prefix);
+    }
+
+    function clearAddressCoords(prefix) {
+        var lat = $(prefix + '-lat');
+        var lng = $(prefix + '-lng');
+        if (lat) {
+            lat.value = '';
+        }
+        if (lng) {
+            lng.value = '';
+        }
     }
 
     [modalPickup, modalDropoff].forEach(function (el) {
         if (!el) return;
         el.addEventListener('change', function () {
+            if (el.id === 'modal-pickup') {
+                clearAddressField('modal-pickup');
+            } else if (el.id === 'modal-dropoff') {
+                clearAddressField('modal-dropoff');
+            }
             syncRouteLabels();
             refreshQuote();
         });
@@ -438,5 +590,9 @@
 
     modalEl.addEventListener('hidden.bs.modal', function () {
         setStep(1);
+    });
+
+    document.addEventListener('addressmap:applied', function () {
+        refreshQuote();
     });
 })();

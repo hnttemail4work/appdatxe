@@ -144,8 +144,13 @@ class TripListingService
             'driver_code'                 => $profile->driver_code,
             'driver_photo_url'            => $profile->photoUrl('photo_portrait'),
             'driver_initial'              => mb_substr($driverName, 0, 1),
-            'driver_availability'         => $profile->availability_status,
+            'driver_availability'         => $profile->effectiveAvailabilityStatus(),
             'driver_availability_label'   => $profile->availabilityLabel(),
+            'driver_availability_tone'    => match ($profile->effectiveAvailabilityStatus()) {
+                'available' => 'success',
+                'on_trip'   => 'warning',
+                default     => 'neutral',
+            },
             'booking_action_label'        => $this->bookingActionLabel($profile),
             'booking_action_tone'         => $this->bookingActionTone($profile),
         ];

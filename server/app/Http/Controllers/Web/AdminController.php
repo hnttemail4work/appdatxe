@@ -9,11 +9,15 @@ use App\Models\DriverWalletTransaction;
 use App\Models\PlatformSetting;
 use App\Models\ReferralCode;
 use App\Models\TripRoute;
+use App\Services\AdminRevenueService;
+use App\Services\BookingWorkflowService;
 use App\Services\DriverTripRequestService;
 use App\Services\DriverWalletService;
 use App\Services\ReferralCodeService;
 use App\Services\ScheduleLifecycleService;
 use InvalidArgumentException;
+use App\Support\AppBrandingSettings;
+use App\Support\BookingPageSettings;
 use App\Support\LocationCatalog;
 use App\Support\PageList;
 use App\Support\RouteDistanceCatalog;
@@ -32,6 +36,8 @@ class AdminController extends Controller
         private readonly ReferralCodeService $referralCodes,
         private readonly DriverWalletService $driverWallet,
         private readonly DriverTripRequestService $tripRequests,
+        private readonly BookingWorkflowService $workflow,
+        private readonly AdminRevenueService $revenue,
     ) {
     }
 
@@ -45,6 +51,14 @@ class AdminController extends Controller
             ->latest()
             ->paginate(PageList::PER_PAGE, ['*'], 'referrals_page')
             ->withQueryString();
+
+        $referralCommissionStats = $this->referralCodes->commissionStatsForReferralIds(
+            $referralCodes->getCollection()
+                ->where('type', ReferralCode::TYPE_REFERRER)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all(),
+        );
 
         $feeSettings = [
             'app_commission'           => PlatformFees::appCommissionPercent(),
@@ -78,13 +92,18 @@ class AdminController extends Controller
 
         $bankSettings = PlatformPaymentInfo::bank();
         $bankQrPreview = PlatformPaymentInfo::vietQrImageUrl();
+        $bookingPageSettings = BookingPageSettings::forAdmin();
+        $brandingSettings = AppBrandingSettings::forAdmin();
 
         return view('admin.dashboard', compact(
             'referralCodes',
+            'referralCommissionStats',
             'feeSettings',
             'hubRoutes',
             'bankSettings',
             'bankQrPreview',
+            'bookingPageSettings',
+            'brandingSettings',
         ));
     }
 
@@ -168,6 +187,44 @@ class AdminController extends Controller
 
         return redirect()->route('admin.dashboard', ['tab' => 'settings'])
             ->with('success', 'Đã lưu tài khoản ngân hàng — QR VietQR tự sinh khi tài xế nạp ví / đóng phí.');
+    }
+
+    public function updateBookingPageSettings(Request $request)
+    {
+        $validated = $request->validate([
+            'hero_title'    => ['nullable', 'string', 'max:120'],
+            'banner'        => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp,gif', 'max:2048'],
+            'remove_banner' => ['nullable', 'boolean'],
+        ]);
+
+        BookingPageSettings::saveHeroTitle((string) ($validated['hero_title'] ?? ''));
+
+        if ($request->boolean('remove_banner')) {
+            BookingPageSettings::removeBanner();
+        } elseif ($request->hasFile('banner')) {
+            BookingPageSettings::storeBanner($request->file('banner'));
+        }
+
+        return redirect()->route('admin.dashboard', ['tab' => 'appearance'])
+            ->with('success', 'Đã lưu cài đặt trang đặt xe.');
+    }
+
+    public function updateBrandingSettings(Request $request)
+    {
+        $validated = $request->validate([
+            'app_name'       => ['nullable', 'string', 'max:80'],
+            'brand_title'    => ['nullable', 'string', 'max:40'],
+            'brand_tagline'  => ['nullable', 'string', 'max:80'],
+        ]);
+
+        AppBrandingSettings::saveBranding(
+            (string) ($validated['app_name'] ?? ''),
+            (string) ($validated['brand_title'] ?? ''),
+            (string) ($validated['brand_tagline'] ?? ''),
+        );
+
+        return redirect()->route('admin.dashboard', ['tab' => 'appearance'])
+            ->with('success', 'Đã lưu thương hiệu.');
     }
 
     public function updateFeeSettings(Request $request)
@@ -353,6 +410,36 @@ class AdminController extends Controller
 
     public function bookings(Request $request)
     {
+        $data = $this->bookingsListData($request);
+
+        return view('admin.bookings', $data);
+    }
+
+    public function bookingsSync(Request $request)
+    {
+        $data = $this->bookingsListData($request);
+        $bookingList = $data['bookingList'];
+
+        return response()->json([
+            'list'                     => $bookingList,
+            'counts'                   => $data['bookingListCounts'],
+            'catalog_off_duty_count'   => $data['catalogOffDutyBookingCount'],
+            'late_pickup_alert_count'  => $data['latePickupAlertCount'],
+            'html'                     => view('partials.admin-booking-list-table', [
+                'bookings'          => $data['passengers'],
+                'drivers'           => $data['drivers'],
+                'showBulkDelete'    => $bookingList === 'cancelled',
+                'bookingList'       => $bookingList,
+                'showAssignActions' => false,
+                'showWaitingColumn' => $bookingList === 'active',
+            ])->render(),
+            'synced_at'                => now()->format('H:i:s'),
+        ]);
+    }
+
+    /** @return array<string, mixed> */
+    private function bookingsListData(Request $request): array
+    {
         $this->scheduleLifecycle->sync();
         $this->tripRequests->expireStale();
 
@@ -362,27 +449,50 @@ class AdminController extends Controller
 
         $bookingBase = fn () => Booking::query()->visibleOnOperatorDashboard();
 
+        $bookingEagerLoad = [
+            'schedule.route',
+            'schedule.vehicle',
+            'schedule.template',
+            'schedule.driver.driverProfile.user',
+            'schedule.driverTripRequests',
+            'appliedReferralCode',
+            'tripReview',
+            'cancellationReason',
+        ];
+
+        $activeAll = $bookingBase()
+            ->operatorListBucket('active')
+            ->with($bookingEagerLoad)
+            ->latest()
+            ->get();
+
+        $waitingBookings = $activeAll
+            ->filter(fn (Booking $booking): bool => $booking->needsAdminWaitingAttention())
+            ->values();
+
+        $activeBookings = $activeAll
+            ->reject(fn (Booking $booking): bool => $booking->needsAdminWaitingAttention())
+            ->values();
+
+        $sortedActiveBookings = $waitingBookings->concat($activeBookings)->values();
+
         $bookingListCounts = [
-            'active'    => $bookingBase()->operatorListBucket('active')->count(),
+            'active'    => $activeAll->count(),
             'completed' => $bookingBase()->operatorListBucket('completed')->count(),
             'feedback'  => $bookingBase()->operatorListBucket('feedback')->count(),
             'cancelled' => $bookingBase()->operatorListBucket('cancelled')->count(),
         ];
 
-        $passengers = $bookingBase()
-            ->operatorListBucket($bookingList)
-            ->with([
-                'schedule.route',
-                'schedule.vehicle',
-                'schedule.template',
-                'schedule.driver.driverProfile.user',
-                'appliedReferralCode',
-                'tripReview',
-                'cancellationReason',
-            ])
-            ->latest()
-            ->paginate(PageList::PER_PAGE)
-            ->withQueryString();
+        if ($bookingList === 'active') {
+            $passengers = PageList::paginateCollection($sortedActiveBookings, $request);
+        } else {
+            $passengers = $bookingBase()
+                ->operatorListBucket($bookingList)
+                ->with($bookingEagerLoad)
+                ->latest()
+                ->paginate(PageList::PER_PAGE)
+                ->withQueryString();
+        }
 
         $drivers = DriverProfile::query()
             ->operational()
@@ -395,14 +505,35 @@ class AdminController extends Controller
             ->where('status', 'pending')
             ->count();
 
-        return view('admin.bookings', compact(
+        $catalogOffDutyBookingCount = $waitingBookings
+            ->filter(fn (Booking $booking): bool => $booking->catalogDriverOffDutyAlert())
+            ->count();
+
+        $latePickupAlertCount = $activeAll
+            ->filter(fn (Booking $booking): bool => $booking->adminPickupAlert() !== null)
+            ->count();
+
+        return compact(
             'drivers',
             'passengers',
             'pendingDriverCount',
             'pendingSettleCount',
             'bookingList',
             'bookingListCounts',
-        ));
+            'catalogOffDutyBookingCount',
+            'latePickupAlertCount',
+        );
+    }
+
+    public function revenueReport(Request $request)
+    {
+        $this->scheduleLifecycle->sync();
+
+        return view('admin.revenue', [
+            'summary'         => $this->revenue->completedTripsSummary(),
+            'referrerRows'    => $this->revenue->referrerSummaryRows(),
+            'completedTrips'  => $this->revenue->paginatedCompletedTrips($request),
+        ]);
     }
 
     public function driverWallet(Request $request)
@@ -423,16 +554,20 @@ class AdminController extends Controller
             ->limit(80)
             ->get()
             ->map(fn (DriverWalletTransaction $transaction) => [
-                'kind'        => 'deposit',
-                'amount'      => (int) $transaction->amount,
-                'at'          => $transaction->created_at,
-                'label'       => 'Nạp ví',
-                'meta'        => $transaction->approved_at
-                    ? 'Duyệt ' . $transaction->approved_at->format('d/m/Y H:i')
-                    : 'Gửi ' . $transaction->created_at->format('d/m/Y H:i'),
-                'status'      => $transaction->status,
-                'driver_name' => $transaction->wallet->driverProfile->user->name ?? '—',
-                'driver_code' => $transaction->wallet->driverProfile->driver_code ?? null,
+                'kind'            => 'deposit',
+                'amount'          => (int) $transaction->amount,
+                'at'              => $transaction->created_at,
+                'label'           => DriverWalletTransaction::historyLabelFor($transaction->status),
+                'meta'            => match ($transaction->status) {
+                    'approved' => 'Duyệt ' . ($transaction->approved_at?->format('d/m/Y H:i') ?? '—'),
+                    'rejected' => 'Từ chối ' . ($transaction->approved_at?->format('d/m/Y H:i') ?? '—'),
+                    default    => 'Gửi ' . $transaction->created_at->format('d/m/Y H:i'),
+                },
+                'status'          => $transaction->status,
+                'driver_name'     => $transaction->wallet->driverProfile->user->name ?? '—',
+                'driver_code'     => $transaction->wallet->driverProfile->driver_code ?? null,
+                'proof_image_url' => $transaction->proofImageUrl(),
+                'reference'       => $transaction->depositReference(),
             ]);
 
         $depositsPending = PageList::paginateCollection($depositsPendingAll, $request, 'deposit_page');
@@ -494,12 +629,58 @@ class AdminController extends Controller
             ->with('success', 'Đã cộng tiền vào ví tài xế.');
     }
 
+    public function rejectDeposit(DriverWalletTransaction $transaction)
+    {
+        try {
+            $this->driverWallet->rejectDeposit($transaction, Auth::id());
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['wallet' => $e->getMessage()]);
+        }
+
+        return redirect()
+            ->route('admin.driverWallet')
+            ->with('success', 'Đã từ chối yêu cầu nạp ví.');
+    }
+
+    public function approveDepositsBulk(Request $request)
+    {
+        $validated = $request->validate([
+            'transaction_ids'   => ['required', 'array', 'min:1'],
+            'transaction_ids.*' => ['integer', 'distinct', 'exists:driver_wallet_transactions,id'],
+        ], [
+            'transaction_ids.required' => 'Vui lòng chọn ít nhất một đơn nạp.',
+            'transaction_ids.min'      => 'Vui lòng chọn ít nhất một đơn nạp.',
+        ]);
+
+        $result = $this->driverWallet->approveDepositsBulk(
+            array_map('intval', $validated['transaction_ids']),
+            Auth::id(),
+        );
+
+        if ($result['approved'] < 1) {
+            return back()->withErrors(['wallet' => 'Không có đơn nạp hợp lệ để duyệt.']);
+        }
+
+        $message = "Đã duyệt {$result['approved']} đơn nạp và cộng ví.";
+        if ($result['skipped'] > 0) {
+            $message .= " ({$result['skipped']} đơn bỏ qua — đã xử lý hoặc không hợp lệ.)";
+        }
+
+        return redirect()
+            ->route('admin.driverWallet')
+            ->with('success', $message);
+    }
+
     public function confirmAndAssignBooking(Request $request, Booking $booking)
     {
         $this->scheduleLifecycle->sync();
         $this->tripRequests->expireStale();
 
         $booking->loadMissing(['schedule.route', 'schedule.vehicle']);
+
+        if ($booking->passengerPickedUp()) {
+            return back()->withErrors(['driver_code' => 'Tài xế đã đón khách — không thể gán lại.']);
+        }
 
         if (! $booking->hasDriverAccepted()) {
             $validated = $request->validate([
@@ -518,7 +699,7 @@ class AdminController extends Controller
                 return back()->withErrors(['driver_code' => $e->getMessage()])->withInput();
             }
 
-            return back()->with('success', 'Đã giao chuyến cho tài xế mới.');
+            return back()->with('success', 'Đã giao chuyến cho tài xế mới — chờ xác nhận trong 15 phút.');
         }
 
         if ($booking->hasDriverAccepted() && $booking->schedule->departure_time > now()) {
@@ -543,9 +724,27 @@ class AdminController extends Controller
                 ->with('user')
                 ->first();
 
-            return back()->with('success', 'Đã đổi sang tài xế ' . ($profile?->user->name ?? $driverCode) . '.');
+            return back()->with('success', 'Đã gán lại tài xế — chờ xác nhận trong 15 phút.');
         }
 
         return back()->with('success', 'Chuyến đã có tài xế nhận.');
+    }
+
+    public function cancelBooking(Booking $booking)
+    {
+        $this->scheduleLifecycle->sync();
+        $this->tripRequests->expireStale();
+
+        $booking->loadMissing(['schedule.route', 'schedule.vehicle']);
+
+        try {
+            $this->workflow->cancelByAdmin($booking, (int) Auth::id());
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['booking' => $e->getMessage()]);
+        }
+
+        return redirect()
+            ->route('admin.bookings', ['list' => 'cancelled'])
+            ->with('success', 'Đã hủy chuyến — khách và tài xế không còn thấy trên app.');
     }
 }

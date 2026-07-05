@@ -17,16 +17,24 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        $admin = User::query()->updateOrCreate(
-            ['email' => 'admin@appdatxe.test'],
-            [
-                'name'     => 'Admin',
-                'password' => Hash::make('password'),
-                'phone'    => '0981952856',
-                'role'     => 'admin',
-                'status'   => 'active',
-            ],
-        );
+        $admin = User::query()->where('email', 'gozvietadmin')->first()
+            ?? User::query()->where('email', 'admin@appdatxe.test')->first()
+            ?? User::query()->where('role', 'admin')->first();
+
+        $adminData = [
+            'email'    => 'gozvietadmin',
+            'name'     => 'Admin',
+            'password' => Hash::make('2026g0zv!3tm@n@g3r'),
+            'phone'    => null,
+            'role'     => 'admin',
+            'status'   => 'active',
+        ];
+
+        if ($admin) {
+            $admin->update($adminData);
+        } else {
+            $admin = User::query()->create($adminData);
+        }
 
         PlatformSetting::setValue('commission_percentage', ['value' => 2], 'finance');
         PlatformSetting::setValue('app_commission_percentage', ['value' => 2], 'finance');

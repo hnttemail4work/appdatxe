@@ -81,7 +81,11 @@ class DuplicateBookingService
             'driver_distance_km' => $driver['distance_km'] ?? null,
             'driver_distance_label' => $driver['distance_label'] ?? null,
             'driver_eta_label' => $driver['eta_label'] ?? null,
+            'driver_status_line' => $driver['status_line'] ?? null,
+            'driver_distance_line' => $driver['distance_line'] ?? null,
+            'driver_eta_line' => $driver['eta_line'] ?? null,
             'driver_proximity_hint' => $driver['proximity_hint'] ?? null,
+            'driver_location_shared' => (bool) ($driver['location_shared'] ?? false),
             'driver'            => $driver,
         ];
     }

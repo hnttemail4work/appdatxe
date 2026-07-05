@@ -43,7 +43,11 @@ class DriverPhotoService
             }
         }
 
-        $this->assertUploadsValid($request, $lockIdentityPhotos);
+        $hasFileChanges = $this->requestHasPhotoFileChanges($request);
+
+        if ($hasFileChanges) {
+            $this->assertUploadsValid($request, $lockIdentityPhotos);
+        }
 
         $updates = [];
         $dir = 'drivers/' . $profile->id;
@@ -65,6 +69,7 @@ class DriverPhotoService
 
         $existing = $profile->photo_vehicles ?? [];
         $vehicleChanged = false;
+        $catalogIndex = $profile->catalogVehiclePhotoIndex();
 
         if ($request->filled('delete_vehicle_idx')) {
             $idx = (int) $request->input('delete_vehicle_idx');
@@ -72,10 +77,16 @@ class DriverPhotoService
                 Storage::disk('public')->delete($existing[$idx]);
                 array_splice($existing, $idx, 1);
                 $vehicleChanged = true;
+
+                if ($idx === $catalogIndex) {
+                    $catalogIndex = 0;
+                } elseif ($idx < $catalogIndex) {
+                    $catalogIndex = max(0, $catalogIndex - 1);
+                }
             }
         }
 
-        $vehicleFiles = $this->validVehicleFiles($request);
+        $vehicleFiles = $hasFileChanges ? $this->validVehicleFiles($request) : [];
         foreach ($vehicleFiles as $file) {
             $existing[] = $file->store($dir, 'public');
             $vehicleChanged = true;
@@ -83,6 +94,21 @@ class DriverPhotoService
 
         if ($vehicleChanged) {
             $updates['photo_vehicles'] = array_values($existing);
+        }
+
+        if ($request->has('catalog_vehicle_photo_index')) {
+            $vehicleCount = count($updates['photo_vehicles'] ?? $profile->photo_vehicles ?? []);
+            if ($vehicleCount > 0) {
+                $requested = (int) $request->input('catalog_vehicle_photo_index');
+                $updates['catalog_vehicle_photo_index'] = max(0, min($requested, $vehicleCount - 1));
+            }
+        } elseif ($vehicleChanged) {
+            $vehicleCount = count($updates['photo_vehicles'] ?? []);
+            if ($vehicleCount > 0) {
+                $updates['catalog_vehicle_photo_index'] = max(0, min($catalogIndex, $vehicleCount - 1));
+            } else {
+                $updates['catalog_vehicle_photo_index'] = 0;
+            }
         }
 
         if ($updates === []) {
@@ -96,6 +122,21 @@ class DriverPhotoService
         $profile->update($updates);
 
         return true;
+    }
+
+    private function requestHasPhotoFileChanges(Request $request): bool
+    {
+        if ($request->filled('delete_vehicle_idx')) {
+            return true;
+        }
+
+        foreach (self::SINGLE_FIELDS as $field) {
+            if ($request->hasFile($field)) {
+                return true;
+            }
+        }
+
+        return $this->validVehicleFiles($request) !== [];
     }
 
     /** @return list<UploadedFile> */

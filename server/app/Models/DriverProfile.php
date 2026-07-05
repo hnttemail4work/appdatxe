@@ -19,7 +19,7 @@ class DriverProfile extends Model
         'vehicle_license_plate', 'vehicle_type', 'vehicle_brand', 'vehicle_model', 'vehicle_color', 'vehicle_seats',
         'photo_portrait', 'photo_id_card', 'photo_id_card_back',
         'photo_license_front', 'photo_license_back',
-        'photo_vehicle', 'photo_vehicles',
+        'photo_vehicle', 'photo_vehicles', 'catalog_vehicle_photo_index',
     ];
 
     protected static function booted(): void
@@ -52,11 +52,30 @@ class DriverProfile extends Model
 
     public function availabilityLabel(): string
     {
-        return match ($this->availability_status ?? 'available') {
+        return match ($this->effectiveAvailabilityStatus()) {
             'available' => 'Sẵn sàng',
-            'on_trip'   => 'Đang chạy',
-            default     => 'Nghỉ',
+            'on_trip'   => 'Đang chạy chuyến',
+            default     => 'Tạm nghỉ',
         };
+    }
+
+    /** Trạng thái làm việc thực tế — đồng bộ với chuyến đang phục vụ, không chỉ cột DB. */
+    public function effectiveAvailabilityStatus(): string
+    {
+        $stored = $this->availability_status ?? 'off_duty';
+
+        if ($stored === 'off_duty') {
+            return 'off_duty';
+        }
+
+        if (! $this->user_id) {
+            return $stored === 'on_trip' ? 'on_trip' : 'available';
+        }
+
+        $activeTrips = app(\App\Services\DriverAvailabilityService::class)
+            ->activeTripCount((int) $this->user_id);
+
+        return $activeTrips > 0 ? 'on_trip' : 'available';
     }
 
     /** Trạng thái pill trên hero tài xế — đồng bộ với availability + vị trí + chuyến đang phục vụ. */
@@ -104,20 +123,16 @@ class DriverProfile extends Model
             return 'Không hoạt động';
         }
 
-        if ($this->isApproved() && ! $this->isWalletActivated()) {
-            return 'Chờ nạp ví';
-        }
-
         return $this->availabilityLabel();
     }
 
     public function displayStatusColor(): string
     {
         return match ($this->displayStatusLabel()) {
-            'Sẵn sàng'           => \App\Support\StatusBadge::SUCCESS,
-            'Đang chạy'          => \App\Support\StatusBadge::GOLD,
-            'Nghỉ'               => \App\Support\StatusBadge::NEUTRAL,
-            'Chờ nạp ví'         => \App\Support\StatusBadge::PENDING,
+            'Sẵn sàng'                              => \App\Support\StatusBadge::SUCCESS,
+            'Đang chạy chuyến', 'Đang chạy'         => \App\Support\StatusBadge::GOLD,
+            'Tạm nghỉ', 'Nghỉ'                      => \App\Support\StatusBadge::NEUTRAL,
+            'Đã duyệt'           => \App\Support\StatusBadge::INFO,
             'Chờ duyệt'          => \App\Support\StatusBadge::PENDING,
             'Tạm khóa', 'Từ chối', 'Tạm ngưng' => \App\Support\StatusBadge::DANGER,
             default              => \App\Support\StatusBadge::NEUTRAL,
@@ -139,7 +154,7 @@ class DriverProfile extends Model
             return 'inactive';
         }
 
-        return $this->availability_status ?? 'available';
+        return $this->effectiveAvailabilityStatus();
     }
 
     protected function casts(): array
@@ -149,6 +164,7 @@ class DriverProfile extends Model
             'experience_years' => 'integer',
             'vehicle_seats'    => 'integer',
             'photo_vehicles'   => 'array',
+            'catalog_vehicle_photo_index' => 'integer',
             'missed_trip_strikes' => 'integer',
             'missed_trip_locked_at' => 'datetime',
             'last_lat' => 'float',
@@ -176,6 +192,34 @@ class DriverProfile extends Model
         return $this->cancelRatePercent() > 0;
     }
 
+    public function walletListLabel(): string
+    {
+        if (! $this->isApproved()) {
+            return '—';
+        }
+
+        $this->loadMissing('wallet');
+
+        if (! $this->isWalletActivated()) {
+            return 'Chờ nạp ví';
+        }
+
+        return number_format((int) ($this->wallet?->balance ?? 0), 0, ',', '.') . ' đ';
+    }
+
+    public function walletListColor(): string
+    {
+        if (! $this->isApproved()) {
+            return \App\Support\StatusBadge::NEUTRAL;
+        }
+
+        if (! $this->isWalletActivated()) {
+            return \App\Support\StatusBadge::PENDING;
+        }
+
+        return \App\Support\StatusBadge::SUCCESS;
+    }
+
     public function hasFreshLocation(int $maxAgeMinutes = 15): bool
     {
         if ($this->last_lat === null || $this->last_lng === null || ! $this->last_location_at) {
@@ -199,11 +243,33 @@ class DriverProfile extends Model
             ->all();
     }
 
-    public function firstVehiclePhotoUrl(): ?string
+    public function catalogVehiclePhotoIndex(): int
+    {
+        $paths = $this->photo_vehicles ?? [];
+
+        if ($paths === []) {
+            return 0;
+        }
+
+        $index = (int) ($this->catalog_vehicle_photo_index ?? 0);
+
+        return max(0, min($index, count($paths) - 1));
+    }
+
+    public function catalogVehiclePhotoUrl(): ?string
     {
         $urls = $this->vehiclePhotoUrls();
 
-        return $urls[0] ?? null;
+        if ($urls === []) {
+            return null;
+        }
+
+        return $urls[$this->catalogVehiclePhotoIndex()] ?? $urls[0];
+    }
+
+    public function firstVehiclePhotoUrl(): ?string
+    {
+        return $this->catalogVehiclePhotoUrl();
     }
 
     public function user()

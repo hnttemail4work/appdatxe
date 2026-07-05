@@ -1,9 +1,11 @@
 <?php
 
 return [
-    'name' => env('APP_NAME', 'Tam Long Limo'),
-    'contact_phone' => env('APP_CONTACT_PHONE', '098.195.28.56'),
-    'contact_email' => env('APP_CONTACT_EMAIL', 'tamlongtrans8888@gmail.com'),
+    'name' => env('APP_NAME', 'gozviet'),
+    'brand_mark' => env('APP_BRAND_MARK', ''),
+    'brand_suffix' => env('APP_BRAND_SUFFIX', 'gozviet'),
+    'contact_phone' => env('APP_CONTACT_PHONE', '0981952856'),
+    'contact_email' => env('APP_CONTACT_EMAIL', 'goz86@gmail.com'),
     'geocode_verify_ssl' => (bool) env('GEOCODE_VERIFY_SSL', env('APP_ENV', 'production') !== 'local'),
     'platform_bank' => [
         'bank_name'    => env('PLATFORM_BANK_NAME', 'VietinBank'),

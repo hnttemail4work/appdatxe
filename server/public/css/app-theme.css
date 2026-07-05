@@ -1,4 +1,4 @@
-/* Tam Long Limo — theme vàng–đen toàn site */
+/* gozviet — theme vàng–đen toàn site */
 :root {
     --app-gold: #d4af37;
     --app-gold-light: #e8c547;
@@ -47,6 +47,37 @@
     text-decoration: none;
 }
 
+.app-brand-link--stacked {
+    align-items: center;
+}
+
+.app-brand-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1.1;
+    text-align: center;
+}
+
+.app-brand-title {
+    font-size: 1.2rem;
+    font-weight: 800;
+    letter-spacing: .08em;
+    color: var(--app-gold);
+    text-transform: uppercase;
+    text-align: center;
+}
+
+.app-brand-tagline {
+    margin-top: .12rem;
+    font-size: .62rem;
+    font-weight: 500;
+    letter-spacing: .01em;
+    color: var(--app-gold-light);
+    text-align: center;
+    white-space: nowrap;
+}
+
 .app-brand-mark {
     width: 2rem;
     height: 2rem;
@@ -67,6 +98,14 @@
     color: var(--app-gold);
     font-weight: 800;
     letter-spacing: -.5px;
+}
+
+.app-brand-logo {
+    display: block;
+    height: 2rem;
+    width: auto;
+    max-width: 9rem;
+    object-fit: contain;
 }
 
 .app-navbar .navbar-toggler {

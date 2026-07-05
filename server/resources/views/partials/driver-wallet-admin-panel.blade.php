@@ -42,7 +42,7 @@ $pendingDeposits = $pendingDeposits ?? collect();
             <div class="console-alert warning mb-3">
                 Tài xế cần nạp ví tối thiểu {{ DriverWalletConfig::minDepositFormatted() }} để kích hoạt và nhận cuốc.
             </div>
-        @elseif($driverWallet->wallet_gate_enabled && $driverWallet->balance <= DriverWalletConfig::MIN_BALANCE)
+        @elseif($driverWallet->wallet_gate_enabled && ! $driverWallet->hasMinBalance())
             <div class="console-alert warning mb-3">
                 Tài xế cần nạp ví trên {{ DriverWalletConfig::minBalanceFormatted() }} để nhận cuốc mới.
             </div>

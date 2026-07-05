@@ -4,23 +4,42 @@ use App\Support\PlatformPaymentInfo;
 /** @var int $amount */
 /** @var string|null $addInfo */
 /** @var string|null $qrElementId */
+/** @var bool $dynamicAmount */
 $amount = (int) ($amount ?? 0);
+$dynamicAmount = (bool) ($dynamicAmount ?? false);
 $addInfo = $addInfo ?? PlatformPaymentInfo::driverTransferContent(auth()->user()?->phone);
 $bank = PlatformPaymentInfo::bank();
-$qrUrl = PlatformPaymentInfo::vietQrImageUrl($amount, $addInfo);
+$qrUrl = (! $dynamicAmount && $amount > 0)
+    ? PlatformPaymentInfo::vietQrImageUrl($amount, $addInfo)
+    : null;
 $qrElementId = $qrElementId ?? 'company-transfer-qr-' . uniqid();
+$qrReady = ! $dynamicAmount && $qrUrl;
 @endphp
 
 <div class="company-bank-transfer border rounded-3 p-3 bg-white" data-company-transfer>
-    @if(PlatformPaymentInfo::isConfigured() && $qrUrl)
+    @if(PlatformPaymentInfo::isConfigured())
         <div class="d-flex flex-wrap gap-3 align-items-start">
-            <div class="text-center flex-shrink-0">
-                <img id="{{ $qrElementId }}" src="{{ $qrUrl }}" alt="QR chuyển khoản" width="140" height="140"
-                     class="rounded border company-transfer-qr" loading="lazy"
-                     data-bank-bin="{{ $bank['bank_bin'] }}"
-                     data-account="{{ $bank['account'] }}"
-                     data-add-info="{{ $addInfo }}"
-                     data-account-name="{{ $bank['account_name'] }}">
+            <div class="text-center flex-shrink-0 company-transfer-qr-col">
+                <div class="company-transfer-qr-frame">
+                    <img id="{{ $qrElementId }}"
+                         src="{{ $qrReady ? $qrUrl : '' }}"
+                         alt="QR chuyển khoản"
+                         width="140"
+                         height="140"
+                         class="rounded border company-transfer-qr{{ $qrReady ? '' : ' is-hidden' }}"
+                         @unless($qrReady) hidden @endunless
+                         loading="lazy"
+                         data-bank-bin="{{ $bank['bank_bin'] }}"
+                         data-account="{{ $bank['account'] }}"
+                         data-add-info="{{ $addInfo }}"
+                         data-account-name="{{ $bank['account_name'] }}">
+                    <div class="company-transfer-qr-placeholder{{ $qrReady ? ' is-hidden' : '' }}"
+                         @if($qrReady) hidden @endif
+                         data-deposit-qr-placeholder>
+                        <span class="company-transfer-qr-placeholder-icon" aria-hidden="true">QR</span>
+                        <span class="company-transfer-qr-placeholder-text">Nhập số tiền để tạo mã QR</span>
+                    </div>
+                </div>
             </div>
             <div class="small flex-grow-1">
                 <div><span class="text-muted">Ngân hàng:</span> <strong>{{ $bank['bank_name'] }}</strong></div>

@@ -27,6 +27,7 @@
             trip_code: String(raw.trip_code),
             booking_reference: raw.booking_reference ? String(raw.booking_reference) : '',
             contact_phone: raw.contact_phone ? String(raw.contact_phone) : '',
+            hotline_phone: raw.hotline_phone ? String(raw.hotline_phone) : '',
             referral_code: referralCode ? String(referralCode) : '',
             referral_url: referralUrl,
             referral_discount_percent: Number(raw.referral_discount_percent || raw.discount_percent) || 0,
@@ -191,34 +192,143 @@
         });
     }
 
-    function updateNotes(phone) {
+    function resolveHotlinePhone() {
+        if (window.__appContactPhone) {
+            return String(window.__appContactPhone);
+        }
+
+        try {
+            var stored = load();
+            if (stored && stored.hotline_phone) {
+                return String(stored.hotline_phone);
+            }
+        } catch (e) {}
+
+        return '';
+    }
+
+    function syncHeroHotline() {
+        var hotline = resolveHotlinePhone();
+        if (!hotline) {
+            return;
+        }
+
+        var tel = hotline.replace(/[^\d+]/g, '');
+        var zaloDigits = tel.replace(/^\+/, '');
+        if (zaloDigits.indexOf('0') === 0) {
+            zaloDigits = '84' + zaloDigits.slice(1);
+        } else if (zaloDigits.indexOf('84') !== 0) {
+            zaloDigits = '84' + zaloDigits;
+        }
+
+        document.querySelectorAll('[data-contact-hotline="phone"]').forEach(function (el) {
+            el.setAttribute('href', 'tel:' + tel);
+            el.setAttribute('aria-label', 'Gọi tổng đài ' + hotline);
+        });
+
+        document.querySelectorAll('[data-contact-hotline="zalo"]').forEach(function (el) {
+            el.setAttribute('href', 'https://zalo.me/' + zaloDigits);
+            el.setAttribute('aria-label', 'Chat Zalo tổng đài ' + hotline);
+        });
+    }
+
+    function updateNotes(payload) {
         var contactNote = document.getElementById('booking-active-session-note-contact');
-        var safePhone = phone ? String(phone) : '';
+        var stored = payload || load();
+        var customerPhone = stored && stored.contact_phone ? String(stored.contact_phone) : '';
 
         if (contactNote) {
-            if (safePhone) {
-                contactNote.innerHTML = 'Chúng tôi sẽ liên hệ bạn sớm nhất qua số điện thoại <strong>'
-                    + safePhone
+            if (customerPhone) {
+                contactNote.innerHTML = 'Vui lòng đợi tài xế nhận chuyến, chúng tôi sẽ liên hệ lại cho bạn qua số điện thoại <strong>'
+                    + customerPhone
                     + '</strong>.';
             } else {
-                contactNote.textContent = 'Chúng tôi sẽ liên hệ bạn sớm nhất qua số điện thoại của bạn.';
+                contactNote.textContent = 'Vui lòng đợi tài xế nhận chuyến, chúng tôi sẽ liên hệ lại cho bạn qua số điện thoại của bạn.';
             }
         }
     }
 
-    function setRow(rowId, valueId, text, visible) {
-        var row = document.getElementById(rowId);
-        var value = document.getElementById(valueId);
-        if (!row || !value) {
+    function setInlineText(el, text, visible) {
+        if (!el) {
             return;
         }
         if (!visible || !text) {
-            row.hidden = true;
-            value.textContent = '—';
+            el.textContent = '';
+            el.classList.add('d-none');
             return;
         }
-        value.textContent = text;
-        row.hidden = false;
+        el.textContent = text;
+        el.classList.remove('d-none');
+    }
+
+    function buildVehicleLine(driver) {
+        var parts = [];
+        var typeLabel = driver.vehicle_type_label || '';
+        var vehicleName = driver.vehicle_name || '';
+
+        if (vehicleName && vehicleName.toLowerCase() !== typeLabel.toLowerCase()) {
+            parts.push(vehicleName);
+        }
+        if (typeLabel) {
+            parts.push(typeLabel);
+        }
+        if (driver.vehicle_plate) {
+            parts.push(driver.vehicle_plate);
+        }
+
+        return parts.join(' · ');
+    }
+
+    function resolveDriverStatusLines(driver, booking) {
+        var statusLine = '';
+        var distanceLine = '';
+        var etaLine = '';
+
+        if (driver) {
+            statusLine = driver.status_line || '';
+            distanceLine = driver.distance_line || '';
+            etaLine = driver.eta_line || '';
+        }
+
+        if (!statusLine && booking) {
+            statusLine = booking.driver_status_line || '';
+            distanceLine = booking.driver_distance_line || '';
+            etaLine = booking.driver_eta_line || '';
+        }
+
+        if (!statusLine) {
+            var hint = (driver && driver.proximity_hint) || (booking && booking.driver_proximity_hint) || '';
+            if (hint) {
+                var hintParts = String(hint).split('\n');
+                statusLine = hintParts[0] || '';
+                distanceLine = distanceLine || hintParts[1] || '';
+                etaLine = etaLine || hintParts[2] || '';
+            }
+        }
+
+        if (!statusLine && driver && (driver.distance_label || driver.eta_label)) {
+            statusLine = 'Tài xế đã nhận chuyến';
+            if (driver.distance_label) {
+                distanceLine = 'Tài xế cách bạn ' + driver.distance_label;
+            }
+            if (driver.eta_label) {
+                etaLine = 'Dự kiến ' + driver.eta_label;
+            }
+        } else if (!statusLine && booking && (booking.driver_distance_label || booking.driver_eta_label)) {
+            statusLine = 'Tài xế đã nhận chuyến';
+            if (booking.driver_distance_label) {
+                distanceLine = 'Tài xế cách bạn ' + booking.driver_distance_label;
+            }
+            if (booking.driver_eta_label) {
+                etaLine = 'Dự kiến ' + booking.driver_eta_label;
+            }
+        }
+
+        return {
+            statusLine: statusLine,
+            distanceLine: distanceLine,
+            etaLine: etaLine,
+        };
     }
 
     function updateDriverPanel(booking) {
@@ -235,25 +345,38 @@
 
         var nameText = driver.name || '—';
         if (driver.code) {
-            nameText += ' (' + driver.code + ')';
+            nameText += ' · ' + driver.code;
         }
 
-        setRow('booking-active-driver-vehicle-name-row', 'booking-active-driver-vehicle-name', driver.vehicle_name, !!driver.vehicle_name);
-        setRow('booking-active-driver-type-row', 'booking-active-driver-vehicle-type', driver.vehicle_type_label, !!driver.vehicle_type_label);
-        setRow('booking-active-driver-plate-row', 'booking-active-driver-vehicle-plate', driver.vehicle_plate, !!driver.vehicle_plate);
+        var statusLines = resolveDriverStatusLines(driver, booking);
 
-        var proximity = driver.proximity_hint
-            || (booking.driver_proximity_hint)
-            || (booking.driver_distance_label && booking.driver_eta_label
-                ? ('Còn ~' + booking.driver_distance_label + ' · dự kiến ' + booking.driver_eta_label)
-                : (booking.driver_distance_label ? ('Còn ~' + booking.driver_distance_label) : (booking.driver_eta_label ? ('Dự kiến ' + booking.driver_eta_label) : '')));
-
-        setRow('booking-active-driver-proximity-row', 'booking-active-driver-proximity', proximity, !!proximity);
-
-        var nameEl = document.getElementById('booking-active-driver-name');
-        if (nameEl) {
-            nameEl.textContent = nameText;
+        var photoWrap = document.getElementById('booking-active-driver-vehicle-photo-wrap');
+        var photoEl = document.getElementById('booking-active-driver-vehicle-photo');
+        var vehiclePhoto = driver.vehicle_photo_url || '';
+        if (photoWrap && photoEl) {
+            if (vehiclePhoto) {
+                photoEl.src = vehiclePhoto;
+                photoEl.alt = driver.vehicle_name || driver.vehicle_type_label || 'Ảnh xe';
+                photoWrap.classList.remove('d-none');
+                photoWrap.removeAttribute('aria-hidden');
+            } else {
+                photoEl.removeAttribute('src');
+                photoEl.alt = '';
+                photoWrap.classList.add('d-none');
+                photoWrap.setAttribute('aria-hidden', 'true');
+            }
         }
+
+        setInlineText(document.getElementById('booking-active-driver-name'), nameText, true);
+        var vehicleLine = buildVehicleLine(driver);
+        setInlineText(
+            document.getElementById('booking-active-driver-vehicle-line'),
+            vehicleLine,
+            !!vehicleLine,
+        );
+        setInlineText(document.getElementById('booking-active-driver-status'), statusLines.statusLine, !!statusLines.statusLine);
+        setInlineText(document.getElementById('booking-active-driver-distance'), statusLines.distanceLine, !!statusLines.distanceLine);
+        setInlineText(document.getElementById('booking-active-driver-eta'), statusLines.etaLine, !!statusLines.etaLine);
 
         panel.classList.remove('d-none');
     }
@@ -281,7 +404,7 @@
             tripCodeEl.textContent = payload.trip_code;
         }
 
-        updateNotes(payload.contact_phone);
+        updateNotes(payload);
         updateBookingSnapshot(payload.booking || null);
 
         if (payload.referral_code && payload.referral_url && referralWrap) {
@@ -304,6 +427,7 @@
             trip_code: booking.trip_code,
             booking_reference: booking.booking_reference || (extra && extra.booking_reference) || '',
             contact_phone: (extra && extra.contact_phone) || '',
+            hotline_phone: resolveHotlinePhone() || ((extra && extra.hotline_phone) || ''),
             referral_code: (extra && extra.referral_code) || '',
             referral_url: (extra && extra.referral_url) || '',
             referral_discount_percent: (extra && extra.referral_discount_percent) || 0,
@@ -338,19 +462,28 @@
         return !!load();
     }
 
+    function shouldPollBookingStatus() {
+        if (!window.__bookingCheckDuplicateUrl) {
+            return false;
+        }
+        if (hasActiveSession()) {
+            return true;
+        }
+        if (window.BookingBrowserGuard && window.BookingBrowserGuard.hasActiveBlock && window.BookingBrowserGuard.hasActiveBlock()) {
+            return true;
+        }
+        return false;
+    }
+
     function pollActiveBookingStatus() {
-        var checkUrl = window.__bookingCheckDuplicateUrl;
-        if (!checkUrl || !hasActiveSession()) {
+        if (!shouldPollBookingStatus()) {
             return;
         }
 
         var payload = load();
-        if (!payload) {
-            return;
-        }
 
         var params = new URLSearchParams();
-        if (payload.contact_phone) {
+        if (payload && payload.contact_phone) {
             params.set('contact_phone', payload.contact_phone);
         }
         if (window.BookingBrowserGuard && window.BookingBrowserGuard.getBrowserSessionId) {
@@ -360,17 +493,33 @@
             }
         }
 
-        fetch(checkUrl + '?' + params.toString(), {
+        if (!params.toString()) {
+            return;
+        }
+
+        fetch(window.__bookingCheckDuplicateUrl + '?' + params.toString(), {
             headers: { Accept: 'application/json' },
             credentials: 'same-origin',
         })
             .then(function (r) { return r.json(); })
             .then(function (data) {
+                if (window.BookingBrowserGuard && window.BookingBrowserGuard.applyCheckResult) {
+                    window.BookingBrowserGuard.applyCheckResult(data || { duplicate: false });
+                    return;
+                }
+
                 if (data && data.duplicate && data.booking) {
                     updateBookingSnapshot(data.booking);
                     var stored = load();
                     if (stored) {
                         stored.booking = data.booking;
+                        stored.driver_distance_label = data.booking.driver_distance_label || null;
+                        stored.driver_eta_label = data.booking.driver_eta_label || null;
+                        stored.driver_status_line = data.booking.driver_status_line || null;
+                        stored.driver_distance_line = data.booking.driver_distance_line || null;
+                        stored.driver_eta_line = data.booking.driver_eta_line || null;
+                        stored.driver_proximity_hint = data.booking.driver_proximity_hint || null;
+                        stored.progress_label = data.booking.progress_label || null;
                         try {
                             sessionStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
                         } catch (e) {}
@@ -387,12 +536,14 @@
 
     function init() {
         bindOverlay();
+        syncHeroHotline();
         var flashPayload = window.__bookingSuccess;
         if (flashPayload) {
             save(flashPayload);
         } else {
             render();
         }
+        syncHeroHotline();
 
         pollActiveBookingStatus();
         window.setInterval(pollActiveBookingStatus, 15000);

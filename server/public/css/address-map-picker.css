@@ -22,6 +22,7 @@
 }
 
 .booking-address-field,
+.booking-address-input-wrap,
 .driver-location-input-wrap,
 .geocode-address-field {
     position: relative;

@@ -24,7 +24,7 @@
                 </div>
                 <div id="address-map-canvas" class="address-map-canvas" aria-label="Bản đồ chọn điểm"></div>
                 <p class="address-map-preview small mb-0 mt-2" id="address-map-preview">
-                    Chạm bản đồ hoặc tìm địa chỉ, rồi bấm Xác nhận.
+                    Tìm địa chỉ để bay tới khu vực, kéo ghim đến đúng điểm đón, rồi bấm Xác nhận.
                 </p>
                 <p class="address-map-confirm-status small text-muted mb-0 mt-1 d-none" id="address-map-confirm-status"></p>
             </div>

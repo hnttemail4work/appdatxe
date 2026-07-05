@@ -2,59 +2,162 @@
     use App\Services\DriverProximityService;
 
     $bookingList = $bookingList ?? 'active';
-    $canReassign = $bookingList === 'active'
-        && $booking->hasDriverAccepted()
-        && $booking->schedule->departure_time > now()
-        && ! in_array($booking->booking_status, ['cancelled', 'rejected'], true)
-        && $booking->trip_status !== 'completed';
+    $displayOnly = (bool) ($displayOnly ?? false);
+
     $schedule = $booking->schedule;
-    $currentDriverId = (int) ($schedule->driver_id ?? 0);
-    $proximity = app(DriverProximityService::class);
+
+    $activeProfile = $booking->activeDriverProfile();
+
+    $chosenProfile = $booking->catalogChosenDriverProfile();
+
 @endphp
 
-@if($canReassign)
-    <form method="POST" action="{{ route('admin.bookings.assign', $booking) }}" class="d-flex flex-wrap gap-1 align-items-center">
-        @csrf
-        <select name="driver_code" class="form-select form-select-sm" style="min-width: 9rem; max-width: 14rem;" required>
-            <option value="">Chọn tài xế</option>
-            @foreach($drivers as $d)
-                @if($d->driver_code && (int) $d->user_id !== $currentDriverId)
-                    @php
-                        $diag = $schedule
-                            ? $proximity->assignDiagnostics($d, $booking, $schedule)
-                            : ['distance_label' => null, 'hint' => null];
-                    @endphp
-                    <option value="{{ $d->driver_code }}">
-                        {{ $d->user->name }}
-                        @if($diag['distance_label'])
-                            — {{ $diag['distance_label'] }}
-                        @endif
-                    </option>
-                @endif
-            @endforeach
-        </select>
-        <button type="submit" class="btn btn-primary btn-sm text-nowrap">Đổi TX</button>
-    </form>
-@elseif($booking->schedule->driver)
-    @php
-        $assignedProfile = $booking->schedule->assignedDriverProfile
-            ?? $booking->schedule->driver?->driverProfile;
-        $distanceText = $booking->driver_pickup_distance_km !== null
-            ? DriverProximityService::formatDistanceLabel((float) $booking->driver_pickup_distance_km) . ' lúc nhận chuyến'
-            : null;
-    @endphp
-    @if($assignedProfile)
-        @include('partials.booking-driver-brief', [
-            'profile' => $assignedProfile,
-            'distanceLabel' => $distanceText,
-            'compact' => true,
-        ])
-    @else
-        {{ $booking->schedule->driver->name }}
-        @if($distanceText)
-            <span class="small text-muted">({{ $distanceText }})</span>
-        @endif
-    @endif
+
+
+@if($activeProfile)
+    @include('partials.admin-booking-driver-code', ['profile' => $activeProfile])
+@elseif($chosenProfile)
+    @include('partials.admin-booking-driver-code', ['profile' => $chosenProfile])
 @else
-    <span class="text-muted">—</span>
+    <span class="text-muted">Chưa có tài xế</span>
 @endif
+
+
+
+@if(! $displayOnly)
+
+    @php
+
+        $activeDriverId = (int) ($booking->resolveAssignedDriverId($schedule) ?? 0);
+
+        $proximity = app(DriverProximityService::class);
+
+        $isActiveTrip = $bookingList === 'active'
+
+            && ! in_array($booking->booking_status, ['cancelled', 'rejected'], true)
+
+            && $booking->trip_status !== 'completed';
+
+        $canReassign = $isActiveTrip
+            && $booking->adminCanModifyDriverOrCancel()
+            && $booking->hasDriverAccepted()
+            && $schedule->departure_time > now();
+
+        $canAssign = $isActiveTrip
+            && $booking->adminCanModifyDriverOrCancel()
+            && ! $booking->hasDriverAccepted();
+
+        $chosenCode = $chosenProfile?->driver_code ? strtoupper(trim($chosenProfile->driver_code)) : '';
+
+        $activeCode = $activeProfile?->driver_code ? strtoupper(trim($activeProfile->driver_code)) : '';
+
+        $selectedCode = $activeCode !== '' ? $activeCode : $chosenCode;
+
+    @endphp
+
+
+
+    @if($canReassign)
+
+        <form method="POST" action="{{ route('admin.bookings.assign', $booking) }}" class="d-flex flex-wrap gap-1 align-items-center mt-2">
+
+            @csrf
+
+            <select name="driver_code" class="form-select form-select-sm" style="min-width: 9rem; max-width: 14rem;" required>
+
+                <option value="">Đổi sang TX khác</option>
+
+                @foreach($drivers as $d)
+
+                    @if($d->driver_code && (int) $d->user_id !== $activeDriverId)
+
+                        @php
+
+                            $diag = $schedule
+
+                                ? $proximity->assignDiagnostics($d, $booking, $schedule)
+
+                                : ['distance_label' => null, 'hint' => null];
+
+                        @endphp
+
+                        <option value="{{ $d->driver_code }}">
+
+                            {{ $d->user->name }}
+
+                            @if($diag['distance_label'])
+
+                                — {{ $diag['distance_label'] }}
+
+                            @endif
+
+                        </option>
+
+                    @endif
+
+                @endforeach
+
+            </select>
+
+            <button type="submit" class="btn btn-primary btn-sm text-nowrap">Đổi TX</button>
+
+        </form>
+
+    @elseif($canAssign)
+
+        <form method="POST" action="{{ route('admin.bookings.assign', $booking) }}" class="d-flex flex-column gap-1 mt-2">
+
+            @csrf
+
+            <div class="d-flex flex-wrap gap-1 align-items-center">
+
+                <select name="driver_code" class="form-select form-select-sm" style="min-width: 9rem; max-width: 14rem;" required>
+
+                    <option value="">Chọn tài xế</option>
+
+                    @foreach($drivers as $d)
+
+                        @if($d->driver_code)
+
+                            @php
+
+                                $code = strtoupper(trim($d->driver_code));
+
+                                $diag = $schedule
+
+                                    ? $proximity->assignDiagnostics($d, $booking, $schedule)
+
+                                    : ['distance_label' => null, 'hint' => null];
+
+                                $isSelected = $selectedCode !== '' && $code === $selectedCode;
+
+                            @endphp
+
+                            <option value="{{ $d->driver_code }}" @selected($isSelected)>
+
+                                {{ $d->user->name }}
+
+                                @if($diag['distance_label'])
+
+                                    — {{ $diag['distance_label'] }}
+
+                                @endif
+
+                            </option>
+
+                        @endif
+
+                    @endforeach
+
+                </select>
+
+                <button type="submit" class="btn btn-primary btn-sm text-nowrap">Giao TX</button>
+
+            </div>
+
+        </form>
+
+    @endif
+
+@endif
+

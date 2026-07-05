@@ -87,6 +87,11 @@ class LocationCatalog
         return $km !== null ? (int) $km : 0;
     }
 
+    public static function estimateDistanceKm(string $from, string $to): float
+    {
+        return (float) self::distanceBetween($from, $to);
+    }
+
     public static function distanceBetween(string $from, string $to): int
     {
         $from = trim($from);

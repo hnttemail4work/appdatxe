@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\PlatformFees;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -46,6 +47,8 @@ class Booking extends Model
         'pickup_time',
         'dropoff_address',
         'dropoff_detail',
+        'dropoff_lat',
+        'dropoff_lng',
         'notes',
         'operator_confirmed_at',
         'hold_expires_at',
@@ -69,6 +72,8 @@ class Booking extends Model
             'passenger_age'  => 'integer',
             'pickup_lat'     => 'float',
             'pickup_lng'     => 'float',
+            'dropoff_lat'    => 'float',
+            'dropoff_lng'    => 'float',
             'driver_pickup_distance_km' => 'float',
             'total_price'    => 'decimal:2',
             'hold_expires_at' => 'datetime',
@@ -82,11 +87,6 @@ class Booking extends Model
             'expired_at'     => 'datetime',
             'operator_confirmed_at' => 'datetime',
         ];
-    }
-
-    public function tripTypeLabel(): string
-    {
-        return app(\App\Services\TripPricingService::class)->tripTypeLabel();
     }
 
     public function contactPhone(): ?string
@@ -457,14 +457,154 @@ class Booking extends Model
         return $this->belongsTo(ReferralCode::class, 'applied_referral_code_id');
     }
 
-    public function referralCommissionAmount(): int
+    public function tripRevenueAmount(): int
     {
-        $this->loadMissing('appliedReferralCode');
-        if (! $this->appliedReferralCode || $this->trip_status !== 'completed') {
+        return (int) round((float) $this->total_price);
+    }
+
+    public function platformFeeAmount(): int
+    {
+        return $this->projectedPlatformFeeAmount();
+    }
+
+    public function projectedPlatformFeeAmount(): int
+    {
+        if ($this->tripRevenueAmount() <= 0) {
             return 0;
         }
 
-        return (int) round((float) $this->total_price * $this->appliedReferralCode->commissionPercent() / 100, 0);
+        return (int) round($this->tripRevenueAmount() * PlatformFees::appCommissionPercent() / 100);
+    }
+
+    public function projectedReferrerCommissionAmount(): int
+    {
+        $this->loadMissing('appliedReferralCode');
+        if (! $this->appliedReferralCode
+            || $this->appliedReferralCode->type !== ReferralCode::TYPE_REFERRER) {
+            return 0;
+        }
+
+        return (int) round($this->tripRevenueAmount() * $this->appliedReferralCode->commissionPercent() / 100);
+    }
+
+    public function referrerCommissionAmount(): int
+    {
+        if ($this->trip_status !== 'completed') {
+            return 0;
+        }
+
+        return $this->projectedReferrerCommissionAmount();
+    }
+
+    public function referralCommissionAmount(): int
+    {
+        return $this->referrerCommissionAmount();
+    }
+
+    public function referralDiscountLabel(): ?string
+    {
+        $this->loadMissing('appliedReferralCode');
+        if (! $this->appliedReferralCode
+            || $this->appliedReferralCode->type !== ReferralCode::TYPE_BOOKING_TEMP) {
+            return null;
+        }
+
+        $percent = $this->appliedReferralCode->customerDiscountPercent();
+        if ($percent <= 0) {
+            return null;
+        }
+
+        $formatted = rtrim(rtrim(number_format($percent, 1, '.', ''), '0'), '.');
+
+        return 'Giảm ' . $formatted . '% (mã QR)';
+    }
+
+    public function catalogChosenDriverProfile(): ?DriverProfile
+    {
+        $this->loadMissing('schedule.template');
+        $driverUserId = (int) ($this->schedule?->template?->driver_id ?? 0);
+        if ($driverUserId <= 0) {
+            return null;
+        }
+
+        return DriverProfile::query()
+            ->where('user_id', $driverUserId)
+            ->with('user')
+            ->first();
+    }
+
+    public function activeDriverProfile(): ?DriverProfile
+    {
+        $driverUserId = (int) ($this->resolveAssignedDriverId() ?? 0);
+        if ($driverUserId <= 0) {
+            return null;
+        }
+
+        return DriverProfile::query()
+            ->where('user_id', $driverUserId)
+            ->with('user')
+            ->first();
+    }
+
+    /** @return array{level: string, label: string, detail: string}|null */
+    public function adminPickupAlert(): ?array
+    {
+        return app(\App\Services\DriverLatePickupService::class)->adminAlertForBooking($this);
+    }
+
+    /** @return array{level: string, label: string, detail: string}|null */
+    public function adminWalletTopUpAlert(): ?array
+    {
+        if (in_array($this->booking_status, ['cancelled', 'rejected'], true)) {
+            return null;
+        }
+
+        if ($this->trip_status === 'completed') {
+            return null;
+        }
+
+        $profile = $this->activeDriverProfile() ?? $this->catalogChosenDriverProfile();
+        if (! $profile) {
+            return null;
+        }
+
+        return app(\App\Services\DriverWalletService::class)->adminTopUpAlertFor($profile);
+    }
+
+    /** Khách chọn TX catalog nhưng TX chưa bật sẵn sàng — admin cần gán TX khác. */
+    public function catalogDriverOffDutyAlert(): bool
+    {
+        if (in_array($this->booking_status, ['cancelled', 'rejected'], true)) {
+            return false;
+        }
+
+        if ($this->hasDriverAccepted()) {
+            return false;
+        }
+
+        $this->loadMissing('schedule.template');
+        $templateDriverId = (int) ($this->schedule?->template?->driver_id ?? 0);
+        if ($templateDriverId <= 0) {
+            return false;
+        }
+
+        $driver = DriverProfile::query()->where('user_id', $templateDriverId)->first();
+        if (! $driver) {
+            return false;
+        }
+
+        return $driver->effectiveAvailabilityStatus() !== 'available';
+    }
+
+    public function scopeCatalogDriverOffDuty(Builder $query): Builder
+    {
+        return $query
+            ->whereNotIn('booking_status', ['cancelled', 'rejected'])
+            ->whereHas('schedule', function (Builder $scheduleQuery): void {
+                $scheduleQuery
+                    ->whereNull('driver_id')
+                    ->whereHas('template', fn (Builder $templateQuery) => $templateQuery->whereNotNull('driver_id'));
+            });
     }
 
     public function audits()
@@ -490,6 +630,86 @@ class Booking extends Model
         return $this->resolveAssignedDriverId($this->schedule) !== null;
     }
 
+    public function passengerPickedUp(): bool
+    {
+        $this->loadMissing('schedule');
+
+        return (bool) $this->schedule?->passengerPickedUp();
+    }
+
+    /** Admin còn được gán / đổi tài xế hoặc hủy chuyến. */
+    public function adminCanModifyDriverOrCancel(): bool
+    {
+        if (in_array($this->booking_status, ['cancelled', 'rejected'], true)) {
+            return false;
+        }
+
+        if ($this->trip_status === 'completed') {
+            return false;
+        }
+
+        return ! $this->passengerPickedUp();
+    }
+
+    public function adminWaitingMinutesRemaining(): ?int
+    {
+        $this->loadMissing('schedule');
+        $schedule = $this->schedule;
+
+        if (! $schedule) {
+            return null;
+        }
+
+        $pendingRequest = DriverTripRequest::query()
+            ->where('schedule_id', $schedule->id)
+            ->where('contact_phone', (string) $this->contact_phone)
+            ->where('status', 'pending')
+            ->latest('id')
+            ->first();
+
+        if ($pendingRequest?->expires_at?->isFuture()) {
+            return max(1, (int) now()->diffInMinutes($pendingRequest->expires_at, false));
+        }
+
+        if (! $schedule->driver_id && $this->driver_search_started_at) {
+            $deadline = app(\App\Services\DriverTripRequestService::class)
+                ->customerSearchStartedAt($this)
+                ->copy()
+                ->addMinutes(\App\Services\DriverTripRequestService::CUSTOMER_SEARCH_DEADLINE_MINUTES);
+
+            if ($deadline->isFuture()) {
+                return max(1, (int) now()->diffInMinutes($deadline, false));
+            }
+        }
+
+        return null;
+    }
+
+    /** Chuyến đang chờ tài xế hoặc cần admin gán / gán lại TX. */
+    public function needsAdminWaitingAttention(): bool
+    {
+        if (! $this->adminCanModifyDriverOrCancel()) {
+            return false;
+        }
+
+        if ($this->adminWaitingMinutesRemaining() !== null) {
+            return true;
+        }
+
+        $this->loadMissing('schedule');
+        $schedule = $this->schedule;
+
+        if (! $schedule) {
+            return false;
+        }
+
+        if ($this->hasDriverAccepted()) {
+            return $schedule->departure_time > now();
+        }
+
+        return true;
+    }
+
     private function awaitingDriverLabel(): string
     {
         $this->loadMissing('schedule.template', 'schedule.driverTripRequests');
@@ -508,16 +728,6 @@ class Booking extends Model
         return 'Đang tìm tài xế';
     }
 
-    public function bookingModeLabel(): string
-    {
-        return 'Thuê xe';
-    }
-
-    public function seatCount(): int
-    {
-        return 1;
-    }
-
     public function chargedTotal(): float
     {
         $stored = (float) $this->total_price;
@@ -531,6 +741,10 @@ class Booking extends Model
             $this->schedule,
             $this->pickup_address,
             $this->dropoff_address,
+            $this->pickup_lat,
+            $this->pickup_lng,
+            $this->dropoff_lat,
+            $this->dropoff_lng,
         );
     }
 
@@ -539,11 +753,6 @@ class Booking extends Model
         $this->loadMissing('schedule.vehicle');
 
         return \App\Support\VehicleDisplay::labelFromVehicle($this->schedule?->vehicle);
-    }
-
-    public function seatCountLabel(): string
-    {
-        return 'Cả xe';
     }
 
     /** Nhãn trạng thái thống nhất — luồng mới: khách → tài xế nhận → thu tiền trực tiếp. */
@@ -647,7 +856,7 @@ class Booking extends Model
         return match ($label) {
             'Đã hủy', 'Từ chối'     => \App\Support\StatusBadge::DANGER,
             'Hoàn thành'            => \App\Support\StatusBadge::SUCCESS,
-            'Đang phục vụ', 'Đang chạy', 'Đã đón khách', 'Tài xế đến điểm đón', 'Đã có tài xế' => \App\Support\StatusBadge::GOLD,
+            'Đang phục vụ', 'Đang chạy', 'Đã đón khách', 'Tài xế đã đến điểm đón', 'Đã có tài xế' => \App\Support\StatusBadge::GOLD,
             'Chờ QL xác nhận', 'Chờ tài xế nhận', 'Đang tìm tài xế' => \App\Support\StatusBadge::PENDING,
             'Cần QL hỗ trợ'        => \App\Support\StatusBadge::DANGER,
             default                 => \App\Support\StatusBadge::NEUTRAL,

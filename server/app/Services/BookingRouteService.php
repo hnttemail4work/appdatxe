@@ -19,7 +19,10 @@ class BookingRouteService
         }
 
         if ($departure === $destination) {
-            throw new InvalidArgumentException('Điểm đi và điểm đến phải khác nhau.');
+            return TripRoute::query()->firstOrCreate(
+                ['departure' => $departure, 'destination' => $destination],
+                ['distance_km' => 1, 'base_price' => 0, 'is_active' => true],
+            );
         }
 
         $existing = TripRoute::query()

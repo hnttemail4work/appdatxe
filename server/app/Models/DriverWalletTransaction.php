@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 class DriverWalletTransaction extends Model
 {
@@ -12,6 +13,7 @@ class DriverWalletTransaction extends Model
         'amount',
         'status',
         'transfer_ref',
+        'proof_image_path',
         'approved_by',
         'approved_at',
         'notes',
@@ -37,11 +39,32 @@ class DriverWalletTransaction extends Model
 
     public function statusLabel(): string
     {
-        return match ($this->status) {
+        return self::statusLabelFor($this->status);
+    }
+
+    public static function historyLabelFor(?string $status): string
+    {
+        return 'Nạp ví';
+    }
+
+    public static function statusLabelFor(?string $status): string
+    {
+        return match ($status) {
             'approved' => 'Đã cộng ví',
-            'rejected' => 'Từ chối',
+            'rejected' => 'Không thành công',
             default    => 'Chờ duyệt',
         };
+    }
+
+    public function proofImageUrl(): ?string
+    {
+        $path = trim((string) $this->proof_image_path);
+
+        if ($path === '' || ! Storage::disk('public')->exists($path)) {
+            return null;
+        }
+
+        return Storage::disk('public')->url($path);
     }
 
     public function statusBadgeClass(): string
@@ -51,5 +74,10 @@ class DriverWalletTransaction extends Model
             'rejected' => \App\Support\StatusBadge::DANGER,
             default    => \App\Support\StatusBadge::PENDING,
         };
+    }
+
+    public function depositReference(): string
+    {
+        return 'NV' . str_pad((string) $this->id, 6, '0', STR_PAD_LEFT);
     }
 }

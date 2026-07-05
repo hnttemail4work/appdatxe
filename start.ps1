@@ -1,4 +1,4 @@
-# Tam Long Limo — khởi động dev (chạy: .\start.ps1)
+# gozviet — khởi động dev (chạy: .\start.ps1)
 $ErrorActionPreference = "Stop"
 $server = Join-Path $PSScriptRoot "server"
 
@@ -10,7 +10,7 @@ if (-not (Test-Path $server)) {
 Set-Location $server
 
 Write-Host ""
-Write-Host "=== Tam Long Limo ===" -ForegroundColor Cyan
+Write-Host "=== gozviet ===" -ForegroundColor Cyan
 Write-Host ""
 
 # Kiem tra PHP

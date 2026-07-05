@@ -407,7 +407,7 @@ class Schedule extends Model
     {
         return match ($this->resolvedDriverStage()) {
             self::DRIVER_STAGE_ASSIGNED  => 'Đã có tài xế',
-            self::DRIVER_STAGE_AT_PICKUP => 'Tài xế đến điểm đón',
+            self::DRIVER_STAGE_AT_PICKUP => 'Tài xế đã đến điểm đón',
             self::DRIVER_STAGE_PICKED_UP => 'Đã đón khách',
             self::DRIVER_STAGE_RUNNING   => 'Đang chạy',
             self::DRIVER_STAGE_COMPLETED => 'Hoàn thành',
@@ -430,6 +430,16 @@ class Schedule extends Model
     public function isPassengerTransit(): bool
     {
         return $this->resolvedDriverStage() === self::DRIVER_STAGE_RUNNING;
+    }
+
+    /** Tài xế đã đón khách — không cho admin gán lại / hủy. */
+    public function passengerPickedUp(): bool
+    {
+        return in_array($this->resolvedDriverStage(), [
+            self::DRIVER_STAGE_PICKED_UP,
+            self::DRIVER_STAGE_RUNNING,
+            self::DRIVER_STAGE_COMPLETED,
+        ], true);
     }
 
     public function driverNextStage(): ?string

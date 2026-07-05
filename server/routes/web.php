@@ -35,13 +35,18 @@ Route::get('trips/search', function (Request $request) {
 
     return match (auth()->user()->role) {
         'driver' => redirect()->route('driver.dashboard'),
-        'admin'  => redirect()->route('admin.dashboard'),
+        'admin'  => redirect()->route('admin.bookings'),
         default  => redirect()->route('home', $request->query()),
     };
 })->name('trips.search');
 
 // ── Đặt vé (trang chủ) ─────────────────────────────────────────────────────
 Route::get('/', [GuestBookingController::class, 'index'])->name('home');
+Route::get('chuyen', [GuestBookingController::class, 'trips'])->name('booking.trips');
+Route::get('chuyen/status', [GuestBookingController::class, 'tripStatus'])->name('booking.tripStatus');
+Route::post('chuyen/review', [GuestBookingController::class, 'storeTripReview'])->name('booking.tripReview');
+Route::redirect('dat-chuyen', '/chuyen');
+Route::get('gioi-thieu', [GuestBookingController::class, 'about'])->name('about');
 Route::get('booking/check-duplicate', [GuestBookingController::class, 'checkDuplicateBooking'])->name('booking.checkDuplicate');
 Route::get('quote-price', [GuestBookingController::class, 'quotePrice'])->name('booking.quotePrice');
 Route::post('bookings', [GuestBookingController::class, 'store'])->name('booking.store');
@@ -51,7 +56,7 @@ Route::get('geocode/search', [GeocodeController::class, 'search'])->name('geocod
 Route::get('cancellation-reasons', [CancellationReasonController::class, 'index'])->name('cancellationReasons.index');
 
 Route::permanentRedirect('dat-xe', '/');
-Route::redirect('guest/orders', '/');
+Route::redirect('guest/orders', '/chuyen');
 Route::post('dat-xe/bookings', [GuestBookingController::class, 'store']);
 
 // ── Driver ────────────────────────────────────────────────────────────────
@@ -78,6 +83,8 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::post('admin/referrers/{referralCode}/hide', [AdminController::class, 'suspendReferrer'])->name('admin.referrers.hide');
     Route::post('admin/referrers/{referralCode}/show', [AdminController::class, 'showReferrer'])->name('admin.referrers.show');
     Route::post('admin/bank-settings',         [AdminController::class, 'updateBankSettings'])->name('admin.bankSettings.update');
+    Route::post('admin/booking-page-settings', [AdminController::class, 'updateBookingPageSettings'])->name('admin.bookingPageSettings.update');
+    Route::post('admin/branding-settings', [AdminController::class, 'updateBrandingSettings'])->name('admin.brandingSettings.update');
     Route::post('admin/fee-settings',         [AdminController::class, 'updateFeeSettings'])->name('admin.feeSettings.update');
     Route::post('admin/route-distances',      [AdminController::class, 'updateRouteDistances'])->name('admin.routeDistances.update');
     Route::post('admin/destinations',         [AdminController::class, 'storeDestination'])->name('admin.destinations.store');
@@ -85,8 +92,12 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::delete('admin/destinations/{tripRoute}', [AdminController::class, 'destroyDestination'])->name('admin.destinations.destroy');
 
     Route::get('admin/bookings',                   [AdminController::class, 'bookings'])->name('admin.bookings');
+    Route::get('admin/bookings/sync',              [AdminController::class, 'bookingsSync'])->name('admin.bookings.sync');
     Route::post('admin/bookings/{booking}/assign', [AdminController::class, 'confirmAndAssignBooking'])->name('admin.bookings.assign');
+    Route::post('admin/bookings/{booking}/cancel', [AdminController::class, 'cancelBooking'])->name('admin.bookings.cancel');
     Route::delete('admin/bookings/lo', [AdminController::class, 'bulkDismissBookings'])->name('admin.bookings.bulkDismiss');
+
+    Route::get('admin/revenue', [AdminController::class, 'revenueReport'])->name('admin.revenue');
 
     Route::get('admin/drivers',                     [DriverController::class, 'index'])->name('admin.drivers');
     Route::get('admin/drivers/{driverProfile}/edit', [DriverController::class, 'edit'])->name('admin.drivers.edit');
@@ -101,4 +112,6 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
 
     Route::get('admin/driver-wallet', [AdminController::class, 'driverWallet'])->name('admin.driverWallet');
     Route::post('admin/wallet-transactions/{transaction}/approve', [AdminController::class, 'approveDeposit'])->name('admin.walletTransactions.approve');
+    Route::post('admin/wallet-transactions/{transaction}/reject', [AdminController::class, 'rejectDeposit'])->name('admin.walletTransactions.reject');
+    Route::post('admin/wallet-transactions/approve-bulk', [AdminController::class, 'approveDepositsBulk'])->name('admin.walletTransactions.approveBulk');
 });

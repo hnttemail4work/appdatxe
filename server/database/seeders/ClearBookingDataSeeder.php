@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /** Xóa toàn bộ đơn/chuyến đã phát sinh — giữ template tuyến của quản lý. */
 class ClearBookingDataSeeder extends Seeder
@@ -12,22 +13,36 @@ class ClearBookingDataSeeder extends Seeder
     {
         DB::transaction(function (): void {
             DB::table('driver_trip_settlements')->delete();
+            if (Schema::hasTable('trip_reviews')) {
+                DB::table('trip_reviews')->delete();
+            }
             DB::table('driver_wallet_transactions')->delete();
             DB::table('booking_audits')->delete();
-            DB::table('payment_transactions')->delete();
-            DB::table('seat_reservations')->delete();
+            if (Schema::hasTable('payment_transactions')) {
+                DB::table('payment_transactions')->delete();
+            }
+            if (Schema::hasTable('seat_reservations')) {
+                DB::table('seat_reservations')->delete();
+            }
             DB::table('driver_trip_requests')->delete();
             DB::table('bookings')->delete();
             DB::table('schedules')->delete();
 
-            DB::table('driver_wallets')->update([
+            $walletReset = [
                 'balance'                     => 0,
                 'cumulative_revenue'          => 0,
                 'completed_settlements_count' => 0,
                 'wallet_gate_enabled'         => false,
                 'accept_trips_blocked_at'     => null,
                 'accept_trips_block_reason'   => null,
-            ]);
+            ];
+            if (Schema::hasColumn('driver_wallets', 'wallet_activated_at')) {
+                $walletReset['wallet_activated_at'] = null;
+            }
+            if (Schema::hasColumn('driver_wallets', 'total_approved_deposits')) {
+                $walletReset['total_approved_deposits'] = 0;
+            }
+            DB::table('driver_wallets')->update($walletReset);
         });
     }
 }

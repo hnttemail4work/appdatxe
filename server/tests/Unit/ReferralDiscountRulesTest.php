@@ -75,6 +75,19 @@ class ReferralDiscountRulesTest extends TestCase
         $this->assertSame(0.0, $service->customerDiscountPercent($referral, '0901234567'));
     }
 
+    public function test_booking_temp_code_does_not_attribute_commission(): void
+    {
+        $service = app(ReferralCodeService::class);
+        $referral = new ReferralCode([
+            'type'                      => ReferralCode::TYPE_BOOKING_TEMP,
+            'status'                    => ReferralCode::STATUS_ACTIVE,
+            'customer_discount_percent' => 2,
+        ]);
+
+        $this->assertFalse($service->shouldAttributeBooking($referral, '0901234567'));
+        $this->assertSame(0.0, $referral->commissionPercent());
+    }
+
     public function test_same_phone_as_referrer_blocks_discount(): void
     {
         $service = app(ReferralCodeService::class);

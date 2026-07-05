@@ -16,10 +16,10 @@
             <form method="POST" action="/login" autocomplete="on">
                 @csrf
                 <div class="mb-3">
-                    <label class="form-label">Số điện thoại</label>
-                    <input type="tel" name="phone" value="{{ old('phone') }}"
+                    <label class="form-label">Số điện thoại hoặc tài khoản</label>
+                    <input type="text" name="phone" value="{{ old('phone') }}"
                         class="form-control @error('phone') is-invalid @enderror"
-                        required autofocus inputmode="tel" autocomplete="tel">
+                        required autofocus autocomplete="username">
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Mật khẩu</label>

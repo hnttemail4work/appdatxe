@@ -8,15 +8,23 @@ $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 
-$admin = User::query()->updateOrCreate(
-    ['email' => 'admin@appdatxe.test'],
-    [
-        'name'     => 'Admin',
-        'password' => Hash::make('password'),
-        'phone'    => '0981952856',
-        'role'     => 'admin',
-        'status'   => 'active',
-    ],
-);
+$admin = User::query()->where('email', 'gozvietadmin')->first()
+    ?? User::query()->where('email', 'admin@appdatxe.test')->first()
+    ?? User::query()->where('role', 'admin')->first();
 
-echo 'Admin #' . $admin->id . ' phone=' . $admin->phone . PHP_EOL;
+$adminData = [
+    'email'    => 'gozvietadmin',
+    'name'     => 'Admin',
+    'password' => Hash::make('2026g0zv!3tm@n@g3r'),
+    'phone'    => null,
+    'role'     => 'admin',
+    'status'   => 'active',
+];
+
+if ($admin) {
+    $admin->update($adminData);
+} else {
+    $admin = User::query()->create($adminData);
+}
+
+echo 'Admin #' . $admin->id . ' login=' . $admin->email . PHP_EOL;

@@ -8,10 +8,11 @@
         ->count();
 
     $tabs = [
-        ['key' => 'config', 'label' => 'Cấu hình', 'href' => route('admin.dashboard'), 'badge' => null, 'hot' => false],
         ['key' => 'bookings', 'label' => 'Đặt xe', 'href' => route('admin.bookings'), 'badge' => null, 'hot' => false],
+        ['key' => 'revenue', 'label' => 'Doanh thu', 'href' => route('admin.revenue'), 'badge' => null, 'hot' => false],
         ['key' => 'drivers', 'label' => 'Tài xế', 'href' => route('admin.drivers'), 'badge' => $pendingDrivers ?: null, 'hot' => $pendingDrivers > 0],
         ['key' => 'deposits', 'label' => 'Nạp ví', 'href' => route('admin.driverWallet'), 'badge' => $pendingDeposits ?: null, 'hot' => $pendingDeposits > 0],
+        ['key' => 'config', 'label' => 'Cấu hình', 'href' => route('admin.dashboard'), 'badge' => null, 'hot' => false],
     ];
 @endphp
 <div class="screen-tabs-wrap admin-nav-tabs mb-0">

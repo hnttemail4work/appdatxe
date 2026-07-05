@@ -9,6 +9,7 @@ use App\Models\DriverWallet;
 use App\Models\DriverWalletTransaction;
 use App\Models\Schedule;
 use App\Support\DriverWalletConfig;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -90,7 +91,7 @@ class DriverWalletService
         });
     }
 
-    public function requestDeposit(DriverProfile $profile, int $amount): DriverWalletTransaction
+    public function requestDeposit(DriverProfile $profile, int $amount, ?UploadedFile $proofImage = null): DriverWalletTransaction
     {
         if ($amount < DriverWalletConfig::MIN_DEPOSIT) {
             throw new InvalidArgumentException('Số tiền nạp tối thiểu ' . DriverWalletConfig::minDepositFormatted() . '.');
@@ -101,22 +102,52 @@ class DriverWalletService
         }
 
         if (! $profile->operator_id) {
+            $this->assignDefaultOperator($profile);
+        }
+
+        if (! $profile->operator_id) {
             throw new InvalidArgumentException('Tài khoản chưa được gán quản lý — liên hệ quản lý để được duyệt hồ sơ.');
         }
 
         $wallet = $this->walletFor($profile);
 
-        if ($wallet->transactions()->where('type', 'deposit')->where('status', 'pending')->exists()) {
-            throw new InvalidArgumentException('Đang có yêu cầu nạp tiền chờ duyệt.');
+        $pendingCount = $wallet->transactions()
+            ->where('type', 'deposit')
+            ->where('status', 'pending')
+            ->count();
+
+        if ($pendingCount >= DriverWalletConfig::MAX_PENDING_DEPOSITS) {
+            throw new InvalidArgumentException(
+                'Đang có yêu cầu nạp chờ duyệt — chờ quản lý xác nhận trước khi gửi thêm.'
+            );
         }
 
-        return DriverWalletTransaction::query()->create([
+        $transaction = DriverWalletTransaction::query()->create([
             'driver_wallet_id' => $wallet->id,
             'type'             => 'deposit',
             'amount'           => $amount,
             'status'           => 'pending',
             'transfer_ref'     => null,
         ]);
+
+        if ($proofImage) {
+            try {
+                $path = app(ImageCompressService::class)->storeOptimized(
+                    $proofImage,
+                    'driver-wallet/deposit-proofs/' . $wallet->id,
+                    'deposit-' . $transaction->id,
+                    1280,
+                );
+            } catch (InvalidArgumentException $e) {
+                $transaction->delete();
+
+                throw $e;
+            }
+
+            $transaction->update(['proof_image_path' => $path]);
+        }
+
+        return $transaction->fresh();
     }
 
     public function approveDeposit(DriverWalletTransaction $transaction, int $actorId): void
@@ -162,11 +193,57 @@ class DriverWalletService
         });
     }
 
+    /**
+     * @param  list<int>  $transactionIds
+     * @return array{approved: int, skipped: int}
+     */
+    public function approveDepositsBulk(array $transactionIds, int $actorId): array
+    {
+        $approved = 0;
+        $skipped = 0;
+
+        foreach (array_unique(array_map('intval', $transactionIds)) as $id) {
+            $transaction = DriverWalletTransaction::query()->find($id);
+
+            if ($transaction === null) {
+                $skipped++;
+
+                continue;
+            }
+
+            try {
+                $this->approveDeposit($transaction, $actorId);
+                $approved++;
+            } catch (InvalidArgumentException) {
+                $skipped++;
+            }
+        }
+
+        return compact('approved', 'skipped');
+    }
+
+    public function rejectDeposit(DriverWalletTransaction $transaction, int $actorId): void
+    {
+        if ($transaction->type !== 'deposit') {
+            throw new InvalidArgumentException('Giao dịch không phải yêu cầu nạp ví.');
+        }
+
+        if ($transaction->status !== 'pending') {
+            throw new InvalidArgumentException('Giao dịch không còn chờ duyệt.');
+        }
+
+        $transaction->update([
+            'status'      => 'rejected',
+            'approved_by' => $actorId,
+            'approved_at' => now(),
+        ]);
+    }
+
     public function enforceDeadlines(): void
     {
         DriverWallet::query()
             ->where('wallet_gate_enabled', true)
-            ->where('balance', '<=', DriverWalletConfig::MIN_BALANCE)
+            ->where('balance', '<', DriverWalletConfig::MIN_BALANCE)
             ->each(fn (DriverWallet $wallet) => $this->refreshAcceptBlock($wallet));
     }
 
@@ -197,23 +274,9 @@ class DriverWalletService
             return 'Tài khoản đang bị khóa.';
         }
 
-        $wallet = $this->walletFor($profile);
+        $notice = $this->walletNoticeForDriver($profile);
 
-        // Chưa đạt 200k doanh thu — tài xế mới dò/nhận cuốc không cần nạp ví trước.
-        if ($this->isPreRevenueThreshold($profile)) {
-            return null;
-        }
-
-        if (! $wallet->wallet_activated_at) {
-            return 'Cần nạp ví tối thiểu ' . DriverWalletConfig::minDepositFormatted() . ' để kích hoạt tài khoản.';
-        }
-
-        if ($wallet->wallet_gate_enabled && $wallet->balance <= DriverWalletConfig::MIN_BALANCE) {
-            return 'Doanh thu đã đạt ' . DriverWalletConfig::revenueThresholdShortLabel()
-                . ' — cần giữ số dư trên ' . DriverWalletConfig::minBalanceFormatted() . ' để nhận cuốc.';
-        }
-
-        return null;
+        return $notice['message'] ?? null;
     }
 
     /** Dò cuốc gần — cùng quy tắc ví; không yêu cầu wallet_activated khi chưa đạt ngưỡng doanh thu. */
@@ -253,16 +316,14 @@ class DriverWalletService
         if ($wallet->wallet_gate_enabled) {
             if (! $wallet->wallet_activated_at) {
                 return [
-                    'message'   => 'Doanh thu đã đạt ' . $threshold
-                        . ' — cần nạp ví tối thiểu ' . DriverWalletConfig::minDepositFormatted()
-                        . ' để kích hoạt và tiếp tục nhận cuốc.',
+                    'message'   => 'Doanh thu đã đạt chỉ tiêu cần nạp ví để tiếp tục nhận cuốc.',
                     'cta_label' => 'Nạp ví ngay',
                     'cta_tab'   => 'deposit',
                     'variant'   => 'warning',
                 ];
             }
 
-            if ($wallet->balance <= DriverWalletConfig::MIN_BALANCE) {
+            if (! $wallet->hasMinBalance()) {
                 return [
                     'message'   => 'Doanh thu đã đạt ' . $threshold
                         . ' — cần giữ số dư trên ' . DriverWalletConfig::minBalanceFormatted()
@@ -288,6 +349,34 @@ class DriverWalletService
         }
 
         return null;
+    }
+
+    /**
+     * Cảnh báo admin — tài xế đã đạt ngưỡng doanh thu nhưng cần nạp ví.
+     *
+     * @return array{level: string, label: string, detail: string}|null
+     */
+    public function adminTopUpAlertFor(DriverProfile $profile): ?array
+    {
+        if (! $profile->isApproved() || $profile->isMissedTripLocked()) {
+            return null;
+        }
+
+        $notice = $this->walletNoticeForDriver($profile);
+        if ($notice === null) {
+            return null;
+        }
+
+        $detail = $notice['message'];
+        if ($profile->driver_code) {
+            $detail = $profile->driver_code . ' — ' . $detail;
+        }
+
+        return [
+            'level'  => 'pending',
+            'label'  => 'TX cần nạp ví',
+            'detail' => $detail,
+        ];
     }
 
     /** Đồng bộ kết chuyến thiếu và bật cổng ví theo doanh thu tích lũy. */
@@ -347,25 +436,52 @@ class DriverWalletService
 
     public function driverRevenueBetween(DriverProfile $profile, \Carbon\Carbon $start, \Carbon\Carbon $end): float
     {
+        return (float) $this->completedBookingsBetweenQuery($profile, $start, $end)->sum('total_price');
+    }
+
+    public function driverCompletedTripCountBetween(DriverProfile $profile, \Carbon\Carbon $start, \Carbon\Carbon $end): int
+    {
+        return $this->completedBookingsBetweenQuery($profile, $start, $end)->count();
+    }
+
+    /**
+     * @param  iterable<int, DriverProfile>  $profiles
+     * @return array<int, array{trips: int, revenue: int}>
+     */
+    public function monthlyStatsForDrivers(iterable $profiles, \Carbon\Carbon $monthStart): array
+    {
+        $end = $monthStart->copy()->endOfMonth();
+        $stats = [];
+
+        foreach ($profiles as $profile) {
+            $userId = (int) $profile->user_id;
+            $stats[$userId] = [
+                'trips'   => $this->driverCompletedTripCountBetween($profile, $monthStart, $end),
+                'revenue' => (int) round($this->driverRevenueBetween($profile, $monthStart, $end)),
+            ];
+        }
+
+        return $stats;
+    }
+
+    /** @return \Illuminate\Database\Eloquent\Builder<Booking> */
+    private function completedBookingsBetweenQuery(DriverProfile $profile, \Carbon\Carbon $start, \Carbon\Carbon $end)
+    {
         $query = Booking::query()
+            ->assignedToDriver($profile->user_id)
             ->where('trip_status', 'completed')
+            ->whereNotIn('booking_status', ['cancelled', 'rejected'])
             ->whereNotNull('completed_at')
             ->whereBetween('completed_at', [$start, $end]);
 
-        if (\Illuminate\Support\Facades\Schema::hasColumn('bookings', 'assigned_driver_id')) {
-            $query->where('assigned_driver_id', $profile->user_id);
-        } else {
-            $query->whereHas('schedule', fn ($q) => $q->where('driver_id', $profile->user_id));
-        }
-
-        return (float) $query->sum('total_price');
+        return $query;
     }
 
     public function driverRevenueStats(DriverProfile $profile): array
     {
         return [
-            'day'   => $this->driverRevenueBetween($profile, now()->startOfDay(), now()->endOfDay()),
-            'month' => $this->driverRevenueBetween($profile, now()->startOfMonth(), now()->endOfMonth()),
+            'day'  => $this->driverRevenueBetween($profile, now()->startOfDay(), now()->endOfDay()),
+            'week' => $this->driverRevenueBetween($profile, now()->startOfWeek(), now()->endOfWeek()),
         ];
     }
 
@@ -382,39 +498,43 @@ class DriverWalletService
     }
 
     /** @return Collection<int, array{kind: string, amount: int, at: \Carbon\Carbon, label: string, meta: string|null, status: string|null}> */
-    public function walletActivityHistory(DriverWallet $wallet): Collection
+    public function walletActivityHistory(DriverWallet $wallet, bool $depositsOnly = false): Collection
     {
-        $wallet->loadMissing(['transactions', 'settlements.schedule.route']);
+        $wallet->loadMissing($depositsOnly
+            ? ['transactions']
+            : ['transactions', 'settlements.schedule.route']);
 
         $items = collect();
 
         foreach ($wallet->transactions as $transaction) {
             $items->push([
-                'kind'   => 'deposit',
-                'amount' => (int) $transaction->amount,
-                'at'     => $transaction->created_at,
-                'label'  => 'Nạp ví',
-                'meta'   => $transaction->approved_at
-                    ? 'Duyệt ' . $transaction->approved_at->format('d/m/Y H:i')
-                    : 'Gửi ' . $transaction->created_at->format('d/m/Y H:i'),
-                'status' => $transaction->status,
+                'kind'            => 'deposit',
+                'amount'          => (int) $transaction->amount,
+                'at'              => $transaction->created_at,
+                'label'           => DriverWalletTransaction::historyLabelFor($transaction->status),
+                'meta'            => $this->depositHistoryMeta($transaction),
+                'status'          => $transaction->status,
+                'proof_image_url' => $transaction->proofImageUrl(),
+                'reference'       => $transaction->depositReference(),
             ]);
         }
 
-        foreach ($wallet->settlements->where('status', 'completed') as $settlement) {
-            $schedule = $settlement->schedule;
-            $routeMeta = $schedule
-                ? $schedule->route->departure . ' → ' . $schedule->route->destination
-                : null;
+        if (! $depositsOnly) {
+            foreach ($wallet->settlements->where('status', 'completed') as $settlement) {
+                $schedule = $settlement->schedule;
+                $routeMeta = $schedule
+                    ? $schedule->route->departure . ' → ' . $schedule->route->destination
+                    : null;
 
-            $items->push([
-                'kind'   => 'trip_revenue',
-                'amount' => (int) $settlement->revenue_amount,
-                'at'     => $settlement->driver_settled_at ?? $settlement->updated_at,
-                'label'  => 'Hoàn thành chuyến',
-                'meta'   => $routeMeta,
-                'status' => 'completed',
-            ]);
+                $items->push([
+                    'kind'   => 'trip_revenue',
+                    'amount' => (int) $settlement->revenue_amount,
+                    'at'     => $settlement->driver_settled_at ?? $settlement->updated_at,
+                    'label'  => 'Hoàn thành chuyến',
+                    'meta'   => $routeMeta,
+                    'status' => 'completed',
+                ]);
+            }
         }
 
         return $items
@@ -439,16 +559,16 @@ class DriverWalletService
         foreach ($transactions as $transaction) {
             $profile = $transaction->wallet->driverProfile;
             $items->push([
-                'kind'        => 'deposit',
-                'amount'      => (int) $transaction->amount,
-                'at'          => $transaction->created_at,
-                'label'       => 'Nạp ví',
-                'meta'        => $transaction->approved_at
-                    ? 'Duyệt ' . $transaction->approved_at->format('d/m/Y H:i')
-                    : 'Gửi ' . $transaction->created_at->format('d/m/Y H:i'),
-                'status'      => $transaction->status,
-                'driver_name' => $profile->user->name,
-                'driver_code' => $profile->driver_code,
+                'kind'            => 'deposit',
+                'amount'          => (int) $transaction->amount,
+                'at'              => $transaction->created_at,
+                'label'           => DriverWalletTransaction::historyLabelFor($transaction->status),
+                'meta'            => $this->depositHistoryMeta($transaction),
+                'status'          => $transaction->status,
+                'driver_name'     => $profile->user->name,
+                'driver_code'     => $profile->driver_code,
+                'proof_image_url' => $transaction->proofImageUrl(),
+                'reference'       => $transaction->depositReference(),
             ]);
         }
 
@@ -538,7 +658,7 @@ class DriverWalletService
             return;
         }
 
-        if ($wallet->wallet_gate_enabled && $wallet->balance <= DriverWalletConfig::MIN_BALANCE) {
+        if ($wallet->wallet_gate_enabled && ! $wallet->hasMinBalance()) {
             $wallet->update([
                 'accept_trips_blocked_at'   => now(),
                 'accept_trips_block_reason' => 'low_balance',
@@ -551,6 +671,15 @@ class DriverWalletService
             'accept_trips_blocked_at'   => null,
             'accept_trips_block_reason' => null,
         ]);
+    }
+
+    private function depositHistoryMeta(DriverWalletTransaction $transaction): string
+    {
+        return match ($transaction->status) {
+            'approved' => 'Duyệt ' . ($transaction->approved_at?->format('d/m/Y H:i') ?? '—'),
+            'rejected' => '',
+            default    => '',
+        };
     }
 
     private function assignOperatorFromTrips(DriverProfile $profile): void
@@ -567,6 +696,20 @@ class DriverWalletService
 
         if ($operatorId) {
             $profile->update(['operator_id' => (int) $operatorId]);
+            $profile->refresh();
+        }
+    }
+
+    private function assignDefaultOperator(DriverProfile $profile): void
+    {
+        $adminId = \App\Models\User::query()
+            ->where('role', 'admin')
+            ->where('status', 'active')
+            ->orderBy('id')
+            ->value('id');
+
+        if ($adminId) {
+            $profile->update(['operator_id' => (int) $adminId]);
             $profile->refresh();
         }
     }

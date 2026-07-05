@@ -16,6 +16,9 @@ class DriverWalletConfig
 
     public const ACTIVATION_DEPOSIT = self::MIN_DEPOSIT;
 
+    /** Tối đa số yêu cầu nạp chờ duyệt cùng lúc mỗi tài xế. */
+    public const MAX_PENDING_DEPOSITS = 1;
+
     public static function revenueThresholdShortLabel(): string
     {
         return number_format((int) (self::REVENUE_THRESHOLD / 1000), 0, ',', '.') . 'k';

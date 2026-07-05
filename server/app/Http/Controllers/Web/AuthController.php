@@ -37,7 +37,7 @@ class AuthController extends Controller
 
         if (! $user) {
             return back()
-                ->withErrors(['login' => 'Số điện thoại hoặc mật khẩu không đúng'])
+                ->withErrors(['login' => 'Tài khoản hoặc mật khẩu không đúng'])
                 ->withInput();
         }
 

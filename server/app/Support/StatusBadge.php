@@ -18,11 +18,6 @@ class StatusBadge
         return 'status-pill status-pill--' . $variant;
     }
 
-    public static function bookingMode(string $mode): string
-    {
-        return $mode === 'whole_car' ? self::GOLD : self::INFO;
-    }
-
     public static function depositStatus(?string $status): string
     {
         return match ($status) {

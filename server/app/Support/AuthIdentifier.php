@@ -53,6 +53,12 @@ class AuthIdentifier
             return User::query()->where('email', $login)->first();
         }
 
+        $byEmail = User::query()->where('email', $login)->first();
+
+        if ($byEmail) {
+            return $byEmail;
+        }
+
         return self::findUserByPhone($login);
     }
 }

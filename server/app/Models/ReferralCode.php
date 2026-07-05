@@ -68,6 +68,11 @@ class ReferralCode extends Model
         return $this->belongsTo(Booking::class);
     }
 
+    public function attributedBookings()
+    {
+        return $this->hasMany(Booking::class, 'applied_referral_code_id');
+    }
+
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
@@ -113,7 +118,6 @@ class ReferralCode extends Model
 
         return match ($this->type) {
             self::TYPE_REFERRER => PlatformFees::referralCommissionFirstPercent(),
-            self::TYPE_BOOKING_TEMP => PlatformFees::referralCommissionRepeatPercent(),
             default => 0,
         };
     }
@@ -121,8 +125,7 @@ class ReferralCode extends Model
     public function commissionTierLabel(): string
     {
         return match ($this->type) {
-            self::TYPE_REFERRER => 'Người GT',
-            self::TYPE_BOOKING_TEMP => 'Từ vé',
+            self::TYPE_REFERRER => 'Doanh thu GT',
             default => '—',
         };
     }
@@ -135,7 +138,7 @@ class ReferralCode extends Model
         }
 
         if ($this->type === self::TYPE_BOOKING_TEMP) {
-            return PlatformFees::referralCommissionRepeatPercent();
+            return PlatformFees::bookingQrDiscountPercent();
         }
 
         return 0.0;

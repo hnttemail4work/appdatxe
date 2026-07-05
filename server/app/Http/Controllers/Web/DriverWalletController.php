@@ -21,29 +21,60 @@ class DriverWalletController extends Controller
     {
         $profile = DriverProfile::query()->where('user_id', Auth::id())->firstOrFail();
         $depositRedirect = fn () => redirect()->route('driver.dashboard', ['tab' => 'deposit']);
+        $wantsJson = $request->expectsJson() || $request->ajax();
 
         $validator = Validator::make($request->all(), [
-            'amount' => ['required', 'numeric', 'min:' . DriverWalletConfig::MIN_DEPOSIT],
+            'amount'      => ['required', 'numeric', 'min:' . DriverWalletConfig::MIN_DEPOSIT],
+            'proof_image' => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp,gif', 'max:5120'],
         ], [
-            'amount.required' => 'Vui lòng nhập số tiền nạp.',
-            'amount.min'      => 'Số tiền nạp tối thiểu ' . DriverWalletConfig::minDepositFormatted() . '.',
+            'amount.required'      => 'Vui lòng nhập số tiền nạp.',
+            'amount.min'           => 'Số tiền nạp tối thiểu ' . DriverWalletConfig::minDepositFormatted() . '.',
+            'proof_image.image'    => 'Ảnh chụp chuyển khoản phải là file ảnh.',
+            'proof_image.mimes'    => 'Ảnh chụp chuyển khoản phải là JPG, PNG, WebP hoặc GIF.',
+            'proof_image.max'      => 'Ảnh chụp chuyển khoản tối đa 5MB.',
         ]);
 
         if ($validator->fails()) {
+            if ($wantsJson) {
+                return response()->json([
+                    'message' => $validator->errors()->first(),
+                    'errors'  => $validator->errors(),
+                ], 422);
+            }
+
             return $depositRedirect()->withErrors($validator)->withInput();
         }
 
         $validated = $validator->validated();
 
         try {
-            $this->wallets->requestDeposit($profile, (int) $validated['amount']);
+            $transaction = $this->wallets->requestDeposit(
+                $profile,
+                (int) $validated['amount'],
+                $request->file('proof_image'),
+            );
         } catch (InvalidArgumentException $e) {
+            if ($wantsJson) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+
             return $depositRedirect()
                 ->withErrors(['wallet' => $e->getMessage()])
                 ->withInput();
         }
 
-        return $depositRedirect()
-            ->with('success', 'Đã gửi yêu cầu nạp tiền — chờ quản lý cộng vào ví.');
+        $message = 'Đã gửi yêu cầu nạp tiền.';
+
+        if ($wantsJson) {
+            session()->flash('success', $message);
+
+            return response()->json([
+                'ok'       => true,
+                'message'  => $message,
+                'redirect' => route('driver.dashboard', ['tab' => 'deposit']),
+            ]);
+        }
+
+        return $depositRedirect()->with('success', $message);
     }
 }

@@ -24,13 +24,19 @@
     var sending = false;
     var onTrip = locationBar.getAttribute('data-driver-trip-active') === '1';
     var tripUpcoming = locationBar.getAttribute('data-driver-trip-upcoming') === '1';
-    var sharePromptMessage = 'Chọn vị trí trên bản đồ để nhận cuốc gần bạn.';
+    var sharePromptMessage = tripUpcoming
+        ? 'Chia sẻ vị trí để khách biết bạn còn bao nhiêu km đến điểm đón.'
+        : '';
 
     function hasLocationCoords() {
         return !!(latInput && lngInput && String(latInput.value || '').trim() && String(lngInput.value || '').trim());
     }
 
     function ensureSharePromptElement() {
+        if (!tripUpcoming || !sharePromptMessage) {
+            return null;
+        }
+
         var prompt = document.getElementById('driver-location-share-prompt');
         if (prompt) {
             prompt.hidden = false;
@@ -56,10 +62,13 @@
 
         locationBar.setAttribute('data-needs-location', '1');
         locationBar.classList.add('driver-location-sheet--needs-share');
-        ensureSharePromptElement();
 
-        if (metaLine) {
-            metaLine.textContent = sharePromptMessage;
+        if (tripUpcoming) {
+            ensureSharePromptElement();
+
+            if (metaLine) {
+                metaLine.textContent = sharePromptMessage;
+            }
         }
 
         if (opts.scroll !== false) {

@@ -260,6 +260,23 @@ class GeocodeController extends Controller
     }
 
     /** @param array<string, mixed> $item */
+    private function searchTypeScore(array $item): int
+    {
+        $type = (string) ($item['type'] ?? '');
+        $class = (string) ($item['class'] ?? '');
+
+        return match (true) {
+            in_array($type, ['house', 'building', 'apartments', 'residential', 'terrace', 'detached'], true) => 100,
+            in_array($type, ['retail', 'commercial', 'industrial', 'school', 'hospital', 'clinic', 'hotel', 'restaurant', 'cafe', 'fast_food', 'pharmacy', 'bank', 'fuel', 'parking', 'place_of_worship'], true) => 90,
+            $class === 'amenity' || $class === 'shop' || $class === 'tourism' => 85,
+            in_array($type, ['house_number', 'address'], true) => 80,
+            in_array($type, ['road', 'pedestrian', 'footway', 'residential'], true) => 40,
+            in_array($type, ['suburb', 'neighbourhood', 'quarter', 'hamlet'], true) => 20,
+            default => 10,
+        };
+    }
+
+    /** @param array<string, mixed> $item */
     private function isLowQualitySearchHit(array $item, string $address): bool
     {
         $type = (string) ($item['type'] ?? '');
@@ -302,7 +319,7 @@ class GeocodeController extends Controller
             'format' => 'json',
             'addressdetails' => 1,
             'accept-language' => 'vi',
-            'zoom' => 18,
+            'zoom' => 19,
         ]);
 
         if ($response === null) {
@@ -343,9 +360,10 @@ class GeocodeController extends Controller
             'q' => $searchText,
             'format' => 'json',
             'countrycodes' => 'vn',
-            'limit' => 8,
+            'limit' => 12,
             'addressdetails' => 1,
             'accept-language' => 'vi',
+            'dedupe' => 1,
         ];
 
         if ($province !== '' && isset(self::PROVINCE_VIEWBOXES[$province])) {
@@ -423,6 +441,7 @@ class GeocodeController extends Controller
                 'lat' => $lat,
                 'lon' => $lon,
                 '_importance' => (float) ($row['importance'] ?? 0),
+                '_type_score' => $this->searchTypeScore($row),
                 '_key' => round($lat, 4).','.round($lon, 4),
             ];
         }
@@ -434,6 +453,11 @@ class GeocodeController extends Controller
         $candidates = array_values($unique);
 
         usort($candidates, function (array $a, array $b) use ($viewbox): int {
+            $typeScore = $b['_type_score'] <=> $a['_type_score'];
+            if ($typeScore !== 0) {
+                return $typeScore;
+            }
+
             $importance = $b['_importance'] <=> $a['_importance'];
             if ($importance !== 0) {
                 return $importance;

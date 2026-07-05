@@ -1,4 +1,4 @@
-/* Tam Long Limo — Customer UI (vàng–đen) */
+/* gozviet — Customer UI (vàng–đen) */
 :root {
     --tl-primary: #d4af37;
     --tl-primary-light: #e8c547;
@@ -96,12 +96,80 @@ body:has(.customer-page) {
     object-fit: cover;
     object-position: center;
 }
+.customer-hero-banner-top {
+    position: absolute;
+    top: .75rem;
+    left: .75rem;
+    right: .75rem;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    line-height: normal;
+    pointer-events: none;
+}
+.customer-hero-banner-title {
+    margin: 0;
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: .95rem;
+    font-weight: 800;
+    line-height: 1.25;
+    color: #fff;
+    text-shadow: 0 1px 8px rgba(0, 0, 0, .65);
+    pointer-events: none;
+}
+.customer-hero-banner-hotline {
+    flex: 0 0 auto;
+    pointer-events: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    max-width: min(100%, 11rem);
+    padding: .32rem .55rem;
+    border-radius: 999px;
+    text-decoration: none;
+    background: rgba(10, 10, 10, .72);
+    border: 1px solid rgba(212, 175, 55, .42);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .28);
+    color: #fde68a;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    transition: background .15s ease, border-color .15s ease, transform .15s ease;
+}
 .customer-hero-banner-overlay {
     position: absolute;
     top: .75rem;
     right: .75rem;
     z-index: 2;
     line-height: normal;
+}
+.customer-hero-banner-hotline:hover,
+.customer-hero-banner-hotline:focus-visible {
+    color: #fff7cc;
+    background: rgba(10, 10, 10, .86);
+    border-color: rgba(212, 175, 55, .62);
+    transform: translateY(-1px);
+}
+.customer-hero-hotline-icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    color: #d4af37;
+}
+.customer-hero-hotline-label {
+    font-size: .62rem;
+    font-weight: 700;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, .78);
+}
+.customer-hero-hotline-number {
+    font-size: .78rem;
+    font-weight: 800;
+    letter-spacing: .01em;
+    color: #fff;
+    white-space: nowrap;
 }
 .customer-hero-banner-foot {
     position: absolute;
@@ -110,13 +178,33 @@ body:has(.customer-page) {
     bottom: 0;
     z-index: 2;
     line-height: 1.45;
-    padding: .55rem .85rem;
+    padding: .45rem .85rem;
     background: linear-gradient(180deg, transparent 0%, rgba(10, 10, 10, .82) 100%);
     color: #f5f5f5;
 }
 @media (max-width: 575.98px) {
     .customer-hero-banner-img {
         max-height: 180px;
+    }
+    .customer-hero-banner-top {
+        top: .5rem;
+        left: .5rem;
+        right: .5rem;
+        gap: .35rem;
+    }
+    .customer-hero-banner-title {
+        font-size: .82rem;
+    }
+    .customer-hero-banner-hotline {
+        padding: .28rem .45rem;
+        gap: .28rem;
+        max-width: min(100%, 9.5rem);
+    }
+    .customer-hero-hotline-label {
+        display: none;
+    }
+    .customer-hero-hotline-number {
+        font-size: .72rem;
     }
     .customer-hero-banner-overlay .customer-hero-badge {
         font-size: .68rem;
@@ -783,7 +871,8 @@ body.route-sheet-picker-open {
 }
 
 /* Thẻ tài xế/xe — chữ đọc rõ trên nền tối */
-.customer-page .trip-card-pro .trip-vehicle-plate {
+.customer-page .trip-card-pro .trip-vehicle-plate,
+.customer-page .trip-card-pro .trip-card-spec--plate dd {
     color: #fff;
 }
 .customer-page .trip-card-pro .trip-card-body .text-muted,
@@ -1333,6 +1422,52 @@ body.route-sheet-picker-open {
 .booking-address-field {
     flex: 1;
     min-width: 0;
+}
+
+.booking-address-input-wrap {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: .4rem;
+    align-items: stretch;
+    position: relative;
+}
+
+.booking-address-input-wrap .booking-address-suggest {
+    grid-column: 1 / -1;
+    z-index: 30;
+}
+
+.booking-address-map-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 2.5rem;
+    min-height: 2.35rem;
+    padding: 0;
+    border: 1px solid rgba(212, 175, 55, .35);
+    border-radius: .5rem;
+    background: rgba(212, 175, 55, .1);
+    color: var(--tl-primary-light);
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.booking-address-map-btn:hover,
+.booking-address-map-btn:focus-visible {
+    background: rgba(212, 175, 55, .2);
+    border-color: rgba(212, 175, 55, .55);
+    color: #fff7cc;
+    outline: none;
+}
+
+.address-map-readonly-input {
+    cursor: pointer;
+    background-color: var(--bs-body-bg);
+}
+
+.address-map-readonly-input:read-only:focus {
+    background-color: var(--bs-body-bg);
 }
 
 .booking-chip-group {
@@ -1964,6 +2099,20 @@ body.modal-open .modal-backdrop.show {
     width: 4.5rem;
     height: 4.5rem;
 }
+.trip-card-layout--catalog {
+    align-items: stretch;
+}
+.trip-card-layout--catalog .trip-vehicle-thumb {
+    width: 9.5rem;
+    height: 7rem;
+}
+.trip-card-layout--catalog .trip-vehicle-photo,
+.trip-card-layout--catalog .trip-vehicle-photo--empty {
+    border-radius: .75rem;
+}
+.trip-card-layout--catalog .trip-vehicle-photo--empty {
+    font-size: 1.5rem;
+}
 .trip-route-thumb {
     width: 5.5rem;
     height: 4rem;
@@ -2001,6 +2150,38 @@ body.modal-open .modal-backdrop.show {
     flex: 1;
     min-width: 0;
 }
+.trip-card-specs {
+    margin: 0;
+    display: grid;
+    gap: .12rem;
+}
+.trip-card-spec {
+    display: flex;
+    gap: .35rem;
+    align-items: baseline;
+    font-size: .85rem;
+    line-height: 1.35;
+    margin: 0;
+}
+.trip-card-spec dt {
+    margin: 0;
+    font-weight: 600;
+    color: var(--tl-text-muted);
+    flex-shrink: 0;
+}
+.trip-card-spec dd {
+    margin: 0;
+    font-weight: 500;
+    color: var(--tl-text);
+    min-width: 0;
+}
+.trip-card-spec--plate dd {
+    font-weight: 700;
+    font-size: .95rem;
+}
+.trip-card-availability {
+    margin-top: .45rem;
+}
 .trip-card-plate {
     line-height: 1.2;
 }
@@ -2013,7 +2194,6 @@ body.modal-open .modal-backdrop.show {
 }
 .trip-card-head .status-pill {
     flex-shrink: 0;
-    margin-top: .1rem;
 }
 .trip-card-driver {
     display: flex;
@@ -2331,6 +2511,23 @@ body.modal-open .modal-backdrop.show {
         width: 3.25rem;
         height: 3.25rem;
         align-self: start;
+    }
+
+    .trip-card-layout--catalog {
+        grid-template-columns: 7.5rem minmax(0, 1fr) auto;
+    }
+
+    .trip-card-layout--catalog .trip-vehicle-thumb {
+        grid-row: 1 / -1;
+        width: 7.5rem;
+        height: auto;
+        min-height: 6.25rem;
+        align-self: stretch;
+    }
+
+    .trip-card-layout--catalog .trip-vehicle-photo,
+    .trip-card-layout--catalog .trip-vehicle-photo--empty {
+        min-height: 6.25rem;
     }
 
     .trip-card-body {
@@ -2858,6 +3055,36 @@ body.modal-open .modal-backdrop.show {
     font-size: .7rem;
     border-radius: 50%;
 }
+.photo-vehicle-catalog-badge {
+    display: block;
+    margin-top: .35rem;
+    padding: .18rem .4rem;
+    border-radius: .35rem;
+    background: rgba(212, 175, 55, .18);
+    border: 1px solid rgba(212, 175, 55, .45);
+    color: #fde68a;
+    font-size: .62rem;
+    font-weight: 700;
+    text-align: center;
+    line-height: 1.2;
+}
+.photo-vehicle-catalog-pick {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    margin-top: .35rem;
+    font-size: .72rem;
+    font-weight: 600;
+    color: var(--tl-text-muted);
+    cursor: pointer;
+}
+.photo-vehicle-catalog-pick input {
+    flex-shrink: 0;
+}
+.photo-vehicle-item.is-catalog-photo a img {
+    outline: 2px solid rgba(212, 175, 55, .55);
+    outline-offset: 1px;
+}
 
 /* Booking result flash */
 .booking-flash {
@@ -3157,6 +3384,16 @@ body.modal-open .modal-backdrop.show {
 #bookingModal .booking-summary-total {
     color: var(--tl-primary-light);
 }
+#bookingModal .booking-price-discounted {
+    color: #22c55e;
+}
+.booking-price-original {
+    text-align: right;
+    line-height: 1.3;
+}
+#modal-footer-step1 .booking-price-original {
+    text-align: left;
+}
 .booking-referral-discount {
     text-align: right;
     line-height: 1.35;
@@ -3179,12 +3416,20 @@ body.modal-open .modal-backdrop.show {
 .booking-active-session {
     border: 1px solid rgba(34, 197, 94, 0.35);
 }
+.booking-active-session.booking-flash {
+    display: block;
+    padding: .75rem .85rem;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, .28);
+}
 .booking-active-session-layout {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: .75rem;
 }
 @media (min-width: 768px) {
+    .booking-active-session.booking-flash {
+        padding: 1rem 1.15rem;
+    }
     .booking-active-session-layout {
         flex-direction: row;
         align-items: flex-start;
@@ -3196,44 +3441,157 @@ body.modal-open .modal-backdrop.show {
     flex: 1 1 auto;
     min-width: 0;
 }
-.booking-active-driver {
-    margin-top: 0.85rem;
-    padding-top: 0.85rem;
-    border-top: 1px solid rgba(34, 197, 94, 0.2);
+.booking-active-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .4rem .55rem;
+    margin-bottom: .35rem;
 }
-.booking-active-driver-title {
-    font-size: 0.8125rem;
+.booking-active-head .booking-flash-title {
+    margin: 0;
+    font-size: .92rem;
+    line-height: 1.3;
+}
+.booking-active-trip-code {
+    display: inline-block;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: .74rem;
     font-weight: 700;
-    letter-spacing: 0.01em;
+    letter-spacing: .04em;
+    padding: .18rem .45rem;
+    border-radius: .35rem;
+    background: rgba(0, 0, 0, .28);
+    border: 1px solid rgba(212, 175, 55, .32);
+    color: #fde68a;
+    word-break: break-all;
 }
-.booking-active-driver-grid {
-    display: grid;
-    gap: 0.45rem 0.75rem;
+.booking-active-contact-note {
+    font-size: .78rem;
+    line-height: 1.45;
+    color: rgba(255, 255, 255, 0.76);
+    margin-bottom: .6rem !important;
 }
-.booking-active-driver-row {
-    display: grid;
-    grid-template-columns: minmax(5.5rem, 7rem) 1fr;
-    gap: 0.5rem;
-    align-items: baseline;
+.booking-active-driver-card {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    margin-top: .15rem;
+    padding: .55rem .65rem;
+    border-radius: .65rem;
+    background: rgba(0, 0, 0, 0.22);
+    border: 1px solid rgba(212, 175, 55, 0.22);
 }
-.booking-active-driver-row dt {
-    margin: 0;
-    font-weight: 600;
-    color: rgba(15, 23, 42, 0.62);
+.booking-active-driver-copy {
+    flex: 1 1 auto;
+    min-width: 0;
 }
-.booking-active-driver-row dd {
-    margin: 0;
-    font-weight: 600;
-    color: inherit;
+.booking-active-driver-name {
+    font-size: .88rem;
+    font-weight: 700;
+    line-height: 1.35;
+    color: #fff;
+    word-break: break-word;
+}
+.booking-active-driver-vehicle {
+    margin-top: .15rem;
+    font-size: .76rem;
+    line-height: 1.35;
+    color: rgba(255, 255, 255, 0.82);
+    word-break: break-word;
+}
+.booking-active-driver-status {
+    margin-top: .25rem;
+    font-size: .78rem;
+    line-height: 1.35;
+    font-weight: 700;
+    color: #fde68a;
+    word-break: break-word;
+}
+.booking-active-driver-distance {
+    margin-top: .12rem;
+    font-size: .76rem;
+    line-height: 1.35;
+    color: rgba(255, 255, 255, 0.88);
+    word-break: break-word;
+}
+.booking-active-driver-eta {
+    margin-top: .12rem;
+    font-size: .76rem;
+    line-height: 1.35;
+    font-weight: 700;
+    color: #86efac;
+    word-break: break-word;
+}
+.booking-active-driver-photo {
+    flex-shrink: 0;
+    width: 3.25rem;
+    height: 3.25rem;
+    border-radius: .55rem;
+    overflow: hidden;
+    border: 1px solid rgba(212, 175, 55, 0.3);
+    background: rgba(0, 0, 0, 0.25);
+}
+.booking-active-driver-vehicle-img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+@media (min-width: 768px) {
+    .booking-active-driver-photo {
+        width: 4rem;
+        height: 4rem;
+    }
+    .booking-active-driver-name {
+        font-size: .94rem;
+    }
+    .booking-active-driver-vehicle,
+    .booking-active-driver-status,
+    .booking-active-driver-distance,
+    .booking-active-driver-eta {
+        font-size: .8rem;
+    }
+}
+.booking-summary-vehicle-photo {
+    flex-shrink: 0;
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: 0.65rem;
+    overflow: hidden;
+    border: 1px solid rgba(212, 175, 55, 0.2);
+    background: rgba(255, 255, 255, 0.04);
+}
+.booking-summary-vehicle-photo .trip-vehicle-photo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 .booking-active-session-referral {
     flex: 0 0 auto;
-    text-align: center;
-    padding: 0;
-    background: transparent;
-    border: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .65rem;
+    text-align: left;
+    padding: .45rem .55rem;
+    background: rgba(0, 0, 0, 0.18);
+    border: 1px solid rgba(212, 175, 55, 0.2);
+    border-radius: .55rem;
     max-width: 100%;
     color: inherit;
+}
+@media (min-width: 768px) {
+    .booking-active-session-referral {
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        text-align: center;
+        padding: 0;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+    }
 }
 .booking-active-referral-label {
     margin: 0;
@@ -3268,8 +3626,15 @@ body.modal-open .modal-backdrop.show {
 .booking-active-referral-qr img,
 .booking-active-referral-qr canvas {
     display: block;
-    width: 72px !important;
-    height: 72px !important;
+    width: 56px !important;
+    height: 56px !important;
+}
+@media (min-width: 768px) {
+    .booking-active-referral-qr img,
+    .booking-active-referral-qr canvas {
+        width: 72px !important;
+        height: 72px !important;
+    }
 }
 .booking-active-referral-qr-overlay {
     position: fixed;
@@ -3381,6 +3746,384 @@ body.booking-active-referral-qr-open {
 }
 #bookingModal .invalid-feedback {
     color: #fca5a5;
+}
+
+/* Guest trip page */
+.guest-trip-page .customer-hero--compact h1 {
+    font-size: 1.15rem;
+    font-weight: 800;
+}
+
+.guest-trip-empty {
+    text-align: center;
+    padding: 2.75rem 1.25rem 3rem;
+    border-radius: 1.15rem;
+    background: linear-gradient(160deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.015) 100%);
+    border: 1px dashed rgba(212, 175, 55, 0.22);
+}
+.guest-trip-empty__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3.5rem;
+    height: 3.5rem;
+    margin-bottom: 0.85rem;
+    border-radius: 999px;
+    color: var(--tl-primary, #d4af37);
+    background: rgba(212, 175, 55, 0.1);
+    border: 1px solid rgba(212, 175, 55, 0.2);
+}
+.guest-trip-empty__title {
+    font-size: 1.05rem;
+    font-weight: 800;
+    margin-bottom: 0.35rem;
+}
+.guest-trip-empty__text {
+    font-size: 0.86rem;
+    color: #9ca3af;
+    margin-bottom: 0;
+    line-height: 1.5;
+}
+
+.guest-trip-card {
+    overflow: hidden;
+    border-radius: 1.15rem;
+    background: linear-gradient(165deg, rgba(28, 28, 28, 0.98) 0%, rgba(18, 18, 18, 0.99) 100%);
+    border: 1px solid rgba(212, 175, 55, 0.22);
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    margin-bottom: 5rem;
+}
+
+.guest-trip-card__head {
+    padding: 1rem 1rem 0.85rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.guest-trip-card__id {
+    min-width: 0;
+}
+.guest-trip-card__id-label {
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #9ca3af;
+    margin-bottom: 0.2rem;
+}
+.guest-trip-card__code {
+    display: inline-block;
+    padding: 0.2rem 0.55rem;
+    border-radius: 0.45rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.95rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #fde68a;
+    background: rgba(212, 175, 55, 0.12);
+    border: 1px solid rgba(212, 175, 55, 0.28);
+}
+
+.guest-trip-card__hero {
+    padding: 1rem 1rem 0.35rem;
+}
+.guest-trip-route {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.65rem;
+}
+.guest-trip-route__city {
+    font-size: 1.2rem;
+    font-weight: 800;
+    line-height: 1.2;
+    color: #fff;
+}
+.guest-trip-route__arrow {
+    display: inline-flex;
+    color: var(--tl-primary, #d4af37);
+    opacity: 0.95;
+}
+.guest-trip-card__meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+}
+.guest-trip-card__schedule {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.28rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #e5e7eb;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.guest-trip-card__schedule-icon {
+    color: var(--tl-primary, #d4af37);
+    flex-shrink: 0;
+}
+.guest-trip-vehicle-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.28rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #fde68a;
+    background: rgba(212, 175, 55, 0.12);
+    border: 1px solid rgba(212, 175, 55, 0.28);
+}
+
+.guest-trip-stops {
+    position: relative;
+    padding: 0.35rem 1rem 0.85rem;
+}
+.guest-trip-stop {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1.1rem minmax(0, 1fr);
+    gap: 0.65rem;
+    padding-bottom: 0.85rem;
+}
+.guest-trip-stop:last-child {
+    padding-bottom: 0;
+}
+.guest-trip-stop__rail {
+    position: absolute;
+    left: 0.48rem;
+    top: 1.15rem;
+    bottom: -0.15rem;
+    width: 2px;
+    background: linear-gradient(180deg, rgba(34, 197, 94, 0.65) 0%, rgba(239, 68, 68, 0.65) 100%);
+    border-radius: 999px;
+}
+.guest-trip-stop--dropoff .guest-trip-stop__rail {
+    display: none;
+}
+.guest-trip-stop__marker {
+    width: 0.72rem;
+    height: 0.72rem;
+    margin-top: 0.22rem;
+    border-radius: 999px;
+    border: 2px solid #111;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
+}
+.guest-trip-stop--pickup .guest-trip-stop__marker {
+    background: #22c55e;
+}
+.guest-trip-stop--dropoff .guest-trip-stop__marker {
+    background: #ef4444;
+}
+.guest-trip-stop__label {
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #9ca3af;
+    margin-bottom: 0.15rem;
+}
+.guest-trip-stop__address {
+    margin: 0;
+    font-size: 0.88rem;
+    line-height: 1.45;
+    color: #f3f4f6;
+    word-break: break-word;
+}
+
+.guest-trip-driver {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.85rem;
+    margin: 0 0.85rem 0.85rem;
+    padding: 0.9rem;
+    border-radius: 0.9rem;
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.09) 0%, rgba(255, 255, 255, 0.03) 100%);
+    border: 1px solid rgba(212, 175, 55, 0.22);
+}
+.guest-trip-driver__media {
+    position: relative;
+    width: 4.25rem;
+    flex-shrink: 0;
+}
+.guest-trip-driver__photo-wrap {
+    width: 100%;
+}
+.guest-trip-driver__photo {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    border-radius: 0.65rem;
+    border: 1px solid rgba(212, 175, 55, 0.25);
+}
+.guest-trip-driver__avatar-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 3.25rem;
+    height: 3.25rem;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: #fde68a;
+    background: rgba(212, 175, 55, 0.16);
+    border: 1px solid rgba(212, 175, 55, 0.3);
+}
+.guest-trip-driver__info {
+    min-width: 0;
+    flex: 1;
+}
+.guest-trip-driver__top {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.5rem;
+    margin-bottom: 0.2rem;
+}
+.guest-trip-driver__name {
+    font-size: 0.98rem;
+    font-weight: 800;
+    color: #fff;
+}
+.guest-trip-driver__code {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #9ca3af;
+    letter-spacing: 0.04em;
+}
+.guest-trip-driver__vehicle-line {
+    font-size: 0.82rem;
+    color: #d1d5db;
+    line-height: 1.4;
+    margin-bottom: 0.35rem;
+}
+.guest-trip-driver__plate {
+    display: inline-block;
+    margin-bottom: 0.45rem;
+    padding: 0.18rem 0.5rem;
+    border-radius: 0.4rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.guest-trip-driver__status {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.22rem 0.55rem;
+    border-radius: 0.45rem;
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: #6ee7b7;
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.24);
+    margin-bottom: 0.35rem;
+}
+.guest-trip-driver__live {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.65rem;
+}
+.guest-trip-driver__live-item {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #93c5fd;
+}
+
+.guest-trip-review {
+    margin: 0 0.85rem 0.85rem;
+    padding: 0.95rem 0.9rem;
+    border-radius: 0.9rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+}
+.guest-trip-review-title {
+    font-size: 0.92rem;
+    font-weight: 800;
+    margin-bottom: 0.25rem;
+}
+.guest-trip-review-lead {
+    font-size: 0.82rem;
+    color: #9ca3af;
+    margin-bottom: 0.65rem;
+}
+.guest-trip-review-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+.guest-trip-review-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.45rem 0.85rem;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.04);
+    color: #e5e7eb;
+    transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+.guest-trip-review-btn--like.active {
+    color: #6ee7b7;
+    border-color: rgba(16, 185, 129, 0.45);
+    background: rgba(16, 185, 129, 0.12);
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.18);
+}
+.guest-trip-review-btn--dislike.active {
+    color: #fca5a5;
+    border-color: rgba(239, 68, 68, 0.45);
+    background: rgba(239, 68, 68, 0.1);
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.16);
+}
+.guest-trip-review-form-label {
+    display: block;
+    font-size: 0.78rem;
+    margin-bottom: 0.25rem;
+    color: #9ca3af;
+}
+.guest-trip-review-textarea {
+    background: rgba(0, 0, 0, 0.25);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #f3f4f6;
+}
+.guest-trip-review-error {
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    color: #fca5a5;
+}
+.guest-trip-review-done {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin: 0 0.85rem 0.85rem;
+    padding: 0.9rem;
+    border-radius: 0.9rem;
+    background: rgba(16, 185, 129, 0.08);
+    border: 1px solid rgba(16, 185, 129, 0.22);
+}
+.guest-trip-review-done-icon {
+    font-size: 1.5rem;
+    line-height: 1;
+}
+.guest-trip-review-done-title {
+    display: block;
+    margin-bottom: 0.15rem;
+}
+.guest-trip-review-done-comment,
+.guest-trip-review-done-time {
+    font-size: 0.8rem;
+    color: #9ca3af;
+    margin-bottom: 0;
+    line-height: 1.4;
 }
 
 /* Wait progress (đặt xe / theo dõi) */
@@ -3607,6 +4350,78 @@ body.booking-active-referral-qr-open {
 .customer-support-hint {
     margin-top: .85rem;
     text-align: center;
+}
+
+/* Phone + Zalo contact — vertical stack */
+.customer-contact-fab {
+    display: flex;
+    flex-direction: column;
+    gap: .45rem;
+    pointer-events: auto;
+}
+
+.customer-contact-fab--fixed {
+    position: fixed;
+    right: .7rem;
+    bottom: calc(5.1rem + env(safe-area-inset-bottom, 0px));
+    z-index: 1035;
+}
+
+.customer-contact-fab--banner {
+    flex-shrink: 0;
+    gap: .35rem;
+}
+
+.customer-contact-fab-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3.35rem;
+    height: 3.35rem;
+    border-radius: 50%;
+    border: 1px solid rgba(212, 175, 55, .42);
+    background: rgba(12, 12, 12, .94);
+    color: #d4af37;
+    text-decoration: none;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
+}
+
+.customer-contact-fab--banner .customer-contact-fab-btn {
+    width: 3rem;
+    height: 3rem;
+}
+
+.customer-contact-fab-btn:hover,
+.customer-contact-fab-btn:focus-visible {
+    color: #fde68a;
+    background: rgba(20, 18, 12, .98);
+    border-color: rgba(212, 175, 55, .68);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, .48);
+    outline: none;
+}
+
+.customer-contact-fab-btn--phone svg {
+    width: 1.5rem;
+    height: 1.5rem;
+    stroke: #d4af37;
+}
+
+.customer-contact-fab-zalo-label {
+    font-size: .88rem;
+    font-weight: 800;
+    letter-spacing: -.02em;
+    line-height: 1;
+    text-transform: lowercase;
+    color: inherit;
+}
+
+@media (min-width: 768px) {
+    .customer-contact-fab--fixed {
+        right: 1rem;
+        bottom: 2rem;
+    }
 }
 
 @media (min-width: 768px) {

@@ -7,8 +7,14 @@
     <div class="console-panel-body">
         @include('partials.admin-nav-tabs', ['active' => 'deposits'])
 
+        @if(session('success'))
+        <div class="console-alert success mb-3 mt-3" role="status">
+            {{ session('success') }}
+        </div>
+        @endif
+
         @if(($counts['deposits'] ?? 0) > 0)
-        <div class="console-alert info mb-3 mt-3">
+        <div class="console-alert info mb-3 {{ session('success') ? '' : 'mt-3' }}">
             <strong>{{ $counts['deposits'] }}</strong> yêu cầu nạp ví chờ duyệt.
         </div>
         @endif
@@ -20,3 +26,7 @@
     </div>
 </div>
 @endsection
+
+@push('scripts')
+<script src="{{ asset('js/admin-wallet-deposits.js') }}?v={{ filemtime(public_path('js/admin-wallet-deposits.js')) }}" defer></script>
+@endpush

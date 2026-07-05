@@ -60,6 +60,7 @@
     var reverseAbort = null;
     var searchAbort = null;
     var isResolving = false;
+    var needsPinFineTune = false;
     var leafletAssetsPromise = null;
     var searchTimer = null;
     var provinceChangeHandler = null;
@@ -132,8 +133,10 @@
         return fromInput || defaultProvince || '';
     }
 
-    var PROVINCE_FOCUS_ZOOM = 15;
-    var DRIVER_FOCUS_ZOOM = 16;
+    var PROVINCE_FOCUS_ZOOM = 14;
+    var DRIVER_FOCUS_ZOOM = 17;
+    var PICKUP_PIN_ZOOM = 18;
+    var PIN_FINETUNE_HINT = 'Kéo ghim hoặc chạm bản đồ để chỉnh đúng cổng / lối vào, rồi bấm Xác nhận.';
 
     function focusZoomLevel() {
         return isDriverMode() ? DRIVER_FOCUS_ZOOM : PROVINCE_FOCUS_ZOOM;
@@ -301,18 +304,40 @@
         return !!(latInputId && lngInputId);
     }
 
+    function markPinFineTuned() {
+        needsPinFineTune = false;
+        updateConfirmButton();
+    }
+
+    function markPinNeedsFineTune() {
+        if (!requiresCoords()) {
+            needsPinFineTune = false;
+            return;
+        }
+        needsPinFineTune = true;
+        updateConfirmButton();
+        if (previewEl && !isResolving) {
+            previewEl.textContent = PIN_FINETUNE_HINT;
+            previewEl.classList.remove('is-loading');
+        }
+    }
+
     function updateConfirmButton() {
         if (!confirmBtn) {
             return;
         }
         var hasAddress = String(pendingAddress || '').trim() !== '';
         var coordsOk = !requiresCoords() || (pendingLat !== null && pendingLng !== null);
-        var canConfirm = !isResolving && hasAddress && coordsOk;
+        var fineTuneOk = !requiresCoords() || !needsPinFineTune;
+        var canConfirm = !isResolving && hasAddress && coordsOk && fineTuneOk;
         confirmBtn.disabled = !canConfirm;
 
         if (confirmStatusEl) {
             if (isResolving) {
                 confirmStatusEl.textContent = 'Đang lấy địa chỉ...';
+                confirmStatusEl.classList.remove('d-none');
+            } else if (requiresCoords() && needsPinFineTune) {
+                confirmStatusEl.textContent = 'Cần chỉnh ghim trên bản đồ trước khi xác nhận.';
                 confirmStatusEl.classList.remove('d-none');
             } else {
                 confirmStatusEl.textContent = '';
@@ -368,6 +393,7 @@
         pendingLat = null;
         pendingLng = null;
         pendingAddress = '';
+        needsPinFineTune = false;
         hideSearchResults();
         updateConfirmButton();
     }
@@ -505,6 +531,12 @@
             return;
         }
 
+        if (options.fromSearch) {
+            markPinNeedsFineTune();
+        } else if (!options.preserveFineTune) {
+            markPinFineTuned();
+        }
+
         pendingLat = lat;
         pendingLng = lng;
 
@@ -520,7 +552,10 @@
         }
 
         if (moveView) {
-            mapInstance.setView([lat, lng], Math.max(mapInstance.getZoom(), isDriverMode() ? 17 : 16));
+            var targetZoom = isDriverMode()
+                ? Math.max(mapInstance.getZoom(), DRIVER_FOCUS_ZOOM)
+                : Math.max(mapInstance.getZoom(), options.fromSearch ? PICKUP_PIN_ZOOM : PROVINCE_FOCUS_ZOOM);
+            mapInstance.setView([lat, lng], targetZoom);
         }
 
         if (options.address) {
@@ -544,6 +579,11 @@
             setPreview('Chọn điểm trên bản đồ hoặc từ kết quả tìm kiếm trước khi xác nhận.', false);
             return;
         }
+        if (requiresCoords() && needsPinFineTune) {
+            setPreview(PIN_FINETUNE_HINT, false);
+            return;
+        }
+
         if (requiresCoords() && (pendingLat === null || pendingLng === null)) {
             setPreview('Chọn điểm trên bản đồ trước khi xác nhận.', false);
             return;
@@ -574,7 +614,7 @@
                 if (isResolving) return;
                 hideSearchResults();
                 if (item.lat != null && item.lon != null) {
-                    placeMarker(item.lat, item.lon, true, { address: item.address });
+                    placeMarker(item.lat, item.lon, true, { address: item.address, fromSearch: true });
                 } else {
                     pendingLat = null;
                     pendingLng = null;
@@ -648,7 +688,10 @@
                     placedExisting = true;
                     var existingAddress = document.getElementById(targetInputId);
                     var existingText = existingAddress ? String(existingAddress.value || '').trim() : '';
-                    placeMarker(existingLat, existingLng, false, existingText ? { address: existingText } : undefined);
+                    placeMarker(existingLat, existingLng, false, existingText
+                        ? { address: existingText, preserveFineTune: true }
+                        : { preserveFineTune: true });
+                    markPinFineTuned();
                 }
             }
         }
@@ -680,6 +723,7 @@
         }
 
         isResolving = false;
+        needsPinFineTune = false;
         pendingLat = null;
         pendingLng = null;
         pendingAddress = '';
@@ -700,7 +744,9 @@
                 : ('Chọn điểm trong khu vực ' + provinceLabel + '.'))
             : (isDriverMode()
                 ? 'Chọn khu vực, ghim vị trí hoạt động hoặc dùng GPS.'
-                : 'Chạm bản đồ hoặc tìm địa chỉ, rồi bấm Xác nhận.');
+                : (requiresCoords()
+                    ? 'Tìm địa chỉ để bay tới khu vực, sau đó kéo ghim đến đúng điểm đón.'
+                    : 'Chạm bản đồ hoặc tìm địa chỉ, rồi bấm Xác nhận.'));
         setPreview(existingValue
             ? ('Chỉnh ghim hoặc tìm lại — ' + provinceHint)
             : provinceHint, false);
@@ -732,6 +778,18 @@
         }
         e.preventDefault();
         openPicker(btn);
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') {
+            return;
+        }
+        var trigger = e.target.closest('.address-map-readonly-input[data-address-map-for]');
+        if (!trigger) {
+            return;
+        }
+        e.preventDefault();
+        openPicker(trigger);
     });
 
     if (confirmBtn) {

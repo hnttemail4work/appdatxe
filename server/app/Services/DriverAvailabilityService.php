@@ -481,6 +481,26 @@ class DriverAvailabilityService
         }
     }
 
+    /** @param  iterable<DriverProfile>  $profiles */
+    public function reconcileMany(iterable $profiles): void
+    {
+        foreach ($profiles as $profile) {
+            if (! $profile instanceof DriverProfile) {
+                continue;
+            }
+
+            if ($profile->status !== 'active' || $profile->isPendingApproval() || $profile->isRejected()) {
+                continue;
+            }
+
+            if (($profile->availability_status ?? 'off_duty') === 'off_duty') {
+                continue;
+            }
+
+            $this->syncAfterTripCompleted((int) $profile->user_id);
+        }
+    }
+
     /** Đăng xuất / hết phiên — tắt Sẵn sàng và xóa vị trí. */
     public function endWebSession(DriverProfile $profile): void
     {

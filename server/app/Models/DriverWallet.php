@@ -51,7 +51,7 @@ class DriverWallet extends Model
 
     public function hasMinBalance(): bool
     {
-        return $this->balance > DriverWalletConfig::MIN_BALANCE;
+        return $this->balance >= DriverWalletConfig::MIN_BALANCE;
     }
 
     public function pendingSettlements()

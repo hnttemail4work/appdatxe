@@ -7,7 +7,7 @@ class RoleDashboard
     public static function route(string $role): string
     {
         return match ($role) {
-            'admin' => route('admin.dashboard'),
+            'admin' => route('admin.bookings'),
             'driver'   => route('driver.dashboard'),
             default    => route('home'),
         };

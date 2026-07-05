@@ -26,6 +26,7 @@
             @elseif(! request()->routeIs('login'))
                 <a href="{{ route('register') }}" class="app-nav-drawer-link">Đăng ký tài xế</a>
             @endif
+            <a href="{{ route('about') }}" class="app-nav-drawer-link {{ request()->routeIs('about') ? 'is-active' : '' }}">Giới thiệu</a>
         @endif
     </div>
 </div>

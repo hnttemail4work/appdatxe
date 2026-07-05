@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\DriverProfile;
+use App\Models\DriverTripRequest;
 
 /** Thống kê tỷ lệ từ chối cuốc — tách khỏi khóa/hủy chuyến hiện có. */
 class DriverCancelRateService
@@ -34,6 +35,50 @@ class DriverCancelRateService
             'cuoc_reject_count'   => 0,
             'cancel_rate_percent' => 0,
         ]);
+    }
+
+    /**
+     * @param  array<int, int>  $driverUserIds
+     * @return array<int, float>
+     */
+    public function monthlyCancelRatesForDrivers(array $driverUserIds, \Carbon\Carbon $monthStart): array
+    {
+        $driverUserIds = array_values(array_unique(array_filter(array_map('intval', $driverUserIds))));
+        $stats = array_fill_keys($driverUserIds, 0.0);
+
+        if ($driverUserIds === []) {
+            return $stats;
+        }
+
+        $end = $monthStart->copy()->endOfMonth();
+
+        $offerCounts = DriverTripRequest::query()
+            ->selectRaw('driver_id, COUNT(*) as offer_count')
+            ->whereIn('driver_id', $driverUserIds)
+            ->whereBetween('created_at', [$monthStart, $end])
+            ->groupBy('driver_id')
+            ->pluck('offer_count', 'driver_id');
+
+        $rejectCounts = DriverTripRequest::query()
+            ->selectRaw('driver_id, COUNT(*) as reject_count')
+            ->whereIn('driver_id', $driverUserIds)
+            ->where('status', 'rejected')
+            ->whereBetween('created_at', [$monthStart, $end])
+            ->groupBy('driver_id')
+            ->pluck('reject_count', 'driver_id');
+
+        foreach ($driverUserIds as $userId) {
+            $offerCount = (int) ($offerCounts[$userId] ?? 0);
+            $rejectCount = (int) ($rejectCounts[$userId] ?? 0);
+            $stats[$userId] = $this->percentFromCounts($offerCount, $rejectCount);
+        }
+
+        return $stats;
+    }
+
+    public function formatCancelRatePercent(float $percent): string
+    {
+        return number_format(round($percent, 1), 1, ',', '.') . '%';
     }
 
     private function bumpCounts(DriverProfile $profile, int $offerDelta = 0, int $rejectDelta = 0): void

@@ -2,7 +2,7 @@
 
 @section('console')
 @php
-$allowedAdminTabs = ['referrals', 'fees', 'settings', 'routes'];
+$allowedAdminTabs = ['referrals', 'fees', 'settings', 'appearance', 'routes'];
 $tabFromRequest = request('tab');
 if ($tabFromRequest === 'bank') {
     $tabFromRequest = 'settings';
@@ -14,6 +14,7 @@ if ($tabFromCookie === 'bank') {
 $adminDefaultTab = in_array($tabFromRequest, $allowedAdminTabs, true)
     ? $tabFromRequest
     : (in_array($tabFromCookie, $allowedAdminTabs, true) ? $tabFromCookie : 'routes');
+$referralCommissionStats = $referralCommissionStats ?? [];
 @endphp
 @include('partials.console-hero', [
     'title' => 'Quản trị hệ thống',
@@ -33,6 +34,7 @@ $adminDefaultTab = in_array($tabFromRequest, $allowedAdminTabs, true)
                         ['key' => 'referrals', 'label' => 'Mã giới thiệu', 'badge' => $referralCodes->total()],
                         ['key' => 'fees', 'label' => 'Tính tiền'],
                         ['key' => 'settings', 'label' => 'Ngân hàng'],
+                        ['key' => 'appearance', 'label' => 'Cài đặt'],
                     ],
                 ])
 
@@ -97,7 +99,9 @@ $adminDefaultTab = in_array($tabFromRequest, $allowedAdminTabs, true)
                                     <th>Tên</th>
                                     <th>SĐT</th>
                                     <th>Trạng thái</th>
-                                    <th>Hoa hồng</th>
+                                    <th>% HH</th>
+                                    <th>Doanh thu GT</th>
+                                    <th>Hoa hồng GT</th>
                                     <th>Giảm giá KH</th>
                                     <th>Ngày hết hạn</th>
                                     <th>Ngày tạo</th>
@@ -128,15 +132,47 @@ $adminDefaultTab = in_array($tabFromRequest, $allowedAdminTabs, true)
                                         <span class="status-pill status-pill--{{ $ref->statusColor() }}">{{ $ref->statusLabel() }}</span>
                                     </td>
                                     <td class="cell-muted">
-                                        {{ number_format($ref->commissionPercent(), 1) }}%
-                                        <span class="d-block small">{{ $ref->commissionTierLabel() }}</span>
+                                        @if($ref->type === \App\Models\ReferralCode::TYPE_REFERRER)
+                                            {{ number_format($ref->commissionPercent(), 1) }}%
+                                        @else
+                                            <span class="text-muted">—</span>
+                                        @endif
+                                    </td>
+                                    <td class="cell-muted small">
+                                        @if($ref->type === \App\Models\ReferralCode::TYPE_REFERRER)
+                                            @php
+                                                $refStats = $referralCommissionStats[$ref->id] ?? ['trips' => 0, 'revenue' => 0, 'commission' => 0];
+                                            @endphp
+                                            @if($refStats['revenue'] > 0)
+                                                <span class="fw-semibold text-body">{{ number_format($refStats['revenue'], 0, ',', '.') }} đ</span>
+                                                <span class="d-block text-muted">{{ $refStats['trips'] }} chuyến HT</span>
+                                            @else
+                                                <span class="text-muted">0 đ</span>
+                                            @endif
+                                        @else
+                                            <span class="text-muted">—</span>
+                                        @endif
+                                    </td>
+                                    <td class="cell-muted small">
+                                        @if($ref->type === \App\Models\ReferralCode::TYPE_REFERRER)
+                                            @php
+                                                $refStats = $referralCommissionStats[$ref->id] ?? ['trips' => 0, 'revenue' => 0, 'commission' => 0];
+                                            @endphp
+                                            @if($refStats['commission'] > 0)
+                                                <span class="fw-semibold text-success">{{ number_format($refStats['commission'], 0, ',', '.') }} đ</span>
+                                            @else
+                                                <span class="text-muted">0 đ</span>
+                                            @endif
+                                        @else
+                                            <span class="text-muted">—</span>
+                                        @endif
                                     </td>
                                     <td class="cell-muted">
                                         @if($ref->type === \App\Models\ReferralCode::TYPE_REFERRER)
-                                            {{ number_format($ref->customerDiscountPercent(), 1) }}%
+                                            <span class="text-muted">—</span>
                                         @else
                                             {{ number_format($ref->customerDiscountPercent(), 1) }}%
-                                            <span class="d-block small">Từ vé</span>
+                                            <span class="d-block small">Mã QR vé</span>
                                         @endif
                                     </td>
                                     <td class="cell-muted small">
@@ -224,6 +260,68 @@ $adminDefaultTab = in_array($tabFromRequest, $allowedAdminTabs, true)
                 </div>
                 @include('partials.screen-tab-pane-end')
 
+                @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'appearance', 'active' => $adminDefaultTab === 'appearance'])
+                <div class="mb-4 pb-4 border-bottom border-secondary">
+                    <h3 class="h6 fw-bold text-uppercase text-muted mb-3" style="letter-spacing:.04em">Thương hiệu</h3>
+                    <form method="POST" action="{{ route('admin.brandingSettings.update') }}" class="console-form">
+                        @csrf
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label" for="branding-app-name">Tên hiển thị</label>
+                                <input type="text" name="app_name" id="branding-app-name" class="form-control @error('app_name') is-invalid @enderror"
+                                       value="{{ old('app_name', $brandingSettings['app_name']) }}" maxlength="80">
+                                @error('app_name')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label" for="branding-brand-title">Chữ thương hiệu</label>
+                                <input type="text" name="brand_title" id="branding-brand-title" class="form-control @error('brand_title') is-invalid @enderror"
+                                       value="{{ old('brand_title', $brandingSettings['brand_title']) }}" maxlength="40">
+                                @error('brand_title')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label" for="branding-brand-tagline">Dòng phụ</label>
+                                <input type="text" name="brand_tagline" id="branding-brand-tagline" class="form-control @error('brand_tagline') is-invalid @enderror"
+                                       value="{{ old('brand_tagline', $brandingSettings['brand_tagline']) }}" maxlength="80">
+                                @error('brand_tagline')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                            </div>
+                        </div>
+                        <button class="btn btn-primary px-4 fw-semibold mt-3">Lưu thương hiệu</button>
+                    </form>
+                </div>
+                <div class="mb-2">
+                    <h3 class="h6 fw-bold text-uppercase text-muted mb-3" style="letter-spacing:.04em">Trang đặt xe</h3>
+                </div>
+                <form method="POST" action="{{ route('admin.bookingPageSettings.update') }}" class="console-form" enctype="multipart/form-data">
+                    @csrf
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="booking-hero-title">Tiêu đề hiển thị</label>
+                            <input type="text" name="hero_title" id="booking-hero-title" class="form-control @error('hero_title') is-invalid @enderror"
+                                   value="{{ old('hero_title', $bookingPageSettings['hero_title']) }}" maxlength="120">
+                            @error('hero_title')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="booking-hero-banner">Ảnh banner</label>
+                            <input type="file" name="banner" id="booking-hero-banner" class="form-control @error('banner') is-invalid @enderror"
+                                   accept="image/jpeg,image/png,image/webp,image/gif">
+                            @error('banner')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                            @if($bookingPageSettings['has_banner'] ?? false)
+                                <div class="form-check mt-2">
+                                    <input class="form-check-input" type="checkbox" name="remove_banner" value="1" id="booking-remove-banner">
+                                    <label class="form-check-label" for="booking-remove-banner">Xóa banner hiện tại</label>
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+                    @if($bookingPageSettings['banner_url'] ?? null)
+                        <div class="mt-3">
+                            <img src="{{ $bookingPageSettings['banner_url'] }}" alt="Banner trang đặt xe" class="admin-booking-banner-preview rounded border">
+                        </div>
+                    @endif
+                    <button class="btn btn-primary px-4 fw-semibold mt-3">Lưu cài đặt</button>
+                </form>
+                @include('partials.screen-tab-pane-end')
+
                 @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'fees', 'active' => $adminDefaultTab === 'fees'])
                 <form method="POST" action="{{ route('admin.feeSettings.update') }}" class="console-form">
                     @csrf
@@ -262,20 +360,22 @@ $adminDefaultTab = in_array($tabFromRequest, $allowedAdminTabs, true)
                             </div>
                         </div>
                         <div class="col-md-6 col-lg-3">
-                            <label class="form-label">Hoa hồng giới thiệu — lần đầu (%)</label>
+                            <label class="form-label">Hoa hồng người giới thiệu (%)</label>
                             <div class="input-group">
                                 <input type="number" name="referral_commission_first" class="form-control" min="0" max="100" step="0.1"
                                        value="{{ old('referral_commission_first', $feeSettings['referral_commission_first']) }}" required>
                                 <span class="input-group-text">%</span>
                             </div>
+                            <div class="form-text">Tính vào doanh thu GT khi khách dùng mã admin.</div>
                         </div>
                         <div class="col-md-6 col-lg-3">
-                            <label class="form-label">Hoa hồng giới thiệu — từ lần 2 (%)</label>
+                            <label class="form-label">Giảm giá mã QR vé (%)</label>
                             <div class="input-group">
                                 <input type="number" name="referral_commission_repeat" class="form-control" min="0" max="100" step="0.1"
                                        value="{{ old('referral_commission_repeat', $feeSettings['referral_commission_repeat']) }}" required>
                                 <span class="input-group-text">%</span>
                             </div>
+                            <div class="form-text">Chỉ giảm giá trên trang đặt xe, không tính doanh thu.</div>
                         </div>
                     </div>
 

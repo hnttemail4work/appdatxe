@@ -210,6 +210,14 @@
 
 
 
+    function hasActiveBlock() {
+
+        return blockState.activeBlocked;
+
+    }
+
+
+
     function isBookingBlocked() {
 
         refreshBlockStateFromLocal();
@@ -421,6 +429,10 @@
         appendHeaders: appendHeaders,
 
         checkBookingEligibility: checkBookingEligibility,
+
+        applyCheckResult: applyCheckResult,
+
+        hasActiveBlock: hasActiveBlock,
 
         syncBanner: syncBanner,
 

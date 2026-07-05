@@ -11,7 +11,7 @@
     $walletHistory = $walletHistory ?? collect();
     $tripSchedules = $tripSchedules ?? collect();
     $tripActionCount = $tripActionCount ?? 0;
-    $revenueStats = $revenueStats ?? ['day' => 0, 'month' => 0];
+    $revenueStats = $revenueStats ?? ['day' => 0, 'week' => 0];
 
     $driverDefaultTab = request('tab');
     if (! in_array($driverDefaultTab, ['trips', 'history', 'deposit'], true)) {
@@ -108,8 +108,8 @@
                 <span class="driver-earnings-value">{{ number_format($revenueStats['day'] ?? 0, 0, ',', '.') }} đ</span>
             </div>
             <div class="driver-earnings-item">
-                <span class="driver-earnings-label">Tháng này</span>
-                <span class="driver-earnings-value">{{ number_format($revenueStats['month'] ?? 0, 0, ',', '.') }} đ</span>
+                <span class="driver-earnings-label">Tuần này</span>
+                <span class="driver-earnings-value">{{ number_format($revenueStats['week'] ?? 0, 0, ',', '.') }} đ</span>
             </div>
         <a href="{{ route('driver.dashboard', ['tab' => 'deposit']) }}" class="driver-earnings-item driver-earnings-item--wallet" data-driver-tab="deposit">
                 <span class="driver-earnings-label">Số dư ví</span>
@@ -118,23 +118,25 @@
         </div>
     </header>
 
-    @if($profile->isMissedTripLocked() || ($walletNotice ?? null) || ($walletBlockReason ?? null))
+    @if($profile->isMissedTripLocked() || ($walletBlockReason ?? null))
     <div class="driver-notice-stack mb-3">
         @if($profile->isMissedTripLocked())
             <div class="driver-notice driver-notice-danger">
                 <strong>Tài khoản tạm khóa</strong> — không nhận chuyến được. Liên hệ quản lý để mở khóa.
             </div>
-        @endif
-        @if($walletNotice ?? null)
-            <div class="driver-notice driver-notice-warning driver-notice--topup">
-                <span class="driver-notice-topup-text">{{ $walletNotice['message'] }}</span>
-                <a href="{{ route('driver.dashboard', ['tab' => $walletNotice['cta_tab']]) }}"
-                   class="driver-notice-topup-link"
-                   data-driver-tab="{{ $walletNotice['cta_tab'] }}">{{ $walletNotice['cta_label'] }} →</a>
-            </div>
         @elseif($walletBlockReason)
-            <div class="driver-notice driver-notice-warning">
-                {{ $walletBlockReason }}
+            <div class="driver-notice driver-notice-warning driver-notice--wallet-warning" role="alert">
+                <div class="driver-notice-warning-icon" aria-hidden="true">!</div>
+                <div class="driver-notice-warning-body">
+                    <p class="driver-notice-warning-text mb-0">{{ $walletBlockReason }}</p>
+                    @if($walletNotice ?? null)
+                        <a href="{{ route('driver.dashboard', ['tab' => $walletNotice['cta_tab'] ?? 'deposit']) }}"
+                           class="driver-notice-warning-cta"
+                           data-driver-tab="{{ $walletNotice['cta_tab'] ?? 'deposit' }}">
+                            {{ $walletNotice['cta_label'] ?? 'Nạp ví ngay' }} →
+                        </a>
+                    @endif
+                </div>
             </div>
         @endif
     </div>
@@ -146,13 +148,9 @@
              data-driver-trip-active="{{ $driverTripActive ? '1' : '0' }}"
              data-driver-trip-upcoming="{{ $driverTripUpcoming ? '1' : '0' }}"
              data-needs-location="{{ $driverNeedsLocationShare ? '1' : '0' }}">
-        @if($driverNeedsLocationShare)
+        @if($driverNeedsLocationShare && $driverTripUpcoming)
             <div class="driver-location-share-prompt" id="driver-location-share-prompt" role="status">
-                @if($driverTripUpcoming)
-                    Chia sẻ vị trí để khách biết bạn còn bao nhiêu km đến điểm đón.
-                @else
-                    Chọn hoặc nhập vị trí trên bản đồ để nhận cuốc gần bạn.
-                @endif
+                Chia sẻ vị trí để khách biết bạn còn bao nhiêu km đến điểm đón.
             </div>
         @endif
         <div class="driver-location-sheet-top {{ $driverPaused ? 'is-disabled' : '' }}">
@@ -266,7 +264,12 @@
                 'hint' => 'Các chuyến đã hoàn thành sẽ lưu tại đây.',
             ])
         @else
-            <div class="driver-trips-list">
+            <div class="driver-history-head">
+                <p class="driver-history-intro">
+                    <strong>{{ number_format($tripHistory->total()) }}</strong> chuyến trong lịch sử
+                </p>
+            </div>
+            <div class="driver-trips-list driver-trips-list--history">
                 @foreach($tripHistory as $schedule)
                     @include('partials.driver-schedule-history-card', [
                         'schedule' => $schedule,

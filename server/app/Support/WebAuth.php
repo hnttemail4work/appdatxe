@@ -9,7 +9,7 @@ class WebAuth
 {
     public static function attempt(string $phone, string $password): ?User
     {
-        $user = AuthIdentifier::findUserByPhone($phone);
+        $user = AuthIdentifier::findUserByLogin($phone);
 
         if (! $user || ! Hash::check($password, $user->password)) {
             return null;

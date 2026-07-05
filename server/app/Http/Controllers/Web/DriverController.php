@@ -12,6 +12,7 @@ use App\Support\DriverFieldRules;
 use App\Services\BookingWorkflowService;
 use App\Services\DriverAvailabilityService;
 use App\Services\DriverCancelRateService;
+use App\Services\DriverLatePickupService;
 use App\Services\DriverMissedTripService;
 use App\Services\DriverPhotoService;
 use App\Services\DriverProfileSyncService;
@@ -58,6 +59,7 @@ class DriverController extends Controller
 
         if ($profile) {
             $this->driverAvailability->enforceWebPresenceIdleFor($profile);
+            $this->driverAvailability->syncAfterTripCompleted((int) $profile->user_id);
             $profile = $profile->fresh(['operator']);
             if (($profile->availability_status ?? 'off_duty') === 'available') {
                 $this->driverAvailability->touchWebPresence((int) $profile->user_id);
@@ -122,9 +124,9 @@ class DriverController extends Controller
         $showTopUpBanner = $walletNotice !== null;
         $revenueStats = $profile
             ? $this->driverWallet->driverRevenueStats($profile)
-            : ['day' => 0, 'month' => 0];
+            : ['day' => 0, 'week' => 0];
         $walletHistoryAll = $driverWallet
-            ? $this->driverWallet->walletActivityHistory($driverWallet)
+            ? $this->driverWallet->walletActivityHistory($driverWallet, depositsOnly: true)
             : collect();
         $walletHistory = PageList::paginateCollection($walletHistoryAll, $request, 'history_page');
 
@@ -441,7 +443,7 @@ class DriverController extends Controller
             : 'all';
 
         $query = DriverProfile::query()
-            ->with(['user', 'operator']);
+            ->with(['user', 'operator', 'wallet']);
 
         if (Auth::user()->role === 'admin') {
             if ($filter === 'pending') {
@@ -467,11 +469,47 @@ class DriverController extends Controller
             $request,
         );
 
+        $this->driverAvailability->reconcileMany($drivers->items());
+        foreach ($drivers->items() as $driver) {
+            $driver->refresh();
+        }
+
         $pendingCount = Auth::user()->role === 'admin'
             ? (int) DriverProfile::query()->pendingApproval()->count()
             : DriverProfile::pendingCountForOperator(Auth::id());
 
-        return view('admin.drivers.index', compact('drivers', 'filter', 'pendingCount'));
+        $statsMonth = now()->startOfMonth();
+        $driverMonthlyStats = [];
+
+        if ($filter === 'all') {
+            $monthInput = trim((string) $request->query('month', ''));
+            if ($monthInput !== '' && preg_match('/^\d{4}-\d{2}$/', $monthInput) === 1) {
+                try {
+                    $statsMonth = \Carbon\Carbon::createFromFormat('Y-m', $monthInput)->startOfMonth();
+                } catch (\Exception) {
+                    $statsMonth = now()->startOfMonth();
+                }
+            }
+
+            $driverMonthlyStats = $this->driverWallet->monthlyStatsForDrivers($drivers->items(), $statsMonth);
+            $cancelRates = $this->cancelRates->monthlyCancelRatesForDrivers(
+                collect($drivers->items())->pluck('user_id')->map(fn ($id) => (int) $id)->all(),
+                $statsMonth,
+            );
+
+            foreach ($driverMonthlyStats as $userId => &$row) {
+                $row['cancel_rate'] = $cancelRates[(int) $userId] ?? 0.0;
+            }
+            unset($row);
+        }
+
+        return view('admin.drivers.index', compact(
+            'drivers',
+            'filter',
+            'pendingCount',
+            'statsMonth',
+            'driverMonthlyStats',
+        ));
     }
 
     public function edit(Request $request, DriverProfile $driverProfile)
@@ -479,6 +517,9 @@ class DriverController extends Controller
         if (! $this->canManageDriver($driverProfile)) {
             abort(403);
         }
+
+        $this->driverAvailability->syncAfterTripCompleted((int) $driverProfile->user_id);
+        $driverProfile->refresh();
 
         $driverProfile->load(['user', 'operator']);
         $driverWallet = $this->driverWallet->walletFor($driverProfile);
@@ -557,7 +598,7 @@ class DriverController extends Controller
         }
 
         return redirect()
-            ->route('admin.drivers.edit', $driverProfile)
+            ->route('admin.drivers.edit', ['driverProfile' => $driverProfile, 'tab' => 'photos'])
             ->with('success', 'Đã cập nhật ảnh tài xế.');
     }
 

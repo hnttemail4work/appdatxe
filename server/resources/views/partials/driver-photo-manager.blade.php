@@ -9,6 +9,7 @@
     $lockIdentityPhotos = $lockIdentityPhotos ?? false;
     $vehicleUrls = $driver->vehiclePhotoUrls();
     $vehicleCount = count($vehicleUrls);
+    $catalogPhotoIndex = $driver->catalogVehiclePhotoIndex();
     $singleSlots = [
         'photo_portrait'       => ['label' => 'Chân dung', 'ratio' => 'portrait', 'identity' => true],
         'photo_id_card'        => ['label' => 'CCCD mặt trước', 'ratio' => 'landscape', 'identity' => true],
@@ -30,10 +31,13 @@
         @if($vehicleCount > 0)
             <div class="photo-vehicle-grid">
                 @foreach($vehicleUrls as $idx => $url)
-                    <div class="photo-vehicle-item">
+                    <div class="photo-vehicle-item {{ $idx === $catalogPhotoIndex ? 'is-catalog-photo' : '' }}">
                         <a href="{{ $url }}" target="_blank" rel="noopener" title="Bấm để xem ảnh gốc">
                             <img src="{{ $url }}" alt="Xe {{ $idx + 1 }}">
                         </a>
+                        @if($idx === $catalogPhotoIndex)
+                            <span class="photo-vehicle-catalog-badge">Hiển thị đặt xe</span>
+                        @endif
                         <span class="photo-vehicle-num">#{{ $idx + 1 }}</span>
                     </div>
                 @endforeach
@@ -76,7 +80,7 @@
     </h6>
     <div class="photo-vehicle-grid mb-0">
         @foreach($vehicleUrls as $idx => $url)
-            <div class="photo-vehicle-item">
+            <div class="photo-vehicle-item {{ $idx === $catalogPhotoIndex ? 'is-catalog-photo' : '' }}">
                 <a href="{{ $url }}" target="_blank" rel="noopener" title="Bấm để xem ảnh gốc">
                     <img src="{{ $url }}" alt="Xe {{ $idx + 1 }}">
                 </a>
@@ -90,11 +94,27 @@
                         <button type="submit" class="btn btn-danger btn-sm" title="Xóa ảnh">×</button>
                     </form>
                 @endif
+                <label class="photo-vehicle-catalog-pick">
+                    <input type="radio"
+                           name="catalog_vehicle_photo_index"
+                           value="{{ $idx }}"
+                           form="driver-photo-catalog-form"
+                           @checked($idx === $catalogPhotoIndex)>
+                    <span>Hiển thị đặt xe</span>
+                </label>
                 <span class="photo-vehicle-num">#{{ $idx + 1 }}</span>
             </div>
         @endforeach
     </div>
 </section>
+@endif
+
+@if($vehicleCount > 0)
+<form method="POST" action="{{ $action }}" id="driver-photo-catalog-form" class="mb-3">
+    @csrf
+    <p class="text-muted small mb-2">Chọn ảnh hiển thị trên trang đặt xe, rồi bấm lưu.</p>
+    <button type="submit" class="btn btn-outline-primary btn-sm">Lưu ảnh hiển thị đặt xe</button>
+</form>
 @endif
 
 <form method="POST" action="{{ $action }}" enctype="multipart/form-data" class="driver-photo-manager">

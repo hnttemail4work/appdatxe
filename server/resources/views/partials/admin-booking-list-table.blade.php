@@ -4,8 +4,12 @@
 $bookings = $bookings ?? collect();
 $showBulkDelete = (bool) ($showBulkDelete ?? false);
 $bookingList = $bookingList ?? 'active';
-$showAssignActions = (bool) ($showAssignActions ?? $bookingList !== 'cancelled');
+$showAssignActions = (bool) ($showAssignActions ?? false);
+$showWaitingColumn = (bool) ($showWaitingColumn ?? $bookingList === 'active');
 $showFeedbackColumn = $bookingList === 'feedback';
+$showPickupAlertColumn = $bookingList === 'active';
+$showStatusColumn = $bookingList !== 'cancelled';
+$showDriverColumn = $bookingList !== 'active';
 @endphp
 
 @if($showBulkDelete)
@@ -52,14 +56,23 @@ $showFeedbackColumn = $bookingList === 'feedback';
                     @endif
                     <th>Hành khách</th>
                     <th>Chuyến</th>
-                    <th>Loại</th>
-                    <th>Ghế</th>
+                    @if($showStatusColumn)
+                    <th>Trạng thái</th>
+                    @endif
+                    @if($showPickupAlertColumn)
+                    <th>Cảnh báo</th>
+                    @endif
+                    @if($showWaitingColumn)
+                    <th>Thời gian chờ</th>
+                    @endif
                     <th>Tổng tiền</th>
-                    <th>Giới thiệu</th>
+                    <th>Phí &amp; hoa hồng</th>
                     @if($showFeedbackColumn)
                     <th>Phản hồi</th>
                     @endif
+                    @if($showDriverColumn)
                     <th>Tài xế</th>
+                    @endif
                 </tr>
             </thead>
             <tbody>
@@ -91,30 +104,59 @@ $showFeedbackColumn = $bookingList === 'feedback';
                         @else
                             <div class="cell-muted small">Giờ chạy: {{ $booking->schedule->departure_time->format('H:i') }}</div>
                         @endif
+                        @if($catalogDriver = $booking->catalogChosenDriverProfile())
+                            <div class="cell-muted small">
+                                TX khách chọn:
+                                <strong>{{ $catalogDriver->user->name ?? '—' }}</strong>
+                                @if($catalogDriver->driver_code)
+                                    <span class="driver-meta-code">{{ $catalogDriver->driver_code }}</span>
+                                @endif
+                            </div>
+                        @endif
+                        @if($activeDriver = $booking->activeDriverProfile())
+                            @php
+                                $catalogId = (int) ($booking->catalogChosenDriverProfile()?->user_id ?? 0);
+                                $activeId = (int) $activeDriver->user_id;
+                            @endphp
+                            @if($catalogId <= 0 || $catalogId !== $activeId)
+                                <div class="cell-muted small">
+                                    TX đang nhận:
+                                    <strong>{{ $activeDriver->user->name ?? '—' }}</strong>
+                                    @if($activeDriver->driver_code)
+                                        <span class="driver-meta-code">{{ $activeDriver->driver_code }}</span>
+                                    @endif
+                                </div>
+                            @endif
+                        @endif
                         @if($bookingList === 'cancelled')
                             @include('partials.booking-cancel-detail', ['booking' => $booking])
                         @endif
                     </td>
+                    @if($showStatusColumn)
+                    <td class="small admin-booking-status-cell">
+                        @include('partials.admin-booking-status', ['booking' => $booking])
+                    </td>
+                    @endif
+                    @if($showPickupAlertColumn)
                     <td class="small">
-                        <span class="status-pill status-pill--gold">{{ $booking->bookingModeLabel() }}</span>
+                        @include('partials.admin-booking-pickup-alert', ['booking' => $booking])
                     </td>
-                    <td>
-                        @if($booking->vehicleBookingLabel())
-                            <div>{{ $booking->vehicleBookingLabel() }}</div>
-                        @endif
-                    </td>
-                    <td class="fw-semibold">{{ number_format($booking->chargedTotal(), 0, ',', '.') }} đ</td>
-                    <td class="small cell-muted">
-                        @if($booking->appliedReferralCode)
-                            <span class="driver-meta-code">{{ $booking->appliedReferralCode->code }}</span>
-                            @if($booking->trip_status === 'completed')
-                                <div>{{ number_format($booking->referralCommissionAmount(), 0, ',', '.') }} đ ({{ number_format($booking->appliedReferralCode->commissionPercent(), 1) }}%)</div>
-                            @else
-                                <div class="text-muted">Chờ hoàn tất</div>
-                            @endif
+                    @endif
+                    @if($showWaitingColumn)
+                    <td class="small admin-booking-waiting-cell">
+                        @if($booking->needsAdminWaitingAttention())
+                            @include('partials.admin-booking-actions', [
+                                'booking' => $booking,
+                                'drivers' => $drivers,
+                            ])
                         @else
                             —
                         @endif
+                    </td>
+                    @endif
+                    <td class="fw-semibold">{{ number_format($booking->tripRevenueAmount(), 0, ',', '.') }} đ</td>
+                    <td class="small">
+                        @include('partials.admin-booking-revenue', ['booking' => $booking])
                     </td>
                     @if($showFeedbackColumn)
                     <td class="small">
@@ -129,12 +171,14 @@ $showFeedbackColumn = $bookingList === 'feedback';
                         @endif
                     </td>
                     @endif
+                    @if($showDriverColumn)
                     <td class="small">
                         @if($showAssignActions)
                             @include('partials.admin-booking-assign', [
                                 'booking' => $booking,
                                 'drivers' => $drivers,
                                 'bookingList' => $bookingList,
+                                'displayOnly' => false,
                             ])
                         @else
                             @php
@@ -142,15 +186,13 @@ $showFeedbackColumn = $bookingList === 'feedback';
                                     ?? $booking->schedule->designatedDriverProfile();
                             @endphp
                             @if($profile)
-                                @include('partials.booking-driver-brief', [
-                                    'profile' => $profile,
-                                    'compact' => true,
-                                ])
+                                @include('partials.admin-booking-driver-code', ['profile' => $profile])
                             @else
                                 —
                             @endif
                         @endif
                     </td>
+                    @endif
                 </tr>
                 @endforeach
             </tbody>

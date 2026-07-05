@@ -181,10 +181,14 @@ class ReferralCodeService
         return $referral->customerDiscountPercent();
     }
 
-    /** Ghi nhận mã GT lên vé (hoa hồng) — mã admin luôn; mã từ vé nếu SĐT chưa dùng GT trước đó. */
+    /** Ghi nhận mã GT lên vé (hoa hồng 8%) — chỉ mã người giới thiệu do admin tạo. */
     public function shouldAttributeBooking(?ReferralCode $referral, string $contactPhone): bool
     {
         if (! $referral || ! $referral->isUsable()) {
+            return false;
+        }
+
+        if ($referral->type !== ReferralCode::TYPE_REFERRER) {
             return false;
         }
 
@@ -192,15 +196,7 @@ class ReferralCodeService
             return false;
         }
 
-        if ($referral->type === ReferralCode::TYPE_REFERRER) {
-            return true;
-        }
-
-        if ($referral->type === ReferralCode::TYPE_BOOKING_TEMP) {
-            return ! $this->phoneHasUsedReferralBefore($contactPhone);
-        }
-
-        return false;
+        return true;
     }
 
     public function qualifiesForCustomerDiscount(?ReferralCode $referral, ?string $contactPhone): bool
@@ -329,5 +325,44 @@ class ReferralCodeService
         $discounted = $subtotal * (1 - $discountPercent / 100);
 
         return (float) PlatformFees::roundDownPrice($discounted);
+    }
+
+    /**
+     * Doanh thu & hoa hồng GT theo vé đã hoàn tất — key = referral_code.id.
+     *
+     * @param  list<int>  $referralCodeIds
+     * @return array<int, array{trips: int, revenue: int, commission: int}>
+     */
+    public function commissionStatsForReferralIds(array $referralCodeIds): array
+    {
+        if ($referralCodeIds === []) {
+            return [];
+        }
+
+        $stats = [];
+
+        Booking::query()
+            ->whereIn('applied_referral_code_id', $referralCodeIds)
+            ->where('trip_status', 'completed')
+            ->with('appliedReferralCode')
+            ->orderBy('id')
+            ->chunkById(200, function ($bookings) use (&$stats): void {
+                foreach ($bookings as $booking) {
+                    $referralId = (int) $booking->applied_referral_code_id;
+                    if ($referralId < 1) {
+                        continue;
+                    }
+
+                    if (! isset($stats[$referralId])) {
+                        $stats[$referralId] = ['trips' => 0, 'revenue' => 0, 'commission' => 0];
+                    }
+
+                    $stats[$referralId]['trips']++;
+                    $stats[$referralId]['revenue'] += $booking->tripRevenueAmount();
+                    $stats[$referralId]['commission'] += $booking->referrerCommissionAmount();
+                }
+            });
+
+        return $stats;
     }
 }

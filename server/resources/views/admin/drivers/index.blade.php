@@ -5,8 +5,10 @@
 $drivers = $drivers ?? collect();
 $filter = $filter ?? 'all';
 $pendingCount = $pendingCount ?? 0;
+$statsMonth = $statsMonth ?? now()->startOfMonth();
+$driverMonthlyStats = $driverMonthlyStats ?? [];
 $driverTabs = [
-    ['key' => 'all', 'label' => 'Tất cả', 'href' => route('admin.drivers')],
+    ['key' => 'all', 'label' => 'Danh sách', 'href' => route('admin.drivers')],
     ['key' => 'pending', 'label' => 'Chờ duyệt', 'href' => route('admin.drivers', ['filter' => 'pending']), 'badge' => $pendingCount, 'hot' => $pendingCount > 0],
     ['key' => 'rejected', 'label' => 'Đã từ chối', 'href' => route('admin.drivers', ['filter' => 'rejected'])],
 ];
@@ -46,7 +48,18 @@ $driverTabs = [
             </p>
         </div>
 @else
-        <p class="text-muted small mb-3">Lượt thích / không thích tự cập nhật khi khách đánh giá sau chuyến.</p>
+        @if($filter === 'all')
+        <form method="GET" action="{{ route('admin.drivers') }}" class="driver-mgmt-month-filter mb-3">
+            <input type="month"
+                   id="driver-stats-month"
+                   name="month"
+                   class="form-control form-control-sm"
+                   style="max-width: 11rem;"
+                   value="{{ $statsMonth->format('Y-m') }}"
+                   onchange="this.form.submit()"
+                   aria-label="Chọn tháng">
+        </form>
+        @endif
         <div class="driver-mgmt-panel pt-3">
     <div class="console-panel-head driver-mgmt-head px-0 pt-0">
         <div class="console-panel-head-accent">
@@ -58,20 +71,42 @@ $driverTabs = [
             <table class="console-table driver-mgmt-table">
                 <thead>
                     <tr>
-                        <th>Tài xế</th>
+                        @if($filter === 'all')
+                            <th>Mã TX</th>
+                        @else
+                            <th>Tài xế</th>
+                        @endif
                         <th>Số điện thoại</th>
-                        <th>Xe</th>
+                        @if($filter !== 'all')
+                            <th>Xe</th>
+                        @endif
+                        @if($filter === 'all')
+                            <th>Số chuyến</th>
+                            <th>Doanh thu</th>
+                        @endif
                         <th>Thích</th>
                         <th>Không thích</th>
                         <th>% Hủy cuốc</th>
+                        <th>Ví</th>
                         <th>Trạng thái</th>
                         <th class="text-end" style="width:11rem"></th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach($drivers as $d)
+                    @php
+                        $monthStats = $driverMonthlyStats[(int) $d->user_id] ?? ['trips' => 0, 'revenue' => 0, 'cancel_rate' => 0.0];
+                        $monthCancelRate = (float) ($monthStats['cancel_rate'] ?? 0.0);
+                    @endphp
                     <tr class="{{ $d->isPendingApproval() ? 'driver-row-pending' : '' }}">
                         <td>
+                            @if($filter === 'all')
+                                @if($d->driver_code)
+                                    <span class="driver-meta-code">{{ $d->driver_code }}</span>
+                                @else
+                                    <span class="text-muted">—</span>
+                                @endif
+                            @else
                             <div class="driver-mgmt-name">
                                 @if($d->photo_portrait)
                                     <img src="{{ $d->photoUrl('photo_portrait') }}" alt=""
@@ -88,8 +123,10 @@ $driverTabs = [
                                     @endif
                                 </div>
                             </div>
+                            @endif
                         </td>
                         <td class="cell-muted">{{ $d->user->phone ?? '—' }}</td>
+                        @if($filter !== 'all')
                         <td class="cell-muted">
                             @if($d->vehicle_license_plate)
                                 <strong class="text-white">{{ $d->vehicle_license_plate }}</strong>
@@ -100,160 +137,42 @@ $driverTabs = [
                                 —
                             @endif
                         </td>
+                        @endif
+                        @if($filter === 'all')
+                        <td class="fw-semibold">{{ number_format($monthStats['trips']) }}</td>
+                        <td class="fw-semibold">{{ number_format($monthStats['revenue'], 0, ',', '.') }} đ</td>
+                        @endif
                         <td class="fw-semibold text-success">{{ number_format($d->preference_likes) }}</td>
                         <td class="fw-semibold text-danger">{{ number_format($d->preference_dislikes) }}</td>
                         <td>
                             <div class="driver-mgmt-cancel-rate">
-                                <span class="fw-semibold {{ $d->hasCancelRate() ? 'text-warning' : 'text-muted' }}">{{ $d->cancelRateLabel() }}</span>
-                                @if($d->hasCancelRate() && ! $d->isPendingApproval())
-                                    <form method="POST"
-                                          action="{{ route('admin.drivers.resetCancelRate', $d) }}"
-                                          class="driver-mgmt-cancel-rate-reset"
-                                          data-confirm="Đặt lại tỷ lệ hủy cuốc của {{ $d->user->name }} về 0%?"
-                                          data-confirm-title="Reset tỷ lệ hủy cuốc"
-                                          data-confirm-ok="Đặt về 0%"
-                                          data-confirm-variant="warning">
-                                        @csrf
-                                        <button type="submit" class="btn btn-link btn-sm p-0 align-baseline">Về 0%</button>
-                                    </form>
+                                @if($filter === 'all')
+                                    <span class="fw-semibold {{ $monthCancelRate > 0 ? 'text-warning' : 'text-muted' }}">
+                                        {{ number_format($monthCancelRate, 1, ',', '.') }}%
+                                    </span>
+                                @else
+                                    <span class="fw-semibold {{ $d->hasCancelRate() ? 'text-warning' : 'text-muted' }}">{{ $d->cancelRateLabel() }}</span>
+                                    @if($d->hasCancelRate() && ! $d->isPendingApproval())
+                                        <form method="POST"
+                                              action="{{ route('admin.drivers.resetCancelRate', $d) }}"
+                                              class="driver-mgmt-cancel-rate-reset"
+                                              data-confirm="Đặt lại tỷ lệ hủy cuốc của {{ $d->user->name }} về 0%?"
+                                              data-confirm-title="Reset tỷ lệ hủy cuốc"
+                                              data-confirm-ok="Đặt về 0%"
+                                              data-confirm-variant="warning">
+                                            @csrf
+                                            <button type="submit" class="btn btn-link btn-sm p-0 align-baseline">Về 0%</button>
+                                        </form>
+                                    @endif
                                 @endif
                             </div>
                         </td>
                         <td>
-                            <div class="driver-mgmt-cancel-rate">
-                                <span class="fw-semibold {{ $d->hasCancelRate() ? 'text-warning' : 'text-muted' }}">{{ $d->cancelRateLabel() }}</span>
-                                @if($d->hasCancelRate() && ! $d->isPendingApproval())
-                                    <form method="POST"
-                                          action="{{ route('admin.drivers.resetCancelRate', $d) }}"
-                                          class="driver-mgmt-cancel-rate-reset"
-                                          data-confirm="Đặt lại tỷ lệ hủy cuốc của {{ $d->user->name }} về 0%?"
-                                          data-confirm-title="Reset tỷ lệ hủy cuốc"
-                                          data-confirm-ok="Đặt về 0%"
-                                          data-confirm-variant="warning">
-                                        @csrf
-                                        <button type="submit" class="btn btn-link btn-sm p-0 align-baseline">Về 0%</button>
-                                    </form>
-                                @endif
-                            </div>
-                        </td>
-                        <td>
-                            <div class="driver-mgmt-cancel-rate">
-                                <span class="fw-semibold {{ $d->hasCancelRate() ? 'text-warning' : 'text-muted' }}">{{ $d->cancelRateLabel() }}</span>
-                                @if($d->hasCancelRate() && ! $d->isPendingApproval())
-                                    <form method="POST"
-                                          action="{{ route('admin.drivers.resetCancelRate', $d) }}"
-                                          class="driver-mgmt-cancel-rate-reset"
-                                          data-confirm="Đặt lại tỷ lệ hủy cuốc của {{ $d->user->name }} về 0%?"
-                                          data-confirm-title="Reset tỷ lệ hủy cuốc"
-                                          data-confirm-ok="Đặt về 0%"
-                                          data-confirm-variant="warning">
-                                        @csrf
-                                        <button type="submit" class="btn btn-link btn-sm p-0 align-baseline">Về 0%</button>
-                                    </form>
-                                @endif
-                            </div>
-                        </td>
-                        <td>
-                            <div class="driver-mgmt-cancel-rate">
-                                <span class="fw-semibold {{ $d->hasCancelRate() ? 'text-warning' : 'text-muted' }}">{{ $d->cancelRateLabel() }}</span>
-                                @if($d->hasCancelRate() && ! $d->isPendingApproval())
-                                    <form method="POST"
-                                          action="{{ route('admin.drivers.resetCancelRate', $d) }}"
-                                          class="driver-mgmt-cancel-rate-reset"
-                                          data-confirm="Đặt lại tỷ lệ hủy cuốc của {{ $d->user->name }} về 0%?"
-                                          data-confirm-title="Reset tỷ lệ hủy cuốc"
-                                          data-confirm-ok="Đặt về 0%"
-                                          data-confirm-variant="warning">
-                                        @csrf
-                                        <button type="submit" class="btn btn-link btn-sm p-0 align-baseline">Về 0%</button>
-                                    </form>
-                                @endif
-                            </div>
-                        </td>
-                        <td>
-                            <div class="driver-mgmt-cancel-rate">
-                                <span class="fw-semibold {{ $d->hasCancelRate() ? 'text-warning' : 'text-muted' }}">{{ $d->cancelRateLabel() }}</span>
-                                @if($d->hasCancelRate() && ! $d->isPendingApproval())
-                                    <form method="POST"
-                                          action="{{ route('admin.drivers.resetCancelRate', $d) }}"
-                                          class="driver-mgmt-cancel-rate-reset"
-                                          data-confirm="Đặt lại tỷ lệ hủy cuốc của {{ $d->user->name }} về 0%?"
-                                          data-confirm-title="Reset tỷ lệ hủy cuốc"
-                                          data-confirm-ok="Đặt về 0%"
-                                          data-confirm-variant="warning">
-                                        @csrf
-                                        <button type="submit" class="btn btn-link btn-sm p-0 align-baseline">Về 0%</button>
-                                    </form>
-                                @endif
-                            </div>
-                        </td>
-                        <td>
-                            <div class="driver-mgmt-cancel-rate">
-                                <span class="fw-semibold {{ $d->hasCancelRate() ? 'text-warning' : 'text-muted' }}">{{ $d->cancelRateLabel() }}</span>
-                                @if($d->hasCancelRate() && ! $d->isPendingApproval())
-                                    <form method="POST"
-                                          action="{{ route('admin.drivers.resetCancelRate', $d) }}"
-                                          class="driver-mgmt-cancel-rate-reset"
-                                          data-confirm="Đặt lại tỷ lệ hủy cuốc của {{ $d->user->name }} về 0%?"
-                                          data-confirm-title="Reset tỷ lệ hủy cuốc"
-                                          data-confirm-ok="Đặt về 0%"
-                                          data-confirm-variant="warning">
-                                        @csrf
-                                        <button type="submit" class="btn btn-link btn-sm p-0 align-baseline">Về 0%</button>
-                                    </form>
-                                @endif
-                            </div>
-                        </td>
-                        <td>
-                            <div class="driver-mgmt-cancel-rate">
-                                <span class="fw-semibold {{ $d->hasCancelRate() ? 'text-warning' : 'text-muted' }}">{{ $d->cancelRateLabel() }}</span>
-                                @if($d->hasCancelRate() && ! $d->isPendingApproval())
-                                    <form method="POST"
-                                          action="{{ route('admin.drivers.resetCancelRate', $d) }}"
-                                          class="driver-mgmt-cancel-rate-reset"
-                                          data-confirm="Đặt lại tỷ lệ hủy cuốc của {{ $d->user->name }} về 0%?"
-                                          data-confirm-title="Reset tỷ lệ hủy cuốc"
-                                          data-confirm-ok="Đặt về 0%"
-                                          data-confirm-variant="warning">
-                                        @csrf
-                                        <button type="submit" class="btn btn-link btn-sm p-0 align-baseline">Về 0%</button>
-                                    </form>
-                                @endif
-                            </div>
-                        </td>
-                        <td>
-                            <div class="driver-mgmt-cancel-rate">
-                                <span class="fw-semibold {{ $d->hasCancelRate() ? 'text-warning' : 'text-muted' }}">{{ $d->cancelRateLabel() }}</span>
-                                @if($d->hasCancelRate() && ! $d->isPendingApproval())
-                                    <form method="POST"
-                                          action="{{ route('admin.drivers.resetCancelRate', $d) }}"
-                                          class="driver-mgmt-cancel-rate-reset"
-                                          data-confirm="Đặt lại tỷ lệ hủy cuốc của {{ $d->user->name }} về 0%?"
-                                          data-confirm-title="Reset tỷ lệ hủy cuốc"
-                                          data-confirm-ok="Đặt về 0%"
-                                          data-confirm-variant="warning">
-                                        @csrf
-                                        <button type="submit" class="btn btn-link btn-sm p-0 align-baseline">Về 0%</button>
-                                    </form>
-                                @endif
-                            </div>
-                        </td>
-                        <td>
-                            <div class="driver-mgmt-cancel-rate">
-                                <span class="fw-semibold {{ $d->hasCancelRate() ? 'text-warning' : 'text-muted' }}">{{ $d->cancelRateLabel() }}</span>
-                                @if($d->hasCancelRate() && ! $d->isPendingApproval())
-                                    <form method="POST"
-                                          action="{{ route('admin.drivers.resetCancelRate', $d) }}"
-                                          class="driver-mgmt-cancel-rate-reset"
-                                          data-confirm="Đặt lại tỷ lệ hủy cuốc của {{ $d->user->name }} về 0%?"
-                                          data-confirm-title="Reset tỷ lệ hủy cuốc"
-                                          data-confirm-ok="Đặt về 0%"
-                                          data-confirm-variant="warning">
-                                        @csrf
-                                        <button type="submit" class="btn btn-link btn-sm p-0 align-baseline">Về 0%</button>
-                                    </form>
-                                @endif
-                            </div>
+                            @if($d->walletListLabel() === '—')
+                                <span class="text-muted">—</span>
+                            @else
+                                <span class="status-pill status-pill--{{ $d->walletListColor() }}">{{ $d->walletListLabel() }}</span>
+                            @endif
                         </td>
                         <td>
                             <span class="status-pill status-pill--{{ $d->displayStatusColor() }}">{{ $d->displayStatusLabel() }}</span>

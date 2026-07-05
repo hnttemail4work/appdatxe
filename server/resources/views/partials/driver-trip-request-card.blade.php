@@ -28,13 +28,8 @@ $pickupAt = $primaryBooking?->tripStartAt();
                 @endif
             </div>
             <div class="driver-request-card__schedule">
-                @if($pickupAt)
-                    Giờ đón: <strong>{{ $pickupAt->format('H:i, d/m/Y') }}</strong>
-                @else
-                    {{ $schedule->departure_time->format('H:i, d/m/Y') }}
-                @endif
                 @if($passengers->count() > 0)
-                    · {{ $passengers->count() }} khách
+                    {{ $passengers->count() }} khách
                 @endif
             </div>
         </div>

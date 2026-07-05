@@ -1,4 +1,4 @@
-/* Tam Long Limo — Operator / Admin Console UI (vàng–đen) */
+/* gozviet — Operator / Admin Console UI (vàng–đen) */
 :root {
     --tl-primary: #d4af37;
     --tl-primary-light: #e8c547;
@@ -573,7 +573,24 @@ body:has(.console-page) {
 .console-page .console-stat-value {
     color: var(--tl-primary-light);
 }
-.console-page .console-stat-icon.primary { background: rgba(212, 175, 55, .15); }
+.console-page .console-stat-icon.primary { background: rgba(212, 175, 55, .18); color: #e8c547; }
+.console-page .console-stat-icon.success { background: rgba(34, 197, 94, .18); color: #4ade80; }
+.console-page .console-stat-icon.info    { background: rgba(56, 189, 248, .18); color: #38bdf8; }
+.console-page .console-stat-icon.warning { background: rgba(251, 191, 36, .18); color: #fbbf24; }
+.console-page .console-stat-icon.danger  { background: rgba(248, 113, 113, .18); color: #f87171; }
+
+.admin-revenue-stats {
+    margin-top: .5rem;
+}
+
+.admin-revenue-stats .console-stat-value {
+    font-size: 1.15rem;
+}
+
+.admin-revenue-trip-table td,
+.admin-revenue-referrer-table td {
+    vertical-align: top;
+}
 .console-page .console-table tbody td {
     border-bottom-color: var(--tl-border);
     color: #e5e5e5;
@@ -615,6 +632,15 @@ body:has(.console-page) {
     object-position: center;
 }
 
+.admin-branding-logo-preview {
+    display: block;
+    max-width: 220px;
+    max-height: 80px;
+    object-fit: contain;
+    background: rgba(255, 255, 255, .04);
+    padding: .5rem .75rem;
+}
+
 .quick-dest-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
@@ -637,4 +663,32 @@ body:has(.console-page) {
 }
 .quick-dest-item .form-check-input {
     margin-top: .15rem;
+}
+
+.wallet-deposit-col-check {
+    width: 2.5rem;
+    vertical-align: middle;
+}
+
+.wallet-deposit-pending-table .form-check-input {
+    margin: 0;
+}
+
+.wallet-deposit-proof-thumb {
+    display: inline-flex;
+    border-radius: .45rem;
+    overflow: hidden;
+    border: 1px solid rgba(212, 175, 55, .28);
+    line-height: 0;
+}
+
+.wallet-deposit-proof-thumb img {
+    display: block;
+    width: 56px;
+    height: 56px;
+    object-fit: cover;
+}
+
+.wallet-deposit-bulk-summary strong {
+    font-weight: 600;
 }

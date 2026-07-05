@@ -17,6 +17,12 @@ class DriverLatePickupService
 {
     public const CONTINUE_WINDOW_MINUTES = 1;
 
+    /** Bắt đầu cảnh báo admin trước giờ đón (phút). */
+    public const ADMIN_WARN_MINUTES_BEFORE = 60;
+
+    /** Bước nhắc admin khi sát giờ đón (phút). */
+    public const ADMIN_WARN_STEP_MINUTES = 15;
+
     public function __construct(
         private readonly DriverTripRequestService $tripRequests,
         private readonly DriverBehaviorPenaltyService $penalties,
@@ -256,6 +262,84 @@ class DriverLatePickupService
         return $this->etaLabel($schedule, $booking);
     }
 
+    /**
+     * Cảnh báo admin — TX có thể không kịp đón hoặc đã quá giờ đón.
+     *
+     * @return array{level: string, label: string, detail: string}|null
+     */
+    public function adminAlertForBooking(Booking $booking): ?array
+    {
+        $booking->loadMissing('schedule');
+        $schedule = $booking->schedule;
+
+        if (! $schedule
+            || ! $booking->hasDriverAccepted()
+            || in_array($booking->booking_status, ['cancelled', 'rejected'], true)
+            || $booking->trip_status === 'completed') {
+            return null;
+        }
+
+        $pickupAt = $booking->tripStartAt();
+        if (! $pickupAt instanceof Carbon) {
+            return null;
+        }
+
+        $stage = $schedule->resolvedDriverStage();
+        if (in_array($stage, [Schedule::DRIVER_STAGE_PICKED_UP, Schedule::DRIVER_STAGE_RUNNING, Schedule::DRIVER_STAGE_COMPLETED], true)) {
+            return null;
+        }
+
+        $minutesUntilPickup = (int) now()->diffInMinutes($pickupAt, false);
+
+        if ($minutesUntilPickup < 0 && $stage === Schedule::DRIVER_STAGE_ASSIGNED) {
+            $lateMinutes = abs($minutesUntilPickup);
+
+            return [
+                'level'  => 'danger',
+                'label'  => 'Quá giờ đón',
+                'detail' => 'TX chưa đến điểm đón · trễ ' . $lateMinutes . ' phút',
+            ];
+        }
+
+        if ($minutesUntilPickup <= 0 || $minutesUntilPickup > self::ADMIN_WARN_MINUTES_BEFORE) {
+            return null;
+        }
+
+        $driverUserId = (int) ($schedule->driver_id ?: $booking->resolveAssignedDriverId($schedule));
+        $profile = $driverUserId > 0
+            ? DriverProfile::query()->where('user_id', $driverUserId)->first()
+            : null;
+
+        if (! $profile?->hasFreshLocation()) {
+            if ($minutesUntilPickup <= self::ADMIN_WARN_STEP_MINUTES) {
+                return [
+                    'level'  => $minutesUntilPickup <= 5 ? 'danger' : 'warning',
+                    'label'  => 'Sát giờ đón',
+                    'detail' => 'Còn ' . $minutesUntilPickup . ' phút · TX chưa chia sẻ vị trí',
+                ];
+            }
+
+            return null;
+        }
+
+        $etaMinutes = $this->travelMinutesToPickup($schedule, $booking);
+        if ($etaMinutes <= $minutesUntilPickup) {
+            return null;
+        }
+
+        $level = match (true) {
+            $minutesUntilPickup <= self::ADMIN_WARN_STEP_MINUTES     => 'danger',
+            $minutesUntilPickup <= self::ADMIN_WARN_STEP_MINUTES * 2 => 'warning',
+            default                                                  => 'pending',
+        };
+
+        return [
+            'level'  => $level,
+            'label'  => 'Có thể trễ đón',
+            'detail' => 'Còn ' . $minutesUntilPickup . ' phút tới giờ đón · TX ~' . $etaMinutes . ' phút nữa mới tới',
+        ];
+    }
+
     private function etaLabel(Schedule $schedule, ?Booking $booking): ?string
     {
         if (! $booking) {
@@ -276,18 +360,21 @@ class DriverLatePickupService
 
     private function travelMinutesToPickup(Schedule $schedule, Booking $booking): int
     {
-        $profile = DriverProfile::query()->where('user_id', $schedule->driver_id)->first();
-        if (! $profile) {
+        $driverUserId = (int) ($schedule->driver_id ?: $booking->resolveAssignedDriverId($schedule));
+        $profile = $driverUserId > 0
+            ? DriverProfile::query()->where('user_id', $driverUserId)->first()
+            : null;
+
+        if (! $profile || ! $profile->hasFreshLocation()) {
             return 1;
         }
 
-        $distanceKm = max(0.5, (float) ($booking->driver_pickup_distance_km ?? 0));
-        if ($distanceKm <= 0.5 && $booking->pickup_lat !== null && $booking->pickup_lng !== null) {
-            $snap = app(DriverProximityService::class)->snapshotPickupDistance($booking, $profile);
-            if ($snap !== null) {
-                $distanceKm = max(0.5, $snap);
-            }
+        $snap = app(DriverProximityService::class)->snapshotPickupDistance($booking, $profile);
+        if ($snap === null) {
+            return 1;
         }
+
+        $distanceKm = max(0.5, $snap);
 
         return (int) max(1, ceil($distanceKm / DriverMovementConfirmService::ASSUMED_SPEED_KMH * 60));
     }

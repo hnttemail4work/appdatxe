@@ -20,7 +20,7 @@ class PlatformFees
         return (float) ($legacy['value'] ?? 2);
     }
 
-    /** % hoa hồng người giới thiệu — mã admin (QR người GT). */
+    /** % hoa hồng người giới thiệu — mã admin tạo từ hệ thống. */
     public static function referralCommissionFirstPercent(): float
     {
         $setting = PlatformSetting::getValue('referral_commission_first_percentage', ['value' => 8]);
@@ -28,22 +28,28 @@ class PlatformFees
         return (float) ($setting['value'] ?? 8);
     }
 
-    /** % giảm giá khách + hoa hồng — mã phát sinh từ khách đặt chuyến thành công. */
-    public static function referralCommissionRepeatPercent(): float
+    /** % giảm giá khách khi quét mã QR từ chuyến hoàn tất — không tính vào doanh thu admin. */
+    public static function bookingQrDiscountPercent(): float
     {
         $setting = PlatformSetting::getValue('referral_commission_repeat_percentage', ['value' => 2]);
 
         return (float) ($setting['value'] ?? 2);
     }
 
+    /** @deprecated Dùng {@see bookingQrDiscountPercent()} hoặc {@see referralCommissionFirstPercent()}. */
+    public static function referralCommissionRepeatPercent(): float
+    {
+        return self::bookingQrDiscountPercent();
+    }
+
     /**
-     * @param  int  $occurrence  1 = lần giới thiệu đầu, >= 2 = các lần sau
+     * @deprecated Không còn phân tầng lần đầu / lần sau.
      */
     public static function referralCommissionPercentForOccurrence(int $occurrence): float
     {
         return $occurrence <= 1
             ? self::referralCommissionFirstPercent()
-            : self::referralCommissionRepeatPercent();
+            : self::bookingQrDiscountPercent();
     }
 
     public static function roundTripDiscountPercent(): float

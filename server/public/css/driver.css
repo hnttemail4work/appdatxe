@@ -1672,6 +1672,58 @@ body:has(.driver-page) {
     border-color: rgba(212, 175, 55, .4);
     color: #fcd34d;
 }
+
+.driver-notice--wallet-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: .75rem;
+    padding: .85rem 1rem;
+    border-radius: .85rem;
+    background: linear-gradient(135deg, rgba(251, 191, 36, .14) 0%, rgba(26, 26, 26, .96) 100%);
+    border: 1px solid rgba(251, 191, 36, .42);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, .32);
+    color: #fef3c7;
+}
+
+.driver-notice-warning-icon {
+    flex-shrink: 0;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    background: rgba(251, 191, 36, .22);
+    color: #fcd34d;
+    font-weight: 800;
+    font-size: 1rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.driver-notice-warning-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.driver-notice-warning-text {
+    font-size: .8125rem;
+    line-height: 1.45;
+    color: #fef3c7;
+}
+
+.driver-notice-warning-cta {
+    display: inline-block;
+    margin-top: .5rem;
+    font-size: .75rem;
+    font-weight: 700;
+    color: #fcd34d;
+    text-decoration: none;
+}
+
+.driver-notice-warning-cta:hover {
+    color: #fde68a;
+    text-decoration: underline;
+}
 .driver-notice-info {
     background: rgba(212, 175, 55, .1);
     border-color: rgba(212, 175, 55, .35);
@@ -1698,13 +1750,363 @@ body:has(.driver-page) {
 }
 .driver-wallet-deposit-form {
     text-align: left;
+    margin-bottom: 2rem;
 }
+
+#driver-section-deposit .driver-wallet-deposit-form {
+    margin-bottom: .75rem;
+}
+
+#driver-section-deposit .driver-wallet-history {
+    margin-top: .75rem;
+    margin-bottom: .25rem;
+}
+
+.driver-deposit-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: .85rem .9rem;
+    border: 1px solid rgba(212, 175, 55, .22);
+    border-radius: .85rem;
+    background: rgba(255, 255, 255, .03);
+}
+
+.driver-deposit-amount-section {
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+}
+
+.driver-deposit-label {
+    font-weight: 600;
+    color: #f5f5f5;
+    margin-bottom: .45rem;
+}
+
+.driver-deposit-amount-row {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+
+.driver-deposit-amount-row .driver-deposit-amount {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    padding: .55rem .7rem;
+    background: #111;
+    border-color: rgba(212, 175, 55, .28);
+    color: #fff;
+}
+
+.driver-deposit-amount-row .driver-deposit-amount::placeholder {
+    font-weight: 400;
+    text-transform: none;
+    color: var(--drv-muted);
+    opacity: 1;
+}
+
+.driver-deposit-amount-row .driver-deposit-amount:focus {
+    border-color: rgba(212, 175, 55, .55);
+    box-shadow: 0 0 0 2px rgba(212, 175, 55, .12);
+}
+
+.driver-deposit-amount-suffix {
+    font-size: .95rem;
+    font-weight: 700;
+    color: var(--drv-muted);
+    flex-shrink: 0;
+}
+
+.driver-deposit-quick-amounts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+}
+
+.driver-deposit-preset {
+    border: 1px solid rgba(212, 175, 55, .25);
+    background: rgba(212, 175, 55, .08);
+    color: #fde68a;
+    border-radius: 999px;
+    padding: .2rem .65rem;
+    font-size: .72rem;
+    font-weight: 600;
+    line-height: 1.3;
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.driver-deposit-preset:hover,
+.driver-deposit-preset:focus-visible {
+    background: rgba(212, 175, 55, .16);
+    border-color: rgba(212, 175, 55, .45);
+    color: #fff;
+    outline: none;
+}
+
+.driver-deposit-preset.is-active {
+    background: rgba(212, 175, 55, .22);
+    border-color: rgba(212, 175, 55, .55);
+    color: #fff;
+}
+
+.driver-deposit-qr-section {
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+}
+
+.driver-deposit-qr-heading {
+    margin: 0 0 .35rem;
+    font-size: .78rem;
+    font-weight: 600;
+    color: #f5f5f5;
+}
+
+.driver-deposit-qr-amount {
+    margin: 0 0 .55rem;
+    font-size: .95rem;
+    font-weight: 800;
+    color: #4ade80;
+}
+
+.company-transfer-qr-frame {
+    position: relative;
+    width: 140px;
+    height: 140px;
+}
+
+.company-transfer-qr.is-hidden {
+    display: none !important;
+}
+
+.company-transfer-qr-placeholder {
+    width: 140px;
+    height: 140px;
+    border: 1px dashed rgba(212, 175, 55, .35);
+    border-radius: .65rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: .35rem;
+    padding: .5rem;
+    text-align: center;
+    background: rgba(212, 175, 55, .06);
+}
+
+.company-transfer-qr-placeholder.is-hidden {
+    display: none !important;
+}
+
+.company-transfer-qr-placeholder-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.2rem;
+    height: 2.2rem;
+    border-radius: .45rem;
+    font-size: .72rem;
+    font-weight: 800;
+    letter-spacing: .04em;
+    color: #fde68a;
+    background: rgba(212, 175, 55, .14);
+    border: 1px solid rgba(212, 175, 55, .25);
+}
+
+.company-transfer-qr-placeholder-text {
+    font-size: .68rem;
+    line-height: 1.35;
+    color: var(--drv-muted);
+    max-width: 7rem;
+}
+
 .driver-deposit-submit-btn {
     font-size: .75rem;
     padding: .2rem .65rem;
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.driver-deposit-proof-section {
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+}
+
+.driver-deposit-proof-label {
+    display: block;
+    margin-bottom: .45rem;
+    font-size: .78rem;
+    font-weight: 600;
+    color: #f5f5f5;
+}
+
+.driver-deposit-proof-preview {
+    margin-top: .65rem;
+}
+
+.driver-deposit-proof-preview-img {
+    display: block;
+    width: 100%;
+    max-width: 220px;
+    border-radius: .65rem;
+    border: 1px solid rgba(212, 175, 55, .25);
+}
+
+.driver-wallet-history-item.is-rejected .driver-wallet-history-label {
+    color: #fca5a5;
+}
+
+.driver-wallet-history-item.is-rejected .driver-wallet-history-amount {
+    color: #f87171;
+}
+.driver-deposit-feedback {
+    margin-bottom: .75rem;
+    padding: .55rem .75rem;
+    border-radius: .65rem;
+    font-size: .8125rem;
+    font-weight: 600;
+    line-height: 1.45;
+}
+.driver-deposit-feedback--info {
+    background: rgba(59, 130, 246, .12);
+    border: 1px solid rgba(59, 130, 246, .28);
+    color: #bfdbfe;
+}
+.driver-deposit-feedback--danger {
+    background: rgba(248, 113, 113, .12);
+    border: 1px solid rgba(248, 113, 113, .28);
+    color: #fecaca;
+}
+.driver-deposit-feedback--success {
+    background: rgba(34, 197, 94, .12);
+    border: 1px solid rgba(34, 197, 94, .28);
+    color: #bbf7d0;
+}
+.driver-notice-success {
+    background: rgba(34, 197, 94, .12);
+    border: 1px solid rgba(34, 197, 94, .28);
+    color: #bbf7d0;
 }
 .driver-trip-card--history {
-    opacity: .95;
+    opacity: 1;
+    border-color: rgba(255, 255, 255, .1);
+}
+
+.driver-trip-card--history.is-completed {
+    border-left: 3px solid rgba(34, 197, 94, .55);
+}
+
+.driver-trip-card--history.is-cancelled {
+    border-left: 3px solid rgba(248, 113, 113, .45);
+}
+
+.driver-history-head {
+    margin-bottom: .75rem;
+}
+
+.driver-history-intro {
+    margin: 0;
+    font-size: .78rem;
+    line-height: 1.45;
+    color: var(--drv-muted);
+}
+
+.driver-history-intro strong {
+    color: #f5f5f5;
+    font-weight: 700;
+}
+
+.driver-trips-list--history {
+    gap: .75rem;
+}
+
+.driver-history-card-top {
+    border-bottom: 0;
+    padding-bottom: .7rem;
+}
+
+.driver-trip-card--history .driver-card-top-aside .status-pill {
+    font-size: .68rem;
+    padding: .2rem .45rem;
+}
+
+.driver-history-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .3rem .55rem;
+    margin-top: .45rem;
+}
+
+.driver-history-meta-item {
+    font-size: .72rem;
+    line-height: 1.3;
+    color: var(--drv-muted);
+}
+
+.driver-history-meta-code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: .68rem;
+    font-weight: 600;
+    letter-spacing: .02em;
+    color: rgba(232, 197, 71, .85);
+    background: rgba(212, 175, 55, .1);
+    border: 1px solid rgba(212, 175, 55, .18);
+    border-radius: .3rem;
+    padding: .05rem .35rem;
+}
+
+.driver-history-passengers {
+    margin-top: .35rem;
+    font-size: .74rem;
+    color: rgba(245, 245, 245, .72);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.driver-history-card-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .6rem .9rem .7rem;
+    border-top: 1px solid rgba(255, 255, 255, .06);
+    background: linear-gradient(180deg, rgba(34, 197, 94, .08) 0%, rgba(34, 197, 94, .03) 100%);
+}
+
+.driver-history-card-foot--muted {
+    display: block;
+    background: rgba(255, 255, 255, .02);
+}
+
+.driver-history-card-foot--muted .booking-cancel-detail {
+    margin-top: 0;
+    color: var(--drv-muted);
+    line-height: 1.4;
+}
+
+.driver-history-foot-label {
+    font-size: .72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--drv-muted);
+}
+
+.driver-history-foot-amount {
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #4ade80;
+    white-space: nowrap;
 }
 
 .driver-request-card,
@@ -2474,6 +2876,10 @@ body:has(.driver-page) {
     margin-top: .5rem;
 }
 
+.driver-wallet-history {
+    margin-top: 1rem;
+}
+
 .driver-wallet-history-list {
     display: flex;
     flex-direction: column;
@@ -2521,6 +2927,85 @@ body:has(.driver-page) {
     font-size: .75rem;
     color: var(--drv-muted);
     margin-top: .15rem;
+}
+
+.driver-wallet-pending-section {
+    border: 1px solid rgba(212, 175, 55, .22);
+    border-radius: .875rem;
+    padding: .85rem 1rem;
+    background: rgba(255, 255, 255, .03);
+}
+
+.driver-wallet-section-head {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    margin-bottom: .35rem;
+}
+
+.driver-wallet-section-title {
+    font-size: .95rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.driver-wallet-pending-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.35rem;
+    height: 1.35rem;
+    padding: 0 .35rem;
+    border-radius: 999px;
+    font-size: .72rem;
+    font-weight: 700;
+    background: rgba(59, 130, 246, .18);
+    color: #93c5fd;
+}
+
+.driver-wallet-pending-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+}
+
+.driver-wallet-pending-item {
+    border: 1px solid rgba(255, 255, 255, .08);
+    border-radius: .65rem;
+    padding: .55rem .7rem;
+    background: rgba(0, 0, 0, .12);
+}
+
+.driver-wallet-pending-item-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+}
+
+.driver-wallet-pending-ref {
+    font-size: .78rem;
+    font-weight: 600;
+    letter-spacing: .02em;
+    color: var(--drv-muted);
+}
+
+.driver-wallet-pending-amount {
+    font-weight: 700;
+    color: #4ade80;
+}
+
+.driver-wallet-pending-item-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    margin-top: .2rem;
+    font-size: .72rem;
+    color: var(--drv-muted);
 }
 
 .driver-location-card {
