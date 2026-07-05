@@ -19,6 +19,49 @@ class DriverWalletConfig
     /** Tối đa số yêu cầu nạp chờ duyệt cùng lúc mỗi tài xế. */
     public const MAX_PENDING_DEPOSITS = 1;
 
+    public static function commissionRate(): float
+    {
+        return PlatformFees::appCommissionPercent();
+    }
+
+    /** Phí nền tảng (mặc định 2%) trên doanh thu chuyến. */
+    public static function platformFee(int $revenue): int
+    {
+        if ($revenue <= 0) {
+            return 0;
+        }
+
+        return (int) round($revenue * self::commissionRate() / 100, 0);
+    }
+
+    /** Chỉ trừ phí khi tài xế đã nạp ví và tổng doanh thu đã vượt ngưỡng (không phải lần đầu đạt ngưỡng). */
+    public static function shouldDeductPlatformFee(string $category, bool $walletActivated): bool
+    {
+        return $walletActivated && $category === 'over_threshold';
+    }
+
+    /**
+     * Phân loại kết chuyến theo tổng doanh thu tích lũy — không theo giá từng chuyến.
+     *
+     * - under_threshold: tổng doanh thu sau chuyến vẫn < 200k
+     * - first_over_threshold: lần đầu tổng doanh thu đạt ≥ 200k
+     * - over_threshold: tổng doanh thu trước chuyến đã ≥ 200k
+     */
+    public static function resolveSettlementCategory(int $tripRevenue, int $cumulativeRevenueBefore): string
+    {
+        $cumulativeAfter = $cumulativeRevenueBefore + $tripRevenue;
+
+        if ($cumulativeAfter < self::REVENUE_THRESHOLD) {
+            return 'under_threshold';
+        }
+
+        if ($cumulativeRevenueBefore < self::REVENUE_THRESHOLD) {
+            return 'first_over_threshold';
+        }
+
+        return 'over_threshold';
+    }
+
     public static function revenueThresholdShortLabel(): string
     {
         return number_format((int) (self::REVENUE_THRESHOLD / 1000), 0, ',', '.') . 'k';

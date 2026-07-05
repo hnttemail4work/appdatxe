@@ -14,8 +14,9 @@ use App\Services\ScheduleLifecycleService;
 use App\Services\TripListingService;
 use App\Services\TripPricingService;
 use App\Support\BookingPageSettings;
+use App\Support\DeparturePlan;
 use App\Support\DepartureTimeDisplay;
-use App\Support\SouthernProvinces;
+use App\Support\ProvinceResolver;
 use App\Support\ServiceDate;
 use App\Support\VehicleCapacityOptions;
 use Illuminate\Http\Request;
@@ -274,12 +275,15 @@ class GuestBookingController extends Controller
             'template_id'        => ['nullable', 'exists:schedule_templates,id'],
             'vehicle_id'         => ['nullable', 'exists:vehicles,id'],
             'driver_profile_id'  => ['nullable', 'exists:driver_profiles,id'],
-            'pickup_address'     => ['required', 'string', 'max:255', SouthernProvinces::inRule()],
-            'dropoff_address'    => ['required', 'string', 'max:255', SouthernProvinces::inRule()],
-            'pickup_lat'         => ['nullable', 'numeric', 'between:-90,90'],
-            'pickup_lng'         => ['nullable', 'numeric', 'between:-180,180'],
-            'dropoff_lat'        => ['nullable', 'numeric', 'between:-90,90'],
-            'dropoff_lng'        => ['nullable', 'numeric', 'between:-180,180'],
+            'pickup_address'     => ['nullable', 'string', 'max:255'],
+            'dropoff_address'    => ['nullable', 'string', 'max:255'],
+            'pickup_detail'      => ['required', 'string', 'max:500'],
+            'dropoff_detail'     => ['required', 'string', 'max:500'],
+            'pickup_lat'         => ['required', 'numeric', 'between:-90,90'],
+            'pickup_lng'         => ['required', 'numeric', 'between:-180,180'],
+            'dropoff_lat'        => ['required', 'numeric', 'between:-90,90'],
+            'dropoff_lng'        => ['required', 'numeric', 'between:-180,180'],
+            'departure_plan'     => ['nullable', 'string', 'in:today,tomorrow,later'],
             'contact_phone'      => ['nullable', 'string', 'max:30'],
         ]);
 
@@ -297,19 +301,22 @@ class GuestBookingController extends Controller
             return response()->json(['message' => 'Xe không khả dụng.'], 422);
         }
 
-        $pickupLat = isset($validated['pickup_lat']) ? (float) $validated['pickup_lat'] : null;
-        $pickupLng = isset($validated['pickup_lng']) ? (float) $validated['pickup_lng'] : null;
-        $dropoffLat = isset($validated['dropoff_lat']) ? (float) $validated['dropoff_lat'] : null;
-        $dropoffLng = isset($validated['dropoff_lng']) ? (float) $validated['dropoff_lng'] : null;
+        $pickupLat = (float) $validated['pickup_lat'];
+        $pickupLng = (float) $validated['pickup_lng'];
+        $dropoffLat = (float) $validated['dropoff_lat'];
+        $dropoffLng = (float) $validated['dropoff_lng'];
+        $addresses = $this->resolveRouteAddresses($validated, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
+        $departurePlan = DeparturePlan::normalize($validated['departure_plan'] ?? DeparturePlan::TODAY);
 
         $quote = $this->pricing->quote(
             $template,
-            $validated['pickup_address'],
-            $validated['dropoff_address'],
+            $addresses['pickup_address'],
+            $addresses['dropoff_address'],
             $pickupLat,
             $pickupLng,
             $dropoffLat,
             $dropoffLng,
+            $departurePlan,
         );
 
         $subtotal = (int) $quote['whole_car_price'];
@@ -347,30 +354,33 @@ class GuestBookingController extends Controller
             'template_id'       => ['nullable', 'exists:schedule_templates,id'],
             'vehicle_id'        => ['nullable', 'exists:vehicles,id'],
             'driver_profile_id' => ['nullable', 'exists:driver_profiles,id'],
-            'service_date'     => ['required', 'date', 'after_or_equal:today'],
-            'pickup_time'      => ['required', 'string', 'max:8', 'regex:/^\d{1,2}:\d{2}$/'],
+            'service_date'     => ['nullable', 'date', 'after_or_equal:today'],
+            'departure_plan'   => ['required', 'string', 'in:today,tomorrow,later'],
+            'pickup_time'      => ['nullable', 'string', 'max:8', 'regex:/^\d{1,2}:\d{2}$/'],
             'passenger_name'   => ['required', 'string', 'max:255'],
             'passenger_gender' => ['nullable', 'in:male,female'],
             'passenger_age'    => ['nullable', 'integer', 'min:1', 'max:120'],
             'contact_phone'    => ['required', 'string', 'max:30'],
-            'pickup_address'   => ['required', 'string', 'max:255', SouthernProvinces::inRule()],
-            'dropoff_address'  => ['required', 'string', 'max:255', SouthernProvinces::inRule()],
-            'pickup_detail'    => ['nullable', 'string', 'max:500'],
-            'dropoff_detail'   => ['nullable', 'string', 'max:500'],
+            'pickup_address'   => ['nullable', 'string', 'max:255'],
+            'dropoff_address'  => ['nullable', 'string', 'max:255'],
+            'pickup_detail'    => ['required', 'string', 'max:500'],
+            'dropoff_detail'   => ['required', 'string', 'max:500'],
             'pickup_lat'       => ['required', 'numeric', 'between:-90,90'],
             'pickup_lng'       => ['required', 'numeric', 'between:-180,180'],
-            'dropoff_lat'      => ['nullable', 'numeric', 'between:-90,90'],
-            'dropoff_lng'      => ['nullable', 'numeric', 'between:-180,180'],
+            'dropoff_lat'      => ['required', 'numeric', 'between:-90,90'],
+            'dropoff_lng'      => ['required', 'numeric', 'between:-180,180'],
             'notes'            => ['nullable', 'string', 'max:500'],
             'referral_code'    => ['nullable', 'string', 'max:32'],
             'booking_browser_id' => ['nullable', 'string', 'max:128'],
         ], [
-            'service_date.required'       => 'Vui lòng chọn ngày đi.',
             'service_date.after_or_equal' => 'Ngày đi phải từ hôm nay trở đi.',
-            'pickup_time.required'        => 'Vui lòng chọn giờ đón.',
             'pickup_time.regex'           => 'Giờ đón không hợp lệ.',
             'pickup_lat.required'         => 'Vui lòng ghim điểm đón trên bản đồ.',
             'pickup_lng.required'         => 'Vui lòng ghim điểm đón trên bản đồ.',
+            'dropoff_lat.required'        => 'Vui lòng ghim điểm trả trên bản đồ.',
+            'dropoff_lng.required'        => 'Vui lòng ghim điểm trả trên bản đồ.',
+            'pickup_detail.required'      => 'Vui lòng chọn điểm đón trên bản đồ.',
+            'dropoff_detail.required'     => 'Vui lòng chọn điểm trả trên bản đồ.',
         ]);
 
         if ($validator->fails()) {
@@ -381,31 +391,18 @@ class GuestBookingController extends Controller
 
         $validated = $validator->validated();
 
-        if ($validated['pickup_address'] === $validated['dropoff_address']) {
-            $intraCityErrors = Validator::make($validated, [
-                'pickup_detail'  => ['required', 'string', 'max:500'],
-                'dropoff_detail' => ['required', 'string', 'max:500'],
-                'pickup_lat'     => ['required', 'numeric', 'between:-90,90'],
-                'pickup_lng'     => ['required', 'numeric', 'between:-180,180'],
-                'dropoff_lat'    => ['required', 'numeric', 'between:-90,90'],
-                'dropoff_lng'    => ['required', 'numeric', 'between:-180,180'],
-            ], [
-                'pickup_detail.required'  => 'Cùng tỉnh/thành — vui lòng nhập điểm đón cụ thể.',
-                'dropoff_detail.required' => 'Cùng tỉnh/thành — vui lòng nhập điểm trả cụ thể.',
-                'pickup_lat.required'     => 'Cùng tỉnh/thành — vui lòng ghim điểm đón trên bản đồ.',
-                'pickup_lng.required'     => 'Cùng tỉnh/thành — vui lòng ghim điểm đón trên bản đồ.',
-                'dropoff_lat.required'    => 'Cùng tỉnh/thành — vui lòng chọn điểm trả trên bản đồ hoặc từ gợi ý địa chỉ.',
-                'dropoff_lng.required'    => 'Cùng tỉnh/thành — vui lòng chọn điểm trả trên bản đồ hoặc từ gợi ý địa chỉ.',
-            ]);
-
-            if ($intraCityErrors->fails()) {
-                return $this->bookingFormRedirect()
-                    ->withErrors($intraCityErrors)
-                    ->withInput();
-            }
-
-            $validated = array_merge($validated, $intraCityErrors->validated());
-        }
+        $pickupLat = (float) $validated['pickup_lat'];
+        $pickupLng = (float) $validated['pickup_lng'];
+        $dropoffLat = (float) $validated['dropoff_lat'];
+        $dropoffLng = (float) $validated['dropoff_lng'];
+        $addresses = $this->resolveRouteAddresses($validated, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
+        $validated['pickup_address'] = $addresses['pickup_address'];
+        $validated['dropoff_address'] = $addresses['dropoff_address'];
+        $departurePlan = DeparturePlan::normalize($validated['departure_plan']);
+        $validated['service_date'] = DeparturePlan::resolveServiceDate(
+            $departurePlan,
+            $validated['service_date'] ?? null,
+        );
 
         if (empty($validated['template_id']) && empty($validated['vehicle_id']) && empty($validated['driver_profile_id'])) {
             return $this->bookingFormRedirect()
@@ -441,10 +438,6 @@ class GuestBookingController extends Controller
         $appliedReferralId = $appliedReferral?->id;
         $passengerGender = ($validated['passenger_gender'] ?? 'male') === 'female' ? 'female' : 'male';
         $passengerAge = isset($validated['passenger_age']) ? (int) $validated['passenger_age'] : null;
-        $pickupLat = isset($validated['pickup_lat']) ? (float) $validated['pickup_lat'] : null;
-        $pickupLng = isset($validated['pickup_lng']) ? (float) $validated['pickup_lng'] : null;
-        $dropoffLat = isset($validated['dropoff_lat']) ? (float) $validated['dropoff_lat'] : null;
-        $dropoffLng = isset($validated['dropoff_lng']) ? (float) $validated['dropoff_lng'] : null;
         $browserId = trim((string) ($validated['booking_browser_id'] ?? $request->header('X-Booking-Browser-Id', '')));
 
         try {
@@ -490,6 +483,7 @@ class GuestBookingController extends Controller
                 $pickupLng,
                 $dropoffLat,
                 $dropoffLng,
+                $departurePlan,
             );
         } catch (InvalidArgumentException $e) {
             return $this->bookingFormError($e);
@@ -518,6 +512,35 @@ class GuestBookingController extends Controller
         }
 
         return redirect()->route('booking.trips')->with('booking_success', $successPayload);
+    }
+
+    /** @return array{pickup_address: string, dropoff_address: string} */
+    private function resolveRouteAddresses(
+        array $input,
+        float $pickupLat,
+        float $pickupLng,
+        float $dropoffLat,
+        float $dropoffLng,
+    ): array {
+        $pickup = trim((string) ($input['pickup_address'] ?? ''));
+        $dropoff = trim((string) ($input['dropoff_address'] ?? ''));
+        $pickupDetail = trim((string) ($input['pickup_detail'] ?? ''));
+        $dropoffDetail = trim((string) ($input['dropoff_detail'] ?? ''));
+
+        if ($pickup === '') {
+            $pickup = ProvinceResolver::fromMapPick($pickupLat, $pickupLng, $pickupDetail !== '' ? $pickupDetail : null)
+                ?? 'Khác';
+        }
+
+        if ($dropoff === '') {
+            $dropoff = ProvinceResolver::fromMapPick($dropoffLat, $dropoffLng, $dropoffDetail !== '' ? $dropoffDetail : null)
+                ?? 'Khác';
+        }
+
+        return [
+            'pickup_address'  => $pickup,
+            'dropoff_address' => $dropoff,
+        ];
     }
 
     private function bookingFormRedirect(): \Illuminate\Http\RedirectResponse

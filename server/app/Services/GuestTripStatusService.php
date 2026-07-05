@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Booking;
 use App\Models\TripReview;
 use App\Support\AuthIdentifier;
+use App\Support\DeparturePlan;
 use App\Support\GuestWaitProgress;
 use Illuminate\Support\Facades\Cache;
 
@@ -91,6 +92,10 @@ class GuestTripStatusService
             'trip_status'       => $booking->trip_status,
             'booking_status'    => $booking->booking_status,
             'total_price'       => (float) $booking->total_price,
+            'total_price_label' => number_format((float) $booking->total_price, 0, ',', '.') . ' đ',
+            'distance_km'       => $booking->tripDistanceKm(),
+            'departure_plan'    => $booking->departure_plan ?? DeparturePlan::TODAY,
+            'departure_plan_label' => DeparturePlan::label($booking->departure_plan ?? DeparturePlan::TODAY),
             'is_active'         => $booking->blocksGuestRebooking(),
             'can_review'        => $booking->trip_status === 'completed' && ! $booking->tripReview,
             'review'            => $this->serializeReview($booking),

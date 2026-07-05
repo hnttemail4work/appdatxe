@@ -5,24 +5,32 @@
     var LEAFLET_CSS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
     var LEAFLET_JS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
 
-    var PROVINCE_CENTERS = {
-        'TP.HCM': [10.7769, 106.7009],
-        'Bình Dương': [11.3254, 106.4770],
-        'Đồng Nai': [10.9574, 106.8427],
-        'Long An': [10.5339, 106.4132],
-        'Tây Ninh': [11.3359, 106.1093],
-        'Vũng Tàu': [10.3460, 107.0843],
-        'Bà Rịa': [10.4963, 107.1684],
-        'Phan Thiết': [10.9289, 108.1021],
-        'Mũi Né': [10.9558, 108.2100],
-        'Đà Lạt': [11.9404, 108.4583],
-        'Mỹ Tho': [10.3600, 106.3600],
-        'Bến Tre': [10.2434, 106.3757],
-        'Vĩnh Long': [10.2537, 105.9722],
-        'Cần Thơ': [10.0452, 105.7469],
-        'Long Xuyên': [10.3866, 105.4352],
-        'Châu Đốc': [10.7047, 105.1200],
-    };
+    var PROVINCE_CENTERS = (function () {
+        var raw = window.__provinceCenters || {};
+        var mapped = {};
+
+        Object.keys(raw).forEach(function (name) {
+            var point = raw[name];
+            if (!point) {
+                return;
+            }
+            if (Array.isArray(point) && point.length >= 2) {
+                mapped[name] = point;
+                return;
+            }
+            if (typeof point.lat === 'number' && typeof point.lng === 'number') {
+                mapped[name] = [point.lat, point.lng];
+            }
+        });
+
+        if (Object.keys(mapped).length) {
+            return mapped;
+        }
+
+        return {
+            'TP.HCM': [10.7769, 106.7009],
+        };
+    })();
 
     var modalEl = document.getElementById('addressMapPickerModal');
     if (!modalEl || typeof bootstrap === 'undefined') {
@@ -57,6 +65,7 @@
     var pendingLat = null;
     var pendingLng = null;
     var pendingAddress = '';
+    var pendingProvince = '';
     var reverseAbort = null;
     var searchAbort = null;
     var isResolving = false;
@@ -393,6 +402,7 @@
         pendingLat = null;
         pendingLng = null;
         pendingAddress = '';
+        pendingProvince = '';
         needsPinFineTune = false;
         hideSearchResults();
         updateConfirmButton();
@@ -451,6 +461,7 @@
                 lat: pendingLat,
                 lng: pendingLng,
                 address: text,
+                province: pendingProvince,
             },
         }));
 
@@ -515,6 +526,7 @@
                 if (!address) {
                     throw new Error('empty_address');
                 }
+                pendingProvince = data && data.province ? String(data.province).trim() : '';
                 previewResolvedAddress(address);
             })
             .catch(function (err) {

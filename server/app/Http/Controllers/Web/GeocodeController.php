@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Support\ProvinceCenters;
+use App\Support\ProvinceResolver;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Http\JsonResponse;
@@ -11,46 +13,6 @@ use Illuminate\Support\Facades\Http;
 
 class GeocodeController extends Controller
 {
-    /** Tên gửi Nominatim khi search (TP.HCM → tên đầy đủ). */
-    private const PROVINCE_SEARCH_LABELS = [
-        'TP.HCM' => 'Thành phố Hồ Chí Minh',
-        'Bình Dương' => 'Bình Dương',
-        'Đồng Nai' => 'Đồng Nai',
-        'Long An' => 'Long An',
-        'Tây Ninh' => 'Tây Ninh',
-        'Vũng Tàu' => 'Vũng Tàu',
-        'Bà Rịa' => 'Bà Rịa',
-        'Phan Thiết' => 'Phan Thiết',
-        'Mũi Né' => 'Mũi Né',
-        'Đà Lạt' => 'Đà Lạt',
-        'Mỹ Tho' => 'Mỹ Tho',
-        'Bến Tre' => 'Bến Tre',
-        'Vĩnh Long' => 'Vĩnh Long',
-        'Cần Thơ' => 'Cần Thơ',
-        'Long Xuyên' => 'Long Xuyên',
-        'Châu Đốc' => 'Châu Đốc',
-    ];
-
-    /** @var array<string, string> minLon,maxLat,maxLon,minLat */
-    private const PROVINCE_VIEWBOXES = [
-        'TP.HCM' => '106.30,11.00,107.05,10.30',
-        'Bình Dương' => '106.40,11.50,107.10,10.80',
-        'Đồng Nai' => '106.60,11.20,107.50,10.50',
-        'Long An' => '105.90,10.80,106.60,10.30',
-        'Tây Ninh' => '105.80,11.60,106.50,10.90',
-        'Vũng Tàu' => '107.00,10.60,107.40,10.20',
-        'Bà Rịa' => '106.90,10.70,107.40,10.30',
-        'Phan Thiết' => '108.00,11.10,108.30,10.80',
-        'Mũi Né' => '108.10,11.05,108.30,10.85',
-        'Đà Lạt' => '108.35,12.05,108.55,11.85',
-        'Mỹ Tho' => '106.20,10.50,106.50,10.20',
-        'Bến Tre' => '106.20,10.40,106.60,9.90',
-        'Vĩnh Long' => '105.80,10.30,106.20,9.90',
-        'Cần Thơ' => '105.60,10.20,105.90,9.90',
-        'Long Xuyên' => '105.30,10.50,105.60,10.30',
-        'Châu Đốc' => '104.90,10.80,105.20,10.50',
-    ];
-
     private const HCM_CITY_LABEL = 'Thành phố Hồ Chí Minh';
 
     private function nominatimHeaders(): array
@@ -149,8 +111,11 @@ class GeocodeController extends Controller
     /** @param array<string, mixed> $addr */
     private function cityLabelForAddress(array $addr, ?float $lat, ?float $lon): string
     {
-        if ($lat !== null && $lon !== null && $this->isInViewbox($lat, $lon, self::PROVINCE_VIEWBOXES['TP.HCM'])) {
-            return self::HCM_CITY_LABEL;
+        if ($lat !== null && $lon !== null) {
+            $hcmViewbox = ProvinceCenters::viewboxFor('TP.HCM');
+            if ($hcmViewbox !== null && $this->isInViewbox($lat, $lon, $hcmViewbox)) {
+                return self::HCM_CITY_LABEL;
+            }
         }
 
         foreach (['city', 'town', 'village', 'municipality'] as $key) {
@@ -168,21 +133,24 @@ class GeocodeController extends Controller
             return '';
         }
 
-        if ($lat !== null && $lon !== null && $this->isInViewbox($lat, $lon, self::PROVINCE_VIEWBOXES['TP.HCM'])) {
-            $display = preg_replace(
-                '/,?\s*Thành phố Thủ Đức\s*$/u',
-                ', '.self::HCM_CITY_LABEL,
-                $display,
-            ) ?? $display;
-            $display = preg_replace(
-                '/,?\s*Thủ Đức\s*$/u',
-                ', '.self::HCM_CITY_LABEL,
-                $display,
-            ) ?? $display;
+        if ($lat !== null && $lon !== null) {
+            $hcmViewbox = ProvinceCenters::viewboxFor('TP.HCM');
+            if ($hcmViewbox !== null && $this->isInViewbox($lat, $lon, $hcmViewbox)) {
+                $display = preg_replace(
+                    '/,?\s*Thành phố Thủ Đức\s*$/u',
+                    ', '.self::HCM_CITY_LABEL,
+                    $display,
+                ) ?? $display;
+                $display = preg_replace(
+                    '/,?\s*Thủ Đức\s*$/u',
+                    ', '.self::HCM_CITY_LABEL,
+                    $display,
+                ) ?? $display;
 
-            if (! str_contains(mb_strtolower($display), 'hồ chí minh')
-                && ! str_contains(mb_strtolower($display), 'ho chi minh')) {
-                $display .= ', '.self::HCM_CITY_LABEL;
+                if (! str_contains(mb_strtolower($display), 'hồ chí minh')
+                    && ! str_contains(mb_strtolower($display), 'ho chi minh')) {
+                    $display .= ', '.self::HCM_CITY_LABEL;
+                }
             }
         }
 
@@ -218,7 +186,7 @@ class GeocodeController extends Controller
         $lower = mb_strtolower($text);
 
         if ($province !== '') {
-            $label = self::PROVINCE_SEARCH_LABELS[$province] ?? $province;
+            $label = ProvinceCenters::searchLabelFor($province);
             $labelLower = mb_strtolower($label);
 
             if (! str_contains($lower, $labelLower)
@@ -343,6 +311,11 @@ class GeocodeController extends Controller
             'address' => $address,
             'lat' => (float) $validated['lat'],
             'lon' => (float) $validated['lon'],
+            'province' => ProvinceResolver::fromMapPick(
+                (float) $validated['lat'],
+                (float) $validated['lon'],
+                $address,
+            ) ?? '',
         ]);
     }
 
@@ -366,15 +339,15 @@ class GeocodeController extends Controller
             'dedupe' => 1,
         ];
 
-        if ($province !== '' && isset(self::PROVINCE_VIEWBOXES[$province])) {
-            $params['viewbox'] = self::PROVINCE_VIEWBOXES[$province];
+        if ($province !== '' && ($viewbox = ProvinceCenters::viewboxFor($province)) !== null) {
+            $params['viewbox'] = $viewbox;
             $params['bounded'] = 1;
         }
 
         $raw = $this->nominatimSearch($params);
         $results = $this->mapSearchResults($raw, $province);
 
-        if ($results === [] && $province !== '' && isset(self::PROVINCE_VIEWBOXES[$province])) {
+        if ($results === [] && $province !== '' && ($viewbox = ProvinceCenters::viewboxFor($province)) !== null) {
             $loose = $this->nominatimSearch([
                 'q' => $this->buildSearchQuery($validated['q'], $province),
                 'format' => 'json',
@@ -382,7 +355,7 @@ class GeocodeController extends Controller
                 'limit' => 12,
                 'addressdetails' => 1,
                 'accept-language' => 'vi',
-                'viewbox' => self::PROVINCE_VIEWBOXES[$province],
+                'viewbox' => $viewbox,
                 'bounded' => 0,
             ]);
             $results = $this->mapSearchResults($loose, $province);
@@ -408,8 +381,8 @@ class GeocodeController extends Controller
      */
     private function mapSearchResults(array $payload, string $province = ''): array
     {
-        $viewbox = ($province !== '' && isset(self::PROVINCE_VIEWBOXES[$province]))
-            ? self::PROVINCE_VIEWBOXES[$province]
+        $viewbox = ($province !== '' && ($resolved = ProvinceCenters::viewboxFor($province)) !== null)
+            ? $resolved
             : null;
 
         /** @var list<array{address: string, lat: float, lon: float, _importance: float, _key: string}> $candidates */

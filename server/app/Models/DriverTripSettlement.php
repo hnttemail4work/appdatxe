@@ -103,9 +103,9 @@ class DriverTripSettlement extends Model
         $threshold = DriverWalletConfig::revenueThresholdShortLabel();
 
         return match ($this->category) {
-            'under_threshold'      => 'Doanh thu chuyến < ' . $threshold,
-            'first_over_threshold' => 'Chuyến đầu ≥ ' . $threshold,
-            'over_threshold'       => 'Từ chuyến 2 — duy trì ví',
+            'under_threshold'      => 'Tổng doanh thu chưa đạt ' . $threshold,
+            'first_over_threshold' => 'Lần đầu đạt ' . $threshold,
+            'over_threshold'       => 'Duy trì ví — trừ phí nền tảng',
             default                => $this->category,
         };
     }

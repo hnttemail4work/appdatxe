@@ -20,6 +20,7 @@ use App\Support\AppBrandingSettings;
 use App\Support\BookingPageSettings;
 use App\Support\LocationCatalog;
 use App\Support\PageList;
+use App\Support\ProvinceCenters;
 use App\Support\RouteDistanceCatalog;
 use App\Support\PlatformFees;
 use App\Support\PlatformPaymentInfo;
@@ -355,6 +356,7 @@ class AdminController extends Controller
                     'updated_at'  => now(),
                 ]);
                 LocationCatalog::forgetCache();
+                ProvinceCenters::warmCenter($name);
 
                 return redirect()->route('admin.dashboard', ['tab' => 'routes'])
                     ->with('success', 'Đã hiện lại điểm đến ' . $name . '.');
@@ -374,6 +376,7 @@ class AdminController extends Controller
         ]);
 
         LocationCatalog::forgetCache();
+        ProvinceCenters::warmCenter($name);
 
         return redirect()->route('admin.dashboard', ['tab' => 'routes'])
             ->with('success', 'Đã thêm điểm đến ' . trim($validated['destination']) . '.');

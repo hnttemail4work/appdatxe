@@ -8,6 +8,8 @@
                 <input type="hidden" name="vehicle_id" id="modal-vehicle-id">
                 <input type="hidden" name="driver_profile_id" id="modal-driver-profile-id">
                 <input type="hidden" name="booking_browser_id" id="booking-browser-id" value="">
+                <input type="hidden" name="pickup_address" id="modal-pickup-address" value="{{ old('pickup_address') }}">
+                <input type="hidden" name="dropoff_address" id="modal-dropoff-address" value="{{ old('dropoff_address') }}">
 
                 <div class="modal-header border-0 p-0 booking-modal-header">
                     <div class="booking-modal-header-inner w-100">
@@ -22,6 +24,7 @@
                             <div id="modal-vehicle-photo-wrap" class="booking-modal-vehicle-photo d-none"></div>
                             <div class="booking-trip-banner-copy">
                                 <div class="booking-trip-banner-route" id="modal-route"></div>
+                                <div class="small text-white-50 d-none" id="modal-route-distance"></div>
                                 <div class="small" id="modal-vehicle-meta"></div>
                             </div>
                         </div>
@@ -32,45 +35,6 @@
                     <div id="booking-step-1">
                         <div class="booking-sheet-section">
                             <div class="booking-panel-label mb-3">Hành trình</div>
-                            <div class="row g-3">
-                                <div class="col-md-6">
-                                    <label class="form-label" for="modal-pickup">Điểm đi <span class="text-danger">*</span></label>
-                                    <select name="pickup_address" id="modal-pickup" class="form-select" required>
-                                        <option value="">— Chọn tỉnh/thành —</option>
-                                        @include('partials.province-options', ['selected' => $defaultPickup])
-                                    </select>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label" for="modal-dropoff">Điểm đến <span class="text-danger">*</span></label>
-                                    <select name="dropoff_address" id="modal-dropoff" class="form-select" required>
-                                        <option value="">— Chọn tỉnh/thành —</option>
-                                        @include('partials.province-options', ['selected' => $defaultDropoff])
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="booking-sheet-section">
-                            <div class="row g-3">
-                                <div class="col-6">
-                                    <label class="form-label" for="modal-service-date">Ngày đi <span class="text-danger">*</span></label>
-                                    <input type="date" name="service_date" id="modal-service-date" class="form-control" required
-                                           min="{{ now()->toDateString() }}" value="{{ old('service_date', $defaultServiceDate) }}">
-                                </div>
-                                <div class="col-6">
-                                    @include('partials.vi-pickup-time-input', [
-                                        'name' => 'pickup_time',
-                                        'id' => 'modal-pickup-time',
-                                        'value' => old('pickup_time', $defaultPickupTime),
-                                        'label' => 'Giờ đón',
-                                        'required' => true,
-                                    ])
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="booking-sheet-section">
-                            <div class="booking-panel-label">Địa chỉ cụ thể</div>
                             <input type="hidden" name="pickup_lat" id="modal-pickup-lat" value="{{ old('pickup_lat') }}">
                             <input type="hidden" name="pickup_lng" id="modal-pickup-lng" value="{{ old('pickup_lng') }}">
                             <input type="hidden" name="dropoff_lat" id="modal-dropoff-lat" value="{{ old('dropoff_lat') }}">
@@ -84,16 +48,14 @@
                                         <div class="booking-address-input-wrap">
                                             <input type="text" name="pickup_detail" id="modal-pickup-detail"
                                                    class="form-control address-map-readonly-input" required readonly
-                                                   placeholder="Chọn trên bản đồ"
+                                                   placeholder="Tìm địa chỉ hoặc chọn trên bản đồ"
                                                    value="{{ old('pickup_detail') }}"
                                                    data-address-map-for="modal-pickup-detail"
-                                                   data-address-map-province="modal-pickup"
                                                    data-address-map-lat="modal-pickup-lat"
                                                    data-address-map-lng="modal-pickup-lng"
                                                    data-address-map-label="Chọn điểm đón">
                                             <button type="button" class="booking-address-map-btn"
                                                     data-address-map-for="modal-pickup-detail"
-                                                    data-address-map-province="modal-pickup"
                                                     data-address-map-lat="modal-pickup-lat"
                                                     data-address-map-lng="modal-pickup-lng"
                                                     data-address-map-label="Chọn điểm đón"
@@ -111,20 +73,18 @@
                                 <div class="booking-address-row">
                                     <span class="booking-address-marker booking-address-marker--dropoff" aria-hidden="true"></span>
                                     <div class="booking-address-field flex-grow-1">
-                                        <label class="booking-address-label" for="modal-dropoff-detail">Điểm trả <span class="text-danger d-none" id="modal-dropoff-required">*</span></label>
+                                        <label class="booking-address-label" for="modal-dropoff-detail">Điểm trả <span class="text-danger">*</span></label>
                                         <div class="booking-address-input-wrap">
                                             <input type="text" name="dropoff_detail" id="modal-dropoff-detail"
-                                                   class="form-control address-map-readonly-input" readonly
-                                                   placeholder="Chọn trên bản đồ"
+                                                   class="form-control address-map-readonly-input" required readonly
+                                                   placeholder="Tìm địa chỉ hoặc chọn trên bản đồ"
                                                    value="{{ old('dropoff_detail') }}"
                                                    data-address-map-for="modal-dropoff-detail"
-                                                   data-address-map-province="modal-dropoff"
                                                    data-address-map-lat="modal-dropoff-lat"
                                                    data-address-map-lng="modal-dropoff-lng"
                                                    data-address-map-label="Chọn điểm trả">
                                             <button type="button" class="booking-address-map-btn"
                                                     data-address-map-for="modal-dropoff-detail"
-                                                    data-address-map-province="modal-dropoff"
                                                     data-address-map-lat="modal-dropoff-lat"
                                                     data-address-map-lng="modal-dropoff-lng"
                                                     data-address-map-label="Chọn điểm trả"
@@ -139,9 +99,33 @@
                                     </div>
                                 </div>
                             </div>
-                            <p id="modal-intracity-hint" class="small text-muted mt-2 mb-0 d-none">
-                                Vui lòng chọn điểm đón và điểm trả cụ thể.
-                            </p>
+                            <p class="small text-muted mt-2 mb-0">Tìm theo tỉnh, thành phố, phường/xã hoặc tên đường — ghim đúng vị trí trên bản đồ.</p>
+                        </div>
+
+                        <div class="booking-sheet-section">
+                            <div class="booking-panel-label mb-2">Thời điểm về</div>
+                            <div class="booking-chip-group booking-chip-group--inline mb-2" id="modal-departure-plan">
+                                <label class="form-check booking-chip">
+                                    <input type="radio" name="departure_plan" value="today" class="form-check-input" checked> Trong ngày <span class="text-muted small">+50%</span>
+                                </label>
+                                <label class="form-check booking-chip">
+                                    <input type="radio" name="departure_plan" value="tomorrow" class="form-check-input"> Ngày mai <span class="text-muted small">+100%</span>
+                                </label>
+                                <label class="form-check booking-chip">
+                                    <input type="radio" name="departure_plan" value="later" class="form-check-input"> Hẹn sau <span class="text-muted small">giá chuẩn</span>
+                                </label>
+                            </div>
+                            <p class="small text-muted mb-3">Giá tính theo quãng đường ghim trên bản đồ. Hẹn sau chưa cần chọn ngày.</p>
+                            <input type="hidden" name="service_date" id="modal-service-date" value="{{ old('service_date', $defaultServiceDate) }}">
+                            <div id="modal-pickup-time-wrap">
+                                @include('partials.vi-pickup-time-input', [
+                                    'name' => 'pickup_time',
+                                    'id' => 'modal-pickup-time',
+                                    'value' => old('pickup_time', $defaultPickupTime),
+                                    'label' => 'Giờ đón (tuỳ chọn)',
+                                    'required' => false,
+                                ])
+                            </div>
                         </div>
                     </div>
 
@@ -152,6 +136,7 @@
                                     <div id="modal-step2-vehicle-photo-wrap" class="booking-summary-vehicle-photo d-none" aria-hidden="true"></div>
                                     <div class="min-w-0">
                                         <div class="fw-bold" id="modal-route-step2"></div>
+                                        <div class="small text-muted" id="modal-route-distance-step2"></div>
                                         <div class="small text-muted" id="modal-vehicle-step2"></div>
                                     </div>
                                 </div>

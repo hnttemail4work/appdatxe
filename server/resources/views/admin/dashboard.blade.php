@@ -2,7 +2,7 @@
 
 @section('console')
 @php
-$allowedAdminTabs = ['referrals', 'fees', 'settings', 'appearance', 'routes'];
+$allowedAdminTabs = ['referrals', 'fees', 'settings', 'appearance'];
 $tabFromRequest = request('tab');
 if ($tabFromRequest === 'bank') {
     $tabFromRequest = 'settings';
@@ -13,7 +13,7 @@ if ($tabFromCookie === 'bank') {
 }
 $adminDefaultTab = in_array($tabFromRequest, $allowedAdminTabs, true)
     ? $tabFromRequest
-    : (in_array($tabFromCookie, $allowedAdminTabs, true) ? $tabFromCookie : 'routes');
+    : (in_array($tabFromCookie, $allowedAdminTabs, true) ? $tabFromCookie : 'referrals');
 $referralCommissionStats = $referralCommissionStats ?? [];
 @endphp
 @include('partials.console-hero', [
@@ -30,7 +30,6 @@ $referralCommissionStats = $referralCommissionStats ?? [];
                     'prefix' => 'admin-main',
                     'activeKey' => $adminDefaultTab,
                     'tabs' => [
-                        ['key' => 'routes', 'label' => 'Điểm đi / đến'],
                         ['key' => 'referrals', 'label' => 'Mã giới thiệu', 'badge' => $referralCodes->total()],
                         ['key' => 'fees', 'label' => 'Tính tiền'],
                         ['key' => 'settings', 'label' => 'Ngân hàng'],
@@ -459,92 +458,6 @@ $referralCommissionStats = $referralCommissionStats ?? [];
                     </div>
 
                     <button class="btn btn-primary px-4 fw-semibold mt-3">Lưu cài đặt</button>
-                </form>
-                @include('partials.screen-tab-pane-end')
-
-                @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'routes', 'active' => $adminDefaultTab === 'routes'])
-                <p class="text-muted small mb-3">Danh sách điểm đến từ TP.HCM — dùng cho form đặt vé.</p>
-
-                <form method="POST" action="{{ route('admin.destinations.store') }}" class="console-form mb-4">
-                    @csrf
-                    <div class="row g-3 align-items-end">
-                        <div class="col-md-5">
-                            <label class="form-label" for="admin-new-destination">Thêm điểm đến</label>
-                            <input type="text" name="destination" id="admin-new-destination" class="form-control"
-                                   value="{{ old('destination') }}" placeholder="Ví dụ: Nha Trang" required maxlength="100">
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label" for="admin-new-distance">Km từ TP.HCM</label>
-                            <input type="number" name="distance_km" id="admin-new-distance" class="form-control"
-                                   min="1" max="2000" value="{{ old('distance_km') }}" required>
-                        </div>
-                        <div class="col-md-4">
-                            <button type="submit" class="btn btn-primary fw-semibold">Thêm điểm đến</button>
-                        </div>
-                    </div>
-                </form>
-
-                @foreach($hubRoutes as $hubRoute)
-                    @if($hubRoute->is_active)
-                        <form method="POST" action="{{ route('admin.destinations.destroy', $hubRoute) }}" id="hide-dest-{{ $hubRoute->id }}"
-                              data-confirm="Ẩn {{ $hubRoute->destination }} khỏi danh sách đặt vé?"
-                              data-confirm-title="Ẩn điểm đến"
-                              data-confirm-variant="danger"
-                              data-confirm-ok="Ẩn">
-                            @csrf
-                            @method('DELETE')
-                        </form>
-                    @else
-                        <form method="POST" action="{{ route('admin.destinations.show', $hubRoute) }}" id="show-dest-{{ $hubRoute->id }}">
-                            @csrf
-                        </form>
-                    @endif
-                @endforeach
-
-                <form method="POST" action="{{ route('admin.routeDistances.update') }}" class="console-form" id="hub-routes-form">
-                    @csrf
-                    <div class="console-table-wrap">
-                        <table class="console-table">
-                            <thead>
-                                <tr>
-                                    <th>Điểm đến</th>
-                                    <th style="width:160px">Km</th>
-                                    <th style="width:100px"></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @php $activeRouteIndex = 0; @endphp
-                                @foreach($hubRoutes as $hubRoute)
-                                <tr class="@if(! $hubRoute->is_active) destination-row-hidden @endif">
-                                    <td class="cell-primary">
-                                        {{ $hubRoute->destination }}
-                                        @if(! $hubRoute->is_active)
-                                            <span class="status-pill status-pill--neutral ms-1">Đã ẩn</span>
-                                        @endif
-                                    </td>
-                                    <td>
-                                        @if($hubRoute->is_active)
-                                            <input type="hidden" name="routes[{{ $activeRouteIndex }}][id]" value="{{ $hubRoute->id }}">
-                                            <input type="number" name="routes[{{ $activeRouteIndex }}][distance_km]" class="form-control form-control-sm"
-                                                   min="1" max="2000" required value="{{ old('routes.'.$activeRouteIndex.'.distance_km', $hubRoute->distance_km) }}">
-                                            @php $activeRouteIndex++; @endphp
-                                        @else
-                                            <input type="number" class="form-control form-control-sm" value="{{ $hubRoute->distance_km }}" disabled readonly>
-                                        @endif
-                                    </td>
-                                    <td class="text-end">
-                                        @if($hubRoute->is_active)
-                                            <button type="submit" class="btn btn-outline-danger btn-sm" form="hide-dest-{{ $hubRoute->id }}">Ẩn</button>
-                                        @else
-                                            <button type="submit" class="btn btn-outline-primary btn-sm" form="show-dest-{{ $hubRoute->id }}">Hiện</button>
-                                        @endif
-                                    </td>
-                                </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                    <button class="btn btn-primary px-4 fw-semibold mt-3">Lưu quãng đường</button>
                 </form>
                 @include('partials.screen-tab-pane-end')
 

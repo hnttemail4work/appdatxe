@@ -1,5 +1,5 @@
 /**
- * Đặt xe — chọn xe/tài xế ngoài trang, nhập tuyến trong modal, báo giá khi đặt.
+ * Đặt xe — chọn xe/tài xế ngoài trang, ghim điểm đi/đến trên bản đồ, báo giá khi đặt.
  */
 (function () {
     var modalEl = document.getElementById('bookingModal');
@@ -11,9 +11,6 @@
     var modal = typeof bootstrap !== 'undefined' ? new bootstrap.Modal(modalEl) : null;
     var ctx = {};
     var quoteTimer = null;
-
-    var modalPickup = document.getElementById('modal-pickup');
-    var modalDropoff = document.getElementById('modal-dropoff');
 
     function $(id) { return document.getElementById(id); }
 
@@ -102,6 +99,7 @@
     }
 
     function submitBookingForm() {
+        syncDepartureDate();
         ensureBrowserIdOnForm();
         form.submit();
     }
@@ -110,18 +108,32 @@
         return (Number(n) || 0).toLocaleString('vi-VN') + ' đ';
     }
 
+    function shortAddress(text) {
+        var value = String(text || '').trim();
+        if (!value) {
+            return '';
+        }
+        var parts = value.split(',').map(function (p) { return p.trim(); }).filter(Boolean);
+        return parts.slice(0, 2).join(', ') || value;
+    }
+
     function modalRoute() {
         return {
-            pickup: modalPickup ? modalPickup.value.trim() : '',
-            dropoff: modalDropoff ? modalDropoff.value.trim() : '',
+            pickup: $('modal-pickup-address') ? $('modal-pickup-address').value.trim() : '',
+            dropoff: $('modal-dropoff-address') ? $('modal-dropoff-address').value.trim() : '',
+            pickupDetail: $('modal-pickup-detail') ? $('modal-pickup-detail').value.trim() : '',
+            dropoffDetail: $('modal-dropoff-detail') ? $('modal-dropoff-detail').value.trim() : '',
         };
     }
 
-    function routeLabel(pickup, dropoff) {
-        if (!pickup || !dropoff) {
-            return '';
+    function routeLabel(route) {
+        route = route || modalRoute();
+        var from = shortAddress(route.pickupDetail) || route.pickup;
+        var to = shortAddress(route.dropoffDetail) || route.dropoff;
+        if (!from || !to) {
+            return from || to || '';
         }
-        return pickup + ' → ' + dropoff;
+        return from + ' → ' + to;
     }
 
     function setBannerText(id, text) {
@@ -141,43 +153,50 @@
         return el.value;
     }
 
-    function isIntraCityRoute(route) {
-        return !!(route.pickup && route.dropoff && route.pickup === route.dropoff);
+    function coordsReady() {
+        return !!(coordValue('modal-pickup-lat') && coordValue('modal-pickup-lng')
+            && coordValue('modal-dropoff-lat') && coordValue('modal-dropoff-lng'));
+    }
+
+    function haversineKm(lat1, lng1, lat2, lng2) {
+        var toRad = function (deg) { return deg * Math.PI / 180; };
+        var r = 6371;
+        var dLat = toRad(lat2 - lat1);
+        var dLng = toRad(lng2 - lng1);
+        var a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+            + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        return r * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    function localDistanceKm() {
+        if (!coordsReady()) {
+            return 0;
+        }
+        return Math.max(1, Math.round(haversineKm(
+            Number(coordValue('modal-pickup-lat')),
+            Number(coordValue('modal-pickup-lng')),
+            Number(coordValue('modal-dropoff-lat')),
+            Number(coordValue('modal-dropoff-lng')),
+        )));
+    }
+
+    function syncDistanceLabel(km) {
+        var distance = Number(km) > 0 ? Number(km) : localDistanceKm();
+        var text = distance > 0 ? ('Khoảng ' + distance + ' km') : '';
+        setBannerText('modal-route-distance', text);
+        setBannerText('modal-route-distance-step2', text);
     }
 
     function routeReady() {
         var route = modalRoute();
-        return !!(route.pickup && route.dropoff);
+        return !!(route.pickupDetail && route.dropoffDetail && coordsReady());
     }
 
     function syncRouteLabels() {
-        var route = modalRoute();
-        var label = routeLabel(route.pickup, route.dropoff);
+        var label = routeLabel();
         setBannerText('modal-route', label);
         setBannerText('modal-route-step2', label);
-        syncIntraCityRequiredUI(route);
-    }
-
-    function syncIntraCityRequiredUI(route) {
-        route = route || modalRoute();
-        var intraCity = isIntraCityRoute(route);
-        var dropoffDetail = $('modal-dropoff-detail');
-        var dropoffRequired = $('modal-dropoff-required');
-        var hint = $('modal-intracity-hint');
-
-        if (dropoffDetail) {
-            if (intraCity) {
-                dropoffDetail.setAttribute('required', 'required');
-            } else {
-                dropoffDetail.removeAttribute('required');
-            }
-        }
-        if (dropoffRequired) {
-            dropoffRequired.classList.toggle('d-none', !intraCity);
-        }
-        if (hint) {
-            hint.classList.toggle('d-none', !intraCity);
-        }
+        syncDistanceLabel(0);
     }
 
     function setStep(step) {
@@ -204,12 +223,18 @@
         var finalTotal = total > 0 ? total : (hasDiscount ? Number(data.total_after_discount || 0) : 0);
         var discountNote = '';
 
+        if (data && data.distance_km) {
+            syncDistanceLabel(data.distance_km);
+        }
+
         if (hasDiscount) {
             var pct = data.referral_discount_percent;
             discountNote = 'Giảm ' + formatMoney(data.referral_discount_amount);
             if (pct > 0) {
                 discountNote += ' (' + pct + '% — mã QR)';
             }
+        } else if (data && data.surcharge_percent > 0 && data.departure_plan_label) {
+            discountNote = data.departure_plan_label + ' (+' + data.surcharge_percent + '%)';
         }
 
         [['modal-original-price-step1', 'modal-total-price-step1', 'modal-referral-discount-step1'],
@@ -236,9 +261,11 @@
             }
 
             if (discEl) {
-                if (hasDiscount && discountNote) {
+                if (discountNote) {
                     discEl.textContent = discountNote;
                     discEl.classList.remove('d-none');
+                    discEl.classList.toggle('text-success', hasDiscount);
+                    discEl.classList.toggle('text-muted', !hasDiscount);
                 } else {
                     discEl.textContent = '';
                     discEl.classList.add('d-none');
@@ -252,24 +279,17 @@
         var params = new URLSearchParams({
             pickup_address: route.pickup,
             dropoff_address: route.dropoff,
+            pickup_detail: route.pickupDetail,
+            dropoff_detail: route.dropoffDetail,
+            departure_plan: departurePlan(),
             contact_phone: $('modal-contact-phone') ? $('modal-contact-phone').value : '',
         });
-        var pickupLat = coordValue('modal-pickup-lat');
-        var pickupLng = coordValue('modal-pickup-lng');
-        var dropoffLat = coordValue('modal-dropoff-lat');
-        var dropoffLng = coordValue('modal-dropoff-lng');
-        if (pickupLat) {
-            params.set('pickup_lat', pickupLat);
-        }
-        if (pickupLng) {
-            params.set('pickup_lng', pickupLng);
-        }
-        if (dropoffLat) {
-            params.set('dropoff_lat', dropoffLat);
-        }
-        if (dropoffLng) {
-            params.set('dropoff_lng', dropoffLng);
-        }
+        ['modal-pickup-lat', 'modal-pickup-lng', 'modal-dropoff-lat', 'modal-dropoff-lng'].forEach(function (id) {
+            var value = coordValue(id);
+            if (value) {
+                params.set(id.replace('modal-', '').replace(/-/g, '_'), value);
+            }
+        });
         if (ctx.driverProfileId) {
             params.set('driver_profile_id', ctx.driverProfileId);
         }
@@ -283,17 +303,10 @@
     }
 
     function refreshQuote() {
-        var route = modalRoute();
-        if (!window.__quotePriceUrl || (!ctx.driverProfileId && !ctx.vehicleId) || !route.pickup || !route.dropoff) {
+        if (!window.__quotePriceUrl || (!ctx.driverProfileId && !ctx.vehicleId) || !routeReady()) {
             updatePriceDisplay(0);
+            syncDistanceLabel(0);
             return;
-        }
-        if (isIntraCityRoute(route)) {
-            if (!coordValue('modal-pickup-lat') || !coordValue('modal-pickup-lng')
-                || !coordValue('modal-dropoff-lat') || !coordValue('modal-dropoff-lng')) {
-                updatePriceDisplay(0);
-                return;
-            }
         }
         clearTimeout(quoteTimer);
         quoteTimer = setTimeout(function () {
@@ -312,8 +325,41 @@
                 })
                 .catch(function () {
                     updatePriceDisplay(0);
+                    syncDistanceLabel(0);
                 });
         }, 200);
+    }
+
+    function todayIso() {
+        return window.__todayDate || new Date().toISOString().slice(0, 10);
+    }
+
+    function tomorrowIso() {
+        var base = window.__todayDate ? new Date(window.__todayDate + 'T12:00:00') : new Date();
+        base.setDate(base.getDate() + 1);
+        return base.toISOString().slice(0, 10);
+    }
+
+    function departurePlan() {
+        var checked = document.querySelector('input[name="departure_plan"]:checked');
+        return checked ? checked.value : 'today';
+    }
+
+    function syncDepartureDate() {
+        var dateEl = $('modal-service-date');
+        if (!dateEl) {
+            return;
+        }
+        var plan = departurePlan();
+        if (dateEl) {
+            dateEl.value = plan === 'later'
+                ? (window.__laterServiceDate || todayIso())
+                : (plan === 'tomorrow' ? tomorrowIso() : todayIso());
+        }
+    }
+
+    function syncDeparturePlanUI() {
+        syncDepartureDate();
     }
 
     function openFromButton(btn) {
@@ -331,7 +377,6 @@
     }
 
     function openBookingModal(btn) {
-        var route = modalRoute();
         ctx = {
             driverProfileId: btn.dataset.driverProfileId || '',
             vehicleId: btn.dataset.vehicleId || '',
@@ -355,6 +400,7 @@
         }
 
         syncRouteLabels();
+        syncDeparturePlanUI();
 
         var vehicleMeta = ctx.offerLabel || [ctx.driverName, ctx.licensePlate, ctx.typeLabel, ctx.capacityLabel]
             .filter(Boolean)
@@ -386,10 +432,6 @@
             }
         }
 
-        if ($('modal-service-date') && window.__defaultServiceDate && !$('modal-service-date').value) {
-            $('modal-service-date').value = window.__defaultServiceDate;
-        }
-
         var pickupTimeEl = $('modal-pickup-time');
         if (pickupTimeEl && window.__defaultPickupTime && !pickupTimeEl.value) {
             pickupTimeEl.value = window.__defaultPickupTime;
@@ -403,106 +445,54 @@
     }
 
     function validateStep1() {
+        syncDepartureDate();
+
+        var pickupDetail = $('modal-pickup-detail');
+        var dropoffDetail = $('modal-dropoff-detail');
+        if (!pickupDetail || !pickupDetail.value.trim()) {
+            alert('Vui lòng chọn điểm đón trên bản đồ.');
+            if (pickupDetail) {
+                pickupDetail.focus();
+            }
+            return false;
+        }
+        if (!dropoffDetail || !dropoffDetail.value.trim()) {
+            alert('Vui lòng chọn điểm trả trên bản đồ.');
+            if (dropoffDetail) {
+                dropoffDetail.focus();
+            }
+            return false;
+        }
+        if (!coordValue('modal-pickup-lat') || !coordValue('modal-pickup-lng')) {
+            notify('Vui lòng ghim đúng vị trí điểm đón trên bản đồ.');
+            if (pickupDetail) {
+                pickupDetail.focus();
+            }
+            return false;
+        }
+        if (!coordValue('modal-dropoff-lat') || !coordValue('modal-dropoff-lng')) {
+            notify('Vui lòng ghim đúng vị trí điểm trả trên bản đồ.');
+            if (dropoffDetail) {
+                dropoffDetail.focus();
+            }
+            return false;
+        }
+
         var route = modalRoute();
         if (!route.pickup || !route.dropoff) {
-            alert('Vui lòng chọn điểm đi và điểm đến.');
-            if (modalPickup && !route.pickup) {
-                modalPickup.focus();
-            } else if (modalDropoff) {
-                modalDropoff.focus();
-            }
-            return false;
+            syncDepartureDate();
         }
-        var date = $('modal-service-date');
-        var pickupTime = $('modal-pickup-time');
-        var pickupDetail = $('modal-pickup-detail');
-        if (!date || !date.value) {
-            alert('Vui lòng chọn ngày đi.');
-            if (date) {
-                date.focus();
-            }
-            return false;
-        }
-        if (!pickupTime || !pickupTime.value) {
-            alert('Vui lòng chọn giờ đón.');
-            if (pickupTime) {
-                pickupTime.focus();
-            }
-            return false;
-        }
-        if (!pickupDetail || !pickupDetail.value.trim()) {
-            var pickupMsg = isIntraCityRoute(route)
-                ? 'Cùng tỉnh/thành — vui lòng chọn điểm đón cụ thể trên bản đồ.'
-                : 'Vui lòng chọn điểm đón cụ thể trên bản đồ.';
-            alert(pickupMsg);
-            if (pickupDetail) {
-                pickupDetail.focus();
-            }
-            return false;
-        }
-        var pickupLat = $('modal-pickup-lat');
-        var pickupLng = $('modal-pickup-lng');
-        if (!pickupLat || !pickupLng || !pickupLat.value || !pickupLng.value) {
-            notify('Vui lòng bấm ô điểm đón và ghim đúng vị trí trên bản đồ.');
-            if (pickupDetail) {
-                pickupDetail.focus();
-            }
-            return false;
-        }
-        if (isIntraCityRoute(route)) {
-            var dropoffDetail = $('modal-dropoff-detail');
-            var dropoffLat = $('modal-dropoff-lat');
-            var dropoffLng = $('modal-dropoff-lng');
-            if (!dropoffDetail || !dropoffDetail.value.trim()) {
-                alert('Cùng tỉnh/thành — vui lòng chọn điểm trả cụ thể trên bản đồ.');
-                if (dropoffDetail) {
-                    dropoffDetail.focus();
-                }
-                return false;
-            }
-            if (!dropoffLat || !dropoffLng || !dropoffLat.value || !dropoffLng.value) {
-                notify('Cùng tỉnh/thành — vui lòng chọn điểm trả trên bản đồ.');
-                if (dropoffDetail) {
-                    dropoffDetail.focus();
-                }
-                return false;
-            }
-        }
+
         return true;
     }
 
-    function clearAddressField(prefix) {
-        var detailId = prefix + '-detail';
-        var detail = $(detailId);
-        if (detail) {
-            detail.value = '';
-        }
-        clearAddressCoords(prefix);
-    }
-
-    function clearAddressCoords(prefix) {
-        var lat = $(prefix + '-lat');
-        var lng = $(prefix + '-lng');
-        if (lat) {
-            lat.value = '';
-        }
-        if (lng) {
-            lng.value = '';
-        }
-    }
-
-    [modalPickup, modalDropoff].forEach(function (el) {
-        if (!el) return;
+    document.querySelectorAll('input[name="departure_plan"]').forEach(function (el) {
         el.addEventListener('change', function () {
-            if (el.id === 'modal-pickup') {
-                clearAddressField('modal-pickup');
-            } else if (el.id === 'modal-dropoff') {
-                clearAddressField('modal-dropoff');
-            }
-            syncRouteLabels();
+            syncDeparturePlanUI();
             refreshQuote();
         });
     });
+    syncDeparturePlanUI();
     syncRouteLabels();
 
     document.querySelectorAll('[data-open-booking]').forEach(function (btn) {
@@ -523,16 +513,13 @@
         backBtn.addEventListener('click', function () { setStep(1); });
     }
 
-    ['modal-pickup-detail', 'modal-dropoff-detail', 'modal-contact-phone'].forEach(function (id) {
+    ['modal-contact-phone'].forEach(function (id) {
         var el = $(id);
         if (!el) {
             return;
         }
         el.addEventListener('blur', function () {
             refreshQuote();
-            if (id !== 'modal-contact-phone') {
-                return;
-            }
             var phone = el.value.trim();
             if (!phone) {
                 return;
@@ -592,7 +579,24 @@
         setStep(1);
     });
 
-    document.addEventListener('addressmap:applied', function () {
+    document.addEventListener('addressmap:applied', function (event) {
+        var detail = event.detail || {};
+        var province = detail.province ? String(detail.province).trim() : '';
+        var targetId = detail.targetInputId || '';
+
+        if (targetId === 'modal-pickup-detail' && province) {
+            var pickupAddr = $('modal-pickup-address');
+            if (pickupAddr) {
+                pickupAddr.value = province;
+            }
+        } else if (targetId === 'modal-dropoff-detail' && province) {
+            var dropoffAddr = $('modal-dropoff-address');
+            if (dropoffAddr) {
+                dropoffAddr.value = province;
+            }
+        }
+
+        syncRouteLabels();
         refreshQuote();
     });
 })();

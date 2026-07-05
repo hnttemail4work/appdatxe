@@ -45,6 +45,7 @@ class Booking extends Model
         'pickup_lng',
         'driver_pickup_distance_km',
         'pickup_time',
+        'departure_plan',
         'dropoff_address',
         'dropoff_detail',
         'dropoff_lat',
@@ -177,6 +178,16 @@ class Booking extends Model
 
     public function tripDistanceKm(): int
     {
+        if ($this->pickup_lat !== null && $this->pickup_lng !== null
+            && $this->dropoff_lat !== null && $this->dropoff_lng !== null) {
+            return max(1, (int) ceil(\App\Support\ProvinceCenters::distanceKm(
+                (float) $this->pickup_lat,
+                (float) $this->pickup_lng,
+                (float) $this->dropoff_lat,
+                (float) $this->dropoff_lng,
+            )));
+        }
+
         $this->loadMissing('schedule.route');
 
         $route = $this->schedule?->route;
@@ -745,6 +756,7 @@ class Booking extends Model
             $this->pickup_lng,
             $this->dropoff_lat,
             $this->dropoff_lng,
+            $this->departure_plan ?? \App\Support\DeparturePlan::TODAY,
         );
     }
 

@@ -53,6 +53,7 @@ class BookingWorkflowService
         ?float $pickupLng = null,
         ?float $dropoffLat = null,
         ?float $dropoffLng = null,
+        string $departurePlan = 'today',
     ): Booking {
         $template->loadMissing(['route', 'vehicle']);
 
@@ -63,7 +64,14 @@ class BookingWorkflowService
             throw new InvalidArgumentException('Vui lòng chọn điểm đi và điểm đến.');
         }
 
-        $route = app(BookingRouteService::class)->resolve($pickup, $dropoff);
+        $route = app(BookingRouteService::class)->resolve(
+            $pickup,
+            $dropoff,
+            $pickupLat,
+            $pickupLng,
+            $dropoffLat,
+            $dropoffLng,
+        );
 
         $schedule = $this->scheduleLifecycle->resolveScheduleForBooking(
             $template,
@@ -78,6 +86,8 @@ class BookingWorkflowService
 
         $pickup = $pickupAddress ?: $pickup;
         $dropoff = $dropoffAddress ?: $dropoff;
+
+        $departurePlan = \App\Support\DeparturePlan::normalize($departurePlan);
 
         $existing = $this->findReusablePendingBooking($schedule, $contactPhone);
         if ($existing) {
@@ -97,6 +107,7 @@ class BookingWorkflowService
                 $pickupLng,
                 $dropoffLat,
                 $dropoffLng,
+                $departurePlan,
             );
             try {
                 $this->driverRequests->assignCatalogBooking($booking->fresh(['schedule.route', 'schedule.vehicle']), $template);
@@ -123,6 +134,7 @@ class BookingWorkflowService
             $pickupLng,
             $dropoffLat,
             $dropoffLng,
+            $departurePlan,
         ): Booking {
             return $this->createBooking(
                 $schedule,
@@ -141,6 +153,7 @@ class BookingWorkflowService
                 $pickupLng,
                 $dropoffLat,
                 $dropoffLng,
+                $departurePlan,
             );
         });
 
@@ -170,8 +183,11 @@ class BookingWorkflowService
         ?float $pickupLng = null,
         ?float $dropoffLat = null,
         ?float $dropoffLng = null,
+        string $departurePlan = 'today',
     ): Booking {
-        $booking = DB::transaction(function () use ($schedule, $contactPhone, $passengerName, $pickupAddress, $pickupDetail, $dropoffAddress, $dropoffDetail, $notes, $pickupTime, $appliedReferralCodeId, $passengerGender, $passengerAge, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng): Booking {
+        $departurePlan = \App\Support\DeparturePlan::normalize($departurePlan);
+
+        $booking = DB::transaction(function () use ($schedule, $contactPhone, $passengerName, $pickupAddress, $pickupDetail, $dropoffAddress, $dropoffDetail, $notes, $pickupTime, $appliedReferralCodeId, $passengerGender, $passengerAge, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng, $departurePlan): Booking {
             $this->duplicateBookings->assertCanBook($contactPhone);
 
             $this->scheduleLifecycle->sync();
@@ -185,7 +201,7 @@ class BookingWorkflowService
                 throw new InvalidArgumentException('Chuyến không còn mở đặt vé (đang chạy hoặc đã kết thúc).');
             }
 
-            $totalPrice = $this->pricing->bookingTotal($schedule, $pickupAddress, $dropoffAddress, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
+            $totalPrice = $this->pricing->bookingTotal($schedule, $pickupAddress, $dropoffAddress, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng, $departurePlan);
             $totalPrice = $this->applyReferralToTotal($totalPrice, $contactPhone, $appliedReferralCodeId);
 
             $booking = Booking::query()->create([
@@ -205,6 +221,7 @@ class BookingWorkflowService
                 'pickup_lat'               => $pickupLat,
                 'pickup_lng'               => $pickupLng,
                 'pickup_time'              => $pickupTime ? \App\Support\DepartureTimeDisplay::storageValue($pickupTime) : null,
+                'departure_plan'           => $departurePlan,
                 'dropoff_address'          => $dropoffAddress,
                 'dropoff_detail'           => $dropoffDetail ? trim($dropoffDetail) : null,
                 'dropoff_lat'              => $dropoffLat,
@@ -879,9 +896,11 @@ class BookingWorkflowService
         ?float $pickupLng = null,
         ?float $dropoffLat = null,
         ?float $dropoffLng = null,
+        string $departurePlan = 'today',
     ): Booking {
+        $departurePlan = \App\Support\DeparturePlan::normalize($departurePlan);
         $booking->loadMissing('schedule.route');
-        $totalPrice = $this->pricing->bookingTotal($booking->schedule, $pickupAddress, $dropoffAddress, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
+        $totalPrice = $this->pricing->bookingTotal($booking->schedule, $pickupAddress, $dropoffAddress, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng, $departurePlan);
         $totalPrice = $this->applyReferralToTotal($totalPrice, $booking->contact_phone, $appliedReferralCodeId);
 
         $refreshFields = [
@@ -893,6 +912,7 @@ class BookingWorkflowService
             'pickup_lat'       => $pickupLat,
             'pickup_lng'       => $pickupLng,
             'pickup_time'      => $pickupTime ? \App\Support\DepartureTimeDisplay::storageValue($pickupTime) : null,
+            'departure_plan'   => $departurePlan,
             'dropoff_address'  => $dropoffAddress,
             'dropoff_detail'   => $dropoffDetail ? trim($dropoffDetail) : null,
             'dropoff_lat'      => $dropoffLat,

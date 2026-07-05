@@ -285,6 +285,35 @@
         );
         setText(qs('[data-field="vehicle_label"]', card), booking.vehicle_label || '', !!booking.vehicle_label);
 
+        var distanceKm = Number(booking.distance_km || 0);
+        var distanceWrap = qs('[data-field="distance_wrap"]', card);
+        var distanceEl = qs('[data-field="distance_km"]', card);
+        if (distanceWrap && distanceEl) {
+            if (distanceKm > 0) {
+                distanceEl.textContent = String(distanceKm);
+                distanceWrap.classList.remove('d-none');
+            } else {
+                distanceEl.textContent = '';
+                distanceWrap.classList.add('d-none');
+            }
+        }
+
+        var priceLabel = booking.total_price_label || '';
+        if (!priceLabel && booking.total_price > 0) {
+            priceLabel = Number(booking.total_price).toLocaleString('vi-VN') + ' đ';
+        }
+        var priceWrap = qs('[data-field="total_price_wrap"]', card);
+        var priceEl = qs('[data-field="total_price"]', card);
+        if (priceWrap && priceEl) {
+            if (priceLabel) {
+                priceEl.textContent = priceLabel;
+                priceWrap.classList.remove('d-none');
+            } else {
+                priceEl.textContent = '';
+                priceWrap.classList.add('d-none');
+            }
+        }
+
         var pickupText = stopAddress(booking.pickup_address, booking.pickup_detail);
         var dropoffText = stopAddress(booking.dropoff_address, booking.dropoff_detail);
         setWrapText(

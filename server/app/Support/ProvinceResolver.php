@@ -44,7 +44,12 @@ final class ProvinceResolver
         $best = null;
         $bestDist = PHP_FLOAT_MAX;
 
-        foreach (ProvinceCenters::all() as $province => $coords) {
+        foreach (LocationCatalog::all() as $province) {
+            $coords = ProvinceCenters::centerFor($province);
+            if ($coords === null) {
+                continue;
+            }
+
             $dist = ProvinceCenters::distanceKm($lat, $lng, $coords['lat'], $coords['lng']);
             if ($dist < $bestDist) {
                 $bestDist = $dist;

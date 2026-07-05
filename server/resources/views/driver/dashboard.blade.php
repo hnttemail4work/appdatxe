@@ -314,6 +314,7 @@ window.__driverLocationUrl = @json(route('driver.location.update'));
 window.__driverAvailabilityUrl = @json(route('driver.availability.update'));
 window.__geocodeReverseUrl = @json(route('geocode.reverse'));
 window.__geocodeSearchUrl = @json(route('geocode.search'));
+window.__provinceCenters = @json(\App\Support\ProvinceCenters::centersForCatalog());
 window.__driverDashboardUrl = @json(route('driver.dashboard', ['tab' => 'trips']));
 </script>
 <script src="{{ asset('js/geocode-address-autocomplete.js') }}?v={{ filemtime(public_path('js/geocode-address-autocomplete.js')) }}"></script>

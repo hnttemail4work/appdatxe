@@ -123,5 +123,6 @@ class LocationCatalog
     {
         Cache::forget('catalog.hub_destinations');
         Cache::forget('catalog.all_locations');
+        ProvinceCenters::forgetCenterCache();
     }
 }

@@ -74,6 +74,17 @@
 
                 <span class="guest-trip-vehicle-badge d-none" data-field="vehicle_label"></span>
 
+                <span class="guest-trip-stat-badge d-none" data-field="distance_wrap">
+                    <svg class="guest-trip-card__schedule-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path d="M3 12h18M12 3v18" stroke-linecap="round"/>
+                    </svg>
+                    <span data-field="distance_km"></span> km
+                </span>
+
+                <span class="guest-trip-price-badge d-none" data-field="total_price_wrap">
+                    <span data-field="total_price"></span>
+                </span>
+
             </div>
 
         </div>

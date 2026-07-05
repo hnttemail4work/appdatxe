@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Schedule;
 use App\Models\ScheduleTemplate;
 use App\Models\TripRoute;
+use App\Support\DeparturePlan;
 use App\Support\LocationCatalog;
 use App\Support\ProvinceCenters;
 use App\Support\RouteDistanceCatalog;
@@ -33,21 +34,26 @@ class TripPricingService
         ?float $pickupLng = null,
         ?float $dropoffLat = null,
         ?float $dropoffLng = null,
+        ?string $departurePlan = null,
     ): array {
         $template->loadMissing(['route', 'vehicle']);
+        $plan = DeparturePlan::normalize($departurePlan);
 
         if ($pickup && $dropoff && $template->vehicle) {
-            return $this->quoteForVehicle($template->vehicle, $pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
+            return $this->applyDeparturePlanToQuote(
+                $this->quoteForVehicle($template->vehicle, $pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng),
+                $plan,
+            );
         }
 
         $wholeCar = $this->oneWayWholeCarPrice($template, $pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
         $distance = $this->resolveDistanceKm($template->route, $pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
 
-        return [
+        return $this->applyDeparturePlanToQuote([
             'distance_km'      => $distance,
             'whole_car_price'  => $wholeCar,
             'unit_price'       => $wholeCar,
-        ];
+        ], $plan);
     }
 
     public function bookingTotal(
@@ -58,8 +64,11 @@ class TripPricingService
         ?float $pickupLng = null,
         ?float $dropoffLat = null,
         ?float $dropoffLng = null,
+        ?string $departurePlan = null,
     ): float {
-        return (float) $this->oneWayWholeCarPrice($entity, $pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
+        $base = $this->oneWayWholeCarPrice($entity, $pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
+
+        return (float) $this->priceWithDeparturePlan($base, $departurePlan);
     }
 
     public function oneWayWholeCarPrice(
@@ -216,5 +225,28 @@ class TripPricingService
     public function roundToThousand(float $amount): int
     {
         return (int) (ceil($amount / 1000) * 1000);
+    }
+
+    public function priceWithDeparturePlan(int|float $basePrice, ?string $departurePlan): int
+    {
+        $multiplier = DeparturePlan::priceMultiplier((string) $departurePlan);
+
+        return $this->roundToThousand((float) $basePrice * $multiplier);
+    }
+
+    /** @param  array<string, mixed>  $quote */
+    private function applyDeparturePlanToQuote(array $quote, string $plan): array
+    {
+        $base = (int) ($quote['whole_car_price'] ?? 0);
+        $adjusted = $this->priceWithDeparturePlan($base, $plan);
+
+        return array_merge($quote, [
+            'base_whole_car_price' => $base,
+            'departure_plan'       => $plan,
+            'departure_plan_label' => DeparturePlan::label($plan),
+            'surcharge_percent'    => DeparturePlan::surchargePercent($plan),
+            'whole_car_price'      => $adjusted,
+            'unit_price'           => $adjusted,
+        ]);
     }
 }

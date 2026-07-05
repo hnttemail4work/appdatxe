@@ -23,6 +23,23 @@ class ProvinceCentersTest extends TestCase
         $this->assertEqualsWithDelta(106.7009, $coords['lng'], 0.0001);
     }
 
+    public function test_tra_vinh_has_static_center(): void
+    {
+        $coords = ProvinceCenters::forProvince('Trà Vinh');
+
+        $this->assertNotNull($coords);
+        $this->assertEqualsWithDelta(9.9513, $coords['lat'], 0.001);
+        $this->assertEqualsWithDelta(106.3345, $coords['lng'], 0.001);
+    }
+
+    public function test_viewbox_is_generated_for_catalog_location(): void
+    {
+        $viewbox = ProvinceCenters::viewboxFor('Trà Vinh');
+
+        $this->assertNotNull($viewbox);
+        $this->assertStringContainsString(',', $viewbox);
+    }
+
     public function test_hcm_to_binh_duong_is_reasonable_distance(): void
     {
         $hcm = ProvinceCenters::forProvince('TP.HCM');

@@ -39,22 +39,21 @@ class TripListingService
 
     private function bookingActionSortKey(DriverProfile $profile): string
     {
-        $status = $profile->availability_status ?? 'off_duty';
+        $status = $profile->effectiveAvailabilityStatus();
 
         return ($status === 'available' ? '0' : '1') . '-' . ($profile->driver_code ?? $profile->id);
     }
 
     public function bookingActionLabel(DriverProfile $profile): string
     {
-        return match ($profile->availability_status ?? 'off_duty') {
-            'available' => 'Đặt ngay',
-            default     => 'Đặt sau',
-        };
+        return $profile->effectiveAvailabilityStatus() === 'available'
+            ? 'Đặt ngay'
+            : 'Đặt sau';
     }
 
     public function bookingActionTone(DriverProfile $profile): string
     {
-        return ($profile->availability_status ?? 'off_duty') === 'available' ? 'success' : 'pending';
+        return $profile->effectiveAvailabilityStatus() === 'available' ? 'now' : 'later';
     }
 
     public function activeTemplateForDriver(DriverProfile $profile): ?ScheduleTemplate

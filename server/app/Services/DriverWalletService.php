@@ -9,6 +9,7 @@ use App\Models\DriverWallet;
 use App\Models\DriverWalletTransaction;
 use App\Models\Schedule;
 use App\Support\DriverWalletConfig;
+use App\Support\PlatformFees;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -31,7 +32,7 @@ class DriverWalletService
         return $booking->schedule ? $this->onScheduleCompleted($booking->schedule) : null;
     }
 
-    /** Ghi nhận doanh thu chuyến — không còn luồng chuyển phí / kết chuyến. */
+    /** Ghi nhận doanh thu chuyến và trừ phí nền tảng (2%) khi đủ điều kiện ví. */
     public function onScheduleCompleted(Schedule $schedule): ?DriverTripSettlement
     {
         $schedule->loadMissing('route');
@@ -66,22 +67,29 @@ class DriverWalletService
         return DB::transaction(function () use ($wallet, $schedule, $bookings, $revenue): DriverTripSettlement {
             $locked = DriverWallet::query()->lockForUpdate()->findOrFail($wallet->id);
             $category = $this->resolveSettlementCategory($revenue, $locked);
+            $platformFee = $this->resolvePlatformFeeAmount($revenue, $category, $locked);
 
             $settlement = DriverTripSettlement::query()->create([
                 'driver_wallet_id'    => $locked->id,
                 'schedule_id'         => $schedule->id,
                 'booking_id'          => $bookings->first()->id,
                 'revenue_amount'      => $revenue,
-                'platform_fee_amount' => 0,
+                'platform_fee_amount' => $platformFee,
                 'category'            => $category,
                 'status'              => 'completed',
                 'driver_settled_at'   => now(),
             ]);
 
-            $locked->update([
+            $walletUpdates = [
                 'cumulative_revenue'          => $locked->cumulative_revenue + $revenue,
                 'completed_settlements_count' => $locked->completed_settlements_count + 1,
-            ]);
+            ];
+
+            if ($platformFee > 0) {
+                $walletUpdates['balance'] = $locked->balance - $platformFee;
+            }
+
+            $locked->update($walletUpdates);
 
             $locked = $locked->fresh();
             $this->refreshWalletGate($locked);
@@ -324,10 +332,15 @@ class DriverWalletService
             }
 
             if (! $wallet->hasMinBalance()) {
-                return [
-                    'message'   => 'Doanh thu đã đạt ' . $threshold
+                $balanceLabel = number_format(abs($wallet->balance), 0, ',', '.') . ' đ';
+                $message = $wallet->balance < 0
+                    ? 'Số dư ví âm ' . $balanceLabel . ' — cần nạp ví để nhận cuốc mới.'
+                    : 'Doanh thu đã đạt ' . $threshold
                         . ' — cần giữ số dư trên ' . DriverWalletConfig::minBalanceFormatted()
-                        . ' để nhận cuốc mới.',
+                        . ' để nhận cuốc mới.';
+
+                return [
+                    'message'   => $message,
                     'cta_label' => 'Nạp ví ngay',
                     'cta_tab'   => 'deposit',
                     'variant'   => 'warning',
@@ -534,6 +547,17 @@ class DriverWalletService
                     'meta'   => $routeMeta,
                     'status' => 'completed',
                 ]);
+
+                if ((int) $settlement->platform_fee_amount > 0) {
+                    $items->push([
+                        'kind'   => 'platform_fee',
+                        'amount' => (int) $settlement->platform_fee_amount,
+                        'at'     => $settlement->driver_settled_at ?? $settlement->updated_at,
+                        'label'  => 'Phí nền tảng ' . rtrim(rtrim(number_format(PlatformFees::appCommissionPercent(), 2, '.', ''), '0'), '.') . '%',
+                        'meta'   => $routeMeta,
+                        'status' => 'completed',
+                    ]);
+                }
             }
         }
 
@@ -616,17 +640,18 @@ class DriverWalletService
             ->get();
     }
 
+    private function resolvePlatformFeeAmount(int $revenue, string $category, DriverWallet $wallet): int
+    {
+        if (! DriverWalletConfig::shouldDeductPlatformFee($category, $wallet->wallet_activated_at !== null)) {
+            return 0;
+        }
+
+        return DriverWalletConfig::platformFee($revenue);
+    }
+
     private function resolveSettlementCategory(int $revenue, DriverWallet $wallet): string
     {
-        if ($revenue < DriverWalletConfig::REVENUE_THRESHOLD) {
-            return 'under_threshold';
-        }
-
-        if ($wallet->cumulative_revenue < DriverWalletConfig::REVENUE_THRESHOLD) {
-            return 'first_over_threshold';
-        }
-
-        return 'over_threshold';
+        return DriverWalletConfig::resolveSettlementCategory($revenue, (int) $wallet->cumulative_revenue);
     }
 
     private function refreshWalletGate(DriverWallet $wallet): void
@@ -650,10 +675,17 @@ class DriverWalletService
         }
 
         if (! $wallet->wallet_activated_at) {
-            $wallet->update([
-                'accept_trips_blocked_at'   => now(),
-                'accept_trips_block_reason' => 'not_activated',
-            ]);
+            if ($wallet->wallet_gate_enabled) {
+                $wallet->update([
+                    'accept_trips_blocked_at'   => now(),
+                    'accept_trips_block_reason' => 'not_activated',
+                ]);
+            } else {
+                $wallet->update([
+                    'accept_trips_blocked_at'   => null,
+                    'accept_trips_block_reason' => null,
+                ]);
+            }
 
             return;
         }
