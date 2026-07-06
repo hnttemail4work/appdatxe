@@ -72,6 +72,7 @@
     var needsPinFineTune = false;
     var leafletAssetsPromise = null;
     var searchTimer = null;
+    var lastSearchQuery = '';
     var provinceChangeHandler = null;
 
     function loadStylesheet(href) {
@@ -604,8 +605,29 @@
         finishWithAddress(text);
     }
 
-    function renderSearchResults(results) {
+    function renderSearchResults(results, query) {
         if (!searchResultsEl) return;
+
+        if (window.GeocodeSearchUi && window.GeocodeSearchUi.renderResults) {
+            window.GeocodeSearchUi.renderResults(searchResultsEl, results, query || lastSearchQuery, {
+                itemClass: 'address-map-search-item geocode-search-item',
+                emptyClass: 'address-map-search-empty',
+                emptyText: 'Không thấy địa chỉ phù hợp — thử thêm số nhà, phường hoặc quận.',
+                onSelect: function (item) {
+                    if (isResolving) return;
+                    hideSearchResults();
+                    if (item.lat != null && item.lon != null) {
+                        placeMarker(item.lat, item.lon, true, { address: item.address, fromSearch: true });
+                    } else {
+                        pendingLat = null;
+                        pendingLng = null;
+                        previewResolvedAddress(item.address);
+                    }
+                },
+            });
+            return;
+        }
+
         searchResultsEl.innerHTML = '';
 
         if (!results.length) {
@@ -644,10 +666,16 @@
             return;
         }
 
+        lastSearchQuery = query;
+
         if (searchAbort) {
             searchAbort.abort();
         }
         searchAbort = new AbortController();
+
+        if (window.GeocodeSearchUi && window.GeocodeSearchUi.setLoading) {
+            window.GeocodeSearchUi.setLoading(searchResultsEl, 'Đang tìm địa chỉ…');
+        }
 
         var url = searchUrl
             + '?q=' + encodeURIComponent(query)
@@ -660,7 +688,7 @@
         })
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (data) {
-                renderSearchResults((data && data.results) || []);
+                renderSearchResults((data && data.results) || [], query);
             })
             .catch(function (err) {
                 if (err && err.name === 'AbortError') return;
@@ -828,6 +856,11 @@
         });
 
         searchInput.addEventListener('keydown', function (e) {
+            if (window.GeocodeSearchUi
+                && window.GeocodeSearchUi.handleListKeydown
+                && window.GeocodeSearchUi.handleListKeydown(e, searchResultsEl)) {
+                return;
+            }
             if (e.key === 'Enter') {
                 e.preventDefault();
                 var first = searchResultsEl && searchResultsEl.querySelector('.address-map-search-item');

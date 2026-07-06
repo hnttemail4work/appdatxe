@@ -1738,7 +1738,72 @@ body.modal-open .modal-backdrop.show {
     font-weight: 700;
     color: var(--tl-primary-light);
     line-height: 1.3;
-    margin-top: .15rem;
+}
+
+.booking-price-summary {
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+    min-width: 11.5rem;
+    text-align: left;
+}
+
+.booking-price-summary--compact {
+    min-width: 10rem;
+    text-align: right;
+}
+
+.booking-price-summary-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: .75rem;
+    font-size: .8125rem;
+    line-height: 1.35;
+}
+
+.booking-price-summary--compact .booking-price-summary-row {
+    justify-content: flex-end;
+    gap: .5rem;
+}
+
+.booking-price-summary-label {
+    color: var(--tl-text-muted, #9ca3af);
+    flex-shrink: 0;
+}
+
+.booking-price-summary-value {
+    color: var(--tl-text, #f3f4f6);
+    font-weight: 600;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.booking-price-summary-row--total {
+    margin-top: .1rem;
+    padding-top: .35rem;
+    border-top: 1px solid rgba(212, 175, 55, .16);
+}
+
+.booking-price-summary-row--total .booking-price-summary-label {
+    color: var(--tl-text, #f3f4f6);
+    font-weight: 600;
+}
+
+.booking-price-summary-row--total .booking-price-summary-value,
+.booking-price-summary-row--total .booking-footer-price {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--tl-primary-light);
+    margin-top: 0;
+}
+
+.booking-price-summary.is-discounted .booking-price-summary-row--total .booking-price-summary-value {
+    color: #22c55e !important;
+}
+
+.booking-price-discount {
+    font-weight: 600;
 }
 
 .time-input-24h {
@@ -3385,22 +3450,12 @@ body.modal-open .modal-backdrop.show {
     color: var(--tl-primary-light);
 }
 #bookingModal .booking-price-discounted {
-    color: #22c55e;
+    color: #22c55e !important;
 }
 .booking-price-original {
     text-align: right;
     line-height: 1.3;
-}
-#modal-footer-step1 .booking-price-original {
-    text-align: left;
-}
-.booking-referral-discount {
-    text-align: right;
-    line-height: 1.35;
-}
-#modal-footer-step1 .booking-referral-discount {
-    text-align: left;
-    margin-top: 0.25rem;
+    font-weight: 500 !important;
 }
 .booking-referral-success-qr {
     display: inline-block;
@@ -3798,6 +3853,41 @@ body.booking-active-referral-qr-open {
     padding: 1rem 1rem 0.85rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
+.guest-trip-card__head-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+.guest-trip-card__aside {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.55rem;
+    flex-shrink: 0;
+}
+.guest-trip-referral {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+}
+.guest-trip-referral-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #9ca3af;
+}
+.guest-trip-referral-qr-btn {
+    padding: 0.15rem;
+}
+.guest-trip-referral-qr img,
+.guest-trip-referral-qr canvas {
+    display: block;
+    border-radius: 0.35rem;
+}
 .guest-trip-card__id {
     min-width: 0;
 }
@@ -4152,6 +4242,24 @@ body.booking-active-referral-qr-open {
     color: #9ca3af;
     margin-bottom: 0;
     line-height: 1.4;
+}
+
+.guest-trip-cancel {
+    margin: 0;
+    padding: 1rem 1rem 1.1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    text-align: center;
+}
+
+.guest-trip-cancel-btn {
+    min-width: 8rem;
+    white-space: nowrap;
+}
+
+.guest-trip-cancel-error {
+    margin: 0.5rem 0 0;
+    font-size: 0.8125rem;
+    color: #dc3545;
 }
 
 /* Wait progress (đặt xe / theo dõi) */
@@ -4620,19 +4728,33 @@ body.booking-active-referral-qr-open {
 .booking-page-hero__banner-scrim {
     position: absolute;
     inset: 0;
-    background: linear-gradient(180deg, rgba(0, 0, 0, .35) 0%, rgba(0, 0, 0, .72) 100%);
+    background:
+        linear-gradient(180deg, rgba(0, 0, 0, .62) 0%, rgba(0, 0, 0, .28) 42%, rgba(0, 0, 0, .55) 100%),
+        linear-gradient(90deg, rgba(0, 0, 0, .45) 0%, transparent 55%);
 }
 .booking-page-hero--banner .booking-page-hero__inner {
     position: relative;
     z-index: 2;
-    padding: 1.25rem 1.15rem 1.15rem;
+    padding: 1rem 1.15rem;
     min-height: 11rem;
     display: flex;
     flex-direction: column;
-    justify-content: flex-end;
+    align-items: flex-start;
+    justify-content: flex-start;
+    text-align: left;
+    gap: .2rem;
+}
+.booking-page-hero--banner .booking-page-hero__eyebrow {
+    margin: 0;
+    text-shadow: 0 1px 8px rgba(0, 0, 0, .65);
 }
 .booking-page-hero--banner .booking-page-hero__title {
-    text-shadow: 0 2px 12px rgba(0, 0, 0, .5);
+    margin: 0;
+    text-shadow: 0 2px 12px rgba(0, 0, 0, .55);
+}
+.booking-page-hero--banner .booking-page-hero__referral {
+    margin-top: .5rem;
+    max-width: min(100%, 22rem);
 }
 
 /* Toolbar + filters */
@@ -4764,14 +4886,6 @@ body.booking-active-referral-qr-open {
     font-weight: 800;
     color: rgba(212, 175, 55, .35);
     background: linear-gradient(135deg, #1a1a1a, #252015);
-}
-
-.vehicle-offer-card__status {
-    position: absolute;
-    top: .65rem;
-    right: .65rem;
-    backdrop-filter: blur(8px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, .35);
 }
 
 .vehicle-offer-card__body {

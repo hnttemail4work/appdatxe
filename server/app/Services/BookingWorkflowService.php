@@ -54,6 +54,7 @@ class BookingWorkflowService
         ?float $dropoffLat = null,
         ?float $dropoffLng = null,
         string $departurePlan = 'today',
+        ?int $laterReturnDays = null,
     ): Booking {
         $template->loadMissing(['route', 'vehicle']);
 
@@ -88,6 +89,9 @@ class BookingWorkflowService
         $dropoff = $dropoffAddress ?: $dropoff;
 
         $departurePlan = \App\Support\DeparturePlan::normalize($departurePlan);
+        $storedLaterDays = $departurePlan === \App\Support\DeparturePlan::LATER
+            ? \App\Support\DeparturePlan::normalizeLaterReturnDays($laterReturnDays)
+            : null;
 
         $existing = $this->findReusablePendingBooking($schedule, $contactPhone);
         if ($existing) {
@@ -108,6 +112,7 @@ class BookingWorkflowService
                 $dropoffLat,
                 $dropoffLng,
                 $departurePlan,
+                $storedLaterDays,
             );
             try {
                 $this->driverRequests->assignCatalogBooking($booking->fresh(['schedule.route', 'schedule.vehicle']), $template);
@@ -135,6 +140,7 @@ class BookingWorkflowService
             $dropoffLat,
             $dropoffLng,
             $departurePlan,
+            $storedLaterDays,
         ): Booking {
             return $this->createBooking(
                 $schedule,
@@ -154,6 +160,7 @@ class BookingWorkflowService
                 $dropoffLat,
                 $dropoffLng,
                 $departurePlan,
+                $storedLaterDays,
             );
         });
 
@@ -184,10 +191,14 @@ class BookingWorkflowService
         ?float $dropoffLat = null,
         ?float $dropoffLng = null,
         string $departurePlan = 'today',
+        ?int $laterReturnDays = null,
     ): Booking {
         $departurePlan = \App\Support\DeparturePlan::normalize($departurePlan);
+        $storedLaterDays = $departurePlan === \App\Support\DeparturePlan::LATER
+            ? \App\Support\DeparturePlan::normalizeLaterReturnDays($laterReturnDays)
+            : null;
 
-        $booking = DB::transaction(function () use ($schedule, $contactPhone, $passengerName, $pickupAddress, $pickupDetail, $dropoffAddress, $dropoffDetail, $notes, $pickupTime, $appliedReferralCodeId, $passengerGender, $passengerAge, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng, $departurePlan): Booking {
+        $booking = DB::transaction(function () use ($schedule, $contactPhone, $passengerName, $pickupAddress, $pickupDetail, $dropoffAddress, $dropoffDetail, $notes, $pickupTime, $appliedReferralCodeId, $passengerGender, $passengerAge, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng, $departurePlan, $storedLaterDays): Booking {
             $this->duplicateBookings->assertCanBook($contactPhone);
 
             $this->scheduleLifecycle->sync();
@@ -201,7 +212,7 @@ class BookingWorkflowService
                 throw new InvalidArgumentException('Chuyến không còn mở đặt vé (đang chạy hoặc đã kết thúc).');
             }
 
-            $totalPrice = $this->pricing->bookingTotal($schedule, $pickupAddress, $dropoffAddress, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng, $departurePlan);
+            $totalPrice = $this->pricing->bookingTotal($schedule, $pickupAddress, $dropoffAddress, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng, $departurePlan, $storedLaterDays);
             $totalPrice = $this->applyReferralToTotal($totalPrice, $contactPhone, $appliedReferralCodeId);
 
             $booking = Booking::query()->create([
@@ -222,6 +233,7 @@ class BookingWorkflowService
                 'pickup_lng'               => $pickupLng,
                 'pickup_time'              => $pickupTime ? \App\Support\DepartureTimeDisplay::storageValue($pickupTime) : null,
                 'departure_plan'           => $departurePlan,
+                'later_return_days'        => $storedLaterDays,
                 'dropoff_address'          => $dropoffAddress,
                 'dropoff_detail'           => $dropoffDetail ? trim($dropoffDetail) : null,
                 'dropoff_lat'              => $dropoffLat,
@@ -304,6 +316,122 @@ class BookingWorkflowService
                 ]);
             }
         });
+
+        $this->browserGuard->clearActiveBookingForBooking($booking->fresh());
+    }
+
+    /** Khách hủy chuyến qua web — tab Đã hủy admin, gỡ khỏi tài xế. */
+    public function cancelByGuest(
+        Booking $booking,
+        ?string $contactPhone = null,
+        ?int $cancellationReasonId = null,
+    ): void {
+        if (in_array($booking->booking_status, ['cancelled', 'rejected'], true)) {
+            throw new InvalidArgumentException('Chuyến đã được hủy.');
+        }
+
+        if ($booking->trip_status === 'completed') {
+            throw new InvalidArgumentException('Chuyến đã hoàn tất, không thể hủy.');
+        }
+
+        if ($booking->passengerPickedUp()) {
+            throw new InvalidArgumentException('Tài xế đã đón khách — không thể hủy chuyến.');
+        }
+
+        $phone = trim((string) ($contactPhone ?: $booking->contact_phone));
+        $locationKey = $phone !== ''
+            ? $this->phoneGuard->locationFingerprintFromBooking($booking)
+            : null;
+
+        $reason = null;
+        $reasonLabel = 'Khách hủy chuyến';
+
+        if ($phone !== '' && $this->phoneGuard->requiresCancelReason($phone, $locationKey)) {
+            if (! $cancellationReasonId) {
+                throw new InvalidArgumentException('Vui lòng chọn lý do hủy chuyến.');
+            }
+            $reason = $this->cancellationReasons->resolveForCancel($cancellationReasonId, 'customer');
+            $reasonLabel = $reason->label;
+        }
+
+        $booking->loadMissing(['schedule.vehicle', 'schedule.route']);
+        $schedule = $booking->schedule;
+        $formerDriverId = (int) ($schedule?->driver_id ?? 0);
+
+        DB::transaction(function () use ($booking, $schedule, $reason, $reasonLabel, $phone, $locationKey): void {
+            $before = $booking->toArray();
+
+            if ($phone !== '') {
+                $this->phoneGuard->recordCustomerCancel($phone, $locationKey);
+            }
+
+            $updates = [
+                'booking_status'            => 'cancelled',
+                'trip_status'               => 'cancelled',
+                'payment_status'            => $booking->payment_status === 'paid' ? 'refunded' : 'unpaid',
+                'cancelled_at'              => now(),
+                'cancelled_by'              => 'customer',
+                'cancellation_reason_id'    => $reason?->id,
+                'cancellation_reason_label' => $reasonLabel,
+                'hold_expires_at'           => null,
+            ];
+
+            if (Schema::hasColumn('bookings', 'assigned_driver_id')) {
+                $updates['assigned_driver_id'] = null;
+            }
+
+            if (Booking::supportsOperatorDismiss()) {
+                $updates['operator_dismissed_at'] = null;
+            }
+
+            $booking->update($updates);
+
+            if ($schedule) {
+                DriverTripRequest::query()
+                    ->where('schedule_id', $schedule->id)
+                    ->where('contact_phone', (string) $booking->contact_phone)
+                    ->whereIn('status', ['pending', 'accepted'])
+                    ->update([
+                        'status'       => 'cancelled',
+                        'responded_at' => now(),
+                        'expires_at'   => null,
+                    ]);
+
+                $stillActive = Booking::query()
+                    ->where('schedule_id', $schedule->id)
+                    ->whereNotIn('booking_status', ['cancelled', 'rejected'])
+                    ->where('trip_status', '!=', 'completed')
+                    ->exists();
+
+                if (! $stillActive) {
+                    $schedule->update([
+                        'driver_id'                               => null,
+                        'driver_name'                             => 'Chờ phân bổ',
+                        'driver_stage'                            => null,
+                        'driver_assigned_at'                      => null,
+                        'driver_movement_deadline_at'             => null,
+                        'driver_late_pickup_prompt_at'            => null,
+                        'driver_late_pickup_continue_deadline_at' => null,
+                        'status'                                  => $schedule->status === 'running'
+                            ? 'scheduled'
+                            : $schedule->status,
+                    ]);
+
+                    $this->tripLedger->recordForSchedule($schedule, TripLedger::OUTCOME_CANCELLED_CUSTOMER, [
+                        'actor_label' => $booking->passenger_name,
+                        'actor_code'  => $booking->contact_phone,
+                    ]);
+                }
+            }
+
+            $booking->paymentTransactions()->where('status', 'pending')->update(['status' => 'failed']);
+            $this->syncScheduleAvailability($schedule);
+            $this->audit($booking, null, 'booking_cancelled_guest', $before, $booking->fresh()->toArray());
+        });
+
+        if ($formerDriverId > 0) {
+            $this->driverAvailability->syncAfterTripCompleted($formerDriverId);
+        }
 
         $this->browserGuard->clearActiveBookingForBooking($booking->fresh());
     }
@@ -798,6 +926,12 @@ class BookingWorkflowService
             $schedule->update($payload);
         });
 
+        $freshSchedule = $schedule->fresh();
+        try {
+            app(\App\Services\PushNotificationService::class)->onDriverStageAdvanced($freshSchedule, $next);
+        } catch (\Throwable) {
+        }
+
         return $next;
     }
 
@@ -897,10 +1031,14 @@ class BookingWorkflowService
         ?float $dropoffLat = null,
         ?float $dropoffLng = null,
         string $departurePlan = 'today',
+        ?int $laterReturnDays = null,
     ): Booking {
         $departurePlan = \App\Support\DeparturePlan::normalize($departurePlan);
+        $storedLaterDays = $departurePlan === \App\Support\DeparturePlan::LATER
+            ? \App\Support\DeparturePlan::normalizeLaterReturnDays($laterReturnDays)
+            : null;
         $booking->loadMissing('schedule.route');
-        $totalPrice = $this->pricing->bookingTotal($booking->schedule, $pickupAddress, $dropoffAddress, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng, $departurePlan);
+        $totalPrice = $this->pricing->bookingTotal($booking->schedule, $pickupAddress, $dropoffAddress, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng, $departurePlan, $storedLaterDays);
         $totalPrice = $this->applyReferralToTotal($totalPrice, $booking->contact_phone, $appliedReferralCodeId);
 
         $refreshFields = [
@@ -913,6 +1051,7 @@ class BookingWorkflowService
             'pickup_lng'       => $pickupLng,
             'pickup_time'      => $pickupTime ? \App\Support\DepartureTimeDisplay::storageValue($pickupTime) : null,
             'departure_plan'   => $departurePlan,
+            'later_return_days'=> $storedLaterDays,
             'dropoff_address'  => $dropoffAddress,
             'dropoff_detail'   => $dropoffDetail ? trim($dropoffDetail) : null,
             'dropoff_lat'      => $dropoffLat,
@@ -1014,21 +1153,21 @@ class BookingWorkflowService
     private function applyReferralToTotal(float $subtotal, string $contactPhone, ?int &$appliedReferralCodeId): float
     {
         if (! $appliedReferralCodeId) {
-            return (float) PlatformFees::roundUpToThousand($subtotal);
+            return (float) PlatformFees::roundDisplayPrice($subtotal);
         }
 
         $referral = ReferralCode::query()->find($appliedReferralCodeId);
         if (! $referral || ! $referral->isUsable()) {
             $appliedReferralCodeId = null;
 
-            return (float) PlatformFees::roundUpToThousand($subtotal);
+            return (float) PlatformFees::roundDisplayPrice($subtotal);
         }
 
         if ($referral->type === ReferralCode::TYPE_BOOKING_TEMP) {
             if (! $this->referralCodes->qualifiesForCustomerDiscount($referral, $contactPhone)) {
                 $appliedReferralCodeId = null;
 
-                return (float) PlatformFees::roundUpToThousand($subtotal);
+                return (float) PlatformFees::roundDisplayPrice($subtotal);
             }
 
             return $this->referralCodes->applyDiscount($subtotal, $referral->customerDiscountPercent());
@@ -1038,7 +1177,7 @@ class BookingWorkflowService
             if (! $this->referralCodes->shouldAttributeBooking($referral, $contactPhone)) {
                 $appliedReferralCodeId = null;
 
-                return (float) PlatformFees::roundUpToThousand($subtotal);
+                return (float) PlatformFees::roundDisplayPrice($subtotal);
             }
 
             $percent = $this->referralCodes->customerDiscountPercent($referral, $contactPhone);
@@ -1046,12 +1185,12 @@ class BookingWorkflowService
                 return $this->referralCodes->applyDiscount($subtotal, $percent);
             }
 
-            return (float) PlatformFees::roundUpToThousand($subtotal);
+            return (float) PlatformFees::roundDisplayPrice($subtotal);
         }
 
         $appliedReferralCodeId = null;
 
-        return (float) PlatformFees::roundUpToThousand($subtotal);
+        return (float) PlatformFees::roundDisplayPrice($subtotal);
     }
 
     private function audit(Booking $booking, ?int $actor, string $action, ?array $before, ?array $after): void

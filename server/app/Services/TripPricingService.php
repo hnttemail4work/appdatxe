@@ -7,6 +7,7 @@ use App\Models\ScheduleTemplate;
 use App\Models\TripRoute;
 use App\Support\DeparturePlan;
 use App\Support\LocationCatalog;
+use App\Support\PlatformFees;
 use App\Support\ProvinceCenters;
 use App\Support\RouteDistanceCatalog;
 use App\Support\VehicleCapacityPricing;
@@ -35,6 +36,7 @@ class TripPricingService
         ?float $dropoffLat = null,
         ?float $dropoffLng = null,
         ?string $departurePlan = null,
+        ?int $laterReturnDays = null,
     ): array {
         $template->loadMissing(['route', 'vehicle']);
         $plan = DeparturePlan::normalize($departurePlan);
@@ -43,6 +45,7 @@ class TripPricingService
             return $this->applyDeparturePlanToQuote(
                 $this->quoteForVehicle($template->vehicle, $pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng),
                 $plan,
+                $laterReturnDays,
             );
         }
 
@@ -53,7 +56,7 @@ class TripPricingService
             'distance_km'      => $distance,
             'whole_car_price'  => $wholeCar,
             'unit_price'       => $wholeCar,
-        ], $plan);
+        ], $plan, $laterReturnDays);
     }
 
     public function bookingTotal(
@@ -65,10 +68,11 @@ class TripPricingService
         ?float $dropoffLat = null,
         ?float $dropoffLng = null,
         ?string $departurePlan = null,
+        ?int $laterReturnDays = null,
     ): float {
         $base = $this->oneWayWholeCarPrice($entity, $pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
 
-        return (float) $this->priceWithDeparturePlan($base, $departurePlan);
+        return (float) $this->priceWithDeparturePlan($base, $departurePlan, $laterReturnDays);
     }
 
     public function oneWayWholeCarPrice(
@@ -138,8 +142,7 @@ class TripPricingService
 
     public function wholeCarOneWayFromDistance(float $distanceKm, int $capacity): int
     {
-        $perKm = self::REFERENCE_WHOLE_CAR / max(1, self::REFERENCE_DISTANCE_KM);
-        $base = $distanceKm * $perKm;
+        $base = PlatformFees::wholeCarBaseFromDistanceKm($distanceKm);
         $multiplier = VehicleCapacityPricing::multiplierForCapacity($capacity);
 
         return $this->roundToThousand($base * $multiplier);
@@ -224,27 +227,31 @@ class TripPricingService
 
     public function roundToThousand(float $amount): int
     {
-        return (int) (ceil($amount / 1000) * 1000);
+        return PlatformFees::roundDisplayPrice($amount);
     }
 
-    public function priceWithDeparturePlan(int|float $basePrice, ?string $departurePlan): int
+    public function priceWithDeparturePlan(int|float $basePrice, ?string $departurePlan, ?int $laterReturnDays = null): int
     {
-        $multiplier = DeparturePlan::priceMultiplier((string) $departurePlan);
+        $multiplier = DeparturePlan::priceMultiplier((string) $departurePlan, $laterReturnDays);
 
         return $this->roundToThousand((float) $basePrice * $multiplier);
     }
 
     /** @param  array<string, mixed>  $quote */
-    private function applyDeparturePlanToQuote(array $quote, string $plan): array
+    private function applyDeparturePlanToQuote(array $quote, string $plan, ?int $laterReturnDays = null): array
     {
         $base = (int) ($quote['whole_car_price'] ?? 0);
-        $adjusted = $this->priceWithDeparturePlan($base, $plan);
+        $normalizedDays = $plan === DeparturePlan::LATER
+            ? DeparturePlan::normalizeLaterReturnDays($laterReturnDays)
+            : null;
+        $adjusted = $this->priceWithDeparturePlan($base, $plan, $normalizedDays);
 
         return array_merge($quote, [
             'base_whole_car_price' => $base,
             'departure_plan'       => $plan,
-            'departure_plan_label' => DeparturePlan::label($plan),
-            'surcharge_percent'    => DeparturePlan::surchargePercent($plan),
+            'departure_plan_label' => DeparturePlan::displayLabel($plan, $normalizedDays),
+            'later_return_days'    => $normalizedDays,
+            'surcharge_percent'    => DeparturePlan::surchargePercent($plan, $normalizedDays),
             'whole_car_price'      => $adjusted,
             'unit_price'           => $adjusted,
         ]);

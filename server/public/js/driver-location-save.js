@@ -8,7 +8,7 @@
     }
 
     var csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
-    var targetId = 'driver-location-detail';
+    var detailInput = document.getElementById('driver-location-detail');
     var addressLine = document.getElementById('driver-location-address');
     var metaLine = document.getElementById('driver-location-meta');
     var locationBar = document.getElementById('driver-location-bar');
@@ -41,6 +41,11 @@
             metaLine.textContent = text || '';
         }
     }
+
+    window.DriverLocationSave = {
+        setMetaLine: setMetaLine,
+        setAddressLine: setAddressLine,
+    };
 
     function saveLocation(lat, lng, address) {
         if (sending || isPaused() || lat == null || lng == null || lat === '' || lng === '') {
@@ -101,11 +106,14 @@
 
     document.addEventListener('addressmap:applied', function (e) {
         var detail = e.detail || {};
-        if (detail.targetInputId !== targetId) {
+        if (detailInput && detail.targetInputId !== detailInput.id) {
+            return;
+        }
+        if (!detailInput && detail.targetInputId !== 'driver-location-detail') {
             return;
         }
         if (detail.lat == null || detail.lng == null) {
-            setMetaLine('Chưa có tọa độ — chọn trên bản đồ');
+            setMetaLine('Chưa có tọa độ — thử chia sẻ GPS lại');
             return;
         }
         saveLocation(detail.lat, detail.lng, detail.address);

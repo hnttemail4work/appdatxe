@@ -73,6 +73,51 @@ class PlatformFees
         return max((int) ($setting['value'] ?? 10000), 0);
     }
 
+    /** % phụ thu trên giá một chiều — thời điểm về trong ngày. */
+    public static function departurePlanTodaySurchargePercent(): float
+    {
+        $setting = self::readFinanceSetting('departure_plan_surcharge_today_percentage', ['value' => 50]);
+
+        return max((float) ($setting['value'] ?? 50), 0);
+    }
+
+    /** % phụ thu trên giá một chiều — về ngày mai. */
+    public static function departurePlanTomorrowSurchargePercent(): float
+    {
+        $setting = self::readFinanceSetting('departure_plan_surcharge_tomorrow_percentage', ['value' => 100]);
+
+        return max((float) ($setting['value'] ?? 100), 0);
+    }
+
+    /** % phụ thu mỗi ngày chờ về — chọn trên 2 ngày (VD: 30 → 3 ngày = +90% giá một chiều). */
+    public static function departurePlanLaterPercentPerDay(): float
+    {
+        $setting = self::readFinanceSetting('departure_plan_surcharge_later_per_day_percentage', ['value' => 30]);
+
+        return max((float) ($setting['value'] ?? 30), 0);
+    }
+
+    public static function departurePlanLaterPriceMultiplier(int $days): float
+    {
+        $days = \App\Support\DeparturePlan::normalizeLaterReturnDays($days);
+
+        return round(1 + ($days * self::departurePlanLaterPercentPerDay() / 100), 4);
+    }
+
+    public static function departurePlanSurchargePercent(string $plan): float
+    {
+        return match (\App\Support\DeparturePlan::normalize($plan)) {
+            \App\Support\DeparturePlan::TODAY    => self::departurePlanTodaySurchargePercent(),
+            \App\Support\DeparturePlan::TOMORROW => self::departurePlanTomorrowSurchargePercent(),
+            default                              => 0.0,
+        };
+    }
+
+    public static function departurePlanPriceMultiplier(string $plan): float
+    {
+        return round(1 + self::departurePlanSurchargePercent($plan) / 100, 4);
+    }
+
     public static function roundTripMultiplier(): float
     {
         $discount = self::roundTripDiscountPercent();
@@ -80,30 +125,67 @@ class PlatformFees
         return round(2 * (1 - $discount / 100), 4);
     }
 
-    /** Bội số làm tròn giá hiển thị / tính vé (10.000đ — không có lẻ hàng nghìn). */
-    public const PRICE_ROUND_UNIT = 10_000;
+    /** Giá khách — làm tròn đến chục nghìn gần nhất (1.096.200 → 1.100.000; 1.254.567 → 1.250.000). */
+    public static function roundDisplayPrice(float|int $amount): int
+    {
+        if ($amount <= 0) {
+            return 0;
+        }
 
-    /** Làm tròn lên bội {@see PRICE_ROUND_UNIT} (vd. 138.001 → 140.000). */
+        return (int) (round((float) $amount / 10_000) * 10_000);
+    }
+
+    /** Tiền cả xe theo km — cấu hình admin (≤100 km / phần vượt). */
+    public static function wholeCarBaseFromDistanceKm(float $distanceKm): int
+    {
+        $km = max(0.0, $distanceKm);
+        if ($km <= 0) {
+            return 0;
+        }
+
+        $underRate = self::kmRateUnder100();
+        $overRate = self::kmRateOver100();
+
+        if ($km <= 100) {
+            return (int) round($km * $underRate);
+        }
+
+        return (int) round((100 * $underRate) + (($km - 100) * $overRate));
+    }
+
+    /** @deprecated Dùng {@see roundDisplayPrice()} */
+    public static function roundDownToHundred(float|int $amount): int
+    {
+        return self::roundDisplayPrice($amount);
+    }
+
+    /** Làm tròn lên bội 10.000đ — giữ cho tương thích nội bộ cũ. */
     public static function roundUpToThousand(float|int $amount): int
     {
         if ($amount <= 0) {
             return 0;
         }
 
-        $unit = self::PRICE_ROUND_UNIT;
+        $unit = 10_000;
 
         return (int) (ceil($amount / $unit) * $unit);
     }
 
-    /** Làm tròn xuống bội {@see PRICE_ROUND_UNIT} — dùng sau giảm giá GT. */
+    /** @deprecated Dùng {@see roundDisplayPrice()} */
     public static function roundDownPrice(float|int $amount): int
     {
-        if ($amount <= 0) {
-            return 0;
+        return self::roundDisplayPrice($amount);
+    }
+
+    /** @return array<string, mixed> */
+    private static function readFinanceSetting(string $key, array $default): array
+    {
+        try {
+            $value = PlatformSetting::getValue($key, $default);
+
+            return is_array($value) ? $value : $default;
+        } catch (\Throwable) {
+            return $default;
         }
-
-        $unit = self::PRICE_ROUND_UNIT;
-
-        return (int) (floor($amount / $unit) * $unit);
     }
 }

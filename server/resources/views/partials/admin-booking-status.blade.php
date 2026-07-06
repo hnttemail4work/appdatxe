@@ -7,6 +7,10 @@ $walletAlert = $booking->adminWalletTopUpAlert();
     {{ $booking->operatorMonitorLabel() }}
 </span>
 
+@if(($bookingList ?? '') === 'completed')
+    @include('partials.admin-booking-later-pickup', ['booking' => $booking])
+@endif
+
 @if($walletAlert)
     <div class="mt-1">
         <span class="status-pill status-pill--{{ $walletAlert['level'] }}">

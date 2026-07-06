@@ -993,7 +993,7 @@ body:has(.driver-page) {
     box-shadow: 0 0 0 1px rgba(212, 175, 55, .15), 0 8px 24px rgba(0, 0, 0, .25);
 }
 
-.driver-location-sheet--needs-share .driver-location-map-btn {
+.driver-location-sheet--needs-share .driver-location-share-btn {
     animation: driver-location-map-pulse 1.6s ease-in-out infinite;
 }
 
@@ -1021,7 +1021,7 @@ body:has(.driver-page) {
     box-shadow: 0 0 0 1px rgba(212, 175, 55, .15), 0 8px 24px rgba(0, 0, 0, .25);
 }
 
-.driver-location-sheet--needs-share .driver-location-map-btn {
+.driver-location-sheet--needs-share .driver-location-share-btn {
     animation: driver-location-map-pulse 1.6s ease-in-out infinite;
 }
 
@@ -1049,7 +1049,7 @@ body:has(.driver-page) {
     box-shadow: 0 0 0 1px rgba(212, 175, 55, .15), 0 8px 24px rgba(0, 0, 0, .25);
 }
 
-.driver-location-sheet--needs-share .driver-location-map-btn {
+.driver-location-sheet--needs-share .driver-location-share-btn {
     animation: driver-location-map-pulse 1.6s ease-in-out infinite;
 }
 
@@ -1077,7 +1077,7 @@ body:has(.driver-page) {
     box-shadow: 0 0 0 1px rgba(212, 175, 55, .15), 0 8px 24px rgba(0, 0, 0, .25);
 }
 
-.driver-location-sheet--needs-share .driver-location-map-btn {
+.driver-location-sheet--needs-share .driver-location-share-btn {
     animation: driver-location-map-pulse 1.6s ease-in-out infinite;
 }
 
@@ -1105,7 +1105,7 @@ body:has(.driver-page) {
     box-shadow: 0 0 0 1px rgba(212, 175, 55, .15), 0 8px 24px rgba(0, 0, 0, .25);
 }
 
-.driver-location-sheet--needs-share .driver-location-map-btn {
+.driver-location-sheet--needs-share .driver-location-share-btn {
     animation: driver-location-map-pulse 1.6s ease-in-out infinite;
 }
 
@@ -1133,7 +1133,7 @@ body:has(.driver-page) {
     box-shadow: 0 0 0 1px rgba(212, 175, 55, .15), 0 8px 24px rgba(0, 0, 0, .25);
 }
 
-.driver-location-sheet--needs-share .driver-location-map-btn {
+.driver-location-sheet--needs-share .driver-location-share-btn {
     animation: driver-location-map-pulse 1.6s ease-in-out infinite;
 }
 
@@ -1161,7 +1161,7 @@ body:has(.driver-page) {
     box-shadow: 0 0 0 1px rgba(212, 175, 55, .15), 0 8px 24px rgba(0, 0, 0, .25);
 }
 
-.driver-location-sheet--needs-share .driver-location-map-btn {
+.driver-location-sheet--needs-share .driver-location-share-btn {
     animation: driver-location-map-pulse 1.6s ease-in-out infinite;
 }
 
@@ -1189,7 +1189,7 @@ body:has(.driver-page) {
     box-shadow: 0 0 0 1px rgba(212, 175, 55, .15), 0 8px 24px rgba(0, 0, 0, .25);
 }
 
-.driver-location-sheet--needs-share .driver-location-map-btn {
+.driver-location-sheet--needs-share .driver-location-share-btn {
     animation: driver-location-map-pulse 1.6s ease-in-out infinite;
 }
 
@@ -1217,7 +1217,7 @@ body:has(.driver-page) {
     box-shadow: 0 0 0 1px rgba(212, 175, 55, .15), 0 8px 24px rgba(0, 0, 0, .25);
 }
 
-.driver-location-sheet--needs-share .driver-location-map-btn {
+.driver-location-sheet--needs-share .driver-location-share-btn {
     animation: driver-location-map-pulse 1.6s ease-in-out infinite;
 }
 
@@ -1336,6 +1336,34 @@ body:has(.driver-page) {
     padding: .65rem .75rem .75rem;
     position: relative;
     z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.55rem;
+}
+
+.driver-location-sheet-actions.is-disabled {
+    opacity: .55;
+    pointer-events: none;
+}
+
+.driver-location-share-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    width: 100%;
+    font-weight: 700;
+}
+
+.driver-location-test-tools {
+    font-size: 0.75rem;
+    color: rgba(245, 245, 245, 0.55);
+}
+
+.driver-location-test-tools summary {
+    cursor: pointer;
+    user-select: none;
 }
 
 .driver-location-province-wrap {

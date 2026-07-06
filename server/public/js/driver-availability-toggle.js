@@ -24,22 +24,32 @@
     var sending = false;
     var onTrip = locationBar.getAttribute('data-driver-trip-active') === '1';
     var tripUpcoming = locationBar.getAttribute('data-driver-trip-upcoming') === '1';
-    var sharePromptMessage = tripUpcoming
-        ? 'Chia sẻ vị trí để khách biết bạn còn bao nhiêu km đến điểm đón.'
-        : '';
+    var shareBtn = document.getElementById('driver-location-share-btn');
+
+    function sharePromptMessage() {
+        if (tripUpcoming) {
+            return 'Chia sẻ vị trí GPS để khách biết bạn còn bao nhiêu km đến điểm đón.';
+        }
+        if (onTrip) {
+            return 'Cập nhật vị trí GPS khi đang chạy chuyến.';
+        }
+        return 'Chia sẻ vị trí GPS để nhận cuốc gần bạn.';
+    }
 
     function hasLocationCoords() {
         return !!(latInput && lngInput && String(latInput.value || '').trim() && String(lngInput.value || '').trim());
     }
 
     function ensureSharePromptElement() {
-        if (!tripUpcoming || !sharePromptMessage) {
+        var message = sharePromptMessage();
+        if (!message) {
             return null;
         }
 
         var prompt = document.getElementById('driver-location-share-prompt');
         if (prompt) {
             prompt.hidden = false;
+            prompt.textContent = message;
             return prompt;
         }
 
@@ -47,7 +57,7 @@
         prompt.id = 'driver-location-share-prompt';
         prompt.className = 'driver-location-share-prompt';
         prompt.setAttribute('role', 'status');
-        prompt.textContent = sharePromptMessage;
+        prompt.textContent = message;
         locationBar.insertBefore(prompt, locationBar.firstChild);
 
         return prompt;
@@ -56,19 +66,16 @@
     function focusLocationShare(options) {
         var opts = options || {};
 
-        if (onTrip || locationBar.getAttribute('data-driver-paused') === '1' || hasLocationCoords()) {
+        if (locationBar.getAttribute('data-driver-paused') === '1' || hasLocationCoords()) {
             return;
         }
 
         locationBar.setAttribute('data-needs-location', '1');
         locationBar.classList.add('driver-location-sheet--needs-share');
+        ensureSharePromptElement();
 
-        if (tripUpcoming) {
-            ensureSharePromptElement();
-
-            if (metaLine) {
-                metaLine.textContent = sharePromptMessage;
-            }
+        if (metaLine) {
+            metaLine.textContent = sharePromptMessage();
         }
 
         if (opts.scroll !== false) {
@@ -76,10 +83,10 @@
         }
 
         window.setTimeout(function () {
-            if (mapBtn && !mapBtn.disabled) {
+            if (shareBtn && !shareBtn.disabled) {
+                shareBtn.focus({ preventScroll: true });
+            } else if (mapBtn && !mapBtn.disabled) {
                 mapBtn.focus({ preventScroll: true });
-            } else if (detailInput && !detailInput.disabled) {
-                detailInput.focus({ preventScroll: true });
             }
         }, opts.scroll === false ? 50 : 420);
     }
@@ -119,6 +126,9 @@
 
         if (mapBtn) {
             mapBtn.disabled = paused;
+        }
+        if (shareBtn) {
+            shareBtn.disabled = paused;
         }
 
         if (statusPill) {

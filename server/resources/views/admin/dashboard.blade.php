@@ -287,6 +287,59 @@ $referralCommissionStats = $referralCommissionStats ?? [];
                         <button class="btn btn-primary px-4 fw-semibold mt-3">Lưu thương hiệu</button>
                     </form>
                 </div>
+                <div class="mb-4 pb-4 border-bottom border-secondary">
+                    <h3 class="h6 fw-bold text-uppercase text-muted mb-3" style="letter-spacing:.04em">Thông báo đẩy (PWA)</h3>
+                    @unless($pushVapidReady ?? false)
+                        <div class="alert alert-warning py-2 small mb-3">
+                            Chưa có khóa VAPID. Chạy <code>php artisan pwa:vapid-keys</code> trên server trước khi gửi thông báo.
+                        </div>
+                    @endunless
+                    <form method="POST" action="{{ route('admin.pushSettings.update') }}" class="console-form">
+                        @csrf
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" role="switch" id="push-enabled"
+                                   name="enabled" value="1" @checked($pushSettings['enabled'] ?? true)>
+                            <label class="form-check-label" for="push-enabled">Bật thông báo đẩy qua biểu tượng app</label>
+                        </div>
+                        <div class="row g-2 mb-3">
+                            @foreach($pushEventLabels ?? [] as $eventKey => $eventLabel)
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="events[]"
+                                               value="{{ $eventKey }}" id="push-event-{{ md5($eventKey) }}"
+                                               @checked($pushSettings['events'][$eventKey] ?? false)>
+                                        <label class="form-check-label small" for="push-event-{{ md5($eventKey) }}">{{ $eventLabel }}</label>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                        <button class="btn btn-outline-primary px-4 fw-semibold">Lưu thông báo</button>
+                    </form>
+                    <details class="mt-3 small text-muted">
+                        <summary class="fw-semibold text-secondary">Khóa VAPID (tuỳ chọn)</summary>
+                        <p class="mt-2 mb-2">Có thể dán khóa từ server Linux (<code>php artisan pwa:vapid-keys</code>) hoặc đặt biến môi trường <code>VAPID_PUBLIC_KEY</code> / <code>VAPID_PRIVATE_KEY</code>.</p>
+                        <form method="POST" action="{{ route('admin.pushSettings.update') }}" class="console-form mt-2">
+                            @csrf
+                            <input type="hidden" name="enabled" value="{{ ($pushSettings['enabled'] ?? true) ? '1' : '0' }}">
+                            @foreach(array_keys($pushSettings['events'] ?? []) as $eventKey)
+                                @if($pushSettings['events'][$eventKey] ?? false)
+                                    <input type="hidden" name="events[]" value="{{ $eventKey }}">
+                                @endif
+                            @endforeach
+                            <div class="row g-2">
+                                <div class="col-12">
+                                    <label class="form-label" for="vapid-public">Public key</label>
+                                    <input type="text" class="form-control form-control-sm" id="vapid-public" name="vapid_public" autocomplete="off">
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label" for="vapid-private">Private key</label>
+                                    <input type="text" class="form-control form-control-sm" id="vapid-private" name="vapid_private" autocomplete="off">
+                                </div>
+                            </div>
+                            <button class="btn btn-sm btn-secondary mt-2">Lưu khóa VAPID</button>
+                        </form>
+                    </details>
+                </div>
                 <div class="mb-2">
                     <h3 class="h6 fw-bold text-uppercase text-muted mb-3" style="letter-spacing:.04em">Trang đặt xe</h3>
                 </div>
@@ -365,7 +418,6 @@ $referralCommissionStats = $referralCommissionStats ?? [];
                                        value="{{ old('referral_commission_first', $feeSettings['referral_commission_first']) }}" required>
                                 <span class="input-group-text">%</span>
                             </div>
-                            <div class="form-text">Tính vào doanh thu GT khi khách dùng mã admin.</div>
                         </div>
                         <div class="col-md-6 col-lg-3">
                             <label class="form-label">Giảm giá mã QR vé (%)</label>
@@ -374,13 +426,43 @@ $referralCommissionStats = $referralCommissionStats ?? [];
                                        value="{{ old('referral_commission_repeat', $feeSettings['referral_commission_repeat']) }}" required>
                                 <span class="input-group-text">%</span>
                             </div>
-                            <div class="form-text">Chỉ giảm giá trên trang đặt xe, không tính doanh thu.</div>
                         </div>
                     </div>
 
                     <hr class="my-4">
-                    <h3 class="h6 fw-semibold mb-2">Loại chỗ hiển thị trên form đặt xe</h3>
-                    <p class="text-muted small mb-3">Chọn loại xe khách có thể chọn khi đặt. Có thể thêm số chỗ tùy chỉnh (1–60).</p>
+                    <h3 class="h6 fw-semibold mb-3">Phụ thu thời điểm về</h3>
+                    <div class="row g-3 mb-2">
+                        <div class="col-md-6 col-lg-3">
+                            <label class="form-label">Về trong ngày (%)</label>
+                            <div class="input-group">
+                                <span class="input-group-text">+</span>
+                                <input type="number" name="departure_plan_surcharge_today" class="form-control" min="0" max="500" step="1"
+                                       value="{{ old('departure_plan_surcharge_today', $feeSettings['departure_plan_surcharge_today']) }}" required>
+                                <span class="input-group-text">%</span>
+                            </div>
+                        </div>
+                        <div class="col-md-6 col-lg-3">
+                            <label class="form-label">Về ngày mai (%)</label>
+                            <div class="input-group">
+                                <span class="input-group-text">+</span>
+                                <input type="number" name="departure_plan_surcharge_tomorrow" class="form-control" min="0" max="500" step="1"
+                                       value="{{ old('departure_plan_surcharge_tomorrow', $feeSettings['departure_plan_surcharge_tomorrow']) }}" required>
+                                <span class="input-group-text">%</span>
+                            </div>
+                        </div>
+                        <div class="col-md-6 col-lg-3">
+                            <label class="form-label">Trên 2 ngày (% / ngày)</label>
+                            <div class="input-group">
+                                <span class="input-group-text">+</span>
+                                <input type="number" name="departure_plan_surcharge_later_per_day" class="form-control" min="0" max="500" step="1"
+                                       value="{{ old('departure_plan_surcharge_later_per_day', $feeSettings['departure_plan_surcharge_later_per_day']) }}" required>
+                                <span class="input-group-text">%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+                    <h3 class="h6 fw-semibold mb-3">Loại chỗ hiển thị trên form đặt xe</h3>
                     <div class="row g-2 mb-3">
                         @foreach($vehicleCapacityKnown ?? \App\Support\VehicleCapacityOptions::knownCapacities() as $capacity)
                         <div class="col-6 col-md-4 col-lg-3">
@@ -400,16 +482,10 @@ $referralCommissionStats = $referralCommissionStats ?? [];
                             <label class="form-label">Thêm số chỗ mới</label>
                             <input type="number" name="capacity_custom_add" class="form-control" min="1" max="60" step="1"
                                    placeholder="VD: 45">
-                            <div class="form-text">Tick thêm ở trên sau khi lưu lần đầu.</div>
                         </div>
                     </div>
 
-                    <h3 class="h6 fw-semibold mb-2">Hệ số giá cả xe theo loại chỗ</h3>
-                    <p class="text-muted small mb-3">
-                        Lấy <strong>4 chỗ = 100%</strong> làm chuẩn. Mỗi bậc loại xe tiếp theo tăng thêm
-                        <strong>{{ number_format($feeSettings['vehicle_capacity']['step_percent'], 1) }}%</strong> (có thể chỉnh bên dưới).
-                        Giá cả xe = (km × đơn giá/km) × hệ số %.
-                    </p>
+                    <h3 class="h6 fw-semibold mb-3">Hệ số giá cả xe theo loại chỗ</h3>
                     <div class="row g-3 mb-3">
                         <div class="col-md-4 col-lg-3">
                             <label class="form-label">Bước tăng mỗi loại xe (%)</label>
@@ -430,9 +506,6 @@ $referralCommissionStats = $referralCommissionStats ?? [];
                             </thead>
                             <tbody>
                                 @foreach($vehicleCapacityEnabled ?? \App\Support\VehicleCapacityOptions::enabled() as $capacity)
-                                @php
-                                    $defaultPercent = \App\Support\VehicleCapacityPricing::defaultPercentForCapacity($capacity);
-                                @endphp
                                 <tr>
                                     <td>{{ \App\Support\VehicleCapacityOptions::label($capacity) }}</td>
                                     <td style="max-width: 12rem;">
@@ -441,15 +514,10 @@ $referralCommissionStats = $referralCommissionStats ?? [];
                                                    name="capacity_percents[{{ $capacity }}]"
                                                    class="form-control"
                                                    min="50" max="500" step="0.1"
-                                                   value="{{ old('capacity_percents.'.$capacity, $feeSettings['vehicle_capacity']['percents'][$capacity] ?? $defaultPercent) }}"
+                                                   value="{{ old('capacity_percents.'.$capacity, $feeSettings['vehicle_capacity']['percents'][$capacity] ?? \App\Support\VehicleCapacityPricing::defaultPercentForCapacity($capacity)) }}"
                                                    required>
                                             <span class="input-group-text">%</span>
                                         </div>
-                                        @if($capacity !== 4)
-                                            <div class="form-text">Mặc định {{ number_format($defaultPercent, 1) }}%</div>
-                                        @else
-                                            <div class="form-text">Chuẩn 100%</div>
-                                        @endif
                                     </td>
                                 </tr>
                                 @endforeach

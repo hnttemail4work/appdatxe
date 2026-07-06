@@ -223,7 +223,8 @@ class ReferralCodeService
      *   reason: string|null,
      *   code: string|null,
      *   type: string|null,
-     *   attribution_only: bool
+     *   attribution_only: bool,
+     *   source_label: string|null
      * }
      */
     public function discountMeta(?ReferralCode $referral, ?string $contactPhone = null): array
@@ -236,8 +237,11 @@ class ReferralCodeService
                 'code'             => $referral?->code,
                 'type'             => $referral?->type,
                 'attribution_only' => false,
+                'source_label'     => null,
             ];
         }
+
+        $sourceLabel = $referral->customerDiscountSourceLabel();
 
         if ($referral->type === ReferralCode::TYPE_REFERRER) {
             $percent = $referral->customerDiscountPercent();
@@ -249,6 +253,7 @@ class ReferralCodeService
                     'code'             => $referral->code,
                     'type'             => $referral->type,
                     'attribution_only' => true,
+                    'source_label'     => $sourceLabel,
                 ];
             }
 
@@ -260,6 +265,7 @@ class ReferralCodeService
                     'code'             => $referral->code,
                     'type'             => $referral->type,
                     'attribution_only' => true,
+                    'source_label'     => $sourceLabel,
                 ];
             }
 
@@ -271,6 +277,7 @@ class ReferralCodeService
                     'code'             => $referral->code,
                     'type'             => $referral->type,
                     'attribution_only' => true,
+                    'source_label'     => $sourceLabel,
                 ];
             }
 
@@ -281,6 +288,7 @@ class ReferralCodeService
                 'code'             => $referral->code,
                 'type'             => $referral->type,
                 'attribution_only' => false,
+                'source_label'     => $sourceLabel,
             ];
         }
 
@@ -292,6 +300,7 @@ class ReferralCodeService
                 'code'             => $referral->code,
                 'type'             => $referral->type,
                 'attribution_only' => false,
+                'source_label'     => $sourceLabel,
             ];
         }
 
@@ -303,6 +312,7 @@ class ReferralCodeService
                 'code'             => $referral->code,
                 'type'             => $referral->type,
                 'attribution_only' => false,
+                'source_label'     => $sourceLabel,
             ];
         }
 
@@ -313,13 +323,14 @@ class ReferralCodeService
             'code'             => $referral->code,
             'type'             => $referral->type,
             'attribution_only' => false,
+            'source_label'     => $sourceLabel,
         ];
     }
 
     public function applyDiscount(float $subtotal, float $discountPercent): float
     {
         if ($discountPercent <= 0 || $subtotal <= 0) {
-            return (float) PlatformFees::roundUpToThousand($subtotal);
+            return (float) PlatformFees::roundDisplayPrice($subtotal);
         }
 
         $discounted = $subtotal * (1 - $discountPercent / 100);

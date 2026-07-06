@@ -143,6 +143,63 @@ class GuestBookingController extends Controller
         ]);
     }
 
+    public function cancelTrip(Request $request)
+    {
+        $validated = $request->validate([
+            'booking_reference'       => ['required', 'string', 'max:64'],
+            'contact_phone'           => ['nullable', 'string', 'max:30'],
+            'booking_browser_id'      => ['nullable', 'string', 'max:128'],
+            'cancellation_reason_id'  => ['nullable', 'integer'],
+        ]);
+
+        $browserId = trim((string) ($validated['booking_browser_id'] ?? $request->header('X-Booking-Browser-Id', '')));
+        $phone = trim((string) ($validated['contact_phone'] ?? ''));
+
+        if ($browserId === '' && $phone === '') {
+            return response()->json(['message' => 'Không xác thực được phiên đặt chuyến.'], 403);
+        }
+
+        $booking = $this->guestTrips->resolve(
+            $browserId !== '' ? $browserId : null,
+            $phone !== '' ? $phone : null,
+            $validated['booking_reference'],
+        );
+
+        if (! $booking) {
+            return response()->json(['message' => 'Không tìm thấy chuyến đi.'], 404);
+        }
+
+        if (! $this->guestTrips->guestCanCancel($booking)) {
+            return response()->json(['message' => 'Chuyến này không thể hủy.'], 422);
+        }
+
+        try {
+            $this->workflow->cancelByGuest(
+                $booking,
+                $phone !== '' ? $phone : null,
+                $validated['cancellation_reason_id'] ?? null,
+            );
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        $cancelCount = 0;
+        if ($browserId !== '') {
+            $cancelCount = $this->browserGuard->recordCancel($browserId);
+            $request->session()->put('guest_browser_cancel_count', $cancelCount);
+        }
+
+        $booking = $booking->fresh(['schedule.route', 'tripReview']);
+
+        return response()->json([
+            'message'        => 'Đã hủy chuyến.',
+            'cancel_count'   => $cancelCount,
+            'cancel_blocked' => $browserId !== '' && $this->browserGuard->isCancelBlocked($browserId),
+            'block_message'  => $this->browserGuard->blockMessage(),
+            'booking'        => $this->guestTrips->serialize($booking),
+        ]);
+    }
+
     /** @return array<string, mixed> */
     private function bookingPageContext(Request $request, bool $withDriverOffers): array
     {
@@ -283,7 +340,8 @@ class GuestBookingController extends Controller
             'pickup_lng'         => ['required', 'numeric', 'between:-180,180'],
             'dropoff_lat'        => ['required', 'numeric', 'between:-90,90'],
             'dropoff_lng'        => ['required', 'numeric', 'between:-180,180'],
-            'departure_plan'     => ['nullable', 'string', 'in:today,tomorrow,later'],
+            'departure_plan'     => ['nullable', 'string', 'in:oneway,today,tomorrow,later'],
+            'later_return_days'  => ['nullable', 'integer', 'min:' . DeparturePlan::MIN_LATER_RETURN_DAYS, 'max:' . DeparturePlan::MAX_LATER_RETURN_DAYS],
             'contact_phone'      => ['nullable', 'string', 'max:30'],
         ]);
 
@@ -306,7 +364,10 @@ class GuestBookingController extends Controller
         $dropoffLat = (float) $validated['dropoff_lat'];
         $dropoffLng = (float) $validated['dropoff_lng'];
         $addresses = $this->resolveRouteAddresses($validated, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
-        $departurePlan = DeparturePlan::normalize($validated['departure_plan'] ?? DeparturePlan::TODAY);
+        $departurePlan = DeparturePlan::normalize($validated['departure_plan'] ?? DeparturePlan::ONE_WAY);
+        $laterReturnDays = $departurePlan === DeparturePlan::LATER
+            ? DeparturePlan::normalizeLaterReturnDays($validated['later_return_days'] ?? null)
+            : null;
 
         $quote = $this->pricing->quote(
             $template,
@@ -317,6 +378,7 @@ class GuestBookingController extends Controller
             $dropoffLat,
             $dropoffLng,
             $departurePlan,
+            $laterReturnDays,
         );
 
         $subtotal = (int) $quote['whole_car_price'];
@@ -334,6 +396,7 @@ class GuestBookingController extends Controller
             'referral_code'             => $discountMeta['code'],
             'referral_discount_percent' => $discountPercent,
             'referral_discount_amount'  => $discountAmount,
+            'referral_discount_label'   => $discountMeta['source_label'],
             'referral_eligible'         => $discountMeta['eligible'] && $discountPercent > 0,
             'referral_attribution_only' => $discountMeta['attribution_only'] ?? false,
             'referral_ineligible_reason'=> $discountMeta['reason'],
@@ -355,7 +418,8 @@ class GuestBookingController extends Controller
             'vehicle_id'        => ['nullable', 'exists:vehicles,id'],
             'driver_profile_id' => ['nullable', 'exists:driver_profiles,id'],
             'service_date'     => ['nullable', 'date', 'after_or_equal:today'],
-            'departure_plan'   => ['required', 'string', 'in:today,tomorrow,later'],
+            'departure_plan'   => ['required', 'string', 'in:oneway,today,tomorrow,later'],
+            'later_return_days'=> ['nullable', 'integer', 'min:' . DeparturePlan::MIN_LATER_RETURN_DAYS, 'max:' . DeparturePlan::MAX_LATER_RETURN_DAYS],
             'pickup_time'      => ['nullable', 'string', 'max:8', 'regex:/^\d{1,2}:\d{2}$/'],
             'passenger_name'   => ['required', 'string', 'max:255'],
             'passenger_gender' => ['nullable', 'in:male,female'],
@@ -399,9 +463,14 @@ class GuestBookingController extends Controller
         $validated['pickup_address'] = $addresses['pickup_address'];
         $validated['dropoff_address'] = $addresses['dropoff_address'];
         $departurePlan = DeparturePlan::normalize($validated['departure_plan']);
+        $laterReturnDays = $departurePlan === DeparturePlan::LATER
+            ? DeparturePlan::normalizeLaterReturnDays($validated['later_return_days'] ?? null)
+            : null;
         $validated['service_date'] = DeparturePlan::resolveServiceDate(
             $departurePlan,
             $validated['service_date'] ?? null,
+            null,
+            $laterReturnDays,
         );
 
         if (empty($validated['template_id']) && empty($validated['vehicle_id']) && empty($validated['driver_profile_id'])) {
@@ -484,6 +553,7 @@ class GuestBookingController extends Controller
                 $dropoffLat,
                 $dropoffLng,
                 $departurePlan,
+                $laterReturnDays,
             );
         } catch (InvalidArgumentException $e) {
             return $this->bookingFormError($e);
@@ -492,6 +562,12 @@ class GuestBookingController extends Controller
         session()->forget('guest_referral_code');
 
         $this->browserGuard->recordActiveBooking($browserId, $booking);
+
+        try {
+            $push = app(\App\Services\PushNotificationService::class);
+            $push->touchContactPhone($browserId, (string) $validated['contact_phone']);
+        } catch (\Throwable) {
+        }
 
         $booking->loadMissing(['schedule', 'referralCode', 'appliedReferralCode']);
         $issuedReferral = $booking->referralCode;

@@ -57,6 +57,7 @@ $bookingReferralSuccess = $bookingReferralSuccess ?? (session('booking_success.r
 <script>
 window.__bookingTripStatusUrl = @json(route('booking.tripStatus'));
 window.__bookingTripReviewUrl = @json(route('booking.tripReview'));
+window.__bookingTripCancelUrl = @json(route('booking.tripCancel'));
 window.__bookingReferralSuccess = @json($bookingReferralSuccess);
 window.__bookingSuccess = @json(session('booking_success'));
 window.__appContactPhone = @json(config('app.contact_phone'));
@@ -68,4 +69,16 @@ window.__guestBrowserCancelBlockLimit = @json(\App\Services\BookingBrowserGuardS
 <script src="{{ asset('js/guest-trip-page.js') }}?v={{ filemtime(public_path('js/guest-trip-page.js')) }}"></script>
 <script src="{{ asset('js/booking-referral-success.js') }}?v={{ filemtime(public_path('js/booking-referral-success.js')) }}"></script>
 <script src="{{ asset('js/customer-scroll-dock.js') }}?v={{ filemtime(public_path('js/customer-scroll-dock.js')) }}"></script>
+@if(session('booking_success'))
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    if (!window.PwaClient) return;
+    var phone = @json(session('booking_success.contact_phone'));
+    if (phone) {
+        window.PwaClient.touchContactPhone(phone);
+    }
+    window.PwaClient.afterBookingSuccess();
+});
+</script>
+@endif
 @endpush

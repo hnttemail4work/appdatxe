@@ -8,9 +8,12 @@ window.__bookingTemplates = @json($bookingTemplates ?? collect());
 window.__bookingRestoreModal = @json($bookingRestoreModal ?? null);
 window.__defaultServiceDate = @json($defaultServiceDate ?? now()->toDateString());
 window.__todayDate = @json(now()->toDateString());
-window.__laterServiceDate = @json(now()->addDays(\App\Support\DeparturePlan::LATER_PLACEHOLDER_DAYS)->toDateString());
+window.__laterReturnDaysMin = @json(\App\Support\DeparturePlan::MIN_LATER_RETURN_DAYS);
+window.__laterReturnDaysMax = @json(\App\Support\DeparturePlan::MAX_LATER_RETURN_DAYS);
+window.__laterReturnPercentPerDay = @json(\App\Support\PlatformFees::departurePlanLaterPercentPerDay());
 window.__defaultPickupTime = @json($defaultPickupTime ?? now()->addHour()->format('H:i'));
 window.__referralDiscountPercent = @json($referralDiscountMeta['percent'] ?? 0);
+window.__referralDiscountLabel = @json($referralDiscountMeta['source_label'] ?? (($appliedReferral ?? null)?->customerDiscountSourceLabel()));
 window.__referralHasCode = @json((bool) ($appliedReferral ?? null));
 window.__bookingReferralSuccess = @json($bookingReferralSuccess ?? null);
 window.__bookingSuccess = @json(session('booking_success'));
@@ -20,6 +23,7 @@ window.__guestBrowserCancelBlockLimit = @json(\App\Services\BookingBrowserGuardS
 </script>
 <script src="{{ asset('js/booking-browser-guard.js') }}?v={{ filemtime(public_path('js/booking-browser-guard.js')) }}"></script>
 <script src="{{ asset('js/booking-active-session.js') }}?v={{ filemtime(public_path('js/booking-active-session.js')) }}"></script>
+<script src="{{ asset('js/geocode-search-ui.js') }}?v={{ filemtime(public_path('js/geocode-search-ui.js')) }}"></script>
 <script src="{{ asset('js/customer-booking.js') }}?v={{ filemtime(public_path('js/customer-booking.js')) }}"></script>
 <script src="{{ asset('js/address-map-picker.js') }}?v={{ filemtime(public_path('js/address-map-picker.js')) }}"></script>
 <script src="{{ asset('js/customer-scroll-dock.js') }}?v={{ filemtime(public_path('js/customer-scroll-dock.js')) }}"></script>

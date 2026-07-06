@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Support\GeocodeSearchAliases;
 use App\Support\ProvinceCenters;
 use App\Support\ProvinceResolver;
 use Illuminate\Http\Client\PendingRequest;
@@ -10,6 +11,7 @@ use Illuminate\Http\Client\Response;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 class GeocodeController extends Controller
 {
@@ -66,6 +68,19 @@ class GeocodeController extends Controller
             }
         }
 
+        $name = trim((string) ($data['name'] ?? ''));
+        if ($name !== '') {
+            $cityLabel = is_array($addr) && $addr !== []
+                ? $this->cityLabelForAddress($addr, $lat, $lon)
+                : '';
+
+            if ($cityLabel !== '' && ! str_contains(mb_strtolower($name), mb_strtolower($cityLabel))) {
+                return $name.', '.$cityLabel;
+            }
+
+            return $name;
+        }
+
         return $this->sanitizeDisplayName(
             $this->shortenDisplayName(trim((string) ($data['display_name'] ?? ''))),
             $lat,
@@ -93,7 +108,7 @@ class GeocodeController extends Controller
             }
         }
 
-        foreach (['city_district', 'district', 'county', 'subdistrict'] as $key) {
+        foreach (['city_district', 'district', 'county', 'subdistrict', 'historic'] as $key) {
             if (! empty($addr[$key]) && is_string($addr[$key])) {
                 $parts[] = trim($addr[$key]);
                 break;
@@ -182,7 +197,7 @@ class GeocodeController extends Controller
 
     private function buildSearchQuery(string $query, string $province = ''): string
     {
-        $text = trim($query);
+        $text = $this->normalizeVietnameseQuery($query);
         $lower = mb_strtolower($text);
 
         if ($province !== '') {
@@ -200,6 +215,36 @@ class GeocodeController extends Controller
         }
 
         return $text;
+    }
+
+    private function normalizeVietnameseQuery(string $query): string
+    {
+        $text = trim($query);
+        if ($text === '') {
+            return '';
+        }
+
+        $text = preg_replace('/\bquan\s*(\d{1,2})\b/iu', 'Quận $1', $text) ?? $text;
+        $text = preg_replace('/\bq\.?\s*(\d{1,2})\b/iu', 'Quận $1', $text) ?? $text;
+        $text = preg_replace('/\bphuong\s+/iu', 'Phường ', $text) ?? $text;
+        $text = preg_replace('/\bp\.?\s+/iu', 'Phường ', $text) ?? $text;
+        $text = preg_replace('/\bhuyen\s+/iu', 'Huyện ', $text) ?? $text;
+        $text = preg_replace('/\bthi\s*xa\s+/iu', 'Thị xã ', $text) ?? $text;
+        $text = preg_replace('/\bduong\s+/iu', 'Đường ', $text) ?? $text;
+        $text = preg_replace('/\bd\.?\s+/iu', 'Đường ', $text) ?? $text;
+        $text = preg_replace('/\bngo\s+/iu', 'Ngõ ', $text) ?? $text;
+        $text = preg_replace('/\bhem\s+/iu', 'Hẻm ', $text) ?? $text;
+        $text = preg_replace('/\btx\.?\s+/iu', 'Thị xã ', $text) ?? $text;
+        $text = preg_replace('/\bsn\s+/iu', 'Số ', $text) ?? $text;
+
+        return trim(preg_replace('/\s+/u', ' ', $text) ?? $text);
+    }
+
+    private function asciiSearchVariant(string $query): string
+    {
+        $folded = trim(preg_replace('/\s+/u', ' ', Str::ascii($query)) ?? '');
+
+        return $folded;
     }
 
     private function viewboxCenter(string $viewbox): ?array
@@ -239,9 +284,38 @@ class GeocodeController extends Controller
             $class === 'amenity' || $class === 'shop' || $class === 'tourism' => 85,
             in_array($type, ['house_number', 'address'], true) => 80,
             in_array($type, ['road', 'pedestrian', 'footway', 'residential'], true) => 40,
-            in_array($type, ['suburb', 'neighbourhood', 'quarter', 'hamlet'], true) => 20,
+            in_array($type, ['suburb', 'neighbourhood', 'quarter', 'hamlet'], true) => 55,
+            $class === 'boundary' && in_array($type, ['administrative', 'historic'], true) => 50,
             default => 10,
         };
+    }
+
+    /** @param array<string, mixed> $item */
+    private function isUsefulAreaSearchHit(array $item): bool
+    {
+        $type = (string) ($item['type'] ?? '');
+        $class = (string) ($item['class'] ?? '');
+        $addresstype = (string) ($item['addresstype'] ?? '');
+
+        if ($class === 'boundary' && $type === 'historic') {
+            return true;
+        }
+
+        if ($class !== 'boundary' || $type !== 'administrative') {
+            return false;
+        }
+
+        return in_array($addresstype, [
+            'suburb',
+            'neighbourhood',
+            'quarter',
+            'city_district',
+            'borough',
+            'district',
+            'hamlet',
+            'town',
+            'village',
+        ], true);
     }
 
     /** @param array<string, mixed> $item */
@@ -249,6 +323,10 @@ class GeocodeController extends Controller
     {
         $type = (string) ($item['type'] ?? '');
         $class = (string) ($item['class'] ?? '');
+
+        if ($this->isUsefulAreaSearchHit($item)) {
+            return mb_strlen(trim($address)) < 4;
+        }
 
         if ($class === 'boundary' && str_starts_with($type, 'administrative')) {
             return true;
@@ -327,13 +405,56 @@ class GeocodeController extends Controller
         ]);
 
         $province = trim((string) ($validated['province'] ?? ''));
-        $searchText = $this->buildSearchQuery($validated['q'], $province);
+        $results = $this->runSearchVariants($validated['q'], $province);
+
+        return response()->json(['results' => $results]);
+    }
+
+    /** @return list<array{address: string, title: string, subtitle: string, kind: string, kind_label: string, lat: float, lon: float}> */
+    private function runSearchVariants(string $query, string $province = ''): array
+    {
+        $variants = array_values(array_unique(array_filter(array_merge(
+            [
+                $this->normalizeVietnameseQuery($query),
+                $this->asciiSearchVariant($query),
+                trim($query),
+            ],
+            GeocodeSearchAliases::variants($query, $province),
+        ), fn (string $value): bool => trim($value) !== '')));
+
+        $searchQuery = $this->normalizeVietnameseQuery($query) ?: trim($query);
+        /** @var array<string, array<string, mixed>> $merged */
+        $merged = [];
+
+        foreach ($variants as $variant) {
+            foreach ($this->searchWithProvince($variant, $province, $searchQuery) as $result) {
+                $key = round($result['lat'], 4).','.round($result['lon'], 4);
+                if (! isset($merged[$key])) {
+                    $merged[$key] = $result;
+                }
+            }
+        }
+
+        $results = array_values($merged);
+        usort($results, fn (array $a, array $b): int => ($b['_score'] ?? 0) <=> ($a['_score'] ?? 0));
+
+        return array_map(function (array $row): array {
+            unset($row['_score']);
+
+            return $row;
+        }, array_slice($results, 0, 8));
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function searchWithProvince(string $query, string $province = '', string $searchQuery = ''): array
+    {
+        $searchText = $this->buildSearchQuery($query, $province);
 
         $params = [
             'q' => $searchText,
             'format' => 'json',
             'countrycodes' => 'vn',
-            'limit' => 12,
+            'limit' => 15,
             'addressdetails' => 1,
             'accept-language' => 'vi',
             'dedupe' => 1,
@@ -345,41 +466,41 @@ class GeocodeController extends Controller
         }
 
         $raw = $this->nominatimSearch($params);
-        $results = $this->mapSearchResults($raw, $province);
+        $results = $this->mapSearchResults($raw, $province, $searchQuery !== '' ? $searchQuery : $query);
 
         if ($results === [] && $province !== '' && ($viewbox = ProvinceCenters::viewboxFor($province)) !== null) {
             $loose = $this->nominatimSearch([
-                'q' => $this->buildSearchQuery($validated['q'], $province),
+                'q' => $this->buildSearchQuery($query, $province),
                 'format' => 'json',
                 'countrycodes' => 'vn',
-                'limit' => 12,
+                'limit' => 15,
                 'addressdetails' => 1,
                 'accept-language' => 'vi',
                 'viewbox' => $viewbox,
                 'bounded' => 0,
             ]);
-            $results = $this->mapSearchResults($loose, $province);
+            $results = $this->mapSearchResults($loose, $province, $searchQuery !== '' ? $searchQuery : $query);
         }
 
         if ($results === [] && $province !== '') {
             $fallback = $this->nominatimSearch([
-                'q' => $this->buildSearchQuery($validated['q']),
+                'q' => $this->buildSearchQuery($query),
                 'format' => 'json',
                 'countrycodes' => 'vn',
-                'limit' => 12,
+                'limit' => 15,
                 'addressdetails' => 1,
                 'accept-language' => 'vi',
             ]);
-            $results = $this->mapSearchResults($fallback, $province);
+            $results = $this->mapSearchResults($fallback, $province, $searchQuery !== '' ? $searchQuery : $query);
         }
 
-        return response()->json(['results' => $results]);
+        return $results;
     }
 
     /** @param list<array<string, mixed>> $payload
-     * @return list<array{address: string, lat: float, lon: float}>
+     * @return list<array<string, mixed>>
      */
-    private function mapSearchResults(array $payload, string $province = ''): array
+    private function mapSearchResults(array $payload, string $province = '', string $searchQuery = ''): array
     {
         $viewbox = ($province !== '' && ($resolved = ProvinceCenters::viewboxFor($province)) !== null)
             ? $resolved
@@ -409,14 +530,14 @@ class GeocodeController extends Controller
                 continue;
             }
 
-            $candidates[] = [
-                'address' => $address,
+            $candidates[] = array_merge($this->presentSearchResult($row, $address), [
                 'lat' => $lat,
                 'lon' => $lon,
                 '_importance' => (float) ($row['importance'] ?? 0),
                 '_type_score' => $this->searchTypeScore($row),
+                '_relevance' => $this->queryRelevanceScore($searchQuery, $address, $row),
                 '_key' => round($lat, 4).','.round($lon, 4),
-            ];
+            ]);
         }
 
         $unique = [];
@@ -426,14 +547,11 @@ class GeocodeController extends Controller
         $candidates = array_values($unique);
 
         usort($candidates, function (array $a, array $b) use ($viewbox): int {
-            $typeScore = $b['_type_score'] <=> $a['_type_score'];
-            if ($typeScore !== 0) {
-                return $typeScore;
-            }
-
-            $importance = $b['_importance'] <=> $a['_importance'];
-            if ($importance !== 0) {
-                return $importance;
+            $scoreA = ($a['_type_score'] * 4) + ($a['_relevance'] * 3) + ($a['_importance'] * 10);
+            $scoreB = ($b['_type_score'] * 4) + ($b['_relevance'] * 3) + ($b['_importance'] * 10);
+            $score = $scoreB <=> $scoreA;
+            if ($score !== 0) {
+                return $score;
             }
 
             if ($viewbox !== null) {
@@ -445,14 +563,156 @@ class GeocodeController extends Controller
         });
 
         $results = [];
-        foreach (array_slice($candidates, 0, 6) as $candidate) {
-            $results[] = [
+        foreach (array_slice($candidates, 0, 8) as $candidate) {
+            $score = ($candidate['_type_score'] * 4)
+                + ($candidate['_relevance'] * 3)
+                + ($candidate['_importance'] * 10);
+            $results[] = array_merge([
                 'address' => $candidate['address'],
+                'title' => $candidate['title'],
+                'subtitle' => $candidate['subtitle'],
+                'kind' => $candidate['kind'],
+                'kind_label' => $candidate['kind_label'],
                 'lat' => $candidate['lat'],
                 'lon' => $candidate['lon'],
-            ];
+                '_score' => $score,
+            ]);
         }
 
         return $results;
+    }
+
+    /** @param array<string, mixed> $row */
+    private function presentSearchResult(array $row, string $address): array
+    {
+        $kindMeta = $this->searchKindMeta($row);
+        $addr = is_array($row['address'] ?? null) ? $row['address'] : [];
+        $name = trim((string) ($row['name'] ?? ''));
+
+        $title = $name;
+        if ($title === '' && $addr !== []) {
+            $streetParts = array_filter([
+                $addr['house_number'] ?? null,
+                $addr['road'] ?? $addr['pedestrian'] ?? $addr['footway'] ?? $addr['residential'] ?? null,
+            ], fn ($value) => is_string($value) && trim($value) !== '');
+            if ($streetParts !== []) {
+                $title = implode(' ', $streetParts);
+            }
+        }
+
+        if ($title === '') {
+            $segments = array_values(array_filter(array_map('trim', explode(',', $address))));
+            $title = $segments[0] ?? $address;
+        }
+
+        $subtitleParts = [];
+        if ($addr !== []) {
+            foreach (['quarter', 'suburb', 'neighbourhood', 'hamlet'] as $key) {
+                if (! empty($addr[$key]) && is_string($addr[$key])) {
+                    $subtitleParts[] = trim($addr[$key]);
+                    break;
+                }
+            }
+            foreach (['city_district', 'district', 'county', 'subdistrict', 'historic'] as $key) {
+                if (! empty($addr[$key]) && is_string($addr[$key])) {
+                    $subtitleParts[] = trim($addr[$key]);
+                    break;
+                }
+            }
+            $cityLabel = $this->cityLabelForAddress(
+                $addr,
+                isset($row['lat']) ? (float) $row['lat'] : null,
+                isset($row['lon']) ? (float) $row['lon'] : null,
+            );
+            if ($cityLabel !== '') {
+                $subtitleParts[] = $cityLabel;
+            }
+        }
+
+        $subtitle = implode(', ', array_values(array_unique(array_filter($subtitleParts))));
+        if ($subtitle === '' || mb_strtolower($subtitle) === mb_strtolower($title)) {
+            $segments = array_values(array_filter(array_map('trim', explode(',', $address))));
+            if (count($segments) > 1) {
+                $subtitle = implode(', ', array_slice($segments, 1));
+            } else {
+                $subtitle = '';
+            }
+        }
+
+        return [
+            'address' => $address,
+            'title' => $title,
+            'subtitle' => $subtitle,
+            'kind' => $kindMeta['kind'],
+            'kind_label' => $kindMeta['label'],
+        ];
+    }
+
+    /** @param array<string, mixed> $row
+     * @return array{kind: string, label: string}
+     */
+    private function searchKindMeta(array $row): array
+    {
+        $type = (string) ($row['type'] ?? '');
+        $class = (string) ($row['class'] ?? '');
+
+        if ($this->isUsefulAreaSearchHit($row)) {
+            return ['kind' => 'area', 'label' => 'Khu vực'];
+        }
+
+        if (in_array($type, ['road', 'pedestrian', 'footway', 'residential', 'living_street', 'service'], true)) {
+            return ['kind' => 'road', 'label' => 'Đường'];
+        }
+
+        if (in_array($type, ['house', 'house_number', 'building', 'apartments', 'residential', 'terrace', 'detached', 'address'], true)) {
+            return ['kind' => 'address', 'label' => 'Địa chỉ'];
+        }
+
+        if ($class === 'amenity' || $class === 'shop' || $class === 'tourism' || $class === 'leisure') {
+            return ['kind' => 'place', 'label' => 'Địa điểm'];
+        }
+
+        return ['kind' => 'place', 'label' => 'Địa điểm'];
+    }
+
+  /** @param array<string, mixed> $row */
+    private function queryRelevanceScore(string $searchQuery, string $address, array $row): int
+    {
+        $query = mb_strtolower(trim($searchQuery));
+        if ($query === '') {
+            return 0;
+        }
+
+        $haystacks = array_filter([
+            mb_strtolower((string) ($row['name'] ?? '')),
+            mb_strtolower($address),
+            mb_strtolower((string) ($row['display_name'] ?? '')),
+            mb_strtolower($this->asciiSearchVariant($searchQuery)),
+        ]);
+
+        $tokens = array_values(array_filter(preg_split('/\s+/u', $query) ?: [], fn (string $t): bool => mb_strlen($t) >= 2));
+        if ($tokens === []) {
+            return 0;
+        }
+
+        $score = 0;
+        foreach ($tokens as $token) {
+            foreach ($haystacks as $haystack) {
+                if ($haystack === '') {
+                    continue;
+                }
+                if (str_starts_with($haystack, $token)) {
+                    $score += 12;
+                } elseif (str_contains($haystack, $token)) {
+                    $score += 6;
+                }
+                $asciiToken = mb_strtolower($this->asciiSearchVariant($token));
+                if ($asciiToken !== $token && str_contains($haystack, $asciiToken)) {
+                    $score += 4;
+                }
+            }
+        }
+
+        return min($score, 120);
     }
 }

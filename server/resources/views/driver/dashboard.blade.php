@@ -29,10 +29,18 @@
     $driverOnTrip = $driverOnTrip ?? $driverTripActive;
     $driverPaused = $availabilityStatus === 'off_duty';
     $driverLocationReady = ! $driverPaused && $profile && $profile->hasFreshLocation();
-    $driverNeedsLocationShare = $profile
-        && ! $driverPaused
-        && ! $driverLocationReady
-        && ($driverTripUpcoming || ! $driverOnTrip);
+    $driverNeedsLocationShare = $profile && ! $driverPaused && ! $driverLocationReady;
+    $driverMapPickerEnabled = app()->environment('local');
+    $locationSharePrompt = null;
+    if ($driverNeedsLocationShare) {
+        if ($driverTripUpcoming) {
+            $locationSharePrompt = 'Chia sẻ vị trí GPS để khách biết bạn còn bao nhiêu km đến điểm đón.';
+        } elseif ($driverTripActive) {
+            $locationSharePrompt = 'Cập nhật vị trí GPS khi đang chạy chuyến.';
+        } else {
+            $locationSharePrompt = 'Chia sẻ vị trí GPS để nhận cuốc gần bạn.';
+        }
+    }
 
     $heroStatus = $profile
         ? $profile->heroStatusMeta($driverTripActive, $driverTripUpcoming)
@@ -148,9 +156,9 @@
              data-driver-trip-active="{{ $driverTripActive ? '1' : '0' }}"
              data-driver-trip-upcoming="{{ $driverTripUpcoming ? '1' : '0' }}"
              data-needs-location="{{ $driverNeedsLocationShare ? '1' : '0' }}">
-        @if($driverNeedsLocationShare && $driverTripUpcoming)
+        @if($locationSharePrompt)
             <div class="driver-location-share-prompt" id="driver-location-share-prompt" role="status">
-                Chia sẻ vị trí để khách biết bạn còn bao nhiêu km đến điểm đón.
+                {{ $locationSharePrompt }}
             </div>
         @endif
         <div class="driver-location-sheet-top {{ $driverPaused ? 'is-disabled' : '' }}">
@@ -174,29 +182,43 @@
             </div>
         </div>
         <div class="driver-location-sheet-actions {{ $driverPaused ? 'is-disabled' : '' }}">
-            <div class="driver-location-input-wrap">
-                <input type="text" id="driver-location-detail" class="form-control driver-location-input"
-                       value="{{ $driverLocationReady ? ($driverLocationAddress ?? '') : '' }}"
-                       placeholder="{{ $driverPaused ? 'Bật Hoạt động để cập nhật vị trí' : '' }}"
-                       autocomplete="off"
-                       @disabled($driverPaused)>
-                <button type="button" class="driver-location-map-btn address-map-trigger"
-                        data-address-map-for="driver-location-detail"
-                        data-address-map-lat="driver-location-lat"
-                        data-address-map-lng="driver-location-lng"
-                        data-address-map-province="driver-location-province"
-                        data-address-map-mode="driver"
-                        data-address-map-label="Chọn vị trí hoạt động"
-                        aria-label="Chọn vị trí trên bản đồ" title="Ghim trên bản đồ"
-                        @disabled($driverPaused)>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
-                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-                        <circle cx="12" cy="10" r="3"/>
-                    </svg>
-                    <span>Bản đồ</span>
-                </button>
-            </div>
+            <button type="button" class="btn btn-warning btn-sm driver-location-share-btn" id="driver-location-share-btn"
+                    @disabled($driverPaused)>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+                </svg>
+                Chia sẻ vị trí
+            </button>
+            @if($driverMapPickerEnabled)
+                <details class="driver-location-test-tools">
+                    <summary>Test bản đồ</summary>
+                    <div class="driver-location-input-wrap mt-2">
+                        <input type="text" id="driver-location-detail" class="form-control driver-location-input"
+                               value="{{ $driverLocationReady ? ($driverLocationAddress ?? '') : '' }}"
+                               placeholder="Chỉ dùng khi test — ghim trên bản đồ"
+                               autocomplete="off"
+                               @disabled($driverPaused)>
+                        <button type="button" class="driver-location-map-btn address-map-trigger"
+                                data-address-map-for="driver-location-detail"
+                                data-address-map-lat="driver-location-lat"
+                                data-address-map-lng="driver-location-lng"
+                                data-address-map-province="driver-location-province"
+                                data-address-map-mode="driver"
+                                data-address-map-label="Chọn vị trí hoạt động"
+                                aria-label="Chọn vị trí trên bản đồ (test)" title="Ghim trên bản đồ (test)"
+                                @disabled($driverPaused)>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                                <circle cx="12" cy="10" r="3"/>
+                            </svg>
+                            <span>Bản đồ</span>
+                        </button>
+                    </div>
+                </details>
+            @endif
         </div>
         <input type="hidden" id="driver-location-lat" value="{{ $driverLocationReady ? ($profile->last_lat ?? '') : '' }}">
         <input type="hidden" id="driver-location-lng" value="{{ $driverLocationReady ? ($profile->last_lng ?? '') : '' }}">
@@ -305,7 +327,9 @@
     @endif
 </div>
 
+@if($driverMapPickerEnabled ?? false)
 @include('partials.address-map-picker-modal')
+@endif
 @endsection
 
 @push('scripts')
@@ -316,13 +340,19 @@ window.__geocodeReverseUrl = @json(route('geocode.reverse'));
 window.__geocodeSearchUrl = @json(route('geocode.search'));
 window.__provinceCenters = @json(\App\Support\ProvinceCenters::centersForCatalog());
 window.__driverDashboardUrl = @json(route('driver.dashboard', ['tab' => 'trips']));
+window.__driverMapPickerEnabled = @json($driverMapPickerEnabled ?? false);
 </script>
+<script src="{{ asset('js/geocode-search-ui.js') }}?v={{ filemtime(public_path('js/geocode-search-ui.js')) }}"></script>
+@if($driverMapPickerEnabled)
 <script src="{{ asset('js/geocode-address-autocomplete.js') }}?v={{ filemtime(public_path('js/geocode-address-autocomplete.js')) }}"></script>
 <script src="{{ asset('js/address-map-picker.js') }}?v={{ filemtime(public_path('js/address-map-picker.js')) }}"></script>
+@endif
 <script src="{{ asset('js/driver-location-save.js') }}?v={{ filemtime(public_path('js/driver-location-save.js')) }}"></script>
+<script src="{{ asset('js/driver-location-gps.js') }}?v={{ filemtime(public_path('js/driver-location-gps.js')) }}"></script>
 <script src="{{ asset('js/driver-availability-toggle.js') }}?v={{ filemtime(public_path('js/driver-availability-toggle.js')) }}"></script>
 <script src="{{ asset('js/driver-trip-request-actions.js') }}?v={{ filemtime(public_path('js/driver-trip-request-actions.js')) }}"></script>
 <script src="{{ asset('js/driver-workflow-actions.js') }}?v={{ filemtime(public_path('js/driver-workflow-actions.js')) }}"></script>
+@if($driverMapPickerEnabled)
 <script>
 (function () {
     if (window.GeocodeAddressAutocomplete) {
@@ -336,6 +366,7 @@ window.__driverDashboardUrl = @json(route('driver.dashboard', ['tab' => 'trips']
     }
 })();
 </script>
+@endif
 <script src="{{ asset('js/wait-progress.js') }}?v={{ filemtime(public_path('js/wait-progress.js')) }}"></script>
 <script src="{{ asset('js/driver-tabs.js') }}?v={{ filemtime(public_path('js/driver-tabs.js')) }}"></script>
 <script src="{{ asset('js/driver-wallet-deposit.js') }}?v={{ filemtime(public_path('js/driver-wallet-deposit.js')) }}"></script>

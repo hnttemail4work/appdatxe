@@ -15,8 +15,8 @@
                 </div>
                 <label class="form-label small text-muted mb-1" for="address-map-search">Tìm địa chỉ</label>
                 <input type="search" class="form-control form-control-sm mb-2" id="address-map-search"
-                       placeholder="Nhập tên đường, khu vực..." autocomplete="off">
-                <div id="address-map-search-results" class="address-map-search-results d-none" role="listbox"></div>
+                       placeholder="Số nhà, tên đường, phường, quận… (vd: 123 Nguyễn Huệ, Quận 1)" autocomplete="off">
+                <div id="address-map-search-results" class="address-map-search-results d-none" role="listbox" aria-label="Kết quả tìm kiếm"></div>
                 <div class="address-map-toolbar d-none" id="address-map-driver-toolbar">
                     <button type="button" class="btn btn-outline-primary btn-sm" id="address-map-my-location">
                         Vị trí của tôi

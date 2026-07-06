@@ -130,18 +130,28 @@ class ReferralCode extends Model
         };
     }
 
-    /** % giảm giá vé trên trang đặt xe. */
+    /** % giảm giá vé — mã từ chuyến hoàn tất lấy % admin cấu hình (mặc định 2%). */
     public function customerDiscountPercent(): float
     {
-        if ($this->customer_discount_percent !== null) {
-            return max(0.0, (float) $this->customer_discount_percent);
-        }
-
         if ($this->type === self::TYPE_BOOKING_TEMP) {
             return PlatformFees::bookingQrDiscountPercent();
         }
 
+        if ($this->customer_discount_percent !== null) {
+            return max(0.0, (float) $this->customer_discount_percent);
+        }
+
         return 0.0;
+    }
+
+    /** Nhãn nguồn giảm giá hiển thị cho khách. */
+    public function customerDiscountSourceLabel(): string
+    {
+        return match ($this->type) {
+            self::TYPE_BOOKING_TEMP => 'giới thiệu',
+            self::TYPE_REFERRER     => 'mã GT',
+            default                 => 'giới thiệu',
+        };
     }
 
     public function grantsCustomerDiscount(): bool

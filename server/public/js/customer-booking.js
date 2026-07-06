@@ -180,11 +180,92 @@
         )));
     }
 
+    function formatDistanceKm(km) {
+        var n = Number(km);
+        if (!(n > 0)) {
+            return '';
+        }
+        if (Math.abs(n - Math.round(n)) < 0.05) {
+            return Math.round(n) + ' km';
+        }
+
+        return n.toFixed(1).replace('.', ',') + ' km';
+    }
+
+    function formatReferralPercent(pct) {
+        var n = Number(pct);
+        if (!(n > 0)) {
+            return '';
+        }
+        if (Math.abs(n - Math.round(n)) < 0.05) {
+            return String(Math.round(n));
+        }
+
+        return n.toFixed(1).replace('.', ',');
+    }
+
     function syncDistanceLabel(km) {
         var distance = Number(km) > 0 ? Number(km) : localDistanceKm();
-        var text = distance > 0 ? ('Khoảng ' + distance + ' km') : '';
-        setBannerText('modal-route-distance', text);
-        setBannerText('modal-route-distance-step2', text);
+        var bannerText = distance > 0 ? ('Khoảng ' + formatDistanceKm(distance)) : '';
+        var footerText = distance > 0 ? formatDistanceKm(distance) : '';
+        setBannerText('modal-route-distance', bannerText);
+        setBannerText('modal-route-distance-step2', bannerText);
+        [
+            ['modal-price-distance-row-step1', 'modal-price-distance-step1'],
+            ['modal-price-distance-row-step2', 'modal-price-distance-step2'],
+        ].forEach(function (pair) {
+            var row = $(pair[0]);
+            var valEl = $(pair[1]);
+            if (!valEl) {
+                return;
+            }
+            if (footerText) {
+                valEl.textContent = footerText;
+                if (row) row.classList.remove('d-none');
+            } else {
+                valEl.textContent = '';
+                if (row) row.classList.add('d-none');
+            }
+        });
+    }
+
+    function setPriceSummaryBlock(suffix, hasDiscount, subtotal, displayTotal, discountNote) {
+        var origRow = $('modal-original-row-' + suffix);
+        var discRow = $('modal-discount-row-' + suffix);
+        var origEl = $('modal-original-price-' + suffix);
+        var discEl = $('modal-referral-discount-' + suffix);
+        var totalEl = suffix === 'step1' ? $('modal-total-price-step1') : $('modal-total-price');
+
+        if (origEl && origRow) {
+            if (hasDiscount && subtotal > 0) {
+                origEl.textContent = formatMoney(subtotal);
+                origRow.classList.remove('d-none');
+            } else {
+                origEl.textContent = '';
+                origRow.classList.add('d-none');
+            }
+        }
+
+        if (discEl && discRow) {
+            if (discountNote) {
+                discEl.textContent = discountNote;
+                discRow.classList.remove('d-none');
+            } else {
+                discEl.textContent = '';
+                discRow.classList.add('d-none');
+            }
+        }
+
+        if (totalEl) {
+            totalEl.textContent = displayTotal > 0 ? formatMoney(displayTotal) : '';
+            totalEl.classList.toggle('d-none', displayTotal <= 0);
+            totalEl.classList.toggle('booking-price-discounted', hasDiscount && displayTotal > 0);
+        }
+
+        var summary = $('modal-price-summary-' + suffix);
+        if (summary) {
+            summary.classList.toggle('is-discounted', hasDiscount && displayTotal > 0);
+        }
     }
 
     function routeReady() {
@@ -192,11 +273,34 @@
         return !!(route.pickupDetail && route.dropoffDetail && coordsReady());
     }
 
+    function setPriceLoading(loading) {
+        ['step1', 'step2'].forEach(function (suffix) {
+            var totalEl = suffix === 'step1' ? $('modal-total-price-step1') : $('modal-total-price');
+            if (!totalEl) {
+                return;
+            }
+            if (loading && routeReady()) {
+                totalEl.textContent = 'Đang tính…';
+                totalEl.classList.remove('d-none');
+            }
+        });
+    }
+
+    function refreshDistanceAndQuote() {
+        syncRouteLabels();
+        if (coordsReady()) {
+            syncDistanceLabel(0);
+        }
+        refreshQuote();
+    }
+
     function syncRouteLabels() {
         var label = routeLabel();
         setBannerText('modal-route', label);
         setBannerText('modal-route-step2', label);
-        syncDistanceLabel(0);
+        if (!coordsReady()) {
+            syncDistanceLabel(0);
+        }
     }
 
     function setStep(step) {
@@ -225,52 +329,22 @@
 
         if (data && data.distance_km) {
             syncDistanceLabel(data.distance_km);
+        } else if (routeReady()) {
+            syncDistanceLabel(0);
         }
 
         if (hasDiscount) {
             var pct = data.referral_discount_percent;
-            discountNote = 'Giảm ' + formatMoney(data.referral_discount_amount);
+            var sourceLabel = data.referral_discount_label || window.__referralDiscountLabel || 'giới thiệu';
+            discountNote = '−' + formatMoney(data.referral_discount_amount);
             if (pct > 0) {
-                discountNote += ' (' + pct + '% — mã QR)';
+                discountNote += ' (' + formatReferralPercent(pct) + '% — ' + sourceLabel + ')';
             }
-        } else if (data && data.surcharge_percent > 0 && data.departure_plan_label) {
-            discountNote = data.departure_plan_label + ' (+' + data.surcharge_percent + '%)';
         }
 
-        [['modal-original-price-step1', 'modal-total-price-step1', 'modal-referral-discount-step1'],
-         ['modal-original-price', 'modal-total-price', 'modal-referral-discount']].forEach(function (group) {
-            var origEl = $(group[0]);
-            var totalEl = $(group[1]);
-            var discEl = $(group[2]);
-
-            if (origEl) {
-                if (hasDiscount && subtotal > 0) {
-                    origEl.textContent = formatMoney(subtotal);
-                    origEl.classList.remove('d-none');
-                } else {
-                    origEl.textContent = '';
-                    origEl.classList.add('d-none');
-                }
-            }
-
-            if (totalEl) {
-                var displayTotal = hasDiscount ? finalTotal : total;
-                totalEl.textContent = displayTotal > 0 ? formatMoney(displayTotal) : '';
-                totalEl.classList.toggle('d-none', displayTotal <= 0);
-                totalEl.classList.toggle('booking-price-discounted', hasDiscount && displayTotal > 0);
-            }
-
-            if (discEl) {
-                if (discountNote) {
-                    discEl.textContent = discountNote;
-                    discEl.classList.remove('d-none');
-                    discEl.classList.toggle('text-success', hasDiscount);
-                    discEl.classList.toggle('text-muted', !hasDiscount);
-                } else {
-                    discEl.textContent = '';
-                    discEl.classList.add('d-none');
-                }
-            }
+        var displayTotal = hasDiscount ? finalTotal : total;
+        ['step1', 'step2'].forEach(function (suffix) {
+            setPriceSummaryBlock(suffix, hasDiscount, subtotal, displayTotal, discountNote);
         });
     }
 
@@ -284,6 +358,9 @@
             departure_plan: departurePlan(),
             contact_phone: $('modal-contact-phone') ? $('modal-contact-phone').value : '',
         });
+        if (departurePlan() === 'later') {
+            params.set('later_return_days', String(laterReturnDays()));
+        }
         ['modal-pickup-lat', 'modal-pickup-lng', 'modal-dropoff-lat', 'modal-dropoff-lng'].forEach(function (id) {
             var value = coordValue(id);
             if (value) {
@@ -303,11 +380,23 @@
     }
 
     function refreshQuote() {
-        if (!window.__quotePriceUrl || (!ctx.driverProfileId && !ctx.vehicleId) || !routeReady()) {
+        if (!window.__quotePriceUrl || (!ctx.driverProfileId && !ctx.vehicleId && !ctx.templateId)) {
             updatePriceDisplay(0);
-            syncDistanceLabel(0);
+            if (!coordsReady()) {
+                syncDistanceLabel(0);
+            }
             return;
         }
+        if (!routeReady()) {
+            updatePriceDisplay(0);
+            if (coordsReady()) {
+                syncDistanceLabel(0);
+            }
+            return;
+        }
+
+        syncDistanceLabel(0);
+        setPriceLoading(true);
         clearTimeout(quoteTimer);
         quoteTimer = setTimeout(function () {
             fetch(window.__quotePriceUrl + '?' + quoteParams().toString(), {
@@ -325,9 +414,14 @@
                 })
                 .catch(function () {
                     updatePriceDisplay(0);
-                    syncDistanceLabel(0);
+                    if (coordsReady()) {
+                        syncDistanceLabel(0);
+                    }
+                })
+                .finally(function () {
+                    setPriceLoading(false);
                 });
-        }, 200);
+        }, 150);
     }
 
     function todayIso() {
@@ -342,7 +436,29 @@
 
     function departurePlan() {
         var checked = document.querySelector('input[name="departure_plan"]:checked');
-        return checked ? checked.value : 'today';
+        return checked ? checked.value : 'oneway';
+    }
+
+    function laterReturnDays() {
+        var el = $('modal-later-return-days');
+        var min = Number(window.__laterReturnDaysMin || 3);
+        var max = Number(window.__laterReturnDaysMax || 60);
+        var raw = el ? parseInt(el.value, 10) : min;
+        if (!raw || raw < min) {
+            return min;
+        }
+        return Math.min(raw, max);
+    }
+
+    function syncLaterReturnDaysHint() {
+        var hint = $('modal-later-return-days-hint');
+        if (!hint) {
+            return;
+        }
+        var pct = Number(window.__laterReturnPercentPerDay || 0);
+        var days = laterReturnDays();
+        hint.textContent = 'Từ ' + (window.__laterReturnDaysMin || 3) + ' ngày. Mỗi ngày +' + pct + '% giá chuyến'
+            + (days > 0 && pct > 0 ? ' (≈ +' + Math.round(days * pct) + '% cho ' + days + ' ngày).' : '.');
     }
 
     function syncDepartureDate() {
@@ -351,14 +467,24 @@
             return;
         }
         var plan = departurePlan();
-        if (dateEl) {
-            dateEl.value = plan === 'later'
-                ? (window.__laterServiceDate || todayIso())
-                : (plan === 'tomorrow' ? tomorrowIso() : todayIso());
+        if (plan === 'later') {
+            var base = window.__todayDate ? new Date(window.__todayDate + 'T12:00:00') : new Date();
+            base.setDate(base.getDate() + laterReturnDays());
+            dateEl.value = base.toISOString().slice(0, 10);
+        } else if (plan === 'tomorrow') {
+            dateEl.value = tomorrowIso();
+        } else {
+            dateEl.value = todayIso();
         }
     }
 
     function syncDeparturePlanUI() {
+        var wrap = $('modal-later-return-days-wrap');
+        var plan = departurePlan();
+        if (wrap) {
+            wrap.classList.toggle('d-none', plan !== 'later');
+        }
+        syncLaterReturnDaysHint();
         syncDepartureDate();
     }
 
@@ -478,6 +604,18 @@
             return false;
         }
 
+        if (departurePlan() === 'later') {
+            var daysInput = $('modal-later-return-days');
+            var minDays = Number(window.__laterReturnDaysMin || 3);
+            if (!daysInput || laterReturnDays() < minDays) {
+                alert('Vui lòng nhập số ngày chờ về (tối thiểu ' + minDays + ' ngày).');
+                if (daysInput) {
+                    daysInput.focus();
+                }
+                return false;
+            }
+        }
+
         var route = modalRoute();
         if (!route.pickup || !route.dropoff) {
             syncDepartureDate();
@@ -492,6 +630,17 @@
             refreshQuote();
         });
     });
+    var laterDaysEl = $('modal-later-return-days');
+    if (laterDaysEl) {
+        laterDaysEl.addEventListener('input', function () {
+            syncDeparturePlanUI();
+            refreshQuote();
+        });
+        laterDaysEl.addEventListener('change', function () {
+            syncDeparturePlanUI();
+            refreshQuote();
+        });
+    }
     syncDeparturePlanUI();
     syncRouteLabels();
 
@@ -596,7 +745,15 @@
             }
         }
 
-        syncRouteLabels();
-        refreshQuote();
+        refreshDistanceAndQuote();
+    });
+
+    ['modal-pickup-lat', 'modal-pickup-lng', 'modal-dropoff-lat', 'modal-dropoff-lng',
+        'modal-pickup-detail', 'modal-dropoff-detail'].forEach(function (id) {
+        var el = $(id);
+        if (!el) {
+            return;
+        }
+        el.addEventListener('change', refreshDistanceAndQuote);
     });
 })();

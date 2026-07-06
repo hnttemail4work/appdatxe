@@ -34,7 +34,7 @@
     right: 0;
     top: calc(100% + 0.25rem);
     z-index: 20;
-    max-height: 12rem;
+    max-height: 14rem;
     overflow-y: auto;
     border-radius: 0.5rem;
     border: 1px solid rgba(212, 175, 55, 0.35);
@@ -56,7 +56,8 @@
 }
 
 .booking-address-suggest-item:hover,
-.booking-address-suggest-item:focus {
+.booking-address-suggest-item:focus,
+.booking-address-suggest-item.is-active {
     background: rgba(212, 175, 55, 0.12);
     outline: none;
 }
@@ -97,11 +98,12 @@
     border: 1px solid rgba(212, 175, 55, .22);
     border-radius: .55rem;
     background: var(--bs-body-bg, #1a1a1a);
-    max-height: 9.5rem;
+    max-height: 13rem;
     overflow-y: auto;
     margin-bottom: .5rem;
 }
 
+.geocode-search-item,
 .address-map-search-item {
     display: block;
     width: 100%;
@@ -115,16 +117,82 @@
     line-height: 1.35;
 }
 
+.geocode-search-item__row {
+    display: flex;
+    align-items: flex-start;
+    gap: .55rem;
+}
+
+.geocode-search-item__icon {
+    flex-shrink: 0;
+    width: 1.25rem;
+    text-align: center;
+    line-height: 1.35;
+    opacity: .9;
+}
+
+.geocode-search-item__copy {
+    flex: 1;
+    min-width: 0;
+}
+
+.geocode-search-item__title {
+    display: block;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.geocode-search-item__subtitle {
+    display: block;
+    margin-top: .1rem;
+    font-size: .75rem;
+    color: var(--bs-secondary-color, #9ca3af);
+    line-height: 1.35;
+}
+
+.geocode-search-item__badge {
+    flex-shrink: 0;
+    align-self: flex-start;
+    font-size: .65rem;
+    font-weight: 600;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+    color: #d4af37;
+    border: 1px solid rgba(212, 175, 55, .35);
+    border-radius: 999px;
+    padding: .1rem .45rem;
+    margin-top: .05rem;
+}
+
+.geocode-search-item mark,
+.address-map-search-item mark,
+.booking-address-suggest-item mark {
+    background: rgba(212, 175, 55, .28);
+    color: inherit;
+    padding: 0 .05rem;
+    border-radius: .15rem;
+}
+
+.geocode-search-item:hover,
+.geocode-search-item:focus-visible,
+.geocode-search-item.is-active,
 .address-map-search-item:hover,
-.address-map-search-item:focus-visible {
+.address-map-search-item:focus-visible,
+.address-map-search-item.is-active {
     background: rgba(212, 175, 55, .12);
     outline: none;
 }
 
+.geocode-search-empty,
+.geocode-search-loading,
 .address-map-search-empty {
     padding: .55rem .75rem;
     font-size: .8125rem;
     color: var(--bs-secondary-color, #adb5bd);
+}
+
+.address-map-search-results--loading .geocode-search-loading {
+    opacity: .85;
 }
 
 .address-map-canvas .leaflet-control-attribution {

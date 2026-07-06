@@ -13,6 +13,13 @@ class Booking extends Model
     protected static function booted(): void
     {
         static::updated(function (Booking $booking): void {
+            if ($booking->wasChanged('trip_status') && $booking->trip_status === 'completed') {
+                try {
+                    app(\App\Services\PushNotificationService::class)->onTripCompleted($booking);
+                } catch (\Throwable) {
+                }
+            }
+
             if (! $booking->wasChanged(['booking_status', 'trip_status'])) {
                 return;
             }
@@ -22,6 +29,16 @@ class Booking extends Model
 
             if ($cancelled) {
                 app(\App\Services\ReferralCodeService::class)->purgeForBooking($booking);
+
+                try {
+                    $push = app(\App\Services\PushNotificationService::class);
+                    if ($booking->cancelled_by === 'system' && ! $booking->hasDriverAccepted()) {
+                        $push->onNoDriverFound($booking);
+                    } else {
+                        $push->onTripCancelled($booking);
+                    }
+                } catch (\Throwable) {
+                }
             }
         });
     }
@@ -46,6 +63,9 @@ class Booking extends Model
         'driver_pickup_distance_km',
         'pickup_time',
         'departure_plan',
+        'later_return_days',
+        'later_return_booking_id',
+        'later_pickup_dispatched_at',
         'dropoff_address',
         'dropoff_detail',
         'dropoff_lat',
@@ -84,6 +104,7 @@ class Booking extends Model
             'repeat_cancel_flag' => 'boolean',
             'confirmed_at'   => 'datetime',
             'completed_at'   => 'datetime',
+            'later_pickup_dispatched_at' => 'datetime',
             'cancelled_at'   => 'datetime',
             'expired_at'     => 'datetime',
             'operator_confirmed_at' => 'datetime',
@@ -327,6 +348,58 @@ class Booking extends Model
         return $this->belongsTo(Schedule::class);
     }
 
+    public function laterReturnBooking()
+    {
+        return $this->belongsTo(self::class, 'later_return_booking_id');
+    }
+
+    public function isLaterDeparturePlan(): bool
+    {
+        return \App\Support\DeparturePlan::normalize($this->departure_plan ?? '') === \App\Support\DeparturePlan::LATER;
+    }
+
+    public function laterPickupReminderStartsAt(): \Carbon\Carbon
+    {
+        if ($this->isLaterDeparturePlan()) {
+            $this->loadMissing('schedule');
+
+            if ($this->schedule?->service_date) {
+                return \App\Support\ServiceDate::dayStart($this->schedule->service_date);
+            }
+        }
+
+        return \App\Support\DeparturePlan::laterPickupReminderStartsAt($this->created_at ?? now());
+    }
+
+    public function laterReturnDays(): ?int
+    {
+        if (! $this->isLaterDeparturePlan()) {
+            return null;
+        }
+
+        $days = (int) ($this->later_return_days ?? 0);
+
+        return $days > 0 ? $days : \App\Support\DeparturePlan::DEFAULT_LATER_RETURN_DAYS;
+    }
+
+    /** Đơn trên 2 ngày đã hoàn thành — đến ngày về cần admin nhắc đón khách. */
+    public function showsLaterPickupReminder(): bool
+    {
+        if (! $this->isLaterDeparturePlan()) {
+            return false;
+        }
+
+        if ($this->trip_status !== 'completed') {
+            return false;
+        }
+
+        if ($this->later_pickup_dispatched_at !== null) {
+            return false;
+        }
+
+        return now()->greaterThanOrEqualTo($this->laterPickupReminderStartsAt());
+    }
+
     public function assignedDriver()
     {
         return $this->belongsTo(User::class, 'assigned_driver_id');
@@ -527,7 +600,7 @@ class Booking extends Model
 
         $formatted = rtrim(rtrim(number_format($percent, 1, '.', ''), '0'), '.');
 
-        return 'Giảm ' . $formatted . '% (mã QR)';
+        return 'Giảm ' . $formatted . '% (' . $this->appliedReferralCode->customerDiscountSourceLabel() . ')';
     }
 
     public function catalogChosenDriverProfile(): ?DriverProfile
@@ -757,6 +830,7 @@ class Booking extends Model
             $this->dropoff_lat,
             $this->dropoff_lng,
             $this->departure_plan ?? \App\Support\DeparturePlan::TODAY,
+            $this->laterReturnDays(),
         );
     }
 
@@ -814,6 +888,10 @@ class Booking extends Model
         }
 
         if ($this->trip_status === 'completed') {
+            if ($this->showsLaterPickupReminder()) {
+                return 'Nhắc đón khách';
+            }
+
             return 'Hoàn thành';
         }
 
@@ -845,6 +923,10 @@ class Booking extends Model
         }
 
         if ($this->trip_status === 'completed') {
+            if ($this->showsLaterPickupReminder()) {
+                return \App\Support\StatusBadge::ACCENT;
+            }
+
             return \App\Support\StatusBadge::SUCCESS;
         }
 
@@ -938,14 +1020,8 @@ class Booking extends Model
             $q->whereNotIn('booking_status', ['cancelled', 'rejected'])
                 ->orWhereNotNull('expired_at')
                 ->orWhere('cancelled_by', 'driver')
-                ->orWhere('cancelled_by', 'system');
-
-            if (Schema::hasColumn('bookings', 'repeat_cancel_flag')) {
-                $q->orWhere(function (Builder $q2): void {
-                    $q2->where('cancelled_by', 'customer')
-                        ->where('repeat_cancel_flag', true);
-                });
-            }
+                ->orWhere('cancelled_by', 'system')
+                ->orWhere('cancelled_by', 'customer');
         });
     }
 

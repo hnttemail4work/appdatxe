@@ -30,6 +30,11 @@ class DriverTripRequest extends Model
             if ($request->driver_id) {
                 app(DriverCancelRateService::class)->recordOfferForUserId((int) $request->driver_id);
             }
+
+            try {
+                app(\App\Services\PushNotificationService::class)->onDriverTripRequestCreated($request);
+            } catch (\Throwable) {
+            }
         });
     }
 

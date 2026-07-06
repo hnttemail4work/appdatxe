@@ -57,7 +57,6 @@ $driverCount = ($driverOffers ?? collect())->count();
         <div class="booking-page-hero__inner">
             <p class="booking-page-hero__eyebrow">Gọi xe · Thuê xe</p>
             <h1 class="booking-page-hero__title">{{ $heroTitle }}</h1>
-            <p class="booking-page-hero__lead">Ghim điểm đón — trả, chọn xe và nhận báo giá ngay.</p>
             @if(($appliedReferral ?? null) || ($prefillReferral ?? '') !== '')
             <div class="booking-page-hero__referral">
                 @if($appliedReferral ?? null)

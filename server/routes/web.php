@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Web\PwaController;
 use App\Http\Controllers\Web\AdminController;
 use App\Http\Controllers\Web\AuthController;
 use App\Http\Controllers\Web\CancellationReasonController;
@@ -14,6 +15,12 @@ use Illuminate\Support\Facades\Route;
 Route::get('csrf-token', function () {
     return response()->json(['token' => csrf_token()]);
 });
+
+Route::get('pwa/manifest.webmanifest', [PwaController::class, 'manifest'])->name('pwa.manifest');
+Route::get('pwa/push/vapid-public-key', [PwaController::class, 'vapidPublicKey'])->name('pwa.vapid');
+Route::post('pwa/push/subscribe', [PwaController::class, 'subscribe'])->name('pwa.subscribe');
+Route::post('pwa/push/unsubscribe', [PwaController::class, 'unsubscribe'])->name('pwa.unsubscribe');
+Route::post('pwa/push/touch-contact', [PwaController::class, 'touchContact'])->name('pwa.touchContact');
 
 Route::middleware('guest')->group(function () {
     Route::get('login',    [AuthController::class, 'showLogin'])->name('login');
@@ -45,6 +52,7 @@ Route::get('/', [GuestBookingController::class, 'index'])->name('home');
 Route::get('chuyen', [GuestBookingController::class, 'trips'])->name('booking.trips');
 Route::get('chuyen/status', [GuestBookingController::class, 'tripStatus'])->name('booking.tripStatus');
 Route::post('chuyen/review', [GuestBookingController::class, 'storeTripReview'])->name('booking.tripReview');
+Route::post('chuyen/cancel', [GuestBookingController::class, 'cancelTrip'])->name('booking.tripCancel');
 Route::redirect('dat-chuyen', '/chuyen');
 Route::get('gioi-thieu', [GuestBookingController::class, 'about'])->name('about');
 Route::get('booking/check-duplicate', [GuestBookingController::class, 'checkDuplicateBooking'])->name('booking.checkDuplicate');
@@ -85,6 +93,7 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::post('admin/bank-settings',         [AdminController::class, 'updateBankSettings'])->name('admin.bankSettings.update');
     Route::post('admin/booking-page-settings', [AdminController::class, 'updateBookingPageSettings'])->name('admin.bookingPageSettings.update');
     Route::post('admin/branding-settings', [AdminController::class, 'updateBrandingSettings'])->name('admin.brandingSettings.update');
+    Route::post('admin/push-settings', [AdminController::class, 'updatePushSettings'])->name('admin.pushSettings.update');
     Route::post('admin/fee-settings',         [AdminController::class, 'updateFeeSettings'])->name('admin.feeSettings.update');
     Route::post('admin/route-distances',      [AdminController::class, 'updateRouteDistances'])->name('admin.routeDistances.update');
     Route::post('admin/destinations',         [AdminController::class, 'storeDestination'])->name('admin.destinations.store');
@@ -95,6 +104,7 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::get('admin/bookings/sync',              [AdminController::class, 'bookingsSync'])->name('admin.bookings.sync');
     Route::post('admin/bookings/{booking}/assign', [AdminController::class, 'confirmAndAssignBooking'])->name('admin.bookings.assign');
     Route::post('admin/bookings/{booking}/cancel', [AdminController::class, 'cancelBooking'])->name('admin.bookings.cancel');
+    Route::post('admin/bookings/{booking}/later-pickup', [AdminController::class, 'dispatchLaterReturnPickup'])->name('admin.bookings.laterPickup');
     Route::delete('admin/bookings/lo', [AdminController::class, 'bulkDismissBookings'])->name('admin.bookings.bulkDismiss');
 
     Route::get('admin/revenue', [AdminController::class, 'revenueReport'])->name('admin.revenue');

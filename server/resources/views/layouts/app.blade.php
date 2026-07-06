@@ -1,10 +1,22 @@
 <!DOCTYPE html>
 @php
     use App\Support\AppBrandingSettings;
+    use App\Support\PushAudience;
 
     $appBrandName = AppBrandingSettings::appName();
     $appBrandTitle = AppBrandingSettings::brandTitle();
     $appBrandTagline = AppBrandingSettings::brandTagline();
+    $pwaEnabled = PushAudience::enabledFor(auth()->user());
+    $pwaAudience = $pwaEnabled ? PushAudience::resolve(auth()->user()) : null;
+    $pwaAudienceLabel = $pwaAudience ? PushAudience::shortLabel($pwaAudience) : '';
+    $pwaInstallTitle = match ($pwaAudience) {
+        PushAudience::DRIVER => 'Ghim app Tài xế',
+        default => 'Ghim app Đặt xe',
+    };
+    $pwaInstallHint = match ($pwaAudience) {
+        PushAudience::DRIVER => 'Mở nhanh bảng chuyến và nhận cuốc mới.',
+        default => 'Mở nhanh trang đặt xe và nhận thông báo chuyến.',
+    };
     $isGuestBookingPage = request()->routeIs('home', 'booking.trips');
     $hidePublicNav = $isGuestBookingPage || request()->routeIs('about') || request()->routeIs('admin.*');
     $minimalNav = auth()->check()
@@ -21,6 +33,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $appBrandName }}</title>
+    @if($pwaEnabled)
+    <meta name="theme-color" content="#0f1419">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="{{ $pwaAudienceLabel }}">
+    <link rel="manifest" href="{{ route('pwa.manifest') }}">
+    @endif
     <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}?v={{ filemtime(public_path('favicon.svg')) }}">
     <link rel="apple-touch-icon" href="{{ asset('favicon.svg') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -70,6 +89,9 @@
     <link rel="stylesheet" href="{{ asset('css/screen-tabs.css') }}?v={{ filemtime(public_path('css/screen-tabs.css')) }}">
     <link rel="stylesheet" href="{{ asset('css/app-layout.css') }}?v={{ filemtime(public_path('css/app-layout.css')) }}">
     <link rel="stylesheet" href="{{ asset('css/app-dialog.css') }}?v={{ filemtime(public_path('css/app-dialog.css')) }}">
+    @if($pwaEnabled)
+    <link rel="stylesheet" href="{{ asset('css/pwa-install.css') }}?v={{ filemtime(public_path('css/pwa-install.css')) }}">
+    @endif
     @stack('styles')
 </head>
 <body class="app-shell @if(request()->routeIs('login', 'register')) app-shell--auth @endif @if(request()->routeIs('home', 'about', 'booking.trips', 'driver.dashboard')) app-shell--mobile-app @endif">
@@ -78,7 +100,9 @@
         <a class="navbar-brand app-brand-link app-brand-link--stacked" href="{{ $brandHref }}" aria-label="{{ $appBrandName }}">
             <span class="app-brand-stack">
                 <span class="app-brand-title">{{ $appBrandTitle }}</span>
+                @if(! request()->routeIs('home'))
                 <span class="app-brand-tagline">{{ $appBrandTagline }}</span>
+                @endif
             </span>
         </a>
         @if($minimalNav)
@@ -134,10 +158,11 @@
         @endif
         @php
             $showMobileDrawer = ! auth()->check();
+            $showNavDrawerOnDesktop = $showMobileDrawer && $hidePublicNav;
         @endphp
         @if($showMobileDrawer)
             <button type="button"
-                    class="app-nav-drawer-trigger d-lg-none ms-auto"
+                    class="app-nav-drawer-trigger ms-auto @unless($showNavDrawerOnDesktop) d-lg-none @endunless"
                     data-bs-toggle="offcanvas"
                     data-bs-target="#appNavDrawer"
                     aria-controls="appNavDrawer"
@@ -157,6 +182,10 @@
     @yield('content')
 </div>
 </main>
+
+@if($pwaEnabled)
+@include('partials.pwa-install-prompt')
+@endif
 
 <footer class="app-footer bg-dark text-secondary border-top">
     <div class="container">
@@ -281,5 +310,15 @@
 })();
 </script>
 @stack('scripts')
+@if($pwaEnabled)
+<script>
+window.__pwaConfig = {
+    audience: @json($pwaAudience),
+    audienceLabel: @json($pwaAudienceLabel),
+    startUrl: @json(PushAudience::startUrl($pwaAudience)),
+};
+</script>
+<script src="{{ asset('js/pwa-client.js') }}?v={{ filemtime(public_path('js/pwa-client.js')) }}"></script>
+@endif
 </body>
 </html>

@@ -79,7 +79,7 @@ class GuestTripStatusService
     /** @return array<string, mixed> */
     public function serialize(Booking $booking): array
     {
-        $booking->loadMissing('schedule.route', 'tripReview');
+        $booking->loadMissing('schedule.route', 'tripReview', 'referralCode');
         $base = $this->duplicateBookings->serializeDuplicate($booking);
 
         return array_merge($base, [
@@ -94,13 +94,34 @@ class GuestTripStatusService
             'total_price'       => (float) $booking->total_price,
             'total_price_label' => number_format((float) $booking->total_price, 0, ',', '.') . ' đ',
             'distance_km'       => $booking->tripDistanceKm(),
-            'departure_plan'    => $booking->departure_plan ?? DeparturePlan::TODAY,
-            'departure_plan_label' => DeparturePlan::label($booking->departure_plan ?? DeparturePlan::TODAY),
+            'departure_plan'    => $booking->departure_plan ?? DeparturePlan::ONE_WAY,
+            'later_return_days' => $booking->laterReturnDays(),
+            'departure_plan_label' => DeparturePlan::displayLabel(
+                $booking->departure_plan ?? DeparturePlan::ONE_WAY,
+                $booking->laterReturnDays(),
+            ),
             'is_active'         => $booking->blocksGuestRebooking(),
+            'can_cancel'        => $this->guestCanCancel($booking),
             'can_review'        => $booking->trip_status === 'completed' && ! $booking->tripReview,
             'review'            => $this->serializeReview($booking),
             'wait_progress'     => GuestWaitProgress::forBooking($booking),
+            'referral'          => $this->serializeReferral($booking),
         ]);
+    }
+
+    /** @return array<string, mixed>|null */
+    private function serializeReferral(Booking $booking): ?array
+    {
+        $referral = $booking->referralCode;
+        if (! $referral) {
+            return null;
+        }
+
+        return [
+            'code'              => $referral->code,
+            'url'               => $referral->landingUrl(),
+            'discount_percent'  => \App\Support\PlatformFees::bookingQrDiscountPercent(),
+        ];
     }
 
     /** @return array<string, mixed>|null */
@@ -118,6 +139,19 @@ class GuestTripStatusService
             'icon'        => $review->sentimentIcon(),
             'created_at'  => $review->created_at?->format('d/m/Y H:i'),
         ];
+    }
+
+    public function guestCanCancel(Booking $booking): bool
+    {
+        if (in_array($booking->booking_status, ['cancelled', 'rejected'], true)) {
+            return false;
+        }
+
+        if (in_array($booking->trip_status, ['completed', 'cancelled'], true)) {
+            return false;
+        }
+
+        return ! $booking->passengerPickedUp();
     }
 
     public function guestCanView(Booking $booking, ?string $browserId, ?string $phone): bool

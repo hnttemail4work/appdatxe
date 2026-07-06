@@ -3,8 +3,13 @@
  */
 (function () {
     var POLL_MS = 15000;
+    var QR_SMALL = 72;
+    var QR_LARGE = 220;
     var selectedSentiment = '';
     var currentBooking = null;
+    var currentReferralUrl = '';
+    var qrLibLoading = false;
+    var referralOverlayBound = false;
 
     function qs(sel, root) {
         return (root || document).querySelector(sel);
@@ -139,10 +144,151 @@
         window.BookingActiveSession.saveFromBooking(booking, {
             booking_reference: booking.booking_reference || stored.booking_reference || '',
             contact_phone: stored.contact_phone || getContactPhone(),
-            referral_code: stored.referral_code || '',
-            referral_url: stored.referral_url || '',
-            referral_discount_percent: stored.referral_discount_percent || 0,
+            referral_code: (booking.referral && booking.referral.code) || stored.referral_code || '',
+            referral_url: (booking.referral && booking.referral.url) || stored.referral_url || '',
+            referral_discount_percent: (booking.referral && booking.referral.discount_percent) || stored.referral_discount_percent || 0,
         });
+    }
+
+    function loadQrLib(cb) {
+        if (typeof QRCode !== 'undefined') {
+            cb();
+            return;
+        }
+        if (qrLibLoading) {
+            var timer = setInterval(function () {
+                if (typeof QRCode !== 'undefined') {
+                    clearInterval(timer);
+                    cb();
+                }
+            }, 50);
+            return;
+        }
+        qrLibLoading = true;
+        var script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js';
+        script.onload = cb;
+        document.head.appendChild(script);
+    }
+
+    function drawQr(container, url, size) {
+        if (!container || !url) {
+            return;
+        }
+        container.innerHTML = '';
+        new QRCode(container, {
+            text: url,
+            width: size,
+            height: size,
+            colorDark: '#0f172a',
+            colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.M,
+        });
+    }
+
+    function referralDiscountNote(percent) {
+        var value = Number(percent) || 0;
+        if (value <= 0) {
+            return 'Chia sẻ mã để bạn bè đặt xe qua link của bạn.';
+        }
+        var label = value % 1 === 0 ? String(value) : String(value).replace(/\.0$/, '');
+        return 'Giảm ngay ' + label + '% khi hoàn tất chuyến.';
+    }
+
+    function renderReferralQr(url) {
+        var wrap = document.getElementById('guest-trip-referral-qr');
+        if (!wrap || !url) {
+            return;
+        }
+        currentReferralUrl = url;
+        loadQrLib(function () {
+            drawQr(wrap, url, QR_SMALL);
+        });
+    }
+
+    function renderLargeReferralQr(url) {
+        var wrap = document.getElementById('guest-trip-referral-qr-large');
+        if (!wrap || !url) {
+            return;
+        }
+        loadQrLib(function () {
+            drawQr(wrap, url, QR_LARGE);
+        });
+    }
+
+    function openReferralQrOverlay(discountPercent) {
+        if (!currentReferralUrl) {
+            return;
+        }
+        var overlay = document.getElementById('guest-trip-referral-qr-overlay');
+        if (!overlay) {
+            return;
+        }
+        var note = document.getElementById('guest-trip-referral-qr-overlay-note');
+        if (note) {
+            note.textContent = referralDiscountNote(discountPercent);
+        }
+        renderLargeReferralQr(currentReferralUrl);
+        overlay.classList.remove('d-none');
+        overlay.removeAttribute('hidden');
+        document.body.classList.add('booking-active-referral-qr-open');
+    }
+
+    function closeReferralQrOverlay() {
+        var overlay = document.getElementById('guest-trip-referral-qr-overlay');
+        if (!overlay) {
+            return;
+        }
+        overlay.classList.add('d-none');
+        overlay.setAttribute('hidden', 'hidden');
+        document.body.classList.remove('booking-active-referral-qr-open');
+        var large = document.getElementById('guest-trip-referral-qr-large');
+        if (large) {
+            large.innerHTML = '';
+        }
+    }
+
+    function bindReferralOverlay() {
+        if (referralOverlayBound) {
+            return;
+        }
+        referralOverlayBound = true;
+        var openBtn = document.getElementById('guest-trip-referral-qr-btn');
+        if (openBtn) {
+            openBtn.addEventListener('click', function () {
+                var percent = currentBooking && currentBooking.referral
+                    ? currentBooking.referral.discount_percent
+                    : 0;
+                openReferralQrOverlay(percent);
+            });
+        }
+        document.querySelectorAll('[data-close-guest-referral-qr]').forEach(function (el) {
+            el.addEventListener('click', closeReferralQrOverlay);
+        });
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                closeReferralQrOverlay();
+            }
+        });
+    }
+
+    function renderReferral(booking) {
+        var wrap = document.getElementById('guest-trip-referral-wrap');
+        if (!wrap) {
+            return;
+        }
+        var referral = booking && booking.referral ? booking.referral : null;
+        if (!referral || !referral.url) {
+            wrap.classList.add('d-none');
+            currentReferralUrl = '';
+            var qr = document.getElementById('guest-trip-referral-qr');
+            if (qr) {
+                qr.innerHTML = '';
+            }
+            return;
+        }
+        wrap.classList.remove('d-none');
+        renderReferralQr(referral.url);
     }
 
     function clearActiveSessionIfDone(booking) {
@@ -329,8 +475,44 @@
 
         renderDriverPanel(booking);
         renderReview(booking);
+        renderReferral(booking);
+        renderCancelAction(booking);
         syncActiveSession(booking);
         clearActiveSessionIfDone(booking);
+    }
+
+    function renderCancelAction(booking) {
+        var wrap = document.getElementById('guest-trip-cancel-wrap');
+        var err = document.getElementById('guest-trip-cancel-error');
+        if (!wrap) {
+            return;
+        }
+        if (err) {
+            err.textContent = '';
+            err.classList.add('d-none');
+        }
+        if (booking && booking.can_cancel) {
+            wrap.classList.remove('d-none');
+        } else {
+            wrap.classList.add('d-none');
+        }
+    }
+
+    function hideCancelError() {
+        var err = document.getElementById('guest-trip-cancel-error');
+        if (err) {
+            err.textContent = '';
+            err.classList.add('d-none');
+        }
+    }
+
+    function showCancelError(message) {
+        var err = document.getElementById('guest-trip-cancel-error');
+        if (!err) {
+            return;
+        }
+        err.textContent = message;
+        err.classList.remove('d-none');
     }
 
     function hideReviewError() {
@@ -433,6 +615,123 @@
             });
     }
 
+    function confirmCancelTrip() {
+        if (window.AppDialog && window.AppDialog.confirm) {
+            return window.AppDialog.confirm({
+                title: 'Hủy chuyến',
+                message: 'Bạn chắc chắn muốn hủy chuyến này?',
+                confirmLabel: 'Hủy chuyến',
+                cancelLabel: 'Giữ chuyến',
+                variant: 'danger',
+            });
+        }
+        return Promise.resolve(window.confirm('Bạn chắc chắn muốn hủy chuyến này?'));
+    }
+
+    function pickCancelReason() {
+        if (!window.CancellationReasonModal || !window.CancellationReasonModal.pick) {
+            return Promise.resolve({ skipped: true, reasonId: null });
+        }
+        return window.CancellationReasonModal.pick({
+            audience: 'customer',
+            contactPhone: getContactPhone(),
+            title: 'Chọn lý do hủy',
+            hint: 'Vui lòng chọn một lý do trước khi hủy chuyến.',
+        });
+    }
+
+    function submitCancel(reasonId) {
+        if (!currentBooking || !window.__bookingTripCancelUrl) {
+            return Promise.resolve();
+        }
+
+        var cancelBtn = document.getElementById('guest-trip-cancel-btn');
+        if (cancelBtn) {
+            cancelBtn.disabled = true;
+        }
+        hideCancelError();
+
+        var token = document.querySelector('meta[name="csrf-token"]');
+        var payload = {
+            booking_reference: currentBooking.booking_reference,
+            contact_phone: getContactPhone(),
+            booking_browser_id: getBrowserId(),
+        };
+        if (reasonId) {
+            payload.cancellation_reason_id = reasonId;
+        }
+
+        return fetch(window.__bookingTripCancelUrl, {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': token ? token.getAttribute('content') : '',
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify(payload),
+        })
+            .then(function (r) {
+                return r.json().then(function (data) {
+                    if (!r.ok) {
+                        throw new Error(data.message || 'Không hủy được chuyến.');
+                    }
+                    return data;
+                });
+            })
+            .then(function (data) {
+                if (window.BookingBrowserGuard && window.BookingBrowserGuard.recordCancelSuccess) {
+                    window.BookingBrowserGuard.recordCancelSuccess(data.cancel_count);
+                }
+                if (window.BookingActiveSession && window.BookingActiveSession.clear) {
+                    window.BookingActiveSession.clear();
+                }
+                currentBooking = null;
+                renderBooking(null);
+                if (window.AppDialog && window.AppDialog.alert) {
+                    var msg = data.message || 'Đã hủy chuyến.';
+                    if (data.cancel_blocked && data.block_message) {
+                        msg += ' ' + data.block_message;
+                    }
+                    window.AppDialog.alert(msg, { variant: 'success', title: 'Đã hủy chuyến' });
+                }
+            })
+            .catch(function (err) {
+                showCancelError(err.message || 'Không hủy được chuyến.');
+            })
+            .finally(function () {
+                if (cancelBtn) {
+                    cancelBtn.disabled = false;
+                }
+            });
+    }
+
+    function cancelTrip() {
+        if (!currentBooking || !currentBooking.can_cancel) {
+            return;
+        }
+
+        confirmCancelTrip().then(function (ok) {
+            if (!ok) {
+                return;
+            }
+            return pickCancelReason();
+        }).then(function (pick) {
+            if (!pick) {
+                return;
+            }
+            return submitCancel(pick.reasonId || null);
+        }).catch(function (err) {
+            if (err && err.message) {
+                if (window.AppDialog && window.AppDialog.alert) {
+                    window.AppDialog.alert(err.message, { variant: 'danger' });
+                } else {
+                    showCancelError(err.message);
+                }
+            }
+        });
+    }
+
     function bindReview() {
         document.querySelectorAll('[data-review-sentiment]').forEach(function (btn) {
             btn.addEventListener('click', function () {
@@ -456,6 +755,11 @@
 
     function init() {
         bindReview();
+        bindReferralOverlay();
+        var cancelBtn = document.getElementById('guest-trip-cancel-btn');
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', cancelTrip);
+        }
         fetchStatus();
         window.setInterval(fetchStatus, POLL_MS);
     }

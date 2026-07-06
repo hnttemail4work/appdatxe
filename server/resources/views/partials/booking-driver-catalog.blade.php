@@ -3,7 +3,6 @@
 $driverOffers = $driverOffers ?? collect();
 $filterCapacities = $driverOffers->pluck('capacity')->filter(fn ($c) => (int) $c > 0)->unique()->sort()->values();
 $filterTypes = $driverOffers->pluck('vehicle_type')->filter()->unique()->sort()->values();
-$driverCount = $driverOffers->count();
 @endphp
 
 <div id="booking-results-main" class="booking-results-main">
@@ -11,13 +10,6 @@ $driverCount = $driverOffers->count();
         <div class="booking-toolbar__head">
             <div>
                 <h2 class="booking-list-title">Chọn xe</h2>
-                <p class="booking-toolbar__sub">
-                    @if($driverCount > 0)
-                        {{ $driverCount }} tài xế sẵn sàng · Ghim điểm đón trả để xem giá
-                    @else
-                        Đang cập nhật danh sách xe
-                    @endif
-                </p>
             </div>
         </div>
 
@@ -67,8 +59,6 @@ $driverCount = $driverOffers->count();
             $driverName = $offer['driver_name'] ?? '—';
             $typeLabel = $offer['type_label'] ?? '—';
             $licensePlate = $offer['license_plate'] ?? '—';
-            $availabilityLabel = $offer['driver_availability_label'] ?? '—';
-            $availabilityTone = $offer['driver_availability_tone'] ?? 'neutral';
             $bookingActionLabel = $offer['booking_action_label'] ?? 'Đặt sau';
             $bookingActionTone = $offer['booking_action_tone'] ?? 'later';
             $offerLabel = $offer['offer_label'] ?? collect([$driverName, $licensePlate, $typeLabel, $capacityLabel])->filter(fn ($p) => filled($p) && $p !== '—')->implode(' - ');
@@ -85,7 +75,6 @@ $driverCount = $driverOffers->count();
                 @else
                     <div class="vehicle-offer-card__photo vehicle-offer-card__photo--empty">{{ strtoupper(substr($vehicleType ?: 'X', 0, 1)) }}</div>
                 @endif
-                <span class="vehicle-offer-card__status status-pill status-pill--{{ $availabilityTone }}">{{ $availabilityLabel }}</span>
             </div>
 
             <div class="vehicle-offer-card__body">

@@ -1297,6 +1297,11 @@ class DriverTripRequestService
         $booking->update(['hold_expires_at' => null]);
 
         $workflow->confirmForDriverAccept($booking->fresh());
+
+        try {
+            app(\App\Services\PushNotificationService::class)->onDriverAcceptedBooking($booking->fresh());
+        } catch (\Throwable) {
+        }
     }
 
     public function reassignScheduleDriver(Schedule $schedule, string $newDriverCode, int $operatorUserId): void

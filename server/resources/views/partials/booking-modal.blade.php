@@ -99,30 +99,42 @@
                                     </div>
                                 </div>
                             </div>
-                            <p class="small text-muted mt-2 mb-0">Tìm theo tỉnh, thành phố, phường/xã hoặc tên đường — ghim đúng vị trí trên bản đồ.</p>
                         </div>
 
                         <div class="booking-sheet-section">
                             <div class="booking-panel-label mb-2">Thời điểm về</div>
                             <div class="booking-chip-group booking-chip-group--inline mb-2" id="modal-departure-plan">
+                                @foreach([
+                                    \App\Support\DeparturePlan::ONE_WAY,
+                                    \App\Support\DeparturePlan::TODAY,
+                                    \App\Support\DeparturePlan::TOMORROW,
+                                    \App\Support\DeparturePlan::LATER,
+                                ] as $planValue)
                                 <label class="form-check booking-chip">
-                                    <input type="radio" name="departure_plan" value="today" class="form-check-input" checked> Trong ngày <span class="text-muted small">+50%</span>
+                                    <input type="radio" name="departure_plan" value="{{ $planValue }}" class="form-check-input"
+                                           @checked(old('departure_plan', \App\Support\DeparturePlan::ONE_WAY) === $planValue)>
+                                    {{ \App\Support\DeparturePlan::label($planValue) }}
                                 </label>
-                                <label class="form-check booking-chip">
-                                    <input type="radio" name="departure_plan" value="tomorrow" class="form-check-input"> Ngày mai <span class="text-muted small">+100%</span>
-                                </label>
-                                <label class="form-check booking-chip">
-                                    <input type="radio" name="departure_plan" value="later" class="form-check-input"> Hẹn sau <span class="text-muted small">giá chuẩn</span>
-                                </label>
+                                @endforeach
                             </div>
-                            <p class="small text-muted mb-3">Giá tính theo quãng đường ghim trên bản đồ. Hẹn sau chưa cần chọn ngày.</p>
+                            <div id="modal-later-return-days-wrap" class="d-none mb-2">
+                                <label class="form-label" for="modal-later-return-days">Số ngày chờ về</label>
+                                <div class="input-group" style="max-width: 12rem;">
+                                    <input type="number" name="later_return_days" id="modal-later-return-days"
+                                           class="form-control" min="{{ \App\Support\DeparturePlan::MIN_LATER_RETURN_DAYS }}"
+                                           max="{{ \App\Support\DeparturePlan::MAX_LATER_RETURN_DAYS }}" step="1"
+                                           value="{{ old('later_return_days', \App\Support\DeparturePlan::DEFAULT_LATER_RETURN_DAYS) }}">
+                                    <span class="input-group-text">ngày</span>
+                                </div>
+                                <div class="form-text" id="modal-later-return-days-hint"></div>
+                            </div>
                             <input type="hidden" name="service_date" id="modal-service-date" value="{{ old('service_date', $defaultServiceDate) }}">
                             <div id="modal-pickup-time-wrap">
                                 @include('partials.vi-pickup-time-input', [
                                     'name' => 'pickup_time',
                                     'id' => 'modal-pickup-time',
                                     'value' => old('pickup_time', $defaultPickupTime),
-                                    'label' => 'Giờ đón (tuỳ chọn)',
+                                    'label' => 'Giờ đón',
                                     'required' => false,
                                 ])
                             </div>
@@ -141,10 +153,24 @@
                                     </div>
                                 </div>
                                 <div class="text-end">
-                                    <div class="small text-muted">Tổng tiền</div>
-                                    <div id="modal-original-price" class="booking-price-original small text-muted text-decoration-line-through d-none"></div>
-                                    <div class="booking-summary-total" id="modal-total-price">0 đ</div>
-                                    <div id="modal-referral-discount" class="booking-referral-discount mt-1 d-none small text-success"></div>
+                                    <div class="booking-price-summary booking-price-summary--compact" id="modal-price-summary-step2">
+                                        <div class="booking-price-summary-row d-none" id="modal-price-distance-row-step2">
+                                            <span class="booking-price-summary-label">Số km:</span>
+                                            <span class="booking-price-summary-value" id="modal-price-distance-step2"></span>
+                                        </div>
+                                        <div class="booking-price-summary-row d-none" id="modal-original-row-step2">
+                                            <span class="booking-price-summary-label">Giá gốc:</span>
+                                            <span class="booking-price-summary-value booking-price-original text-muted text-decoration-line-through" id="modal-original-price-step2"></span>
+                                        </div>
+                                        <div class="booking-price-summary-row d-none" id="modal-discount-row-step2">
+                                            <span class="booking-price-summary-label">Giảm giá:</span>
+                                            <span class="booking-price-summary-value booking-price-discount text-success" id="modal-referral-discount-step2"></span>
+                                        </div>
+                                        <div class="booking-price-summary-row booking-price-summary-row--total">
+                                            <span class="booking-price-summary-label">Thành tiền:</span>
+                                            <span class="booking-price-summary-value booking-footer-price" id="modal-total-price">0 đ</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -176,11 +202,25 @@
                 </div>
 
                 <div class="modal-footer border-0 booking-modal-footer" id="modal-footer-step1">
-                    <div class="booking-footer-price-wrap text-end me-auto">
-                        <div class="small text-muted">Tạm tính</div>
-                        <div id="modal-original-price-step1" class="booking-price-original small text-muted text-decoration-line-through d-none"></div>
-                        <div class="booking-footer-price fw-semibold" id="modal-total-price-step1"></div>
-                        <div id="modal-referral-discount-step1" class="booking-referral-discount d-none small text-success"></div>
+                    <div class="booking-footer-price-wrap me-auto">
+                        <div class="booking-price-summary" id="modal-price-summary-step1">
+                            <div class="booking-price-summary-row d-none" id="modal-price-distance-row-step1">
+                                <span class="booking-price-summary-label">Số km:</span>
+                                <span class="booking-price-summary-value" id="modal-price-distance-step1"></span>
+                            </div>
+                            <div class="booking-price-summary-row d-none" id="modal-original-row-step1">
+                                <span class="booking-price-summary-label">Giá gốc:</span>
+                                <span class="booking-price-summary-value booking-price-original text-muted text-decoration-line-through" id="modal-original-price-step1"></span>
+                            </div>
+                            <div class="booking-price-summary-row d-none" id="modal-discount-row-step1">
+                                <span class="booking-price-summary-label">Giảm giá:</span>
+                                <span class="booking-price-summary-value booking-price-discount text-success" id="modal-referral-discount-step1"></span>
+                            </div>
+                            <div class="booking-price-summary-row booking-price-summary-row--total">
+                                <span class="booking-price-summary-label">Thành tiền:</span>
+                                <span class="booking-price-summary-value booking-footer-price" id="modal-total-price-step1"></span>
+                            </div>
+                        </div>
                     </div>
                     <button type="button" class="btn btn-primary fw-semibold px-4" id="modal-next-btn">Tiếp tục</button>
                 </div>

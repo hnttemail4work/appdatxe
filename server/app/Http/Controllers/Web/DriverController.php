@@ -263,6 +263,20 @@ class DriverController extends Controller
         $pickupDistances = $this->proximity->refreshAssignedPickupDistances($profile);
         $proximityPayload = $this->firstAssignedPickupPayload((int) $profile->user_id);
 
+        if (! empty($proximityPayload['distance_label'])) {
+            $schedule = $this->driverAvailability->activeSchedulesForDriver((int) $profile->user_id)->first();
+            $booking = $schedule?->driverRelevantBookings()->first();
+            if ($booking && ($schedule->resolvedDriverStage() ?? '') === Schedule::DRIVER_STAGE_ASSIGNED) {
+                try {
+                    app(\App\Services\PushNotificationService::class)->onDriverEnRoute(
+                        $booking,
+                        (string) $proximityPayload['distance_label'],
+                    );
+                } catch (\Throwable) {
+                }
+            }
+        }
+
         return response()->json([
             'ok'                    => true,
             'address'               => $address !== '' ? $address : null,

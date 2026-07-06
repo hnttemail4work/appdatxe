@@ -120,6 +120,11 @@
                 }
                 searchAbort = new AbortController();
 
+                if (window.GeocodeSearchUi && window.GeocodeSearchUi.setLoading) {
+                    window.GeocodeSearchUi.setLoading(suggestEl, 'Đang tìm…');
+                    showSuggest();
+                }
+
                 var url = searchUrl
                     + '?q=' + encodeURIComponent(query)
                     + '&province=' + encodeURIComponent(provinceName(options.provinceInputId, options.defaultProvince || ''));
@@ -136,6 +141,20 @@
                         }
 
                         var results = (data && data.results) || [];
+
+                        if (window.GeocodeSearchUi && window.GeocodeSearchUi.renderResults) {
+                            window.GeocodeSearchUi.renderResults(suggestEl, results, query, {
+                                itemClass: 'booking-address-suggest-item geocode-search-item',
+                                emptyClass: 'booking-address-suggest-empty',
+                                emptyText: 'Không thấy địa chỉ phù hợp — thử thêm quận/huyện hoặc chọn trên bản đồ.',
+                                onSelect: function (item) {
+                                    applySuggestion(item);
+                                },
+                            });
+                            showSuggest();
+                            return;
+                        }
+
                         suggestEl.innerHTML = '';
 
                         if (!results.length) {
@@ -195,6 +214,11 @@
             if (coordsLocked && e.key !== 'Escape' && e.key !== 'Tab') {
                 hideSuggest();
             }
+            if (window.GeocodeSearchUi
+                && window.GeocodeSearchUi.handleListKeydown
+                && window.GeocodeSearchUi.handleListKeydown(e, suggestEl)) {
+                return;
+            }
             if (e.key === 'Enter') {
                 var first = suggestEl.querySelector('.booking-address-suggest-item');
                 if (first) {
@@ -241,4 +265,4 @@
 
     window.GeocodeAddressAutocomplete = { attach: attach };
 })();
-
+

@@ -24,11 +24,31 @@
 
         <header class="guest-trip-card__head">
 
-            <div class="guest-trip-card__id">
+            <div class="guest-trip-card__head-row">
 
-                <span class="guest-trip-card__id-label">Mã chuyến</span>
+                <div class="guest-trip-card__id">
 
-                <code class="guest-trip-card__code" data-field="trip_code">—</code>
+                    <span class="guest-trip-card__id-label">Mã chuyến</span>
+
+                    <code class="guest-trip-card__code" data-field="trip_code">—</code>
+
+                </div>
+
+                <aside class="guest-trip-card__aside">
+
+                    <div class="guest-trip-referral d-none" id="guest-trip-referral-wrap" data-field="referral_wrap">
+
+                        <p class="guest-trip-referral-label mb-0">Mã giới thiệu</p>
+
+                        <button type="button" class="booking-active-referral-qr-btn guest-trip-referral-qr-btn" id="guest-trip-referral-qr-btn" aria-label="Bấm để xem mã QR giới thiệu">
+
+                            <span id="guest-trip-referral-qr" class="booking-active-referral-qr guest-trip-referral-qr" aria-hidden="true"></span>
+
+                        </button>
+
+                    </div>
+
+                </aside>
 
             </div>
 
@@ -225,7 +245,43 @@
 
         </div>
 
+
+
+        <div id="guest-trip-cancel-wrap" class="guest-trip-cancel d-none" data-field="cancel_wrap">
+
+            <button type="button" class="btn btn-outline-danger btn-sm guest-trip-cancel-btn" id="guest-trip-cancel-btn">
+
+                Hủy chuyến
+
+            </button>
+
+            <p class="guest-trip-cancel-error d-none" id="guest-trip-cancel-error"></p>
+
+        </div>
+
     </article>
+
+    <div id="guest-trip-referral-qr-overlay" class="booking-active-referral-qr-overlay d-none" role="dialog" aria-modal="true" aria-labelledby="guest-trip-referral-qr-overlay-title" hidden>
+
+        <div class="booking-active-referral-qr-overlay-backdrop" data-close-guest-referral-qr></div>
+
+        <div class="booking-active-referral-qr-overlay-panel">
+
+            <div class="booking-active-referral-qr-overlay-head">
+
+                <strong id="guest-trip-referral-qr-overlay-title">Mã giới thiệu</strong>
+
+                <button type="button" class="btn-close" data-close-guest-referral-qr aria-label="Đóng"></button>
+
+            </div>
+
+            <div id="guest-trip-referral-qr-large" class="booking-active-referral-qr-large"></div>
+
+            <p class="booking-active-referral-qr-overlay-note small mb-0" id="guest-trip-referral-qr-overlay-note"></p>
+
+        </div>
+
+    </div>
 
 </div>
 

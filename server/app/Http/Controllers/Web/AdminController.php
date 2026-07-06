@@ -9,6 +9,7 @@ use App\Models\DriverWalletTransaction;
 use App\Models\PlatformSetting;
 use App\Models\ReferralCode;
 use App\Models\TripRoute;
+use App\Services\LaterReturnBookingService;
 use App\Services\AdminRevenueService;
 use App\Services\BookingWorkflowService;
 use App\Services\DriverTripRequestService;
@@ -23,7 +24,7 @@ use App\Support\PageList;
 use App\Support\ProvinceCenters;
 use App\Support\RouteDistanceCatalog;
 use App\Support\PlatformFees;
-use App\Support\PlatformPaymentInfo;
+use App\Support\PushNotificationSettings;
 use App\Support\VehicleCapacityOptions;
 use App\Support\VehicleCapacityPricing;
 use Illuminate\Http\Request;
@@ -39,6 +40,7 @@ class AdminController extends Controller
         private readonly DriverTripRequestService $tripRequests,
         private readonly BookingWorkflowService $workflow,
         private readonly AdminRevenueService $revenue,
+        private readonly LaterReturnBookingService $laterReturnBookings,
     ) {
     }
 
@@ -68,6 +70,9 @@ class AdminController extends Controller
             'round_trip_discount'      => PlatformFees::roundTripDiscountPercent(),
             'km_rate_under_100'   => PlatformFees::kmRateUnder100(),
             'km_rate_over_100'    => PlatformFees::kmRateOver100(),
+            'departure_plan_surcharge_today' => PlatformFees::departurePlanTodaySurchargePercent(),
+            'departure_plan_surcharge_tomorrow' => PlatformFees::departurePlanTomorrowSurchargePercent(),
+            'departure_plan_surcharge_later_per_day' => PlatformFees::departurePlanLaterPercentPerDay(),
             'vehicle_capacity'    => VehicleCapacityPricing::settingsForAdmin(),
             'vehicleCapacityEnabled' => VehicleCapacityOptions::enabled(),
             'vehicleCapacityKnown'   => VehicleCapacityOptions::knownCapacities(),
@@ -95,6 +100,9 @@ class AdminController extends Controller
         $bankQrPreview = PlatformPaymentInfo::vietQrImageUrl();
         $bookingPageSettings = BookingPageSettings::forAdmin();
         $brandingSettings = AppBrandingSettings::forAdmin();
+        $pushSettings = PushNotificationSettings::forAdmin();
+        $pushEventLabels = PushNotificationSettings::eventLabels();
+        $pushVapidReady = PushNotificationSettings::vapidKeys() !== null;
 
         return view('admin.dashboard', compact(
             'referralCodes',
@@ -105,6 +113,9 @@ class AdminController extends Controller
             'bankQrPreview',
             'bookingPageSettings',
             'brandingSettings',
+            'pushSettings',
+            'pushEventLabels',
+            'pushVapidReady',
         ));
     }
 
@@ -228,6 +239,24 @@ class AdminController extends Controller
             ->with('success', 'Đã lưu thương hiệu.');
     }
 
+    public function updatePushSettings(Request $request)
+    {
+        $validated = $request->validate([
+            'enabled' => ['nullable', 'boolean'],
+            'events'  => ['nullable', 'array'],
+            'events.*'=> ['string', 'max:64'],
+            'vapid_public'  => ['nullable', 'string', 'max:255'],
+            'vapid_private' => ['nullable', 'string', 'max:255'],
+            'vapid_subject' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $validated['enabled'] = $request->boolean('enabled');
+        PushNotificationSettings::saveFromAdmin($validated);
+
+        return redirect()->route('admin.dashboard', ['tab' => 'appearance'])
+            ->with('success', 'Đã lưu cài đặt thông báo đẩy.');
+    }
+
     public function updateFeeSettings(Request $request)
     {
         $knownCapacities = VehicleCapacityOptions::knownCapacities();
@@ -243,6 +272,9 @@ class AdminController extends Controller
             'round_trip_discount'   => ['required', 'numeric', 'min:0', 'max:100'],
             'km_rate_under_100'   => ['required', 'integer', 'min:0'],
             'km_rate_over_100'    => ['required', 'integer', 'min:0'],
+            'departure_plan_surcharge_today' => ['required', 'numeric', 'min:0', 'max:500'],
+            'departure_plan_surcharge_tomorrow' => ['required', 'numeric', 'min:0', 'max:500'],
+            'departure_plan_surcharge_later_per_day' => ['required', 'numeric', 'min:0', 'max:500'],
             'capacity_step_percent' => ['required', 'numeric', 'min:0', 'max:50'],
             'capacity_percents'   => ['nullable', 'array'],
             'capacity_enabled'    => ['nullable', 'array'],
@@ -289,6 +321,18 @@ class AdminController extends Controller
 
         PlatformSetting::setValue('pricing_km_rate_over_100', [
             'value' => (int) $validated['km_rate_over_100'],
+        ], 'finance');
+
+        PlatformSetting::setValue('departure_plan_surcharge_today_percentage', [
+            'value' => (float) $validated['departure_plan_surcharge_today'],
+        ], 'finance');
+
+        PlatformSetting::setValue('departure_plan_surcharge_tomorrow_percentage', [
+            'value' => (float) $validated['departure_plan_surcharge_tomorrow'],
+        ], 'finance');
+
+        PlatformSetting::setValue('departure_plan_surcharge_later_per_day_percentage', [
+            'value' => (float) $validated['departure_plan_surcharge_later_per_day'],
         ], 'finance');
 
         VehicleCapacityPricing::save(
@@ -749,5 +793,23 @@ class AdminController extends Controller
         return redirect()
             ->route('admin.bookings', ['list' => 'cancelled'])
             ->with('success', 'Đã hủy chuyến — khách và tài xế không còn thấy trên app.');
+    }
+
+    public function dispatchLaterReturnPickup(Booking $booking)
+    {
+        $this->scheduleLifecycle->sync();
+        $this->tripRequests->expireStale();
+
+        $booking->loadMissing(['schedule.template', 'schedule.route', 'schedule.vehicle']);
+
+        try {
+            $returnBooking = $this->laterReturnBookings->dispatchReturnPickup($booking);
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['booking' => $e->getMessage()]);
+        }
+
+        return redirect()
+            ->route('admin.bookings', ['list' => 'active'])
+            ->with('success', 'Đã tạo chuyến đón khách về — mã ' . ($returnBooking->booking_reference ?? '—') . '.');
     }
 }

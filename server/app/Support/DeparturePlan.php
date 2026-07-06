@@ -7,58 +7,107 @@ use Carbon\Carbon;
 /** Thời điểm đặt chuyến — ảnh hưởng hệ số giá. */
 final class DeparturePlan
 {
+    public const ONE_WAY = 'oneway';
+
     public const TODAY = 'today';
 
     public const TOMORROW = 'tomorrow';
 
     public const LATER = 'later';
 
-    /** Số ngày placeholder khi khách chọn hẹn sau (chưa chốt ngày). */
-    public const LATER_PLACEHOLDER_DAYS = 30;
+    /** Số ngày chờ về tối thiểu (> 2 ngày). */
+    public const MIN_LATER_RETURN_DAYS = 3;
+
+    public const MAX_LATER_RETURN_DAYS = 60;
+
+    public const DEFAULT_LATER_RETURN_DAYS = 3;
+
+    /** @deprecated Dùng {@see MIN_LATER_RETURN_DAYS} */
+    public const LATER_PLACEHOLDER_DAYS = self::DEFAULT_LATER_RETURN_DAYS;
+
+    /** @deprecated Nhắc đón theo ngày về (service_date). */
+    public const LATER_PICKUP_REMINDER_DAYS = 2;
 
     public static function normalize(?string $plan): string
     {
         $plan = strtolower(trim((string) $plan));
 
-        return in_array($plan, [self::TODAY, self::TOMORROW, self::LATER], true)
+        return in_array($plan, [self::ONE_WAY, self::TODAY, self::TOMORROW, self::LATER], true)
             ? $plan
-            : self::TODAY;
+            : self::ONE_WAY;
     }
 
     public static function label(string $plan): string
     {
         return match (self::normalize($plan)) {
-            self::TODAY    => 'Trong ngày',
-            self::TOMORROW => 'Ngày mai',
-            self::LATER    => 'Hẹn sau',
+            self::ONE_WAY   => 'Một chiều',
+            self::TODAY    => 'Về trong ngày',
+            self::TOMORROW => 'Về ngày mai',
+            self::LATER    => 'Trên 2 ngày',
         };
+    }
+
+    public static function displayLabel(string $plan, ?int $laterReturnDays = null): string
+    {
+        $plan = self::normalize($plan);
+
+        if ($plan === self::LATER) {
+            $days = self::normalizeLaterReturnDays($laterReturnDays);
+
+            return self::label($plan) . ' (' . $days . ' ngày)';
+        }
+
+        return self::label($plan);
+    }
+
+    public static function normalizeLaterReturnDays(mixed $days): int
+    {
+        $value = (int) $days;
+
+        if ($value < self::MIN_LATER_RETURN_DAYS) {
+            return self::DEFAULT_LATER_RETURN_DAYS;
+        }
+
+        return min($value, self::MAX_LATER_RETURN_DAYS);
     }
 
     /** Hệ số nhân trên giá chuẩn (một chiều theo km). */
-    public static function priceMultiplier(string $plan): float
+    public static function priceMultiplier(string $plan, ?int $laterReturnDays = null): float
     {
-        return match (self::normalize($plan)) {
-            self::TODAY    => 1.5,
-            self::TOMORROW => 2.0,
-            default        => 1.0,
-        };
+        $plan = self::normalize($plan);
+
+        if ($plan === self::LATER) {
+            return PlatformFees::departurePlanLaterPriceMultiplier(
+                self::normalizeLaterReturnDays($laterReturnDays),
+            );
+        }
+
+        return PlatformFees::departurePlanPriceMultiplier($plan);
     }
 
-    public static function surchargePercent(string $plan): int
+    public static function surchargePercent(string $plan, ?int $laterReturnDays = null): int
     {
-        return match (self::normalize($plan)) {
-            self::TODAY    => 50,
-            self::TOMORROW => 100,
-            default        => 0,
-        };
+        $plan = self::normalize($plan);
+
+        if ($plan === self::LATER) {
+            $days = self::normalizeLaterReturnDays($laterReturnDays);
+
+            return (int) round($days * PlatformFees::departurePlanLaterPercentPerDay());
+        }
+
+        return (int) round(PlatformFees::departurePlanSurchargePercent($plan));
     }
 
-    public static function resolveServiceDate(string $plan, ?string $requested = null, ?Carbon $reference = null): string
-    {
+    public static function resolveServiceDate(
+        string $plan,
+        ?string $requested = null,
+        ?Carbon $reference = null,
+        ?int $laterReturnDays = null,
+    ): string {
         $reference ??= now();
         $plan = self::normalize($plan);
 
-        if ($plan === self::TODAY) {
+        if (in_array($plan, [self::ONE_WAY, self::TODAY], true)) {
             return ServiceDate::dayStart($reference)->toDateString();
         }
 
@@ -66,11 +115,22 @@ final class DeparturePlan
             return ServiceDate::dayStart($reference)->addDay()->toDateString();
         }
 
+        if ($plan === self::LATER) {
+            return ServiceDate::dayStart($reference)
+                ->addDays(self::normalizeLaterReturnDays($laterReturnDays))
+                ->toDateString();
+        }
+
         $requested = trim((string) $requested);
         if ($requested !== '') {
             return ServiceDate::parse($requested)->toDateString();
         }
 
-        return ServiceDate::dayStart($reference)->addDays(self::LATER_PLACEHOLDER_DAYS)->toDateString();
+        return ServiceDate::dayStart($reference)->toDateString();
+    }
+
+    public static function laterPickupReminderStartsAt(\Carbon\Carbon $bookedAt): \Carbon\Carbon
+    {
+        return ServiceDate::dayStart($bookedAt)->addDays(self::LATER_PICKUP_REMINDER_DAYS);
     }
 }

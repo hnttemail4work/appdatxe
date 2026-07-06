@@ -134,7 +134,10 @@ $showDriverColumn = $bookingList !== 'active';
                     </td>
                     @if($showStatusColumn)
                     <td class="small admin-booking-status-cell">
-                        @include('partials.admin-booking-status', ['booking' => $booking])
+                        @include('partials.admin-booking-status', [
+                            'booking' => $booking,
+                            'bookingList' => $bookingList,
+                        ])
                     </td>
                     @endif
                     @if($showPickupAlertColumn)
