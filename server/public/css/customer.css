@@ -3914,14 +3914,70 @@ body.booking-active-referral-qr-open {
 }
 
 .guest-trip-card__hero {
-    padding: 1rem 1rem 0.35rem;
+    padding: 1rem 1rem 0.5rem;
+}
+.guest-trip-vehicle-section {
+    margin: 0 0.85rem 0.75rem;
+    border-radius: 0.9rem;
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.09) 0%, rgba(255, 255, 255, 0.03) 100%);
+    border: 1px solid rgba(212, 175, 55, 0.22);
+    overflow: hidden;
+}
+.guest-trip-vehicle-section .guest-trip-driver {
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+}
+.guest-trip-summary-section {
+    margin: 0 0.85rem 0.85rem;
+    padding: 0.65rem 0.9rem 0.75rem;
+    border-radius: 0.9rem;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.guest-trip-summary-section .guest-trip-details {
+    display: grid;
+    gap: 0.35rem;
+}
+.guest-trip-detail {
+    display: grid;
+    grid-template-columns: minmax(7.5rem, 42%) minmax(0, 1fr);
+    gap: 0.65rem;
+    align-items: baseline;
+    padding: 0;
+    border: none;
+    background: transparent;
+}
+.guest-trip-detail--price .guest-trip-detail__value {
+    color: #86efac;
+    font-size: 1rem;
+}
+.guest-trip-detail__label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.58);
+}
+.guest-trip-detail__value {
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: #f8fafc;
+    text-align: right;
+    word-break: break-word;
+}
+.guest-trip-detail__value--status {
+    color: #fde68a;
+}
+.guest-trip-detail__value--price {
+    color: #86efac;
+    font-size: 1rem;
 }
 .guest-trip-route {
     display: flex;
     align-items: center;
     gap: 0.55rem;
     flex-wrap: wrap;
-    margin-bottom: 0.65rem;
+    margin-bottom: 0;
 }
 .guest-trip-route__city {
     font-size: 1.2rem;
@@ -3966,6 +4022,17 @@ body.booking-active-referral-qr-open {
     color: #fde68a;
     background: rgba(212, 175, 55, 0.12);
     border: 1px solid rgba(212, 175, 55, 0.28);
+}
+.guest-trip-plan-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.28rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #bfdbfe;
+    background: rgba(96, 165, 250, 0.12);
+    border: 1px solid rgba(96, 165, 250, 0.28);
 }
 .guest-trip-stat-badge,
 .guest-trip-price-badge {
@@ -4095,6 +4162,16 @@ body.booking-active-referral-qr-open {
     min-width: 0;
     flex: 1;
 }
+.guest-trip-driver__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.65rem;
+}
+.guest-trip-driver__main {
+    min-width: 0;
+    flex: 1;
+}
 .guest-trip-driver__top {
     display: flex;
     align-items: baseline;
@@ -4121,7 +4198,7 @@ body.booking-active-referral-qr-open {
 }
 .guest-trip-driver__plate {
     display: inline-block;
-    margin-bottom: 0.45rem;
+    margin-bottom: 0;
     padding: 0.18rem 0.5rem;
     border-radius: 0.4rem;
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -4134,25 +4211,33 @@ body.booking-active-referral-qr-open {
 }
 .guest-trip-driver__status {
     display: inline-flex;
-    align-items: center;
+    align-items: flex-start;
+    justify-content: flex-end;
+    flex-shrink: 0;
+    max-width: 42%;
     padding: 0.22rem 0.55rem;
     border-radius: 0.45rem;
-    font-size: 0.76rem;
+    font-size: 0.72rem;
     font-weight: 700;
+    line-height: 1.35;
+    text-align: right;
     color: #6ee7b7;
     background: rgba(16, 185, 129, 0.12);
     border: 1px solid rgba(16, 185, 129, 0.24);
-    margin-bottom: 0.35rem;
 }
 .guest-trip-driver__live {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem 0.65rem;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-top: 0.45rem;
 }
-.guest-trip-driver__live-item {
+.guest-trip-driver__live-distance,
+.guest-trip-driver__live-eta {
+    margin: 0;
     font-size: 0.78rem;
     font-weight: 600;
     color: #93c5fd;
+    line-height: 1.4;
 }
 
 .guest-trip-review {

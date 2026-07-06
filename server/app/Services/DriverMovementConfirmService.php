@@ -222,10 +222,6 @@ class DriverMovementConfirmService
             ]);
 
             foreach ($bookings as $booking) {
-                if ($booking->assigned_driver_id) {
-                    $booking->update(['assigned_driver_id' => null]);
-                }
-
                 DriverTripRequest::query()->updateOrCreate(
                     [
                         'schedule_id'   => $locked->id,
@@ -244,9 +240,9 @@ class DriverMovementConfirmService
         $tripRequests = app(DriverTripRequestService::class);
 
         foreach ($bookings as $booking) {
-            $fresh = $booking->fresh(['schedule.route', 'schedule.vehicle']);
+            $fresh = $booking->fresh(['schedule.route', 'schedule.vehicle', 'schedule.template']);
             if ($fresh && ! $fresh->schedule?->driver_id) {
-                $tripRequests->autoAssignForBooking($fresh);
+                $tripRequests->tryReassignAfterDriverRelease($fresh, $formerDriverId);
             }
         }
 

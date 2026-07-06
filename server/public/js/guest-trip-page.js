@@ -45,6 +45,80 @@
         }
     }
 
+    function setDetailRow(card, wrapField, valueField, text) {
+        var wrap = qs('[data-field="' + wrapField + '"]', card);
+        var el = qs('[data-field="' + valueField + '"]', card);
+        if (!wrap || !el) {
+            return;
+        }
+        var show = !!(text !== null && text !== undefined && String(text).trim() !== '');
+        el.textContent = show ? String(text) : '';
+        wrap.classList.toggle('d-none', !show);
+    }
+
+    function showGuestDriverProximity(booking) {
+        if (!booking) {
+            return false;
+        }
+        if (booking.trip_status === 'completed' || booking.trip_status === 'cancelled') {
+            return false;
+        }
+        if (!booking.has_driver) {
+            return false;
+        }
+        if (!booking.driver) {
+            return true;
+        }
+        var stage = String(booking.driver.stage || 'assigned');
+        return stage === 'assigned' || stage === 'at_pickup';
+    }
+
+    /** Khoảng cách / ETA — chỉ khi TX đang đi đón, chưa bấm «Đến điểm đón». */
+    function showGuestDriverLiveProximity(booking) {
+        if (!showGuestDriverProximity(booking)) {
+            return false;
+        }
+        if (!booking.driver) {
+            return false;
+        }
+        return String(booking.driver.stage || 'assigned') === 'assigned';
+    }
+
+    function serviceDateLabel(booking) {
+        if (booking.service_date_label) {
+            return booking.service_date_label;
+        }
+        if (booking.service_date) {
+            return String(booking.service_date).split(' ')[0];
+        }
+        return '';
+    }
+
+    function driverDistanceGuestLabel(booking) {
+        if (booking.driver_distance_label) {
+            return booking.driver_distance_label;
+        }
+        if (!booking.driver_location_shared) {
+            return '';
+        }
+        var line = booking.driver_distance_line || '';
+        if (line.indexOf('Tài xế cách bạn ') === 0) {
+            return line.replace('Tài xế cách bạn ', '');
+        }
+        return line || '';
+    }
+
+    function driverEtaGuestLabel(booking) {
+        if (booking.driver_eta_label) {
+            return booking.driver_eta_label;
+        }
+        var line = booking.driver_eta_line || '';
+        if (line.indexOf('Dự kiến ') === 0) {
+            return line.replace('Dự kiến ', '');
+        }
+        return line || '';
+    }
+
     function parseRoute(route) {
         var raw = String(route || '').trim();
         if (!raw || raw === '—') {
@@ -55,14 +129,6 @@
             return { from: parts[0].trim(), to: parts.slice(1).join(' → ').trim() };
         }
         return { from: raw, to: raw };
-    }
-
-    function formatSchedule(booking) {
-        if (booking.pickup_time_label && booking.service_date) {
-            var dateOnly = String(booking.service_date).split(' ')[0];
-            return booking.pickup_time_label + ' · ' + dateOnly;
-        }
-        return booking.service_date || booking.pickup_time_label || '';
     }
 
     function stopAddress(province, detail) {
@@ -345,21 +411,91 @@
             vehicleParts.push(driver.vehicle_name);
         }
         setText(qs('[data-field="driver_vehicle"]', panel), vehicleParts.join(' · '), vehicleParts.length > 0);
-        setText(qs('[data-field="driver_plate"]', panel), driver.vehicle_plate || '', !!driver.vehicle_plate);
+
+        var plateText = driver.vehicle_plate || '';
+        var seatsLabel = driver.vehicle_seats_label || '';
+        if (!seatsLabel && Number(driver.vehicle_seats || 0) > 0) {
+            seatsLabel = driver.vehicle_seats + ' chỗ';
+        }
+        if (plateText && seatsLabel) {
+            plateText = plateText + ', ' + seatsLabel;
+        } else if (!plateText && seatsLabel) {
+            plateText = seatsLabel;
+        }
+        setText(qs('[data-field="driver_plate"]', panel), plateText, !!plateText);
 
         var statusLine = booking.driver_status_line || driver.status_line || '';
         setText(qs('[data-field="driver_status"]', panel), statusLine, !!statusLine);
 
         var liveWrap = qs('[data-field="driver_live_wrap"]', panel);
-        var distanceLine = booking.driver_distance_line || driver.distance_line || '';
-        var etaLine = booking.driver_eta_line || driver.eta_line || '';
-        setText(qs('[data-field="driver_distance"]', panel), distanceLine, !!distanceLine);
-        setText(qs('[data-field="driver_eta"]', panel), etaLine, !!etaLine);
+        var distanceEl = qs('[data-field="driver_distance_line"]', panel);
+        var etaEl = qs('[data-field="driver_eta_line"]', panel);
+        var distanceLine = '';
+        var etaLine = '';
+
+        if (showGuestDriverLiveProximity(booking)) {
+            var locationShared = booking.driver_location_shared
+                || (driver && driver.location_shared);
+            if (locationShared) {
+                distanceLine = booking.driver_distance_line
+                    || (driver && driver.distance_line)
+                    || '';
+                if (!distanceLine) {
+                    var distanceLabel = booking.driver_distance_label
+                        || (driver && driver.distance_label)
+                        || driverDistanceGuestLabel(booking);
+                    if (distanceLabel) {
+                        distanceLine = 'Tài xế cách bạn ' + distanceLabel;
+                    }
+                }
+                etaLine = booking.driver_eta_line || (driver && driver.eta_line) || '';
+                if (!etaLine) {
+                    var etaLabel = booking.driver_eta_label || (driver && driver.eta_label) || '';
+                    if (etaLabel) {
+                        etaLine = 'Dự kiến ' + etaLabel;
+                    }
+                }
+            }
+        }
+
+        if (distanceEl) {
+            distanceEl.textContent = distanceLine;
+            distanceEl.classList.toggle('d-none', !distanceLine);
+        }
+
+        if (etaEl) {
+            etaEl.textContent = etaLine;
+            etaEl.classList.toggle('d-none', !etaLine);
+        }
+
         if (liveWrap) {
             liveWrap.classList.toggle('d-none', !distanceLine && !etaLine);
         }
 
         panel.classList.remove('d-none');
+    }
+
+    function syncTripSummarySection(card) {
+        var section = qs('[data-field="trip_summary_wrap"]', card);
+        if (!section) {
+            return;
+        }
+
+        var hasVisibleDetail = !!section.querySelector('.guest-trip-detail:not(.d-none)');
+        section.classList.toggle('d-none', !hasVisibleDetail);
+    }
+
+    function syncVehicleSection(card) {
+        var section = qs('[data-field="vehicle_section_wrap"]', card);
+        if (!section) {
+            return;
+        }
+
+        var driverPanel = qs('[data-field="driver_panel"]', card);
+        var hasDriver = !!(driverPanel && !driverPanel.classList.contains('d-none'));
+
+        section.classList.toggle('d-none', !hasDriver);
+        section.classList.toggle('guest-trip-vehicle-section--driver-only', hasDriver);
     }
 
     function renderReview(booking) {
@@ -423,42 +559,35 @@
         setText(qs('[data-field="route_from"]', card), routeParts.from, true);
         setText(qs('[data-field="route_to"]', card), routeParts.to, true);
 
-        var scheduleText = formatSchedule(booking);
-        setWrapText(
-            qs('[data-field="schedule_wrap"]', card),
-            qs('[data-field="schedule_display"]', card),
-            scheduleText,
+        setDetailRow(card, 'pickup_time_wrap', 'pickup_time_label', booking.pickup_time_label || '');
+        setDetailRow(card, 'service_date_wrap', 'service_date_label', serviceDateLabel(booking));
+        setDetailRow(
+            card,
+            'departure_plan_wrap',
+            'departure_plan_label',
+            booking.departure_plan_guest_label || booking.departure_plan_label || '',
         );
-        setText(qs('[data-field="vehicle_label"]', card), booking.vehicle_label || '', !!booking.vehicle_label);
+        var planWrap = qs('[data-field="departure_plan_wrap"]', card);
+        var planLabelEl = planWrap ? planWrap.querySelector('.guest-trip-detail__label') : null;
+        if (planLabelEl) {
+            planLabelEl.textContent = booking.departure_plan === 'later'
+                ? 'Số ngày đặt chuyến'
+                : 'Loại chuyến';
+        }
 
         var distanceKm = Number(booking.distance_km || 0);
-        var distanceWrap = qs('[data-field="distance_wrap"]', card);
-        var distanceEl = qs('[data-field="distance_km"]', card);
-        if (distanceWrap && distanceEl) {
-            if (distanceKm > 0) {
-                distanceEl.textContent = String(distanceKm);
-                distanceWrap.classList.remove('d-none');
-            } else {
-                distanceEl.textContent = '';
-                distanceWrap.classList.add('d-none');
-            }
-        }
+        setDetailRow(
+            card,
+            'trip_distance_wrap',
+            'trip_distance_km',
+            distanceKm > 0 ? distanceKm + ' km' : '',
+        );
 
         var priceLabel = booking.total_price_label || '';
         if (!priceLabel && booking.total_price > 0) {
             priceLabel = Number(booking.total_price).toLocaleString('vi-VN') + ' đ';
         }
-        var priceWrap = qs('[data-field="total_price_wrap"]', card);
-        var priceEl = qs('[data-field="total_price"]', card);
-        if (priceWrap && priceEl) {
-            if (priceLabel) {
-                priceEl.textContent = priceLabel;
-                priceWrap.classList.remove('d-none');
-            } else {
-                priceEl.textContent = '';
-                priceWrap.classList.add('d-none');
-            }
-        }
+        setDetailRow(card, 'total_price_wrap', 'total_price', priceLabel);
 
         var pickupText = stopAddress(booking.pickup_address, booking.pickup_detail);
         var dropoffText = stopAddress(booking.dropoff_address, booking.dropoff_detail);
@@ -474,6 +603,8 @@
         );
 
         renderDriverPanel(booking);
+        syncVehicleSection(card);
+        syncTripSummarySection(card);
         renderReview(booking);
         renderReferral(booking);
         renderCancelAction(booking);

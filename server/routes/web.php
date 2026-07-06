@@ -103,6 +103,7 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::get('admin/bookings',                   [AdminController::class, 'bookings'])->name('admin.bookings');
     Route::get('admin/bookings/sync',              [AdminController::class, 'bookingsSync'])->name('admin.bookings.sync');
     Route::post('admin/bookings/{booking}/assign', [AdminController::class, 'confirmAndAssignBooking'])->name('admin.bookings.assign');
+    Route::post('admin/bookings/{booking}/nudge-driver', [AdminController::class, 'nudgeDriverBooking'])->name('admin.bookings.nudgeDriver');
     Route::post('admin/bookings/{booking}/cancel', [AdminController::class, 'cancelBooking'])->name('admin.bookings.cancel');
     Route::post('admin/bookings/{booking}/later-pickup', [AdminController::class, 'dispatchLaterReturnPickup'])->name('admin.bookings.laterPickup');
     Route::delete('admin/bookings/lo', [AdminController::class, 'bulkDismissBookings'])->name('admin.bookings.bulkDismiss');

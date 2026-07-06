@@ -40,18 +40,20 @@
 
         $canReassign = $isActiveTrip
             && $booking->adminCanModifyDriverOrCancel()
-            && $booking->hasDriverAccepted()
-            && $schedule->departure_time > now();
+            && $booking->driverAcceptanceState() === 'accepted';
 
         $canAssign = $isActiveTrip
             && $booking->adminCanModifyDriverOrCancel()
-            && ! $booking->hasDriverAccepted();
+            && (
+                in_array($booking->driverAcceptanceState(), ['none', 'pending'], true)
+                || $booking->needs_operator_help_at
+            );
 
         $chosenCode = $chosenProfile?->driver_code ? strtoupper(trim($chosenProfile->driver_code)) : '';
 
         $activeCode = $activeProfile?->driver_code ? strtoupper(trim($activeProfile->driver_code)) : '';
 
-        $selectedCode = $activeCode !== '' ? $activeCode : $chosenCode;
+        $selectedCode = $canReassign ? $chosenCode : ($activeCode !== '' ? $activeCode : $chosenCode);
 
     @endphp
 
@@ -65,13 +67,18 @@
 
             <select name="driver_code" class="form-select form-select-sm" style="min-width: 9rem; max-width: 14rem;" required>
 
-                <option value="">Đổi sang TX khác</option>
+                <option value="">Chọn tài xế</option>
 
                 @foreach($drivers as $d)
 
-                    @if($d->driver_code && (int) $d->user_id !== $activeDriverId)
+                    @if($d->driver_code)
 
                         @php
+
+                            $code = strtoupper(trim($d->driver_code));
+
+                            $includeDriver = (int) $d->user_id !== $activeDriverId
+                                || ($chosenCode !== '' && $code === $chosenCode);
 
                             $diag = $schedule
 
@@ -79,9 +86,13 @@
 
                                 : ['distance_label' => null, 'hint' => null];
 
+                            $isSelected = $selectedCode !== '' && $code === $selectedCode;
+
                         @endphp
 
-                        <option value="{{ $d->driver_code }}">
+                        @if($includeDriver)
+
+                        <option value="{{ $d->driver_code }}" @selected($isSelected)>
 
                             {{ $d->user->name }}
 
@@ -93,13 +104,15 @@
 
                         </option>
 
+                        @endif
+
                     @endif
 
                 @endforeach
 
             </select>
 
-            <button type="submit" class="btn btn-primary btn-sm text-nowrap">Đổi TX</button>
+            <button type="submit" class="btn btn-primary btn-sm text-nowrap">Gán lại TX</button>
 
         </form>
 

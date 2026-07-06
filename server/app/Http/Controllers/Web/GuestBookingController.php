@@ -45,20 +45,9 @@ class GuestBookingController extends Controller
 
     public function trips(Request $request)
     {
-        $bookingReferralSuccess = session('booking_success.referral_code')
-            ? [
-                'code' => session('booking_success.referral_code'),
-                'url' => session('booking_success.referral_url')
-                    ?: route('home', ['ref' => session('booking_success.referral_code')]),
-                'discount_percent' => session('booking_success.referral_discount_percent'),
-                'pending' => session('booking_success.referral_pending', true),
-            ]
-            : null;
-
         return view('booking.trips', [
             'browserCancelCount' => (int) $request->session()->get('guest_browser_cancel_count', 0),
             'platformHotlinePhone' => (string) config('app.contact_phone'),
-            'bookingReferralSuccess' => $bookingReferralSuccess,
         ]);
     }
 

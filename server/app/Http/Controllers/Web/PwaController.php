@@ -26,7 +26,6 @@ class PwaController extends Controller
         $audience = PushAudience::resolve($request->user());
         $appName = AppBrandingSettings::appName();
         $startUrl = PushAudience::startUrl($audience);
-        $iconVer = @filemtime(public_path('favicon.svg')) ?: time();
 
         return response()->json([
             'name'             => PushAudience::manifestName($audience, $appName),
@@ -39,14 +38,7 @@ class PwaController extends Controller
             'background_color' => '#0f1419',
             'theme_color'      => '#0f1419',
             'lang'             => 'vi',
-            'icons'            => [
-                [
-                    'src'     => asset('favicon.svg') . '?v=' . $iconVer,
-                    'sizes'   => 'any',
-                    'type'    => 'image/svg+xml',
-                    'purpose' => 'any maskable',
-                ],
-            ],
+            'icons'            => AppBrandingSettings::manifestIcons(),
         ])->header('Content-Type', 'application/manifest+json');
     }
 

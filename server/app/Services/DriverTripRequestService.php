@@ -115,7 +115,8 @@ class DriverTripRequestService
                     return;
                 }
 
-                app(BookingWorkflowService::class)->cancelOperatorInviteTimeout($booking);
+                app(DriverCuocOfferHideService::class)->recordMissedOffer($request->fresh());
+                app(BookingWorkflowService::class)->flagOperatorInviteExpired($booking);
             });
 
         $this->expireAbandonedDriverSearches();
@@ -123,6 +124,7 @@ class DriverTripRequestService
         app(BookingWorkflowService::class)->expirePastPickupWithoutDriver();
 
         app(DriverLatePickupService::class)->processDuePrompts();
+        app(DriverLatePickupService::class)->processPickupPushReminders();
         app(DriverLatePickupService::class)->expireOverdueContinue();
     }
 
@@ -557,10 +559,20 @@ class DriverTripRequestService
                 ->whereNull('driver_id')
                 ->where('status', 'scheduled')
                 ->where('departure_time', '>', now()))
-            ->with(['schedule.route', 'schedule.vehicle'])
+            ->with(['schedule.route', 'schedule.vehicle', 'schedule.template'])
             ->orderBy('created_at')
             ->each(function (Booking $booking) use (&$assigned): void {
-                if ($this->autoAssignForBooking($booking->fresh(['schedule.route', 'schedule.vehicle']))) {
+                $booking = $booking->fresh(['schedule.route', 'schedule.vehicle', 'schedule.template']);
+                $template = $booking->schedule?->template;
+                if ($template && (int) ($template->driver_id ?? 0) > 0) {
+                    if ($this->assignCatalogBooking($booking, $template)) {
+                        $assigned++;
+
+                        return;
+                    }
+                }
+
+                if ($this->autoAssignForBooking($booking)) {
                     $assigned++;
                 }
             });
@@ -1118,6 +1130,10 @@ class DriverTripRequestService
         return DriverTripRequest::query()
             ->where('driver_id', $driverUserId)
             ->where('status', 'pending')
+            ->where(function ($query): void {
+                $query->whereNull('expires_at')
+                    ->orWhere('expires_at', '>', now());
+            })
             ->with(['schedule.route', 'schedule.vehicle', 'schedule.bookings'])
             ->latest()
             ->get()
@@ -1306,22 +1322,65 @@ class DriverTripRequestService
 
     public function reassignScheduleDriver(Schedule $schedule, string $newDriverCode, int $operatorUserId): void
     {
+        $schedule->loadMissing(['bookings']);
+        $bookings = $schedule->driverRelevantBookings()
+            ->filter(fn (Booking $booking): bool => ! in_array($booking->trip_status, ['completed'], true));
+
+        if ($bookings->isEmpty()) {
+            throw new InvalidArgumentException('Chuyến không còn vé cần phân công.');
+        }
+
+        foreach ($bookings as $booking) {
+            $this->reassignBookingDriver($booking, $newDriverCode, $operatorUserId);
+        }
+    }
+
+    /** Admin gán / gán lại TX — tạo chuyến mới cho khách, mời TX trong 15 phút. */
+    public function assignBookingDriver(Booking $booking, string $driverCode, int $operatorUserId): void
+    {
+        $booking->loadMissing(['schedule.route', 'schedule.vehicle', 'schedule.template']);
+
+        if ($booking->passengerPickedUp()) {
+            throw new InvalidArgumentException('Tài xế đã đón khách — không thể gán lại.');
+        }
+
+        $needsFreshTrip = $booking->driverAcceptanceState() === 'accepted'
+            || $booking->needs_operator_help_at
+            || $booking->isPastPickupTime();
+
+        if ($needsFreshTrip) {
+            $this->reassignBookingDriver($booking, $driverCode, $operatorUserId);
+
+            return;
+        }
+
+        $this->requestDriver(
+            $booking->schedule->fresh(['route']),
+            $driverCode,
+            (string) $booking->contact_phone,
+        );
+        $this->refreshCustomerSearchDeadline($booking->fresh());
+    }
+
+    public function reassignBookingDriver(Booking $booking, string $newDriverCode, int $operatorUserId): void
+    {
         $this->expireStale();
 
-        $schedule->loadMissing(['route', 'vehicle', 'bookings']);
+        $booking->loadMissing(['schedule.route', 'schedule.vehicle', 'schedule.template']);
+        $oldSchedule = $booking->schedule;
 
-        if ((int) $schedule->vehicle->operator_id !== $operatorUserId) {
+        if (! $oldSchedule) {
+            throw new InvalidArgumentException('Không tìm thấy chuyến của vé.');
+        }
+
+        if ((int) $oldSchedule->vehicle->operator_id !== $operatorUserId) {
             $operator = \App\Models\User::query()->find($operatorUserId);
             if (! $operator || $operator->role !== 'admin') {
                 throw new InvalidArgumentException('Không có quyền phân công chuyến này.');
             }
         }
 
-        if ($schedule->departure_time <= now()) {
-            throw new InvalidArgumentException('Chuyến đã khởi hành, không thể đổi tài xế.');
-        }
-
-        if ($schedule->passengerPickedUp()) {
+        if ($booking->passengerPickedUp()) {
             throw new InvalidArgumentException('Tài xế đã đón khách — không thể đổi tài xế.');
         }
 
@@ -1335,59 +1394,20 @@ class DriverTripRequestService
             throw new InvalidArgumentException('Không tìm thấy tài xế với mã này.');
         }
 
-        if ($schedule->driver_id && (int) $schedule->driver_id === (int) $profile->user_id) {
-            throw new InvalidArgumentException('Chuyến đang được tài xế này phục vụ.');
-        }
+        $workflow = app(BookingWorkflowService::class);
+        $newSchedule = $workflow->relocateBookingForReassign($booking->fresh(['schedule.template']));
 
-        $this->assertNoAssignmentConflict((int) $profile->user_id, $schedule);
+        $this->assertNoAssignmentConflict((int) $profile->user_id, $newSchedule, $booking->fresh());
 
-        $bookingsToReassign = $schedule->driverRelevantBookings()
-            ->filter(fn (Booking $booking): bool => ! in_array($booking->trip_status, ['completed'], true));
+        $booking = $booking->fresh(['schedule.route', 'schedule.vehicle', 'schedule.template']);
 
-        if ($bookingsToReassign->isEmpty()) {
-            throw new InvalidArgumentException('Chuyến không còn vé cần phân công.');
-        }
+        $this->requestDriver(
+            $newSchedule->fresh(['route']),
+            $newDriverCode,
+            (string) $booking->contact_phone,
+        );
 
-        $formerDriverId = (int) ($schedule->driver_id ?? 0);
-
-        DB::transaction(function () use ($schedule, $bookingsToReassign): void {
-            $locked = Schedule::query()->lockForUpdate()->findOrFail($schedule->id);
-
-            DriverTripRequest::query()
-                ->where('schedule_id', $locked->id)
-                ->whereIn('status', ['pending', 'accepted'])
-                ->update([
-                    'status'       => 'cancelled',
-                    'responded_at' => now(),
-                ]);
-
-            $locked->update([
-                'driver_id'                   => null,
-                'driver_name'                 => 'Chờ phân bổ',
-                'driver_stage'                => null,
-                'driver_assigned_at'          => null,
-                'driver_movement_deadline_at' => null,
-            ]);
-
-            foreach ($bookingsToReassign as $booking) {
-                $booking->update([
-                    'trip_status' => 'pending',
-                ]);
-            }
-        });
-
-        if ($formerDriverId > 0) {
-            $this->availability->syncAfterTripCompleted($formerDriverId);
-        }
-
-        foreach ($bookingsToReassign as $booking) {
-            $this->requestDriver(
-                $schedule->fresh(['route']),
-                $newDriverCode,
-                (string) $booking->contact_phone,
-            );
-            $this->refreshCustomerSearchDeadline($booking->fresh());
-        }
+        $this->refreshCustomerSearchDeadline($booking->fresh());
     }
 
     public function reject(DriverTripRequest $request, int $driverUserId): void
@@ -1503,10 +1523,10 @@ class DriverTripRequestService
         ]);
     }
 
-    /** Gỡ tài xế sau timeout đón trễ — thử gán lại tài xế khác. */
+    /** Gỡ tài xế sau timeout đón trễ — ưu tiên gán lại tài xế khách đã chọn từ catalog. */
     public function tryReassignAfterDriverRelease(Booking $booking, int $formerDriverUserId): void
     {
-        $booking = $booking->fresh(['schedule.route', 'schedule.vehicle']);
+        $booking = $booking->fresh(['schedule.route', 'schedule.vehicle', 'schedule.template']);
         $schedule = $booking->schedule;
 
         if (! $schedule || $schedule->driver_id) {
@@ -1518,7 +1538,14 @@ class DriverTripRequestService
         }
 
         $this->refreshCustomerSearchDeadline($booking);
-        $booking = $booking->fresh(['schedule.route', 'schedule.vehicle']);
+        $booking = $booking->fresh(['schedule.route', 'schedule.vehicle', 'schedule.template']);
+
+        $template = $schedule->template;
+        if ($template && (int) ($template->driver_id ?? 0) > 0) {
+            if ($this->assignCatalogBooking($booking, $template)) {
+                return;
+            }
+        }
 
         $exclude = $this->recentlyExcludedDriverIds($schedule, (string) $booking->contact_phone)
             ->push($formerDriverUserId)

@@ -76,37 +76,6 @@
 
             </div>
 
-            <div class="guest-trip-card__meta">
-
-                <div class="guest-trip-card__schedule d-none" data-field="schedule_wrap">
-
-                    <svg class="guest-trip-card__schedule-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-
-                        <rect x="3" y="4" width="18" height="18" rx="2"/>
-
-                        <path d="M16 2v4M8 2v4M3 10h18"/>
-
-                    </svg>
-
-                    <span data-field="schedule_display"></span>
-
-                </div>
-
-                <span class="guest-trip-vehicle-badge d-none" data-field="vehicle_label"></span>
-
-                <span class="guest-trip-stat-badge d-none" data-field="distance_wrap">
-                    <svg class="guest-trip-card__schedule-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                        <path d="M3 12h18M12 3v18" stroke-linecap="round"/>
-                    </svg>
-                    <span data-field="distance_km"></span> km
-                </span>
-
-                <span class="guest-trip-price-badge d-none" data-field="total_price_wrap">
-                    <span data-field="total_price"></span>
-                </span>
-
-            </div>
-
         </div>
 
 
@@ -147,7 +116,9 @@
 
 
 
-        <div id="guest-trip-driver-panel" class="guest-trip-driver d-none" data-field="driver_panel">
+        <section class="guest-trip-vehicle-section d-none" data-field="vehicle_section_wrap" aria-label="Thông tin xe">
+
+            <div id="guest-trip-driver-panel" class="guest-trip-driver d-none" data-field="driver_panel">
 
             <div class="guest-trip-driver__media">
 
@@ -163,31 +134,76 @@
 
             <div class="guest-trip-driver__info">
 
-                <div class="guest-trip-driver__top">
+                <div class="guest-trip-driver__header">
 
-                    <strong class="guest-trip-driver__name" data-field="driver_name">—</strong>
+                    <div class="guest-trip-driver__main">
 
-                    <span class="guest-trip-driver__code d-none" data-field="driver_code"></span>
+                        <div class="guest-trip-driver__vehicle-line d-none" data-field="driver_vehicle"></div>
+
+                        <div class="guest-trip-driver__top">
+
+                            <strong class="guest-trip-driver__name" data-field="driver_name">—</strong>
+
+                            <span class="guest-trip-driver__code d-none" data-field="driver_code"></span>
+
+                        </div>
+
+                        <span class="guest-trip-driver__plate d-none" data-field="driver_plate"></span>
+
+                    </div>
+
+                    <div class="guest-trip-driver__status d-none" data-field="driver_status"></div>
 
                 </div>
 
-                <div class="guest-trip-driver__vehicle-line d-none" data-field="driver_vehicle"></div>
-
-                <span class="guest-trip-driver__plate d-none" data-field="driver_plate"></span>
-
-                <div class="guest-trip-driver__status d-none" data-field="driver_status"></div>
-
                 <div class="guest-trip-driver__live d-none" data-field="driver_live_wrap">
 
-                    <span class="guest-trip-driver__live-item d-none" data-field="driver_distance"></span>
+                    <p class="guest-trip-driver__live-distance d-none" data-field="driver_distance_line"></p>
 
-                    <span class="guest-trip-driver__live-item d-none" data-field="driver_eta"></span>
+                    <p class="guest-trip-driver__live-eta d-none" data-field="driver_eta_line"></p>
 
                 </div>
 
             </div>
 
-        </div>
+            </div>
+
+        </section>
+
+
+
+        <section class="guest-trip-summary-section d-none" data-field="trip_summary_wrap" aria-label="Chi tiết chuyến">
+
+            <div class="guest-trip-details" data-field="trip_details">
+
+                    <div class="guest-trip-detail d-none" data-field="pickup_time_wrap">
+                        <span class="guest-trip-detail__label">Giờ đón</span>
+                        <span class="guest-trip-detail__value" data-field="pickup_time_label"></span>
+                    </div>
+
+                    <div class="guest-trip-detail d-none" data-field="service_date_wrap">
+                        <span class="guest-trip-detail__label">Ngày đi</span>
+                        <span class="guest-trip-detail__value" data-field="service_date_label"></span>
+                    </div>
+
+                    <div class="guest-trip-detail d-none" data-field="departure_plan_wrap">
+                        <span class="guest-trip-detail__label">Loại chuyến</span>
+                        <span class="guest-trip-detail__value" data-field="departure_plan_label"></span>
+                    </div>
+
+                    <div class="guest-trip-detail d-none" data-field="trip_distance_wrap">
+                        <span class="guest-trip-detail__label">Quãng đường</span>
+                        <span class="guest-trip-detail__value" data-field="trip_distance_km"></span>
+                    </div>
+
+                    <div class="guest-trip-detail guest-trip-detail--price d-none" data-field="total_price_wrap">
+                        <span class="guest-trip-detail__label">Giá chuyến</span>
+                        <span class="guest-trip-detail__value guest-trip-detail__value--price" data-field="total_price"></span>
+                    </div>
+
+            </div>
+
+        </section>
 
 
 

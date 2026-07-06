@@ -114,12 +114,14 @@ $referralCommissionStats = $referralCommissionStats ?? [];
                                         <span class="driver-meta-code">{{ $ref->code }}</span>
                                     </td>
                                     <td>
-                                        @if($ref->type === \App\Models\ReferralCode::TYPE_REFERRER && $ref->isUsable())
+                                        @if($ref->isUsable())
                                             <button type="button" class="referral-qr-thumb" data-referral-qr-open
                                                     data-url="{{ $ref->landingUrl() }}" data-code="{{ $ref->code }}"
                                                     title="Xem QR — {{ $ref->code }}">
                                                 <span data-referral-qr data-url="{{ $ref->landingUrl() }}"></span>
                                             </button>
+                                        @elseif($ref->type === \App\Models\ReferralCode::TYPE_BOOKING_TEMP && $ref->status === \App\Models\ReferralCode::STATUS_PENDING)
+                                            <span class="text-muted small" title="QR kích hoạt sau khi hoàn tất chuyến">Chờ HT</span>
                                         @else
                                             <span class="text-muted small">—</span>
                                         @endif
@@ -261,8 +263,8 @@ $referralCommissionStats = $referralCommissionStats ?? [];
 
                 @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'appearance', 'active' => $adminDefaultTab === 'appearance'])
                 <div class="mb-4 pb-4 border-bottom border-secondary">
-                    <h3 class="h6 fw-bold text-uppercase text-muted mb-3" style="letter-spacing:.04em">Thương hiệu</h3>
-                    <form method="POST" action="{{ route('admin.brandingSettings.update') }}" class="console-form">
+                    <h3 class="h6 fw-bold text-uppercase text-muted mb-3" style="letter-spacing:.04em">Thương hiệu &amp; App</h3>
+                    <form method="POST" action="{{ route('admin.brandingSettings.update') }}" class="console-form" enctype="multipart/form-data">
                         @csrf
                         <div class="row g-3">
                             <div class="col-md-4">
@@ -270,6 +272,7 @@ $referralCommissionStats = $referralCommissionStats ?? [];
                                 <input type="text" name="app_name" id="branding-app-name" class="form-control @error('app_name') is-invalid @enderror"
                                        value="{{ old('app_name', $brandingSettings['app_name']) }}" maxlength="80">
                                 @error('app_name')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                <div class="form-text">Dùng cho tiêu đề trang và tên đầy đủ khi ghim app.</div>
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label" for="branding-brand-title">Chữ thương hiệu</label>
@@ -283,8 +286,45 @@ $referralCommissionStats = $referralCommissionStats ?? [];
                                        value="{{ old('brand_tagline', $brandingSettings['brand_tagline']) }}" maxlength="80">
                                 @error('brand_tagline')<div class="invalid-feedback">{{ $message }}</div>@enderror
                             </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="branding-pwa-guest-name">Tên app — Khách đặt xe</label>
+                                <input type="text" name="pwa_guest_short_name" id="branding-pwa-guest-name" class="form-control @error('pwa_guest_short_name') is-invalid @enderror"
+                                       value="{{ old('pwa_guest_short_name', $brandingSettings['pwa_guest_short_name']) }}" maxlength="24">
+                                @error('pwa_guest_short_name')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                <div class="form-text">Tên ngắn trên màn hình chính (mặc định: Đặt xe).</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="branding-pwa-driver-name">Tên app — Tài xế</label>
+                                <input type="text" name="pwa_driver_short_name" id="branding-pwa-driver-name" class="form-control @error('pwa_driver_short_name') is-invalid @enderror"
+                                       value="{{ old('pwa_driver_short_name', $brandingSettings['pwa_driver_short_name']) }}" maxlength="24">
+                                @error('pwa_driver_short_name')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                <div class="form-text">Tên ngắn trên màn hình chính (mặc định: Tài xế).</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="branding-app-icon">Biểu tượng app</label>
+                                <input type="file" name="app_icon" id="branding-app-icon" class="form-control @error('app_icon') is-invalid @enderror"
+                                       accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml">
+                                @error('app_icon')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                <div class="form-text">Ảnh vuông PNG/JPG/WEBP/SVG, tối đa 2 MB. Dùng cho ghim màn hình và thông báo.</div>
+                                @if($brandingSettings['has_app_icon'] ?? false)
+                                    <div class="form-check mt-2">
+                                        <input class="form-check-input" type="checkbox" name="remove_app_icon" value="1" id="branding-remove-app-icon">
+                                        <label class="form-check-label" for="branding-remove-app-icon">Xóa biểu tượng hiện tại</label>
+                                    </div>
+                                @endif
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label d-block">Xem thử trên màn hình chính</label>
+                                <div class="admin-pwa-home-preview">
+                                    <img src="{{ $brandingSettings['app_icon_url'] ?? asset('favicon.svg') }}" alt="" class="admin-pwa-icon-preview">
+                                    <div>
+                                        <div class="admin-pwa-home-preview__name">{{ $brandingSettings['pwa_guest_short_name'] }}</div>
+                                        <div class="admin-pwa-home-preview__hint text-muted small">Ví dụ: khách ghim app</div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <button class="btn btn-primary px-4 fw-semibold mt-3">Lưu thương hiệu</button>
+                        <button class="btn btn-primary px-4 fw-semibold mt-3">Lưu thương hiệu &amp; app</button>
                     </form>
                 </div>
                 <div class="mb-4 pb-4 border-bottom border-secondary">

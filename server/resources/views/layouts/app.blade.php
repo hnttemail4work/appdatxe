@@ -6,6 +6,8 @@
     $appBrandName = AppBrandingSettings::appName();
     $appBrandTitle = AppBrandingSettings::brandTitle();
     $appBrandTagline = AppBrandingSettings::brandTagline();
+    $appIconUrl = AppBrandingSettings::appIconAssetUrl();
+    $appIconMime = AppBrandingSettings::appIconMimeType();
     $pwaEnabled = PushAudience::enabledFor(auth()->user());
     $pwaAudience = $pwaEnabled ? PushAudience::resolve(auth()->user()) : null;
     $pwaAudienceLabel = $pwaAudience ? PushAudience::shortLabel($pwaAudience) : '';
@@ -40,8 +42,8 @@
     <meta name="apple-mobile-web-app-title" content="{{ $pwaAudienceLabel }}">
     <link rel="manifest" href="{{ route('pwa.manifest') }}">
     @endif
-    <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}?v={{ filemtime(public_path('favicon.svg')) }}">
-    <link rel="apple-touch-icon" href="{{ asset('favicon.svg') }}">
+    <link rel="icon" type="{{ $appIconMime }}" href="{{ $appIconUrl }}">
+    <link rel="apple-touch-icon" href="{{ $appIconUrl }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -91,6 +93,16 @@
     <link rel="stylesheet" href="{{ asset('css/app-dialog.css') }}?v={{ filemtime(public_path('css/app-dialog.css')) }}">
     @if($pwaEnabled)
     <link rel="stylesheet" href="{{ asset('css/pwa-install.css') }}?v={{ filemtime(public_path('css/pwa-install.css')) }}">
+    @endif
+    @if($pwaEnabled)
+    <script>
+    window.__pwaDeferredInstallPrompt = null;
+    window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        window.__pwaDeferredInstallPrompt = e;
+        window.dispatchEvent(new Event('pwa-install-available'));
+    });
+    </script>
     @endif
     @stack('styles')
 </head>
@@ -172,6 +184,9 @@
         @endif
     </div>
 </nav>
+@if($pwaEnabled)
+@include('partials.pwa-install-prompt')
+@endif
 @if($showMobileDrawer ?? false)
     @include('partials.app-nav-drawer')
 @endif
@@ -182,10 +197,6 @@
     @yield('content')
 </div>
 </main>
-
-@if($pwaEnabled)
-@include('partials.pwa-install-prompt')
-@endif
 
 <footer class="app-footer bg-dark text-secondary border-top">
     <div class="container">

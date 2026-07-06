@@ -111,12 +111,9 @@ class DriverController extends Controller
         $tripHistory = PageList::paginateCollection($tripHistoryAll, $request, 'history_page');
 
         $tripActionCount = $this->driverRequests->tripActionCountForDriver($user->id);
-        $driverTripActive = $tripSchedulesAll->contains(
-            fn (Schedule $schedule): bool => $schedule->driverWorkflowPhase() === 'active',
-        );
-        $driverTripUpcoming = $tripSchedulesAll->contains(
-            fn (Schedule $schedule): bool => $schedule->driverWorkflowPhase() === 'upcoming',
-        );
+        $tripFlags = $this->driverAvailability->driverDashboardTripFlags($user->id);
+        $driverTripActive = $tripFlags['active'];
+        $driverTripUpcoming = $tripFlags['upcoming'];
         $driverOnTrip = $driverTripActive;
 
         $pendingTripRequestGroups = $this->driverRequests->visiblePendingGroupsForDriver($user->id);

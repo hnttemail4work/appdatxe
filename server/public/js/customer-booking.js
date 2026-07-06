@@ -439,6 +439,36 @@
         return checked ? checked.value : 'oneway';
     }
 
+    function departurePlanDisplayLabel() {
+        var labels = window.__departurePlanLabels || {
+            oneway: 'Một chiều',
+            today: 'Về trong ngày',
+            tomorrow: 'Về ngày mai',
+            later: 'Trên 2 ngày',
+        };
+        var plan = departurePlan();
+
+        if (plan === 'later') {
+            var days = laterReturnDays();
+
+            return labels.later + ' (' + days + ' ngày)';
+        }
+
+        return labels[plan] || labels.oneway;
+    }
+
+    function syncDeparturePlanLabel() {
+        var text = departurePlanDisplayLabel();
+        [
+            'modal-departure-plan-label',
+            'modal-departure-plan-label-step2',
+            'modal-price-departure-plan-step1',
+            'modal-price-departure-plan-step2',
+        ].forEach(function (id) {
+            setBannerText(id, text);
+        });
+    }
+
     function laterReturnDays() {
         var el = $('modal-later-return-days');
         var min = Number(window.__laterReturnDaysMin || 3);
@@ -486,6 +516,7 @@
         }
         syncLaterReturnDaysHint();
         syncDepartureDate();
+        syncDeparturePlanLabel();
     }
 
     function openFromButton(btn) {

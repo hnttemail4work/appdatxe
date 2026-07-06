@@ -14,6 +14,7 @@ use App\Services\AdminRevenueService;
 use App\Services\BookingWorkflowService;
 use App\Services\DriverTripRequestService;
 use App\Services\DriverWalletService;
+use App\Services\PushNotificationService;
 use App\Services\ReferralCodeService;
 use App\Services\ScheduleLifecycleService;
 use InvalidArgumentException;
@@ -24,6 +25,7 @@ use App\Support\PageList;
 use App\Support\ProvinceCenters;
 use App\Support\RouteDistanceCatalog;
 use App\Support\PlatformFees;
+use App\Support\PlatformPaymentInfo;
 use App\Support\PushNotificationSettings;
 use App\Support\VehicleCapacityOptions;
 use App\Support\VehicleCapacityPricing;
@@ -41,6 +43,7 @@ class AdminController extends Controller
         private readonly BookingWorkflowService $workflow,
         private readonly AdminRevenueService $revenue,
         private readonly LaterReturnBookingService $laterReturnBookings,
+        private readonly PushNotificationService $pushNotifications,
     ) {
     }
 
@@ -224,19 +227,31 @@ class AdminController extends Controller
     public function updateBrandingSettings(Request $request)
     {
         $validated = $request->validate([
-            'app_name'       => ['nullable', 'string', 'max:80'],
-            'brand_title'    => ['nullable', 'string', 'max:40'],
-            'brand_tagline'  => ['nullable', 'string', 'max:80'],
+            'app_name'              => ['nullable', 'string', 'max:80'],
+            'brand_title'           => ['nullable', 'string', 'max:40'],
+            'brand_tagline'         => ['nullable', 'string', 'max:80'],
+            'pwa_guest_short_name'  => ['nullable', 'string', 'max:24'],
+            'pwa_driver_short_name' => ['nullable', 'string', 'max:24'],
+            'app_icon'              => ['nullable', 'file', 'mimes:jpeg,jpg,png,webp,gif,svg', 'max:2048'],
+            'remove_app_icon'       => ['nullable', 'boolean'],
         ]);
 
         AppBrandingSettings::saveBranding(
             (string) ($validated['app_name'] ?? ''),
             (string) ($validated['brand_title'] ?? ''),
             (string) ($validated['brand_tagline'] ?? ''),
+            (string) ($validated['pwa_guest_short_name'] ?? ''),
+            (string) ($validated['pwa_driver_short_name'] ?? ''),
         );
 
+        if ($request->boolean('remove_app_icon')) {
+            AppBrandingSettings::removeAppIcon();
+        } elseif ($request->hasFile('app_icon')) {
+            AppBrandingSettings::storeAppIcon($request->file('app_icon'));
+        }
+
         return redirect()->route('admin.dashboard', ['tab' => 'appearance'])
-            ->with('success', 'Đã lưu thương hiệu.');
+            ->with('success', 'Đã lưu thương hiệu và biểu tượng app.');
     }
 
     public function updatePushSettings(Request $request)
@@ -723,58 +738,61 @@ class AdminController extends Controller
         $this->scheduleLifecycle->sync();
         $this->tripRequests->expireStale();
 
-        $booking->loadMissing(['schedule.route', 'schedule.vehicle']);
+        $booking->loadMissing(['schedule.route', 'schedule.vehicle', 'schedule.template']);
 
         if ($booking->passengerPickedUp()) {
             return back()->withErrors(['driver_code' => 'Tài xế đã đón khách — không thể gán lại.']);
         }
 
-        if (! $booking->hasDriverAccepted()) {
-            $validated = $request->validate([
-                'driver_code' => ['required', 'string', 'max:20'],
-            ]);
+        $validated = $request->validate([
+            'driver_code' => ['required', 'string', 'max:20'],
+        ]);
 
-            $driverCode = strtoupper(trim($validated['driver_code']));
+        $driverCode = strtoupper(trim($validated['driver_code']));
 
-            try {
-                $this->tripRequests->requestDriver(
-                    $booking->schedule->fresh(['route']),
-                    $driverCode,
-                    (string) $booking->contact_phone,
-                );
-            } catch (InvalidArgumentException $e) {
-                return back()->withErrors(['driver_code' => $e->getMessage()])->withInput();
-            }
+        $isReassign = $booking->driverAcceptanceState() === 'accepted'
+            || $booking->needs_operator_help_at
+            || $booking->isPastPickupTime();
 
-            return back()->with('success', 'Đã giao chuyến cho tài xế mới — chờ xác nhận trong 15 phút.');
+        try {
+            $this->tripRequests->assignBookingDriver(
+                $booking->fresh(['schedule.route', 'schedule.vehicle', 'schedule.template']),
+                $driverCode,
+                (int) Auth::id(),
+            );
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['driver_code' => $e->getMessage()])->withInput();
         }
 
-        if ($booking->hasDriverAccepted() && $booking->schedule->departure_time > now()) {
-            $validated = $request->validate([
-                'driver_code' => ['required', 'string', 'max:20'],
-            ]);
+        return back()->with(
+            'success',
+            $isReassign
+                ? 'Đã tạo chuyến mới và gán lại tài xế — chờ xác nhận trong 15 phút.'
+                : 'Đã giao chuyến cho tài xế — chờ xác nhận trong 15 phút.',
+        );
+    }
 
-            $driverCode = strtoupper(trim($validated['driver_code']));
+    public function nudgeDriverBooking(Booking $booking)
+    {
+        $this->scheduleLifecycle->sync();
+        $this->tripRequests->expireStale();
 
-            try {
-                $this->tripRequests->reassignScheduleDriver(
-                    $booking->schedule->fresh(['route', 'vehicle', 'bookings']),
-                    $driverCode,
-                    Auth::id(),
-                );
-            } catch (InvalidArgumentException $e) {
-                return back()->withErrors(['driver_code' => $e->getMessage()])->withInput();
-            }
+        $booking->loadMissing(['schedule.route']);
 
-            $profile = DriverProfile::query()
-                ->where('driver_code', $driverCode)
-                ->with('user')
-                ->first();
-
-            return back()->with('success', 'Đã gán lại tài xế — chờ xác nhận trong 15 phút.');
+        $request = $booking->latestDriverTripRequest();
+        if (! $request || ! $request->isPending()) {
+            return back()->withErrors(['booking' => 'Chuyến không còn ở trạng thái chờ tài xế nhận.']);
         }
 
-        return back()->with('success', 'Chuyến đã có tài xế nhận.');
+        if (! $booking->assignedDriverHasPushSubscription()) {
+            return back()->withErrors(['booking' => 'Tài xế chưa bật app — không gửi được thông báo đẩy.']);
+        }
+
+        if (! $this->pushNotifications->nudgeDriverTripRequest($request)) {
+            return back()->withErrors(['booking' => 'Không gửi được thông báo. Kiểm tra cấu hình TB đẩy (VAPID).']);
+        }
+
+        return back()->with('success', 'Đã gửi lại thông báo cho tài xế.');
     }
 
     public function cancelBooking(Booking $booking)

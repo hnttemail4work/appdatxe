@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Booking;
 use App\Models\DriverProfile;
 use App\Models\Schedule;
+use App\Support\VehicleCapacityOptions;
 use App\Support\VehicleDisplay;
 
 /**
@@ -65,18 +66,20 @@ class GuestBookingDriverStatusService
         } elseif (in_array($stage, [Schedule::DRIVER_STAGE_PICKED_UP, Schedule::DRIVER_STAGE_RUNNING], true)) {
             $statusLine = 'Tài xế đang chở bạn trên chuyến';
         } elseif ($stage === Schedule::DRIVER_STAGE_ASSIGNED) {
-            $statusLine = 'Tài xế đã nhận chuyến';
+            $statusLine = 'Đã nhận';
 
-            if ($hasLiveLocation && $distanceKm !== null) {
+            if ($hasLiveLocation && $distanceKm !== null && $distanceLabel) {
+                $distanceLine = 'Tài xế cách bạn ' . $distanceLabel;
                 $etaLabel = $this->latePickup->pickupEtaLabel($schedule, $booking);
-
-                if ($distanceLabel) {
-                    $distanceLine = 'Tài xế cách bạn ' . $distanceLabel;
-                }
                 if ($etaLabel) {
                     $etaLine = 'Dự kiến ' . $etaLabel;
                 }
             }
+        }
+
+        $vehicleSeats = VehicleDisplay::capacityFromDriverProfile($profile);
+        if ($vehicleSeats <= 0 && $schedule->vehicle) {
+            $vehicleSeats = max(0, (int) ($schedule->vehicle->capacity ?? 0));
         }
 
         $proximityHint = implode("\n", array_filter([$statusLine, $distanceLine, $etaLine])) ?: null;
@@ -87,6 +90,8 @@ class GuestBookingDriverStatusService
             'vehicle_type'       => $profile->vehicle_type,
             'vehicle_type_label' => VehicleDisplay::typeLabel($profile->vehicle_type),
             'vehicle_plate'      => $profile->vehicle_license_plate,
+            'vehicle_seats'      => $vehicleSeats,
+            'vehicle_seats_label' => $vehicleSeats > 0 ? VehicleCapacityOptions::label($vehicleSeats) : null,
             'vehicle_name'       => $vehicleName !== '' ? $vehicleName : null,
             'vehicle_photo_url'  => $vehiclePhotoUrl,
             'vehicle_label'      => DriverTripRequestService::vehicleLabel($profile),

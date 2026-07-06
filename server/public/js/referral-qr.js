@@ -4,7 +4,6 @@
 (function () {
     var libLoading = false;
     var modalInstance = null;
-    var modalQr = null;
 
     function loadLib(cb) {
         if (typeof QRCode !== 'undefined') {
@@ -24,12 +23,23 @@
         var s = document.createElement('script');
         s.src = 'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js';
         s.onload = cb;
+        s.onerror = function () {
+            libLoading = false;
+        };
         document.head.appendChild(s);
     }
 
-    function renderThumb(el) {
+    function renderThumb(el, force) {
         var url = el.dataset.url;
-        if (!url || el.dataset.rendered === '1') return;
+        if (!url) {
+            return;
+        }
+
+        var hasImage = el.querySelector('img, canvas');
+        if (!force && el.dataset.rendered === '1' && hasImage) {
+            return;
+        }
+
         el.dataset.rendered = '1';
         el.innerHTML = '';
         new QRCode(el, {
@@ -44,9 +54,11 @@
 
     function renderModalQr(url) {
         var canvas = document.getElementById('referral-qr-modal-canvas');
-        if (!canvas) return;
+        if (!canvas) {
+            return;
+        }
         canvas.innerHTML = '';
-        modalQr = new QRCode(canvas, {
+        new QRCode(canvas, {
             text: url,
             width: 220,
             height: 220,
@@ -58,7 +70,9 @@
 
     function getModal() {
         var el = document.getElementById('referral-qr-modal');
-        if (!el || typeof bootstrap === 'undefined') return null;
+        if (!el || typeof bootstrap === 'undefined') {
+            return null;
+        }
         if (!modalInstance) {
             modalInstance = new bootstrap.Modal(el);
         }
@@ -79,7 +93,9 @@
 
     function openModal(url, code) {
         var modal = getModal();
-        if (!modal) return;
+        if (!modal) {
+            return;
+        }
 
         document.getElementById('referral-qr-modal-code').textContent = code || '—';
         document.getElementById('referral-qr-modal-url').value = url;
@@ -91,16 +107,22 @@
         });
     }
 
-    function initThumbs() {
-        document.querySelectorAll('[data-referral-qr]').forEach(function (el) {
+    function initThumbs(root, force) {
+        var scope = root || document;
+        scope.querySelectorAll('[data-referral-qr]').forEach(function (el) {
             loadLib(function () {
-                renderThumb(el);
+                renderThumb(el, !!force);
             });
         });
     }
 
-    function initOpeners() {
-        document.querySelectorAll('[data-referral-qr-open]').forEach(function (btn) {
+    function initOpeners(root) {
+        var scope = root || document;
+        scope.querySelectorAll('[data-referral-qr-open]').forEach(function (btn) {
+            if (btn.dataset.referralQrBound === '1') {
+                return;
+            }
+            btn.dataset.referralQrBound = '1';
             btn.addEventListener('click', function () {
                 openModal(btn.dataset.url || '', btn.dataset.code || '');
             });
@@ -145,10 +167,30 @@
         }
     }
 
+    function bindTabRefresh() {
+        document.addEventListener('shown.bs.tab', function (event) {
+            var target = event.target;
+            if (!target || !target.getAttribute) {
+                return;
+            }
+            var paneSelector = target.getAttribute('data-bs-target');
+            if (!paneSelector) {
+                return;
+            }
+            var pane = document.querySelector(paneSelector);
+            if (!pane) {
+                return;
+            }
+            initThumbs(pane, true);
+            initOpeners(pane);
+        });
+    }
+
     function init() {
         initThumbs();
         initOpeners();
         initModalActions();
+        bindTabRefresh();
     }
 
     if (document.readyState === 'loading') {

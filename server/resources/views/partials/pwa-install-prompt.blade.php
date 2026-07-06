@@ -1,7 +1,10 @@
+@php
+    use App\Support\AppBrandingSettings;
+@endphp
 <div id="pwa-install-banner" class="pwa-install-banner" aria-live="polite">
     <div class="pwa-install-banner__inner">
         <div class="pwa-install-banner__icon" aria-hidden="true">
-            <img src="{{ asset('favicon.svg') }}" alt="">
+            <img src="{{ AppBrandingSettings::appIconAssetUrl() }}" alt="">
         </div>
         <div class="pwa-install-banner__text">
             <p class="pwa-install-banner__title" data-pwa-install-title>{{ $pwaInstallTitle ?? 'Thêm vào màn hình chính' }}</p>

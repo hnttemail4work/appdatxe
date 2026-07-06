@@ -124,8 +124,83 @@
         });
     }
 
+    function isAndroid() {
+        return /android/i.test(window.navigator.userAgent);
+    }
+
+    function showManualInstallHelp() {
+        var message;
+
+        if (isIos()) {
+            message = 'Trên iPhone/iPad: nhấn nút Chia sẻ (hình vuông có mũi tên) → chọn Thêm vào Màn hình chính.';
+        } else if (isAndroid()) {
+            message = 'Nhấn menu ⋮ trên trình duyệt → chọn Cài ứng dụng hoặc Thêm vào Màn hình chính.';
+        } else {
+            message = 'Nhấn biểu tượng cài đặt (⊕ hoặc máy tính) trên thanh địa chỉ Chrome/Edge → chọn Cài đặt ứng dụng.';
+        }
+
+        if (window.AppDialog && window.AppDialog.alert) {
+            window.AppDialog.alert(message, {
+                variant: 'info',
+                title: 'Ghim ' + (cfg.audienceLabel || 'ứng dụng'),
+            });
+        } else {
+            window.alert(message);
+        }
+    }
+
+    function runNativeInstall(installBtn) {
+        if (!deferredPrompt) {
+            return Promise.resolve(false);
+        }
+
+        if (installBtn) {
+            installBtn.disabled = true;
+            installBtn.textContent = 'Đang mở...';
+        }
+
+        var promptEvent = deferredPrompt;
+        deferredPrompt = null;
+
+        try {
+            var promptResult = promptEvent.prompt();
+            var choicePromise = promptEvent.userChoice;
+
+            return Promise.resolve(promptResult).then(function () {
+                return choicePromise;
+            }).then(function (choice) {
+            hideInstallBanner();
+            dismiss(storageInstallKey);
+
+            if (choice && choice.outcome === 'accepted') {
+                subscribePush();
+            }
+
+            return true;
+            }).catch(function () {
+                return false;
+            }).finally(function () {
+                if (installBtn) {
+                    installBtn.disabled = false;
+                    installBtn.textContent = 'Cài đặt';
+                }
+            });
+        } catch (err) {
+            if (installBtn) {
+                installBtn.disabled = false;
+                installBtn.textContent = 'Cài đặt';
+            }
+
+            return Promise.resolve(false);
+        }
+    }
+
     function showInstallBanner() {
         if (isStandalone() || isDismissed(storageInstallKey)) {
+            return;
+        }
+
+        if (!deferredPrompt && !isIos()) {
             return;
         }
 
@@ -173,20 +248,22 @@
         if (installBtn) {
             installBtn.addEventListener('click', function () {
                 if (deferredPrompt) {
-                    deferredPrompt.prompt();
-                    deferredPrompt.userChoice.then(function () {
-                        deferredPrompt = null;
-                        hideInstallBanner();
-                        dismiss(storageInstallKey);
-                        subscribePush();
+                    runNativeInstall(installBtn).then(function (ok) {
+                        if (!ok) {
+                            showManualInstallHelp();
+                        }
                     });
                     return;
                 }
 
+                hideInstallBanner();
+
                 if (isIos()) {
-                    hideInstallBanner();
                     showIosHint();
+                    return;
                 }
+
+                showManualInstallHelp();
             });
         }
 
@@ -280,13 +357,31 @@
         showInstallBanner();
     });
 
+    window.addEventListener('pwa-install-available', function () {
+        if (!deferredPrompt && window.__pwaDeferredInstallPrompt) {
+            deferredPrompt = window.__pwaDeferredInstallPrompt;
+            showInstallBanner();
+        }
+    });
+
     document.addEventListener('DOMContentLoaded', function () {
+        if (!deferredPrompt && window.__pwaDeferredInstallPrompt) {
+            deferredPrompt = window.__pwaDeferredInstallPrompt;
+        }
+
         bindInstallUi();
         registerServiceWorker().then(function () {
-            if (isIos() && !isStandalone()) {
-                window.setTimeout(showIosHint, 1500);
-            } else if (!deferredPrompt && !isStandalone()) {
-                window.setTimeout(showInstallBanner, 2500);
+            if (isStandalone()) {
+                return;
+            }
+
+            if (deferredPrompt) {
+                showInstallBanner();
+                return;
+            }
+
+            if (isIos()) {
+                window.setTimeout(showInstallBanner, 1500);
             }
         });
     });

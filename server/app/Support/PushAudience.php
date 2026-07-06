@@ -43,10 +43,7 @@ class PushAudience
 
     public static function shortLabel(string $audience): string
     {
-        return match ($audience) {
-            self::DRIVER => 'Tài xế',
-            default      => 'Đặt xe',
-        };
+        return AppBrandingSettings::pwaShortName($audience);
     }
 
     public static function manifestName(string $audience, string $appName): string

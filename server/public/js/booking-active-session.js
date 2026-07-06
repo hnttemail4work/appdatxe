@@ -292,8 +292,12 @@
 
         if (!statusLine && booking) {
             statusLine = booking.driver_status_line || '';
-            distanceLine = booking.driver_distance_line || '';
-            etaLine = booking.driver_eta_line || '';
+            if (!distanceLine) {
+                distanceLine = booking.driver_distance_line || '';
+            }
+            if (!etaLine) {
+                etaLine = booking.driver_eta_line || '';
+            }
         }
 
         if (!statusLine) {
@@ -306,22 +310,21 @@
             }
         }
 
-        if (!statusLine && driver && (driver.distance_label || driver.eta_label)) {
-            statusLine = 'Tài xế đã nhận chuyến';
-            if (driver.distance_label) {
-                distanceLine = 'Tài xế cách bạn ' + driver.distance_label;
-            }
-            if (driver.eta_label) {
-                etaLine = 'Dự kiến ' + driver.eta_label;
-            }
-        } else if (!statusLine && booking && (booking.driver_distance_label || booking.driver_eta_label)) {
-            statusLine = 'Tài xế đã nhận chuyến';
-            if (booking.driver_distance_label) {
-                distanceLine = 'Tài xế cách bạn ' + booking.driver_distance_label;
-            }
-            if (booking.driver_eta_label) {
-                etaLine = 'Dự kiến ' + booking.driver_eta_label;
-            }
+        var stage = String((driver && driver.stage) || 'assigned');
+        var locationShared = !!(driver && driver.location_shared)
+            || !!(booking && booking.driver_location_shared);
+
+        if (stage !== 'assigned' || !locationShared) {
+            distanceLine = '';
+            etaLine = '';
+        } else if (!distanceLine && driver && driver.distance_label) {
+            distanceLine = 'Tài xế cách bạn ' + driver.distance_label;
+        } else if (!distanceLine && booking && booking.driver_distance_label) {
+            distanceLine = 'Tài xế cách bạn ' + booking.driver_distance_label;
+        }
+
+        if (stage !== 'assigned' || !locationShared) {
+            etaLine = '';
         }
 
         return {

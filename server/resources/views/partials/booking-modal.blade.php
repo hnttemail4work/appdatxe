@@ -25,6 +25,7 @@
                             <div class="booking-trip-banner-copy">
                                 <div class="booking-trip-banner-route" id="modal-route"></div>
                                 <div class="small text-white-50 d-none" id="modal-route-distance"></div>
+                                <div class="small text-white-50" id="modal-departure-plan-label"></div>
                                 <div class="small" id="modal-vehicle-meta"></div>
                             </div>
                         </div>
@@ -149,11 +150,16 @@
                                     <div class="min-w-0">
                                         <div class="fw-bold" id="modal-route-step2"></div>
                                         <div class="small text-muted" id="modal-route-distance-step2"></div>
+                                        <div class="small text-muted" id="modal-departure-plan-label-step2"></div>
                                         <div class="small text-muted" id="modal-vehicle-step2"></div>
                                     </div>
                                 </div>
                                 <div class="text-end">
                                     <div class="booking-price-summary booking-price-summary--compact" id="modal-price-summary-step2">
+                                        <div class="booking-price-summary-row" id="modal-price-departure-row-step2">
+                                            <span class="booking-price-summary-label">Đặt xe:</span>
+                                            <span class="booking-price-summary-value" id="modal-price-departure-plan-step2"></span>
+                                        </div>
                                         <div class="booking-price-summary-row d-none" id="modal-price-distance-row-step2">
                                             <span class="booking-price-summary-label">Số km:</span>
                                             <span class="booking-price-summary-value" id="modal-price-distance-step2"></span>
@@ -204,6 +210,10 @@
                 <div class="modal-footer border-0 booking-modal-footer" id="modal-footer-step1">
                     <div class="booking-footer-price-wrap me-auto">
                         <div class="booking-price-summary" id="modal-price-summary-step1">
+                            <div class="booking-price-summary-row" id="modal-price-departure-row-step1">
+                                <span class="booking-price-summary-label">Đặt xe:</span>
+                                <span class="booking-price-summary-value" id="modal-price-departure-plan-step1"></span>
+                            </div>
                             <div class="booking-price-summary-row d-none" id="modal-price-distance-row-step1">
                                 <span class="booking-price-summary-label">Số km:</span>
                                 <span class="booking-price-summary-value" id="modal-price-distance-step1"></span>

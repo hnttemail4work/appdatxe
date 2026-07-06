@@ -396,6 +396,36 @@ class DriverAvailabilityService
         $this->markOffDuty($profile);
     }
 
+    /** @return array{active: bool, upcoming: bool} */
+    public function driverDashboardTripFlags(int $driverUserId): array
+    {
+        if ($driverUserId <= 0) {
+            return ['active' => false, 'upcoming' => false];
+        }
+
+        $schedules = Schedule::query()
+            ->with([
+                'route',
+                'vehicle',
+                'tripSettlement',
+                'bookings' => fn ($q) => $q->orderByDesc('id'),
+            ])
+            ->forDriverActiveTrips($driverUserId)
+            ->get()
+            ->filter(fn (Schedule $schedule): bool => $schedule->driverRelevantBookings()->isNotEmpty()
+                && $schedule->driverWorkflowPhase() !== 'settled'
+                && $schedule->isVisibleOnDriverDashboard());
+
+        return [
+            'active'   => $schedules->contains(
+                fn (Schedule $schedule): bool => $schedule->driverWorkflowPhase() === 'active',
+            ),
+            'upcoming' => $schedules->contains(
+                fn (Schedule $schedule): bool => $schedule->driverWorkflowPhase() === 'upcoming',
+            ),
+        ];
+    }
+
     public function touchWebPresence(int $driverUserId): void
     {
         Cache::put(
@@ -494,9 +524,12 @@ class DriverAvailabilityService
             }
 
             if (($profile->availability_status ?? 'off_duty') === 'off_duty') {
+                $this->syncAfterTripCompleted((int) $profile->user_id);
+
                 continue;
             }
 
+            $this->enforceWebPresenceIdleFor($profile);
             $this->syncAfterTripCompleted((int) $profile->user_id);
         }
     }

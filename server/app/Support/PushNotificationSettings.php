@@ -23,6 +23,10 @@ class PushNotificationSettings
             'guest.no_driver_found'     => true,
             'driver.new_trip_request'   => true,
             'driver.trip_cancelled'     => true,
+            'driver.depart_reminder'    => true,
+            'driver.pickup_urgent'      => true,
+            'driver.late_pickup'        => true,
+            'driver.movement_deadline'  => true,
         ];
     }
 
@@ -134,6 +138,10 @@ class PushNotificationSettings
             'guest.no_driver_found'     => 'Khách — Không ghép được tài xế',
             'driver.new_trip_request'   => 'Tài xế — Cuốc mới chờ nhận',
             'driver.trip_cancelled'     => 'Tài xế — Chuyến bị hủy',
+            'driver.depart_reminder'    => 'Tài xế — Nhắc xuất phát đón khách',
+            'driver.pickup_urgent'      => 'Tài xế — Sát giờ đón, mở app',
+            'driver.late_pickup'        => 'Tài xế — Đã đến giờ đón',
+            'driver.movement_deadline'  => 'Tài xế — Hạn bấm Đến điểm đón',
         ];
     }
 }

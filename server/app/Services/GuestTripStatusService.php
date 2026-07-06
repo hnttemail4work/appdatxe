@@ -89,6 +89,8 @@ class GuestTripStatusService
             'dropoff_address'   => $booking->dropoff_address,
             'dropoff_detail'    => $booking->dropoff_detail,
             'pickup_time_label' => $booking->pickupTimeLabel(),
+            'service_date_label' => $booking->guestPickupAt()?->format('d/m/Y')
+                ?? $booking->schedule?->departure_time?->format('d/m/Y'),
             'trip_status'       => $booking->trip_status,
             'booking_status'    => $booking->booking_status,
             'total_price'       => (float) $booking->total_price,
@@ -100,6 +102,11 @@ class GuestTripStatusService
                 $booking->departure_plan ?? DeparturePlan::ONE_WAY,
                 $booking->laterReturnDays(),
             ),
+            'departure_plan_guest_label' => DeparturePlan::guestStayLabel(
+                $booking->departure_plan ?? DeparturePlan::ONE_WAY,
+                $booking->laterReturnDays(),
+            ),
+            'guest_status_label' => $booking->primaryStatusLabel(),
             'is_active'         => $booking->blocksGuestRebooking(),
             'can_cancel'        => $this->guestCanCancel($booking),
             'can_review'        => $booking->trip_status === 'completed' && ! $booking->tripReview,

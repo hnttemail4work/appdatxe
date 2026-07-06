@@ -11,6 +11,7 @@ use App\Models\ScheduleTemplate;
 use App\Models\ReferralCode;
 use App\Models\DriverTripRequest;
 use App\Services\DriverAvailabilityService;
+use App\Services\DriverCuocOfferHideService;
 use App\Services\TripPricingService;
 use App\Support\PlatformFees;
 use Illuminate\Support\Facades\DB;
@@ -581,8 +582,8 @@ class BookingWorkflowService
         $this->browserGuard->clearActiveBookingForBooking($booking->fresh());
     }
 
-    /** Hết 15 phút chờ tài xế xác nhận sau khi quản lý gán — hủy, chuyển tab Đã hủy. */
-    public function cancelOperatorInviteTimeout(Booking $booking): void
+    /** Hết 15 phút chờ tài xế xác nhận — giữ đơn ở tab Chuyến, báo admin gán lại (không tự chuyển Đã hủy). */
+    public function flagOperatorInviteExpired(Booking $booking): void
     {
         if (in_array($booking->booking_status, ['cancelled', 'rejected'], true)) {
             return;
@@ -592,43 +593,191 @@ class BookingWorkflowService
             return;
         }
 
+        if ($booking->needs_operator_help_at) {
+            return;
+        }
+
         DB::transaction(function () use ($booking): void {
             $before = $booking->toArray();
             $schedule = $booking->schedule()->with(['vehicle', 'route'])->first();
 
-            $updates = [
-                'booking_status'            => 'cancelled',
-                'trip_status'               => 'cancelled',
-                'payment_status'            => $booking->payment_status === 'paid' ? 'refunded' : 'unpaid',
-                'cancelled_at'              => now(),
-                'cancelled_by'              => 'system',
-                'cancellation_reason_label' => 'Hết thời gian chờ tài xế xác nhận (15 phút)',
-                'hold_expires_at'           => null,
-            ];
-
-            if (Schema::hasColumn('bookings', 'assigned_driver_id')) {
-                $updates['assigned_driver_id'] = null;
-            }
-
-            $booking->update($updates);
+            $booking->update([
+                'needs_operator_help_at' => now(),
+                'operator_help_reason'   => 'driver_invite_timeout',
+            ]);
 
             if ($schedule) {
                 DriverTripRequest::query()
                     ->where('schedule_id', $schedule->id)
-                    ->whereIn('status', ['pending', 'expired'])
+                    ->where('contact_phone', (string) $booking->contact_phone)
+                    ->where('status', 'pending')
                     ->update([
-                        'status'       => 'cancelled',
+                        'status'       => 'expired',
                         'responded_at' => now(),
-                        'expires_at'   => null,
                     ]);
+
+                $hide = app(DriverCuocOfferHideService::class);
+                DriverTripRequest::query()
+                    ->where('schedule_id', $schedule->id)
+                    ->where('contact_phone', (string) $booking->contact_phone)
+                    ->whereIn('status', ['expired', 'cancelled'])
+                    ->each(fn (DriverTripRequest $request) => $hide->recordMissedOffer($request));
 
                 $this->syncScheduleAvailability($schedule);
             }
 
-            $this->audit($booking, null, 'booking_cancelled', $before, $booking->fresh()->toArray());
+            $this->audit($booking, null, 'booking_operator_help', $before, $booking->fresh()->toArray());
         });
+    }
 
-        $this->browserGuard->clearActiveBookingForBooking($booking->fresh());
+    /** Tạo chuyến mới và chuyển vé sang — dùng khi admin gán lại / qua giờ đón. */
+    public function relocateBookingForReassign(Booking $booking): Schedule
+    {
+        $booking->loadMissing(['schedule.route', 'schedule.vehicle', 'schedule.template']);
+        $oldSchedule = $booking->schedule;
+
+        if (! $oldSchedule) {
+            throw new InvalidArgumentException('Không tìm thấy chuyến của vé.');
+        }
+
+        $template = $oldSchedule->template;
+        if (! $template) {
+            throw new InvalidArgumentException('Không tìm thấy xe/tuyến gốc để tạo chuyến mới.');
+        }
+
+        $pickupTime = $this->resolveReassignPickupClock($booking);
+        $serviceDate = $this->resolveReassignServiceDate($pickupTime);
+
+        return DB::transaction(function () use ($booking, $oldSchedule, $template, $pickupTime, $serviceDate): Schedule {
+            $formerDriverId = (int) ($oldSchedule->driver_id ?? 0);
+
+            DriverTripRequest::query()
+                ->where('schedule_id', $oldSchedule->id)
+                ->where('contact_phone', (string) $booking->contact_phone)
+                ->whereIn('status', ['pending', 'accepted'])
+                ->update([
+                    'status'       => 'cancelled',
+                    'responded_at' => now(),
+                ]);
+
+            if ($formerDriverId > 0) {
+                $oldSchedule->update([
+                    'driver_id'                               => null,
+                    'driver_name'                             => 'Chờ phân bổ',
+                    'driver_stage'                            => null,
+                    'driver_assigned_at'                      => null,
+                    'driver_movement_deadline_at'             => null,
+                    'driver_late_pickup_prompt_at'            => null,
+                    'driver_late_pickup_continue_deadline_at' => null,
+                ]);
+            }
+
+            $newSchedule = $this->scheduleLifecycle->resolveScheduleForBooking(
+                $template,
+                $serviceDate,
+                $pickupTime,
+                true,
+                1,
+                $booking->pickup_lat,
+                $booking->pickup_lng,
+                $oldSchedule->route_id,
+            );
+
+            $booking->update([
+                'schedule_id'              => $newSchedule->id,
+                'booking_status'           => 'pending',
+                'trip_status'              => 'pending',
+                'pickup_time'              => \App\Support\DepartureTimeDisplay::storageValue($pickupTime),
+                'driver_search_started_at' => now(),
+                'operator_confirmed_at'    => now(),
+                'needs_operator_help_at'   => null,
+                'operator_help_reason'     => null,
+                'hold_expires_at'          => null,
+                'cancelled_at'             => null,
+                'expired_at'                 => null,
+            ]);
+
+            if (Booking::supportsOperatorDismiss()) {
+                $booking->update(['operator_dismissed_at' => null]);
+            }
+
+            $this->abandonScheduleIfEmpty($oldSchedule->fresh());
+
+            if ($formerDriverId > 0) {
+                $this->driverAvailability->syncAfterTripCompleted($formerDriverId);
+            }
+
+            return $newSchedule->fresh(['route', 'vehicle', 'template']);
+        });
+    }
+
+    private function resolveReassignPickupClock(Booking $booking): string
+    {
+        $pickupAt = $booking->tripStartAt();
+        if ($pickupAt instanceof \Carbon\Carbon && $pickupAt->isFuture()) {
+            return \App\Support\DepartureTimeDisplay::normalizeForClock(
+                $booking->pickup_time ?? $pickupAt->format('H:i'),
+            );
+        }
+
+        return now()
+            ->copy()
+            ->addMinutes(DriverTripRequestService::OPERATOR_INVITE_ACCEPT_MINUTES)
+            ->format('H:i');
+    }
+
+    private function resolveReassignServiceDate(string $pickupClock): string
+    {
+        $candidate = \Carbon\Carbon::parse(
+            now()->toDateString() . ' ' . $pickupClock . ':00',
+            config('app.timezone'),
+        )->startOfMinute();
+
+        if ($candidate->lte(now())) {
+            return now()->copy()->addDay()->toDateString();
+        }
+
+        return now()->toDateString();
+    }
+
+    private function abandonScheduleIfEmpty(Schedule $schedule): void
+    {
+        $stillActive = Booking::query()
+            ->where('schedule_id', $schedule->id)
+            ->whereNotIn('booking_status', ['cancelled', 'rejected'])
+            ->where('trip_status', '!=', 'completed')
+            ->exists();
+
+        if ($stillActive) {
+            return;
+        }
+
+        if ($schedule->driver_id) {
+            $driverId = (int) $schedule->driver_id;
+            $schedule->update([
+                'driver_id'                               => null,
+                'driver_name'                             => 'Chờ phân bổ',
+                'driver_stage'                            => null,
+                'driver_assigned_at'                      => null,
+                'driver_movement_deadline_at'             => null,
+                'driver_late_pickup_prompt_at'            => null,
+                'driver_late_pickup_continue_deadline_at' => null,
+                'status'                                  => 'cancelled',
+            ]);
+            $this->driverAvailability->syncAfterTripCompleted($driverId);
+
+            return;
+        }
+
+        if ($schedule->status === 'scheduled' && $schedule->departure_time <= now()) {
+            $schedule->update(['status' => 'cancelled']);
+        }
+    }
+
+    /** @deprecated Giữ cho tương thích — dùng {@see flagOperatorInviteExpired}. */
+    public function cancelOperatorInviteTimeout(Booking $booking): void
+    {
+        $this->flagOperatorInviteExpired($booking);
     }
 
     /** Ẩn đơn không gán được TX — hủy hệ thống để khách/TX không còn theo dõi. */
@@ -724,6 +873,8 @@ class BookingWorkflowService
                 'cancelled_by'              => 'admin',
                 'cancellation_reason_label' => 'Quản lý hủy chuyến',
                 'hold_expires_at'           => null,
+                'needs_operator_help_at'    => null,
+                'operator_help_reason'      => null,
             ];
 
             if (Schema::hasColumn('bookings', 'assigned_driver_id')) {
@@ -736,7 +887,7 @@ class BookingWorkflowService
                 DriverTripRequest::query()
                     ->where('schedule_id', $schedule->id)
                     ->where('contact_phone', (string) $booking->contact_phone)
-                    ->whereIn('status', ['pending', 'accepted'])
+                    ->whereIn('status', ['pending', 'accepted', 'expired'])
                     ->update([
                         'status'       => 'cancelled',
                         'responded_at' => now(),

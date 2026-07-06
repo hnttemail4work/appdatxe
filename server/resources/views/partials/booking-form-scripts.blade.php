@@ -11,6 +11,7 @@ window.__todayDate = @json(now()->toDateString());
 window.__laterReturnDaysMin = @json(\App\Support\DeparturePlan::MIN_LATER_RETURN_DAYS);
 window.__laterReturnDaysMax = @json(\App\Support\DeparturePlan::MAX_LATER_RETURN_DAYS);
 window.__laterReturnPercentPerDay = @json(\App\Support\PlatformFees::departurePlanLaterPercentPerDay());
+window.__departurePlanLabels = @json(\App\Support\DeparturePlan::labelsForJs());
 window.__defaultPickupTime = @json($defaultPickupTime ?? now()->addHour()->format('H:i'));
 window.__referralDiscountPercent = @json($referralDiscountMeta['percent'] ?? 0);
 window.__referralDiscountLabel = @json($referralDiscountMeta['source_label'] ?? (($appliedReferral ?? null)?->customerDiscountSourceLabel()));

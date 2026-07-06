@@ -123,7 +123,10 @@ class DriverProfile extends Model
             return 'Không hoạt động';
         }
 
-        return $this->availabilityLabel();
+        $flags = app(\App\Services\DriverAvailabilityService::class)
+            ->driverDashboardTripFlags((int) $this->user_id);
+
+        return $this->heroStatusMeta($flags['active'], $flags['upcoming'])['label'];
     }
 
     public function displayStatusColor(): string
@@ -131,6 +134,8 @@ class DriverProfile extends Model
         return match ($this->displayStatusLabel()) {
             'Sẵn sàng'                              => \App\Support\StatusBadge::SUCCESS,
             'Đang chạy chuyến', 'Đang chạy'         => \App\Support\StatusBadge::GOLD,
+            'Đã nhận cuốc'                          => \App\Support\StatusBadge::INFO,
+            'Cập nhật vị trí để nhận chuyến'       => \App\Support\StatusBadge::PENDING,
             'Tạm nghỉ', 'Nghỉ'                      => \App\Support\StatusBadge::NEUTRAL,
             'Đã duyệt'           => \App\Support\StatusBadge::INFO,
             'Chờ duyệt'          => \App\Support\StatusBadge::PENDING,

@@ -47,6 +47,17 @@ final class DeparturePlan
         };
     }
 
+    /** @return array<string, string> */
+    public static function labelsForJs(): array
+    {
+        return [
+            self::ONE_WAY   => self::label(self::ONE_WAY),
+            self::TODAY     => self::label(self::TODAY),
+            self::TOMORROW  => self::label(self::TOMORROW),
+            self::LATER     => self::label(self::LATER),
+        ];
+    }
+
     public static function displayLabel(string $plan, ?int $laterReturnDays = null): string
     {
         $plan = self::normalize($plan);
@@ -55,6 +66,18 @@ final class DeparturePlan
             $days = self::normalizeLaterReturnDays($laterReturnDays);
 
             return self::label($plan) . ' (' . $days . ' ngày)';
+        }
+
+        return self::label($plan);
+    }
+
+    /** Nhãn ngắn cho khách xem chuyến — ví dụ «4 ngày», «Một chiều». */
+    public static function guestStayLabel(string $plan, ?int $laterReturnDays = null): string
+    {
+        $plan = self::normalize($plan);
+
+        if ($plan === self::LATER) {
+            return self::normalizeLaterReturnDays($laterReturnDays) . ' ngày';
         }
 
         return self::label($plan);

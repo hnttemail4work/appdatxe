@@ -641,6 +641,31 @@ body:has(.console-page) {
     padding: .5rem .75rem;
 }
 
+.admin-pwa-icon-preview {
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: .85rem;
+    object-fit: cover;
+    background: rgba(255, 255, 255, .06);
+    flex-shrink: 0;
+}
+
+.admin-pwa-home-preview {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .85rem 1rem;
+    border: 1px solid var(--tl-border);
+    border-radius: .85rem;
+    background: #12161c;
+    min-height: 5rem;
+}
+
+.admin-pwa-home-preview__name {
+    font-weight: 600;
+    color: #f8fafc;
+}
+
 .quick-dest-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));

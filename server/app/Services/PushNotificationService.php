@@ -81,22 +81,190 @@ class PushNotificationService
 
     public function onDriverTripRequestCreated(DriverTripRequest $request): void
     {
+        $this->notifyDriverTripRequest($request, 'driver:trip:' . $request->id . ':new');
+    }
+
+    public function nudgeDriverTripRequest(DriverTripRequest $request): bool
+    {
         if ($request->status !== 'pending') {
-            return;
+            return false;
+        }
+
+        return $this->notifyDriverTripRequest(
+            $request,
+            'driver:trip:' . $request->id . ':nudge:' . now()->format('YmdHi'),
+        );
+    }
+
+    public function onDriverDepartReminder(Booking $booking, ?string $etaLabel = null): bool
+    {
+        $booking->loadMissing('schedule.route');
+        $routeLabel = $this->routeLabel($booking);
+        $body = 'Vui lòng di chuyển đến điểm đón khách';
+        if ($etaLabel) {
+            $body .= ' — dự kiến ' . $etaLabel;
+        }
+        if ($routeLabel !== '') {
+            $body .= ' · ' . $routeLabel;
+        }
+
+        return $this->notifyDriverBooking(
+            $booking,
+            'driver.depart_reminder',
+            'Đến lúc xuất phát đón khách',
+            $body,
+            $this->pickupDedupKey($booking, 'depart', now()->format('YmdH')),
+        );
+    }
+
+    public function onDriverPickupUrgent(Booking $booking, int $minutesUntilPickup): bool
+    {
+        $bucket = match (true) {
+            $minutesUntilPickup <= 5  => '5',
+            $minutesUntilPickup <= 10 => '10',
+            default                   => '15',
+        };
+
+        return $this->notifyDriverBooking(
+            $booking,
+            'driver.pickup_urgent',
+            'Sát giờ đón khách',
+            'Còn ' . $minutesUntilPickup . ' phút tới giờ đón — mở app Tài xế và chia sẻ vị trí GPS.',
+            $this->pickupDedupKey($booking, 'warn', $bucket),
+        );
+    }
+
+    public function onDriverLatePickupDue(Booking $booking): bool
+    {
+        return $this->notifyDriverBooking(
+            $booking,
+            'driver.late_pickup',
+            'Đã đến giờ đón',
+            'Vui lòng đến điểm đón khách ngay hoặc bấm «Tiếp tục» trên app Tài xế.',
+            $this->pickupDedupKey($booking, 'late', 'due'),
+        );
+    }
+
+    public function onDriverMovementDeadline(Booking $booking, int $minutesRemaining): bool
+    {
+        return $this->notifyDriverBooking(
+            $booking,
+            'driver.movement_deadline',
+            'Hạn xác nhận di chuyển',
+            'Còn ' . max(1, $minutesRemaining) . ' phút để bấm «Đến điểm đón» trên app Tài xế.',
+            $this->pickupDedupKey($booking, 'movement', (string) max(1, $minutesRemaining)),
+        );
+    }
+
+    /**
+     * @return array{has_push: bool, sent_at: ?\Carbon\Carbon, sent_label: ?string}
+     */
+    public function pickupNotifyMetaForBooking(Booking $booking): array
+    {
+        $driverUserId = (int) ($booking->resolveAssignedDriverId() ?? 0);
+        $hasPush = $driverUserId > 0
+            && PushSubscription::query()
+                ->where('audience', PushAudience::DRIVER)
+                ->where('user_id', $driverUserId)
+                ->exists();
+
+        $prefix = $this->pickupDedupPrefix($booking);
+        $row = $prefix === ''
+            ? null
+            : DB::table('push_notification_dedup')
+                ->where('dedup_key', 'like', $prefix . '%')
+                ->orderByDesc('sent_at')
+                ->first();
+
+        $sentAt = $row?->sent_at ? \Carbon\Carbon::parse($row->sent_at) : null;
+
+        return [
+            'has_push'   => $hasPush,
+            'sent_at'    => $sentAt,
+            'sent_label' => $sentAt ? ('Đã TB đến TX lúc ' . $sentAt->format('H:i')) : null,
+        ];
+    }
+
+    protected function notifyDriverBooking(
+        Booking $booking,
+        string $eventKey,
+        string $title,
+        string $body,
+        string $dedupKey,
+    ): bool {
+        $driverUserId = (int) ($booking->resolveAssignedDriverId() ?? 0);
+        if ($driverUserId <= 0) {
+            return false;
+        }
+
+        $subscriptions = PushSubscription::query()
+            ->where('audience', PushAudience::DRIVER)
+            ->where('user_id', $driverUserId)
+            ->get();
+
+        if ($subscriptions->isEmpty()) {
+            return false;
+        }
+
+        $this->dispatch(
+            $subscriptions,
+            $eventKey,
+            $title,
+            $body,
+            '/driver/dashboard',
+            $dedupKey,
+        );
+
+        return DB::table('push_notification_dedup')->where('dedup_key', $dedupKey)->exists();
+    }
+
+    protected function pickupDedupPrefix(Booking $booking): string
+    {
+        return 'driver:booking:' . (int) $booking->id . ':pickup:';
+    }
+
+    protected function pickupDedupKey(Booking $booking, string $kind, string $bucket): string
+    {
+        return $this->pickupDedupPrefix($booking) . $kind . ':' . $bucket;
+    }
+
+    protected function routeLabel(Booking $booking): string
+    {
+        $schedule = $booking->schedule;
+        $routeLabel = trim(($schedule?->route?->departure ?? '') . ' → ' . ($schedule?->route?->destination ?? ''));
+
+        return $routeLabel !== '→' ? $routeLabel : '';
+    }
+
+    protected function notifyDriverTripRequest(DriverTripRequest $request, string $dedupKey): bool
+    {
+        if ($request->status !== 'pending') {
+            return false;
         }
 
         $request->loadMissing('schedule.route');
         $schedule = $request->schedule;
         $routeLabel = trim(($schedule?->route?->departure ?? '') . ' → ' . ($schedule?->route?->destination ?? ''));
 
-        $this->sendToDriver(
-            (int) $request->driver_id,
+        $subscriptions = PushSubscription::query()
+            ->where('audience', PushAudience::DRIVER)
+            ->where('user_id', (int) $request->driver_id)
+            ->get();
+
+        if ($subscriptions->isEmpty()) {
+            return false;
+        }
+
+        $this->dispatch(
+            $subscriptions,
             'driver.new_trip_request',
             'Cuốc mới chờ nhận',
             $routeLabel !== '→' ? $routeLabel : 'Có chuyến mới cần xác nhận.',
             '/driver/dashboard',
-            'driver:trip:' . $request->id . ':new',
+            $dedupKey,
         );
+
+        return true;
     }
 
     public function onDriverAcceptedBooking(Booking $booking): void

@@ -5,7 +5,9 @@ namespace App\Services;
 use App\Models\Booking;
 use App\Models\DriverProfile;
 use App\Models\DriverTripRequest;
+use App\Models\PushSubscription;
 use App\Models\Schedule;
+use App\Support\PushAudience;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -26,6 +28,7 @@ class DriverLatePickupService
     public function __construct(
         private readonly DriverTripRequestService $tripRequests,
         private readonly DriverBehaviorPenaltyService $penalties,
+        private readonly PushNotificationService $pushNotifications,
     ) {
     }
 
@@ -46,6 +49,31 @@ class DriverLatePickupService
             });
 
         return $prompted;
+    }
+
+    /** Gửi TB đẩy nhắc tài xế khi gần giờ đón / cần xuất phát / hết hạn xác nhận di chuyển. */
+    public function processPickupPushReminders(): int
+    {
+        $sent = 0;
+
+        Schedule::query()
+            ->with(['route', 'vehicle', 'bookings'])
+            ->whereNotNull('driver_id')
+            ->where('driver_stage', Schedule::DRIVER_STAGE_ASSIGNED)
+            ->whereIn('status', ['scheduled', 'running'])
+            ->each(function (Schedule $schedule) use (&$sent): void {
+                $booking = $schedule->driverRelevantBookings()->first();
+
+                if (! $booking
+                    || in_array($booking->booking_status, ['cancelled', 'rejected'], true)
+                    || $booking->trip_status === 'completed') {
+                    return;
+                }
+
+                $sent += $this->pushRemindersForBooking($schedule, $booking);
+            });
+
+        return $sent;
     }
 
     public function expireOverdueContinue(): int
@@ -85,6 +113,11 @@ class DriverLatePickupService
             'driver_late_pickup_prompt_at'            => now(),
             'driver_late_pickup_continue_deadline_at' => $deadline,
         ]);
+
+        try {
+            $this->pushNotifications->onDriverLatePickupDue($booking);
+        } catch (\Throwable) {
+        }
 
         return true;
     }
@@ -187,10 +220,6 @@ class DriverLatePickupService
             ]);
 
             foreach ($bookings as $booking) {
-                if ($booking->assigned_driver_id) {
-                    $booking->update(['assigned_driver_id' => null]);
-                }
-
                 DriverTripRequest::query()->updateOrCreate(
                     [
                         'schedule_id'   => $locked->id,
@@ -262,10 +291,38 @@ class DriverLatePickupService
         return $this->etaLabel($schedule, $booking);
     }
 
+    /** Ước tính theo giờ đón đã đặt khi TX chưa chia sẻ GPS. */
+    public function minutesUntilScheduledPickupLabel(Booking $booking): ?string
+    {
+        $pickupAt = $booking->guestPickupAt();
+        if (! $pickupAt instanceof Carbon || ! $pickupAt->isFuture()) {
+            return null;
+        }
+
+        $minutes = (int) now()->diffInMinutes($pickupAt, false);
+        if ($minutes <= 0) {
+            return null;
+        }
+
+        return $this->formatMinutesLabel($minutes);
+    }
+
+    public function formatMinutesLabel(int $travelMinutes): string
+    {
+        if ($travelMinutes < 60) {
+            return $travelMinutes . ' phút nữa';
+        }
+
+        $hours = (int) floor($travelMinutes / 60);
+        $mins = $travelMinutes % 60;
+
+        return $mins > 0 ? ($hours . ' giờ ' . $mins . ' phút nữa') : ($hours . ' giờ nữa');
+    }
+
     /**
      * Cảnh báo admin — TX có thể không kịp đón hoặc đã quá giờ đón.
      *
-     * @return array{level: string, label: string, detail: string}|null
+     * @return array{level: string, label: string, detail: string, push_label?: string|null}|null
      */
     public function adminAlertForBooking(Booking $booking): ?array
     {
@@ -289,15 +346,19 @@ class DriverLatePickupService
             return null;
         }
 
+        $pushMeta = $this->pushNotifications->pickupNotifyMetaForBooking($booking);
+        $pushSuffix = $this->adminPushDetailSuffix($pushMeta);
+
         $minutesUntilPickup = (int) now()->diffInMinutes($pickupAt, false);
 
         if ($minutesUntilPickup < 0 && $stage === Schedule::DRIVER_STAGE_ASSIGNED) {
             $lateMinutes = abs($minutesUntilPickup);
 
             return [
-                'level'  => 'danger',
-                'label'  => 'Quá giờ đón',
-                'detail' => 'TX chưa đến điểm đón · trễ ' . $lateMinutes . ' phút',
+                'level'       => 'danger',
+                'label'       => 'Quá giờ đón',
+                'detail'      => 'TX chưa đến điểm đón · trễ ' . $lateMinutes . ' phút' . $pushSuffix,
+                'push_label'  => $pushMeta['sent_label'],
             ];
         }
 
@@ -313,9 +374,10 @@ class DriverLatePickupService
         if (! $profile?->hasFreshLocation()) {
             if ($minutesUntilPickup <= self::ADMIN_WARN_STEP_MINUTES) {
                 return [
-                    'level'  => $minutesUntilPickup <= 5 ? 'danger' : 'warning',
-                    'label'  => 'Sát giờ đón',
-                    'detail' => 'Còn ' . $minutesUntilPickup . ' phút · TX chưa chia sẻ vị trí',
+                    'level'      => $minutesUntilPickup <= 5 ? 'danger' : 'warning',
+                    'label'      => 'Sát giờ đón',
+                    'detail'     => 'Còn ' . $minutesUntilPickup . ' phút · TX chưa chia sẻ vị trí' . $pushSuffix,
+                    'push_label' => $pushMeta['sent_label'],
                 ];
             }
 
@@ -334,10 +396,97 @@ class DriverLatePickupService
         };
 
         return [
-            'level'  => $level,
-            'label'  => 'Có thể trễ đón',
-            'detail' => 'Còn ' . $minutesUntilPickup . ' phút tới giờ đón · TX ~' . $etaMinutes . ' phút nữa mới tới',
+            'level'      => $level,
+            'label'      => 'Có thể trễ đón',
+            'detail'     => 'Còn ' . $minutesUntilPickup . ' phút tới giờ đón · TX ~' . $etaMinutes . ' phút nữa mới tới' . $pushSuffix,
+            'push_label' => $pushMeta['sent_label'],
         ];
+    }
+
+    /** @param array{has_push: bool, sent_at: ?Carbon, sent_label: ?string} $pushMeta */
+    private function adminPushDetailSuffix(array $pushMeta): string
+    {
+        if (! $pushMeta['has_push']) {
+            return ' · TX chưa bật app';
+        }
+
+        if ($pushMeta['sent_label']) {
+            return ' · ' . $pushMeta['sent_label'];
+        }
+
+        return '';
+    }
+
+    private function pushRemindersForBooking(Schedule $schedule, Booking $booking): int
+    {
+        $driverUserId = (int) ($schedule->driver_id ?: $booking->resolveAssignedDriverId($schedule));
+        if ($driverUserId <= 0) {
+            return 0;
+        }
+
+        $hasPush = PushSubscription::query()
+            ->where('audience', PushAudience::DRIVER)
+            ->where('user_id', $driverUserId)
+            ->exists();
+
+        if (! $hasPush) {
+            return 0;
+        }
+
+        $sent = 0;
+
+        if ($schedule->driver_movement_deadline_at?->isFuture()) {
+            $minutesToDeadline = (int) now()->diffInMinutes($schedule->driver_movement_deadline_at, false);
+            if ($minutesToDeadline >= 0 && $minutesToDeadline <= 3) {
+                try {
+                    if ($this->pushNotifications->onDriverMovementDeadline($booking, $minutesToDeadline)) {
+                        $sent++;
+                    }
+                } catch (\Throwable) {
+                }
+            }
+        }
+
+        if ($this->shouldDepartForPickup($booking)) {
+            try {
+                if ($this->pushNotifications->onDriverDepartReminder(
+                    $booking,
+                    $this->etaLabel($schedule, $booking),
+                )) {
+                    $sent++;
+                }
+            } catch (\Throwable) {
+            }
+        }
+
+        $pickupAt = $booking->tripStartAt();
+        if (! $pickupAt instanceof Carbon) {
+            return $sent;
+        }
+
+        $minutesUntilPickup = (int) now()->diffInMinutes($pickupAt, false);
+        if ($minutesUntilPickup <= 0 || $minutesUntilPickup > self::ADMIN_WARN_MINUTES_BEFORE) {
+            return $sent;
+        }
+
+        $profile = DriverProfile::query()->where('user_id', $driverUserId)->first();
+        if ($profile?->hasFreshLocation()) {
+            return $sent;
+        }
+
+        foreach ([15, 10, 5] as $threshold) {
+            if ($minutesUntilPickup <= $threshold) {
+                try {
+                    if ($this->pushNotifications->onDriverPickupUrgent($booking, $minutesUntilPickup)) {
+                        $sent++;
+                    }
+                } catch (\Throwable) {
+                }
+                break;
+            }
+        }
+
+        return $sent;
     }
 
     private function etaLabel(Schedule $schedule, ?Booking $booking): ?string
@@ -348,14 +497,7 @@ class DriverLatePickupService
 
         $travelMinutes = $this->travelMinutesToPickup($schedule, $booking);
 
-        if ($travelMinutes < 60) {
-            return $travelMinutes . ' phút nữa';
-        }
-
-        $hours = (int) floor($travelMinutes / 60);
-        $mins = $travelMinutes % 60;
-
-        return $mins > 0 ? ($hours . ' giờ ' . $mins . ' phút nữa') : ($hours . ' giờ nữa');
+        return $this->formatMinutesLabel($travelMinutes);
     }
 
     private function travelMinutesToPickup(Schedule $schedule, Booking $booking): int
