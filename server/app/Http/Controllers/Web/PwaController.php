@@ -28,11 +28,12 @@ class PwaController extends Controller
         $startUrl = PushAudience::startUrl($audience);
 
         return response()->json([
+            'id'               => url('/'),
             'name'             => PushAudience::manifestName($audience, $appName),
             'short_name'       => PushAudience::shortLabel($audience),
             'description'      => AppBrandingSettings::brandTagline(),
-            'start_url'        => $startUrl,
-            'scope'            => '/',
+            'start_url'        => AppBrandingSettings::absoluteUrl($startUrl),
+            'scope'            => url('/'),
             'display'          => 'standalone',
             'orientation'      => 'portrait',
             'background_color' => '#0f1419',

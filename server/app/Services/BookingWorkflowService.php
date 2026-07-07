@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Booking;
 use App\Models\BookingAudit;
+use App\Models\CancellationReason;
 use App\Models\DriverProfile;
 use App\Models\Schedule;
 use App\Models\TripLedger;
@@ -319,6 +320,20 @@ class BookingWorkflowService
         });
 
         $this->browserGuard->clearActiveBookingForBooking($booking->fresh());
+    }
+
+    /** Ghi lý do TX từ chối / hủy cuốc — đơn vẫn tìm TX khác, không hủy vé. */
+    public function stampDriverReleaseReason(Booking $booking, CancellationReason $reason): void
+    {
+        if (in_array($booking->booking_status, ['cancelled', 'rejected'], true)
+            || $booking->trip_status === 'completed') {
+            return;
+        }
+
+        $booking->update([
+            'cancellation_reason_id'    => $reason->id,
+            'cancellation_reason_label' => $reason->label,
+        ]);
     }
 
     /** Khách hủy chuyến qua web — tab Đã hủy admin, gỡ khỏi tài xế. */
@@ -1297,7 +1312,7 @@ class BookingWorkflowService
             throw new InvalidArgumentException('Sau khi đón khách không thể hủy — liên hệ quản lý nếu cần hỗ trợ.');
         }
 
-        $this->cancellationReasons->resolveForCancel($cancellationReasonId, 'driver');
+        $reason = $this->cancellationReasons->resolveForCancel($cancellationReasonId, 'driver');
 
         $schedule = Schedule::query()
             ->with(['route', 'vehicle', 'bookings'])
@@ -1333,7 +1348,7 @@ class BookingWorkflowService
         $driverLabel = $profile?->user?->name ?? $schedule->driver_name ?? 'Tài xế';
         $driverCode = $profile?->driver_code;
 
-        DB::transaction(function () use ($schedule, $activeBookings, $formerDriverId): void {
+        DB::transaction(function () use ($schedule, $activeBookings, $formerDriverId, $reason): void {
             $locked = Schedule::query()->lockForUpdate()->findOrFail($schedule->id);
 
             if ((int) $locked->driver_id !== $formerDriverId) {
@@ -1353,6 +1368,8 @@ class BookingWorkflowService
             ]);
 
             foreach ($activeBookings as $booking) {
+                $this->stampDriverReleaseReason($booking, $reason);
+
                 $releasedRequests = DriverTripRequest::query()
                     ->where('schedule_id', $locked->id)
                     ->where('contact_phone', (string) $booking->contact_phone)

@@ -3,10 +3,12 @@
 namespace App\Services;
 
 use App\Models\Booking;
+use App\Models\ReferralCode;
 use App\Models\TripReview;
 use App\Support\AuthIdentifier;
 use App\Support\DeparturePlan;
 use App\Support\GuestWaitProgress;
+use App\Support\PlatformFees;
 use Illuminate\Support\Facades\Cache;
 
 class GuestTripStatusService
@@ -60,16 +62,32 @@ class GuestTripStatusService
                 return $phoneActive->loadMissing(['schedule.route', 'tripReview']);
             }
 
+            $phoneMatch = fn (Booking $booking): bool => $booking->matchesContactPhone($phone)
+                && ! $booking->shouldHideFromGuestAndOperatorActiveLists();
+
+            $awaitingReview = Booking::query()
+                ->with(['schedule.route', 'tripReview'])
+                ->where('trip_status', 'completed')
+                ->whereNotIn('booking_status', ['cancelled', 'rejected'])
+                ->whereDoesntHave('tripReview')
+                ->whereNotNull('contact_phone')
+                ->orderByDesc('completed_at')
+                ->orderByDesc('id')
+                ->get()
+                ->first($phoneMatch);
+
+            if ($awaitingReview) {
+                return $awaitingReview;
+            }
+
             $latest = Booking::query()
                 ->with(['schedule.route', 'tripReview'])
                 ->whereNotNull('contact_phone')
                 ->orderByDesc('created_at')
                 ->limit(20)
                 ->get()
-                ->first(fn (Booking $booking): bool => $booking->matchesContactPhone($phone)
-                    && ! $booking->shouldHideFromGuestAndOperatorActiveLists()
-                    && ($booking->blocksGuestRebooking()
-                        || ($booking->trip_status === 'completed' && ! $booking->tripReview)));
+                ->first(fn (Booking $booking): bool => $phoneMatch($booking)
+                    && $booking->blocksGuestRebooking());
 
             if ($latest) {
                 return $latest;
@@ -125,15 +143,23 @@ class GuestTripStatusService
     private function serializeReferral(Booking $booking): ?array
     {
         $referral = $booking->referralCode;
-        if (! $referral) {
+        if (! $referral || $referral->type !== ReferralCode::TYPE_BOOKING_TEMP) {
             return null;
         }
 
-        return [
-            'code'              => $referral->code,
-            'url'               => $referral->landingUrl(),
-            'discount_percent'  => \App\Support\PlatformFees::bookingQrDiscountPercent(),
+        $payload = [
+            'code'    => $referral->code,
+            'url'     => $referral->landingUrl(),
+            'pending' => $referral->status === ReferralCode::STATUS_PENDING,
         ];
+
+        if ($referral->isUsable()) {
+            $payload['discount_percent'] = PlatformFees::bookingQrDiscountPercent();
+        } else {
+            $payload['discount_percent'] = 0.0;
+        }
+
+        return $payload;
     }
 
     /** @return array<string, mixed>|null */

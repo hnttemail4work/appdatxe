@@ -7,6 +7,7 @@ use App\Models\DriverProfile;
 use App\Models\DriverTripRequest;
 use App\Models\DriverWallet;
 use App\Models\Schedule;
+use App\Models\ScheduleTemplate;
 use App\Models\TripRoute;
 use App\Models\User;
 use App\Models\Vehicle;
@@ -234,6 +235,15 @@ class DriverAutoAssignTest extends TestCase
         return Schema::hasTable('driver_trip_requests')
             && Schema::hasTable('driver_wallets')
             && Schema::hasColumn('driver_profiles', 'driver_code');
+    }
+
+    private function driverCancelReasonId(): int
+    {
+        $id = \App\Models\CancellationReason::query()
+            ->where('audience', 'driver')
+            ->value('id');
+
+        return (int) ($id ?: \App\Models\CancellationReason::query()->value('id'));
     }
 
     protected function setUp(): void
@@ -484,7 +494,7 @@ class DriverAutoAssignTest extends TestCase
             'expires_at'    => now()->addMinutes(15),
         ]);
 
-        $service->reject($request, (int) $data['driverNear']->id);
+        $service->reject($request, (int) $data['driverNear']->id, $this->driverCancelReasonId());
 
         $request->refresh();
         $this->assertSame('rejected', $request->status);
@@ -495,6 +505,43 @@ class DriverAutoAssignTest extends TestCase
                 ->where('status', 'pending')
                 ->count(),
         );
+    }
+
+    public function test_reject_reassigns_to_next_driver_with_web_presence_without_fresh_gps(): void
+    {
+        $data = $this->seedOpenScheduleWithDrivers();
+        $service = app(DriverTripRequestService::class);
+        $availability = app(\App\Services\DriverAvailabilityService::class);
+
+        DriverProfile::query()->whereKey($data['profileFar']->id)->update([
+            'last_location_at' => now()->subMinutes(20),
+        ]);
+        $availability->touchWebPresence((int) $data['driverFar']->id);
+
+        $request = DriverTripRequest::query()->create([
+            'schedule_id'   => $data['schedule']->id,
+            'contact_phone' => $data['booking']->contact_phone,
+            'driver_id'     => $data['driverNear']->id,
+            'status'        => 'pending',
+            'expires_at'    => now()->addMinutes(1),
+            'created_at'    => now()->subSeconds(30),
+        ]);
+
+        $service->reject($request, (int) $data['driverNear']->id, $this->driverCancelReasonId());
+
+        $pending = DriverTripRequest::query()
+            ->where('schedule_id', $data['schedule']->id)
+            ->where('status', 'pending')
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($pending);
+        $this->assertSame((int) $data['driverFar']->id, (int) $pending->driver_id);
+
+        $visible = $service->visiblePendingGroupsForDriver((int) $data['driverFar']->id);
+        $this->assertTrue($visible->contains(
+            fn (array $group): bool => (int) $group['primary']->id === (int) $pending->id,
+        ));
     }
 
     public function test_auto_assign_skipped_when_schedule_already_has_driver(): void
@@ -577,7 +624,7 @@ class DriverAutoAssignTest extends TestCase
             'expires_at'    => now()->addMinutes(12),
         ]);
 
-        $service->reject($first, (int) $data['driverNear']->id);
+        $service->reject($first, (int) $data['driverNear']->id, $this->driverCancelReasonId());
 
         DriverTripRequest::query()->create([
             'schedule_id'   => $data['schedule']->id,
@@ -593,6 +640,169 @@ class DriverAutoAssignTest extends TestCase
         $this->assertNull($booking->adminWaitingMinutesRemaining());
         $this->assertTrue($booking->adminReleasedAfterDriverEngagement());
         $this->assertNotSame('Chờ tài xế nhận', $booking->operatorMonitorLabel());
+    }
+
+    public function test_assign_diagnostics_treats_on_trip_toggle_as_online_when_not_blocking(): void
+    {
+        $data = $this->seedOpenScheduleWithDrivers();
+
+        DriverProfile::query()->whereKey($data['profileNear']->id)->update([
+            'availability_status' => 'on_trip',
+            'last_lat'            => 10.7769,
+            'last_lng'            => 106.7009,
+            'last_location_at'    => now(),
+        ]);
+
+        $diagnostics = app(DriverProximityService::class)->assignDiagnostics(
+            $data['profileNear']->fresh(),
+            $data['booking']->fresh(),
+            $data['schedule']->fresh(),
+        );
+
+        $this->assertTrue($diagnostics['auto_assign_eligible']);
+        $this->assertNull($diagnostics['hint']);
+    }
+
+    public function test_catalog_off_duty_alert_uses_ready_toggle_not_on_trip_derived_status(): void
+    {
+        $data = $this->seedOpenScheduleWithDrivers();
+
+        $template = ScheduleTemplate::query()->create([
+            'route_id'    => $data['route']->id,
+            'vehicle_id'  => $data['vehicle']->id,
+            'driver_id'   => $data['driverNear']->id,
+            'driver_name' => $data['driverNear']->name,
+            'status'      => 'active',
+        ]);
+
+        $data['schedule']->update(['template_id' => $template->id]);
+
+        DriverProfile::query()->whereKey($data['profileNear']->id)->update([
+            'availability_status' => 'available',
+        ]);
+
+        $otherDeparture = now()->addHours(5);
+        Schedule::query()->create([
+            'route_id'       => $data['route']->id,
+            'vehicle_id'     => $data['vehicle']->id,
+            'driver_id'      => $data['driverNear']->id,
+            'driver_name'    => $data['driverNear']->name,
+            'departure_time' => $otherDeparture,
+            'service_date'   => $otherDeparture->toDateString(),
+            'status'         => 'scheduled',
+            'trip_code'      => 'OT' . strtoupper(substr(uniqid(), -5)),
+        ]);
+
+        Booking::query()->create([
+            'contact_phone'     => '0918' . random_int(100000, 999999),
+            'passenger_name'    => 'Khách Other Trip',
+            'passenger_gender'  => 'male',
+            'schedule_id'       => Schedule::query()->where('driver_id', $data['driverNear']->id)->latest('id')->value('id'),
+            'booking_reference' => 'BK-OTHER-' . uniqid(),
+            'total_price'       => 200000,
+            'payment_status'    => 'unpaid',
+            'trip_status'       => 'confirmed',
+            'booking_status'    => 'confirmed',
+            'pickup_address'    => 'TP.HCM',
+            'pickup_lat'        => 10.7769,
+            'pickup_lng'        => 106.7009,
+            'dropoff_address'   => 'Vũng Tàu',
+            'pickup_time'       => $otherDeparture->format('H:i'),
+        ]);
+
+        $profile = $data['profileNear']->fresh();
+        $this->assertSame('on_trip', $profile->effectiveAvailabilityStatus());
+
+        $booking = $data['booking']->fresh(['schedule.template']);
+        $this->assertFalse($booking->catalogDriverOffDutyAlert());
+
+        DriverProfile::query()->whereKey($data['profileNear']->id)->update([
+            'availability_status' => 'off_duty',
+        ]);
+
+        $this->assertTrue($booking->fresh(['schedule.template'])->catalogDriverOffDutyAlert());
+    }
+
+    public function test_manual_assign_after_catalog_driver_cancelled_reaches_other_driver(): void
+    {
+        $data = $this->seedOpenScheduleWithDrivers();
+
+        $template = ScheduleTemplate::query()->create([
+            'route_id'    => $data['route']->id,
+            'vehicle_id'  => $data['vehicle']->id,
+            'driver_id'   => $data['driverNear']->id,
+            'driver_name' => $data['driverNear']->name,
+            'status'      => 'active',
+        ]);
+
+        $data['schedule']->update(['template_id' => $template->id]);
+
+        DriverTripRequest::query()->create([
+            'schedule_id'   => $data['schedule']->id,
+            'contact_phone' => $data['booking']->contact_phone,
+            'driver_id'     => $data['driverNear']->id,
+            'status'        => 'cancelled',
+            'responded_at'  => now(),
+        ]);
+
+        DriverTripRequest::query()->create([
+            'schedule_id'   => $data['schedule']->id,
+            'contact_phone' => $data['booking']->contact_phone,
+            'driver_id'     => $data['driverNear']->id,
+            'status'        => 'pending',
+            'expires_at'    => now()->addMinutes(10),
+        ]);
+
+        $service = app(DriverTripRequestService::class);
+        $request = $service->requestDriver(
+            $data['schedule']->fresh(['route', 'vehicle', 'template']),
+            $data['profileFar']->driver_code,
+            $data['booking']->contact_phone,
+        );
+
+        $this->assertSame('pending', $request->status);
+        $this->assertSame((int) $data['driverFar']->id, (int) $request->driver_id);
+
+        $visible = $service->visiblePendingGroupsForDriver((int) $data['driverFar']->id);
+        $this->assertTrue($visible->contains(
+            fn (array $group): bool => (int) $group['primary']->id === (int) $request->id,
+        ));
+    }
+
+    public function test_manual_reassign_to_same_driver_who_cancelled_shows_offer(): void
+    {
+        $data = $this->seedOpenScheduleWithDrivers();
+        $service = app(DriverTripRequestService::class);
+        $booking = $data['booking']->fresh(['schedule.route', 'schedule.vehicle']);
+
+        $cancelled = DriverTripRequest::query()->create([
+            'schedule_id'   => $data['schedule']->id,
+            'contact_phone' => $booking->contact_phone,
+            'driver_id'     => $data['driverNear']->id,
+            'status'        => 'cancelled',
+            'responded_at'  => now(),
+        ]);
+
+        app(\App\Services\DriverCuocOfferHideService::class)->recordMissedOffer($cancelled);
+
+        $request = $service->requestDriver(
+            $data['schedule']->fresh(['route', 'vehicle']),
+            $data['profileNear']->driver_code,
+            $booking->contact_phone,
+        );
+
+        $this->assertSame('pending', $request->status);
+        $this->assertSame((int) $data['driverNear']->id, (int) $request->driver_id);
+
+        $booking = $booking->fresh(['schedule']);
+        $this->assertSame('pending', $booking->driverAcceptanceState());
+        $this->assertNotNull($booking->eligiblePendingDriverTripRequest());
+        $this->assertSame((int) $request->id, (int) $booking->eligiblePendingDriverTripRequest()->id);
+
+        $visible = $service->visiblePendingGroupsForDriver((int) $data['driverNear']->id);
+        $this->assertTrue($visible->contains(
+            fn (array $group): bool => (int) $group['primary']->id === (int) $request->id,
+        ));
     }
 
     public function test_operator_manual_request_still_works(): void

@@ -1,3 +1,7 @@
+@php
+$bookingQrDiscountPercent = \App\Support\PlatformFees::bookingQrDiscountPercent();
+$bookingQrDiscountLabel = rtrim(rtrim(number_format($bookingQrDiscountPercent, 1, '.', ''), '0'), '.');
+@endphp
 <div class="modal fade" id="guestTripCompletionModal" tabindex="-1" aria-labelledby="guestTripCompletionModalTitle" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable guest-trip-completion-dialog">
         <div class="modal-content border-0 shadow guest-trip-completion-modal">
@@ -12,7 +16,7 @@
                 <section id="guest-trip-completion-referral" class="guest-trip-completion-referral d-none" aria-label="Mã QR giới thiệu">
                     <h6 class="guest-trip-completion-section-title">Mã QR giới thiệu</h6>
                     <p class="guest-trip-completion-section-lead mb-2" id="guest-trip-completion-referral-note">
-                        Giảm ngay 2% khi hoàn tất chuyến.
+                        Giảm ngay {{ $bookingQrDiscountLabel }}% khi hoàn tất chuyến.
                     </p>
                     <div class="guest-trip-completion-qr-wrap">
                         <div id="guest-trip-completion-referral-qr" class="guest-trip-completion-qr" aria-hidden="true"></div>

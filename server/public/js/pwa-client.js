@@ -32,6 +32,36 @@
         return /iphone|ipad|ipod/i.test(window.navigator.userAgent);
     }
 
+    function isIosSafari() {
+        var ua = window.navigator.userAgent || '';
+        if (!isIos()) {
+            return false;
+        }
+        if (/CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua)) {
+            return false;
+        }
+        if (/FBAN|FBAV|Instagram|Line\/|Zalo|MicroMessenger|GSA/i.test(ua)) {
+            return false;
+        }
+
+        return /Version\/[\d.]+/.test(ua) && /Safari/i.test(ua);
+    }
+
+    function iosInstallBlockReason() {
+        var ua = window.navigator.userAgent || '';
+        if (!isIos()) {
+            return '';
+        }
+        if (/FBAN|FBAV|Instagram|Line\/|Zalo|MicroMessenger/i.test(ua)) {
+            return 'Trình duyệt trong app (Zalo/Facebook/…) không ghim được. Mở link bằng Safari.';
+        }
+        if (/CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua)) {
+            return 'Chrome/Firefox trên iPhone không ghim app đúng cách. Hãy mở lại bằng Safari.';
+        }
+
+        return '';
+    }
+
     function isDismissed(key) {
         try {
             return sessionStorage.getItem(key) === '1';
@@ -132,7 +162,11 @@
         var message;
 
         if (isIos()) {
-            message = 'Trên iPhone/iPad: nhấn nút Chia sẻ (hình vuông có mũi tên) → chọn Thêm vào Màn hình chính.';
+            if (!isIosSafari()) {
+                message = iosInstallBlockReason() || 'Mở trang bằng Safari để ghim app lên màn hình chính.';
+            } else {
+                message = 'Trên Safari: nhấn Chia sẻ (mũi tên lên, thanh dưới) → cuộn xuống Thêm vào Màn hình chính → Thêm.';
+            }
         } else if (isAndroid()) {
             message = 'Nhấn menu ⋮ trên trình duyệt → chọn Cài ứng dụng hoặc Thêm vào Màn hình chính.';
         } else {
@@ -233,9 +267,23 @@
         }
 
         var hint = document.getElementById('pwa-ios-hint');
-        if (hint) {
-            hint.classList.add('is-visible');
+        if (!hint) {
+            return;
         }
+
+        var warning = hint.querySelector('[data-pwa-ios-warning]');
+        var blockReason = iosInstallBlockReason();
+        if (warning) {
+            if (blockReason) {
+                warning.textContent = blockReason;
+                warning.hidden = false;
+            } else {
+                warning.textContent = '';
+                warning.hidden = true;
+            }
+        }
+
+        hint.classList.add('is-visible');
     }
 
     function bindInstallUi() {
@@ -249,6 +297,10 @@
         var pushBtn = banner.querySelector('[data-pwa-enable-push]');
 
         if (installBtn) {
+            if (isIos()) {
+                installBtn.textContent = 'Hướng dẫn';
+            }
+
             installBtn.addEventListener('click', function () {
                 if (deferredPrompt) {
                     runNativeInstall(installBtn).then(function (ok) {
@@ -263,6 +315,9 @@
 
                 if (isIos()) {
                     showIosHint();
+                    if (!isIosSafari()) {
+                        showManualInstallHelp();
+                    }
                     return;
                 }
 
@@ -384,7 +439,12 @@
             }
 
             if (isIos()) {
-                window.setTimeout(showInstallBanner, 1500);
+                window.setTimeout(function () {
+                    showInstallBanner();
+                    if (isIosSafari()) {
+                        showIosHint();
+                    }
+                }, 1500);
             }
         });
     });

@@ -96,10 +96,26 @@
 }
 
 .pwa-ios-hint.is-visible {
-    max-height: 10rem;
+    max-height: 16rem;
     padding: 1rem;
     border-bottom-color: rgba(212, 175, 55, 0.35);
     opacity: 1;
+}
+
+.pwa-ios-hint__steps {
+    margin: 0;
+    padding-left: 1.15rem;
+    font-size: 0.82rem;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.pwa-ios-hint__steps li + li {
+    margin-top: 0.25rem;
+}
+
+.pwa-ios-hint__note {
+    font-size: 0.8rem;
+    color: #f0ad4e;
 }
 
 .pwa-ios-hint p {

@@ -27,13 +27,22 @@ return Application::configure(basePath: dirname(__DIR__))
             }
 
             if ($request->user() && $request->is('admin/*')) {
-                $params = ['tab' => 'referrals'];
+                $route = $request->routeIs('admin.referrers.*', 'admin.referralCodes.*')
+                    ? 'admin.referrals'
+                    : 'admin.dashboard';
+                $params = ['tab' => 'settings'];
+                if ($route === 'admin.referrals') {
+                    $params = [];
+                }
                 if ($request->routeIs('admin.referrers.store')) {
                     $params['referrals_page'] = 1;
                 }
+                if ($request->routeIs('admin.password.update')) {
+                    $params = ['tab' => 'account'];
+                }
 
                 return redirect()
-                    ->route('admin.dashboard', $params)
+                    ->route($route, $params)
                     ->withInput()
                     ->withErrors([
                         'csrf' => 'Phiên đã hết hạn. Tải lại trang (F5) rồi thử tạo mã lại.',

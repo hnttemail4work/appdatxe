@@ -43,7 +43,7 @@
     <link rel="manifest" href="{{ route('pwa.manifest') }}">
     @endif
     <link rel="icon" type="{{ $appIconMime }}" href="{{ $appIconUrl }}">
-    <link rel="apple-touch-icon" href="{{ $appIconUrl }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ AppBrandingSettings::appleTouchIconAssetUrl() }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">

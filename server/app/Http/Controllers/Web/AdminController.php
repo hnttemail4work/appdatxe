@@ -31,6 +31,7 @@ use App\Support\VehicleCapacityOptions;
 use App\Support\VehicleCapacityPricing;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
@@ -51,22 +52,6 @@ class AdminController extends Controller
     public function dashboard()
     {
         $this->scheduleLifecycle->sync();
-
-        $referralCodes = ReferralCode::query()
-            ->with('booking')
-            ->orderByRaw("CASE WHEN type = 'referrer' THEN 0 ELSE 1 END")
-            ->orderByRaw("CASE WHEN type = 'referrer' AND status = 'suspended' THEN 1 ELSE 0 END")
-            ->latest()
-            ->paginate(PageList::PER_PAGE, ['*'], 'referrals_page')
-            ->withQueryString();
-
-        $referralCommissionStats = $this->referralCodes->commissionStatsForReferralIds(
-            $referralCodes->getCollection()
-                ->where('type', ReferralCode::TYPE_REFERRER)
-                ->pluck('id')
-                ->map(fn ($id) => (int) $id)
-                ->all(),
-        );
 
         $feeSettings = [
             'app_commission'           => PlatformFees::appCommissionPercent(),
@@ -109,8 +94,6 @@ class AdminController extends Controller
         $pushVapidReady = PushNotificationSettings::vapidKeys() !== null;
 
         return view('admin.dashboard', compact(
-            'referralCodes',
-            'referralCommissionStats',
             'feeSettings',
             'hubRoutes',
             'bankSettings',
@@ -123,6 +106,35 @@ class AdminController extends Controller
         ));
     }
 
+    public function referrals()
+    {
+        $data = $this->referralsListData();
+
+        return view('admin.referrals', $data);
+    }
+
+    /** @return array{referralCodes: \Illuminate\Contracts\Pagination\LengthAwarePaginator, referralCommissionStats: array<int, array{trips: int, revenue: int, commission: int}>} */
+    private function referralsListData(): array
+    {
+        $referralCodes = ReferralCode::query()
+            ->with('booking')
+            ->orderByRaw("CASE WHEN type = 'referrer' AND status = 'suspended' THEN 1 WHEN type = 'referrer' THEN 0 WHEN type = 'booking_temp' AND status = 'active' THEN 2 WHEN type = 'booking_temp' THEN 3 ELSE 4 END")
+            ->orderByDesc('activated_at')
+            ->orderByDesc('created_at')
+            ->paginate(PageList::PER_PAGE, ['*'], 'referrals_page')
+            ->withQueryString();
+
+        $referralCommissionStats = $this->referralCodes->commissionStatsForReferralIds(
+            $referralCodes->getCollection()
+                ->where('type', ReferralCode::TYPE_REFERRER)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all(),
+        );
+
+        return compact('referralCodes', 'referralCommissionStats');
+    }
+
     public function storeReferrer(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -131,7 +143,7 @@ class AdminController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return redirect()->route('admin.dashboard', ['tab' => 'referrals'])
+            return redirect()->route('admin.referrals')
                 ->withErrors($validator)
                 ->withInput();
         }
@@ -144,7 +156,7 @@ class AdminController extends Controller
             Auth::id(),
         );
 
-        return redirect()->route('admin.dashboard', ['tab' => 'referrals', 'referrals_page' => 1])
+        return redirect()->route('admin.referrals', ['referrals_page' => 1])
             ->with('success', 'Đã tạo mã giới thiệu ' . $referral->code . ' cho ' . $referral->name . '.');
     }
 
@@ -164,7 +176,7 @@ class AdminController extends Controller
             'customer_discount_percent' => (float) $validated['customer_discount_percent'],
         ]);
 
-        return redirect()->route('admin.dashboard', ['tab' => 'referrals'])
+        return redirect()->route('admin.referrals')
             ->with('success', 'Đã cập nhật mã ' . $referralCode->code . ' — giảm giá ' . number_format($validated['customer_discount_percent'], 1) . '%, hoa hồng ' . number_format($validated['commission_percent'], 1) . '%.');
     }
 
@@ -172,7 +184,7 @@ class AdminController extends Controller
     {
         $this->referralCodes->suspendReferrer($referralCode);
 
-        return redirect()->route('admin.dashboard', ['tab' => 'referrals'])
+        return redirect()->route('admin.referrals')
             ->with('success', 'Đã tạm ngưng mã ' . $referralCode->code . ' (' . $referralCode->name . ').');
     }
 
@@ -180,7 +192,7 @@ class AdminController extends Controller
     {
         $this->referralCodes->restoreReferrer($referralCode);
 
-        return redirect()->route('admin.dashboard', ['tab' => 'referrals'])
+        return redirect()->route('admin.referrals')
             ->with('success', 'Mã ' . $referralCode->code . ' đã chuyển sang trạng thái sử dụng.');
     }
 
@@ -189,7 +201,7 @@ class AdminController extends Controller
         $code = $referralCode->code;
         $this->referralCodes->deleteBookingReferralCode($referralCode);
 
-        return redirect()->route('admin.dashboard', ['tab' => 'referrals'])
+        return redirect()->route('admin.referrals')
             ->with('success', 'Đã xóa mã ' . $code . '.');
     }
 
@@ -211,6 +223,31 @@ class AdminController extends Controller
 
         return redirect()->route('admin.dashboard', ['tab' => 'settings'])
             ->with('success', 'Đã lưu tài khoản ngân hàng — QR VietQR tự sinh khi tài xế nạp ví / đóng phí.');
+    }
+
+    public function updatePassword(Request $request)
+    {
+        $user = Auth::user();
+        abort_unless($user && $user->role === 'admin', 403);
+
+        $validated = $request->validate([
+            'current_password'      => ['required', 'string'],
+            'password'              => ['required', 'string', 'min:6', 'confirmed'],
+            'password_confirmation' => ['required', 'string', 'min:6'],
+        ]);
+
+        if (! Hash::check($validated['current_password'], $user->password)) {
+            return redirect()->route('admin.dashboard', ['tab' => 'account'])
+                ->withErrors(['current_password' => 'Mật khẩu hiện tại không đúng.']);
+        }
+
+        $user->update([
+            'password'             => $validated['password'],
+            'must_change_password' => false,
+        ]);
+
+        return redirect()->route('admin.dashboard', ['tab' => 'account'])
+            ->with('success', 'Đã đổi mật khẩu quản trị thành công.');
     }
 
     public function updateBookingPageSettings(Request $request)

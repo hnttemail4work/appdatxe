@@ -807,9 +807,20 @@ class Booking extends Model
             return false;
         }
 
+        if ($this->adminReleasedAfterDriverEngagement()) {
+            return false;
+        }
+
         $this->loadMissing('schedule.template');
-        $templateDriverId = (int) ($this->schedule?->template?->driver_id ?? 0);
-        if ($templateDriverId <= 0) {
+        $schedule = $this->schedule;
+        $templateDriverId = (int) ($schedule?->template?->driver_id ?? 0);
+        if ($templateDriverId <= 0 || ! $schedule) {
+            return false;
+        }
+
+        $exclude = app(\App\Services\DriverTripRequestService::class)
+            ->assignmentExcludeDriverIds($schedule, (string) $this->contact_phone);
+        if ($exclude->contains($templateDriverId)) {
             return false;
         }
 
@@ -823,7 +834,8 @@ class Booking extends Model
             return false;
         }
 
-        return $driver->effectiveAvailabilityStatus() !== 'available';
+        // Chỉ báo khi TX tắt «Sẵn sàng» — không nhầm với đang chạy chuyến khác (on_trip).
+        return ($driver->availability_status ?? 'off_duty') !== 'available';
     }
 
     public function scopeCatalogDriverOffDuty(Builder $query): Builder
@@ -1179,7 +1191,14 @@ class Booking extends Model
             ->assignmentExcludeDriverIds($schedule, (string) $this->contact_phone);
 
         if ($exclude->contains((int) $request->driver_id)) {
-            return null;
+            $hidden = app(\App\Services\DriverCuocOfferHideService::class)->isHidden(
+                (int) $request->driver_id,
+                $schedule,
+                (string) $this->contact_phone,
+            );
+            if ($hidden) {
+                return null;
+            }
         }
 
         return $request;

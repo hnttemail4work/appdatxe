@@ -76,7 +76,7 @@ class DriverTripRequest extends Model
 
         $minutes = max(1, (int) ceil($seconds / 60));
 
-        return $minutes . ' phút';
+        return 'Còn ~' . $minutes . ' phút';
     }
 
     public function relatedBooking(): ?Booking

@@ -189,6 +189,9 @@
             if (stored && stored.contact_phone) {
                 return String(stored.contact_phone);
             }
+            if (stored && stored.booking && stored.booking.contact_phone) {
+                return String(stored.booking.contact_phone);
+            }
         }
         if (window.__bookingSuccess && window.__bookingSuccess.contact_phone) {
             return String(window.__bookingSuccess.contact_phone);
@@ -317,7 +320,10 @@
             if (hasReferral) {
                 var note = document.getElementById('guest-trip-completion-referral-note');
                 if (note) {
-                    note.textContent = referralDiscountNote(referral.discount_percent);
+                    note.textContent = referralDiscountNote(
+                        referral.discount_percent,
+                        !!referral.pending,
+                    );
                 }
                 loadQrLib(function () {
                     drawQr(
@@ -452,6 +458,9 @@
                     fetchStatus();
                 }
                 closeCompletionModal();
+                if (window.CustomerScrollDock && window.CustomerScrollDock.focusTripsContent) {
+                    window.CustomerScrollDock.focusTripsContent();
+                }
             })
             .catch(function (err) {
                 showCompletionReviewError(err.message || 'Không gửi được đánh giá.');
@@ -499,7 +508,16 @@
         });
     }
 
-    function referralDiscountNote(percent) {
+    function bookingQrDiscountPercent() {
+        return Number(window.__bookingQrDiscountPercent) || 2;
+    }
+
+    function referralDiscountNote(percent, pending) {
+        var qrPercent = bookingQrDiscountPercent();
+        var qrLabel = qrPercent % 1 === 0 ? String(qrPercent) : String(qrPercent).replace(/\.0$/, '');
+        if (pending) {
+            return 'Mã QR kích hoạt sau khi hoàn tất chuyến — bạn bè được giảm ' + qrLabel + '%.';
+        }
         var value = Number(percent) || 0;
         if (value <= 0) {
             return 'Chia sẻ mã để bạn bè đặt xe qua link của bạn.';
@@ -529,7 +547,7 @@
         });
     }
 
-    function openReferralQrOverlay(discountPercent) {
+    function openReferralQrOverlay(discountPercent, pending) {
         if (!currentReferralUrl) {
             return;
         }
@@ -539,7 +557,7 @@
         }
         var note = document.getElementById('guest-trip-referral-qr-overlay-note');
         if (note) {
-            note.textContent = referralDiscountNote(discountPercent);
+            note.textContent = referralDiscountNote(discountPercent, !!pending);
         }
         renderLargeReferralQr(currentReferralUrl);
         overlay.classList.remove('d-none');
@@ -569,10 +587,9 @@
         var openBtn = document.getElementById('guest-trip-referral-qr-btn');
         if (openBtn) {
             openBtn.addEventListener('click', function () {
-                var percent = currentBooking && currentBooking.referral
-                    ? currentBooking.referral.discount_percent
-                    : 0;
-                openReferralQrOverlay(percent);
+                var referral = currentBooking && currentBooking.referral ? currentBooking.referral : null;
+                var percent = referral ? referral.discount_percent : 0;
+                openReferralQrOverlay(percent, referral && referral.pending);
             });
         }
         document.querySelectorAll('[data-close-guest-referral-qr]').forEach(function (el) {
@@ -858,6 +875,17 @@
         syncActiveSession(booking);
         clearActiveSessionIfDone(booking);
         maybeOpenCompletionModal(booking, previousBooking);
+
+        var tripJustEnded = !!(
+            previousBooking
+            && previousBooking.is_active
+            && booking
+            && booking.trip_status === 'completed'
+            && previousBooking.trip_status !== 'completed'
+        );
+        if (tripJustEnded && window.CustomerScrollDock && window.CustomerScrollDock.focusTripsPage) {
+            window.CustomerScrollDock.focusTripsPage();
+        }
     }
 
     function renderCancelAction(booking) {
@@ -984,6 +1012,9 @@
                     fetchStatus();
                 }
                 closeCompletionModal();
+                if (window.CustomerScrollDock && window.CustomerScrollDock.focusTripsContent) {
+                    window.CustomerScrollDock.focusTripsContent();
+                }
             })
             .catch(function (err) {
                 showReviewError(err.message || 'Không gửi được đánh giá.');
@@ -1068,6 +1099,9 @@
                 }
                 currentBooking = null;
                 renderBooking(null);
+                if (window.CustomerScrollDock && window.CustomerScrollDock.focusTripsPage) {
+                    window.CustomerScrollDock.focusTripsPage();
+                }
                 if (window.AppDialog && window.AppDialog.alert) {
                     var msg = data.cancel_blocked && data.block_message
                         ? data.block_message

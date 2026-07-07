@@ -310,8 +310,16 @@ class DriverController extends Controller
 
     public function rejectTripRequest(Request $request, DriverTripRequest $driverTripRequest)
     {
+        $validated = $request->validate([
+            'cancellation_reason_id' => ['required', 'integer', 'exists:cancellation_reasons,id'],
+        ]);
+
         try {
-            $this->driverRequests->reject($driverTripRequest, (int) Auth::id());
+            $this->driverRequests->reject(
+                $driverTripRequest,
+                (int) Auth::id(),
+                (int) $validated['cancellation_reason_id'],
+            );
         } catch (InvalidArgumentException $e) {
             if ($request->expectsJson()) {
                 return response()->json(['message' => $e->getMessage()], 422);
@@ -326,11 +334,11 @@ class DriverController extends Controller
             return response()->json([
                 'ok'                  => true,
                 'availability'        => $profile?->availability_status ?? 'off_duty',
-                'message'             => 'Đã từ chối cuốc — đã tắt Sẵn sàng.',
+                'message'             => 'Đã hủy cuốc. Quản lý sẽ được thông báo lý do bạn chọn.',
             ]);
         }
 
-        return redirect()->route('driver.dashboard', ['tab' => 'trips'])->with('success', 'Đã từ chối yêu cầu nhận chuyến.');
+        return redirect()->route('driver.dashboard', ['tab' => 'trips'])->with('success', 'Đã hủy cuốc.');
     }
 
     public function updateLocation(Request $request)

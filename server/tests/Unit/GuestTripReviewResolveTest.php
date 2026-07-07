@@ -40,4 +40,34 @@ class GuestTripReviewResolveTest extends TestCase
 
         $this->assertTrue($method->invoke($service, $booking, $browserId, null));
     }
+
+    public function test_browser_session_kept_for_completed_trip_awaiting_review(): void
+    {
+        $booking = new Booking([
+            'booking_status' => 'confirmed',
+            'trip_status'  => 'completed',
+        ]);
+        $booking->setRelation('tripReview', null);
+
+        $guard = app(BookingBrowserGuardService::class);
+        $method = new \ReflectionMethod($guard, 'bookingStillActive');
+        $method->setAccessible(true);
+
+        $this->assertTrue($method->invoke($guard, $booking));
+    }
+
+    public function test_browser_session_not_kept_after_review_submitted(): void
+    {
+        $booking = new Booking([
+            'booking_status' => 'confirmed',
+            'trip_status'  => 'completed',
+        ]);
+        $booking->setRelation('tripReview', new \App\Models\TripReview());
+
+        $guard = app(BookingBrowserGuardService::class);
+        $method = new \ReflectionMethod($guard, 'bookingStillActive');
+        $method->setAccessible(true);
+
+        $this->assertFalse($method->invoke($guard, $booking));
+    }
 }

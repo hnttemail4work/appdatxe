@@ -1,3 +1,7 @@
+@php
+$bookingQrDiscountPercent = \App\Support\PlatformFees::bookingQrDiscountPercent();
+$bookingQrDiscountLabel = rtrim(rtrim(number_format($bookingQrDiscountPercent, 1, '.', ''), '0'), '.');
+@endphp
 <div class="modal fade" id="booking-referral-success-modal" tabindex="-1" aria-labelledby="booking-referral-success-title" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content booking-referral-success-content">
@@ -8,7 +12,7 @@
             <div class="modal-body text-center pt-2">
                 <p class="small text-muted mb-3">
                     Mã giới thiệu, sử dụng sau khi hoàn tất chuyến, giảm
-                    <strong id="booking-referral-success-percent">2</strong>% bạn bè người thân.
+                    <strong id="booking-referral-success-percent">{{ $bookingQrDiscountLabel }}</strong>% bạn bè người thân.
                 </p>
                 <div id="booking-referral-success-qr" class="booking-referral-success-qr mx-auto mb-3"></div>
                 <p class="mb-2"><code class="fs-5" id="booking-referral-success-code">—</code></p>

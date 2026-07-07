@@ -80,6 +80,34 @@ class DriverTripRequestService
         }
     }
 
+    /** Cùng điều kiện với {@see DriverProximityService::pickBest()} — tránh chọn được TX nhưng không gửi được cuốc. */
+    private function assertDriverEligibleForAutoAssign(
+        DriverProfile $driver,
+        Schedule $schedule,
+        Booking $booking,
+    ): void {
+        if (! $driver->isApproved()) {
+            throw new InvalidArgumentException('Tài xế không thể nhận cuốc.');
+        }
+
+        if (! $this->availability->catalogBookingButtonState($driver)['is_online']) {
+            throw new InvalidArgumentException('Tài xế không sẵn sàng.');
+        }
+
+        if (! $this->wallets->canAcceptTrips($driver)) {
+            throw new InvalidArgumentException($this->wallets->acceptBlockReason($driver) ?: 'Tài xế không thể nhận cuốc.');
+        }
+
+        if ($this->availability->hasTripTimeConflict((int) $driver->user_id, $schedule, $booking)) {
+            throw new InvalidArgumentException('Tài xế trùng giờ với chuyến khác.');
+        }
+
+        $pickup = $this->proximity->pickupCoordinates($booking);
+        if ($pickup === null || ! $this->proximity->withinAssignRadius($driver, $booking, $pickup)) {
+            throw new InvalidArgumentException('Tài xế ngoài phạm vi.');
+        }
+    }
+
     public function expireStale(): void
     {
         DriverTripRequest::query()
@@ -284,14 +312,7 @@ class DriverTripRequestService
             throw new InvalidArgumentException('Không tìm thấy tài xế với mã này.');
         }
 
-        $designated = $schedule->designatedDriverProfile();
-        if ($designated && (int) $designated->user_id !== (int) $profile->user_id) {
-            $designated->loadMissing('user');
-            throw new InvalidArgumentException(
-                'Chuyến này đã được giao cho tài xế ' . $designated->user->name
-                . '. Các khách ghép cùng chuyến phải dùng một tài xế.'
-            );
-        }
+        $this->assertManualAssignDriverAllowed($schedule, $profile, $contactPhone);
 
         $alreadyOnTrip = $schedule->driver_id && (int) $schedule->driver_id === (int) $profile->user_id;
 
@@ -339,14 +360,11 @@ class DriverTripRequestService
             throw new InvalidArgumentException('Chuyến này đã có tài xế nhận. Chỉ có thể chọn tài xế đang phục vụ chuyến này.');
         }
 
-        $existing = DriverTripRequest::query()
-            ->where('schedule_id', $schedule->id)
-            ->where('status', 'pending')
-            ->where('contact_phone', $contactPhone)
-            ->first();
-
+        $existing = $this->replaceStaleManualPendingOffers($schedule, $contactPhone, (int) $profile->user_id);
         if ($existing) {
-            throw new InvalidArgumentException('Bạn đang chờ tài xế phản hồi cho chuyến này.');
+            app(DriverCuocOfferHideService::class)->clearHidesForContact($schedule, $contactPhone);
+
+            return $existing;
         }
 
         $booking = Booking::query()
@@ -361,8 +379,7 @@ class DriverTripRequestService
             app(DriverLatePickupService::class)->assertOperatorCanReachPickup($profile, $booking, $schedule);
         }
 
-        app(DriverCuocOfferHideService::class)->clearForOffer(
-            (int) $profile->user_id,
+        app(DriverCuocOfferHideService::class)->clearHidesForContact(
             $schedule,
             $contactPhone,
         );
@@ -834,32 +851,24 @@ class DriverTripRequestService
 
             $driver->loadMissing('user');
 
-            if (($driver->availability_status ?? 'off_duty') !== 'available') {
-                throw new InvalidArgumentException('Tài xế không sẵn sàng.');
-            }
-
-            if (! $driver->hasFreshLocation(DriverProximityService::LOCATION_MAX_AGE_MINUTES)) {
-                throw new InvalidArgumentException('Tài xế chưa cập nhật vị trí.');
-            }
-
-            if (! $this->proximity->withinDiscoveryRadius($driver, $booking)) {
-                throw new InvalidArgumentException('Tài xế ngoài phạm vi.');
-            }
-
-            $blockReason = $this->wallets->acceptBlockReason($driver);
-            if ($blockReason) {
-                throw new InvalidArgumentException($blockReason);
-            }
+            $this->assertDriverEligibleForAutoAssign($driver, $schedule, $booking);
 
             $this->assertNoAssignmentConflict((int) $driver->user_id, $schedule, $booking);
 
             DriverTripRequest::query()
                 ->where('schedule_id', $schedule->id)
+                ->where('contact_phone', $contactPhone)
                 ->where('status', 'pending')
                 ->update([
                     'status'       => 'cancelled',
                     'responded_at' => now(),
                 ]);
+
+            app(DriverCuocOfferHideService::class)->clearForOffer(
+                (int) $driver->user_id,
+                $schedule,
+                $contactPhone,
+            );
 
             // TODO (Fix Flow): Gửi cuốc chờ TX xác nhận — không gán thẳng schedule.driver_id.
             return DriverTripRequest::query()->create([
@@ -1385,7 +1394,7 @@ class DriverTripRequestService
     public function visiblePendingGroupsForDriver(int $driverUserId): Collection
     {
         $profile = DriverProfile::query()->where('user_id', $driverUserId)->first();
-        if (! $profile || ($profile->availability_status ?? 'off_duty') !== 'available') {
+        if (! $profile || ! $this->availability->catalogBookingButtonState($profile)['is_online']) {
             return collect();
         }
 
@@ -1600,6 +1609,10 @@ class DriverTripRequestService
             (string) $booking->contact_phone,
         );
         $booking = $booking->fresh();
+        if (! $booking->operator_confirmed_at) {
+            $booking->update(['operator_confirmed_at' => now()]);
+            $booking = $booking->fresh();
+        }
         $this->refreshCustomerSearchDeadline($booking);
         $this->acknowledgeOperatorManualAssign($booking);
     }
@@ -1668,7 +1681,7 @@ class DriverTripRequestService
         $this->acknowledgeOperatorManualAssign($booking);
     }
 
-    public function reject(DriverTripRequest $request, int $driverUserId): void
+    public function reject(DriverTripRequest $request, int $driverUserId, int $cancellationReasonId): void
     {
         if ($request->driver_id !== $driverUserId) {
             throw new InvalidArgumentException('Không có quyền xử lý yêu cầu này.');
@@ -1677,6 +1690,8 @@ class DriverTripRequestService
         if (! $request->isPending()) {
             throw new InvalidArgumentException('Yêu cầu không còn hiệu lực.');
         }
+
+        $reason = app(CancellationReasonService::class)->resolveForCancel($cancellationReasonId, 'driver');
 
         $siblings = DriverTripRequest::query()
             ->where('schedule_id', $request->schedule_id)
@@ -1691,6 +1706,13 @@ class DriverTripRequestService
             ]);
 
             app(DriverCuocOfferHideService::class)->recordMissedOffer($sibling->fresh());
+
+            try {
+                $booking = $this->bookingForRequest($sibling)->fresh(['schedule.route', 'schedule.vehicle', 'schedule.template']);
+                app(BookingWorkflowService::class)->stampDriverReleaseReason($booking, $reason);
+            } catch (\Throwable) {
+            }
+
             $this->tryReassignAfterDecline($sibling);
         }
 
@@ -1909,6 +1931,78 @@ class DriverTripRequestService
         }
 
         $this->availability->markOffDuty($profile);
+    }
+
+    private function assertManualAssignDriverAllowed(
+        Schedule $schedule,
+        DriverProfile $profile,
+        string $contactPhone,
+    ): void {
+        if ($schedule->driver_id && (int) $schedule->driver_id !== (int) $profile->user_id) {
+            throw new InvalidArgumentException(
+                'Chuyến này đã có tài xế nhận. Chỉ có thể chọn tài xế đang phục vụ chuyến này.'
+            );
+        }
+
+        $otherPassengerPending = DriverTripRequest::query()
+            ->where('schedule_id', $schedule->id)
+            ->where('status', 'pending')
+            ->where('contact_phone', '!=', $contactPhone)
+            ->where(function ($query): void {
+                $query->whereNull('expires_at')
+                    ->orWhere('expires_at', '>', now());
+            })
+            ->latest('id')
+            ->first();
+
+        if ($otherPassengerPending
+            && (int) $otherPassengerPending->driver_id !== (int) $profile->user_id) {
+            $otherDriver = DriverProfile::query()
+                ->with('user')
+                ->where('user_id', $otherPassengerPending->driver_id)
+                ->first();
+
+            throw new InvalidArgumentException(
+                'Chuyến ghép đang chờ tài xế '
+                . ($otherDriver?->user?->name ?? 'khác')
+                . ' — phải dùng cùng tài xế cho mọi khách trên chuyến.'
+            );
+        }
+    }
+
+    /** Gỡ offer pending cũ (TX catalog / auto-assign) trước khi admin mời TX mới. */
+    private function replaceStaleManualPendingOffers(
+        Schedule $schedule,
+        string $contactPhone,
+        int $targetDriverUserId,
+    ): ?DriverTripRequest {
+        $existingForTarget = null;
+
+        DriverTripRequest::query()
+            ->where('schedule_id', $schedule->id)
+            ->where('contact_phone', $contactPhone)
+            ->where('status', 'pending')
+            ->where(function ($query): void {
+                $query->whereNull('expires_at')
+                    ->orWhere('expires_at', '>', now());
+            })
+            ->orderBy('id')
+            ->get()
+            ->each(function (DriverTripRequest $pending) use ($targetDriverUserId, &$existingForTarget): void {
+                if ((int) $pending->driver_id === $targetDriverUserId) {
+                    $existingForTarget = $pending;
+
+                    return;
+                }
+
+                $pending->update([
+                    'status'       => 'cancelled',
+                    'responded_at' => now(),
+                ]);
+                $this->notifyDriverOfferRevoked($pending->fresh(['schedule.route']));
+            });
+
+        return $existingForTarget;
     }
 
     // TODO (Fix Stuck Offer UI): Đồng bộ realtime khi offer không còn hiệu lực để app TX thu hồi card ngay.

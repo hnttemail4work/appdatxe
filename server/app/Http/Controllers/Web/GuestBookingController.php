@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Models\Booking;
 use App\Models\ReferralCode;
 use App\Services\BookingBrowserGuardService;
 use App\Services\BookingPhoneGuardService;
@@ -125,7 +126,15 @@ class GuestBookingController extends Controller
         );
 
         if (! $booking) {
-            return response()->json(['message' => 'Không tìm thấy chuyến đi.'], 404);
+            $exists = Booking::query()
+                ->where('booking_reference', $validated['booking_reference'])
+                ->exists();
+
+            return response()->json([
+                'message' => $exists
+                    ? 'Không xác thực được chuyến đi. Vui lòng tải lại trang Chuyến và thử lại.'
+                    : 'Không tìm thấy chuyến đi.',
+            ], $exists ? 403 : 404);
         }
 
         try {

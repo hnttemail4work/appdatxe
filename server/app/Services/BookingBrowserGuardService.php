@@ -166,6 +166,18 @@ class BookingBrowserGuardService
 
     private function bookingStillActive(Booking $booking): bool
     {
-        return $booking->blocksGuestRebooking();
+        if ($booking->blocksGuestRebooking()) {
+            return true;
+        }
+
+        if ($booking->trip_status !== 'completed') {
+            return false;
+        }
+
+        if ($booking->relationLoaded('tripReview')) {
+            return $booking->getRelation('tripReview') === null;
+        }
+
+        return ! $booking->tripReview()->exists();
     }
 }

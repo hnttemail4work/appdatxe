@@ -1,3 +1,7 @@
+@php
+$bookingQrDiscountPercent = \App\Support\PlatformFees::bookingQrDiscountPercent();
+$bookingQrDiscountLabel = rtrim(rtrim(number_format($bookingQrDiscountPercent, 1, '.', ''), '0'), '.');
+@endphp
 <div id="booking-active-session" class="booking-active-session booking-flash booking-flash-success mb-3 d-none" role="region" aria-label="Chuyến đang trong phiên đặt">
     <div class="booking-active-session-layout">
         <div class="booking-active-session-main">
@@ -41,6 +45,6 @@
             <button type="button" class="btn-close" data-close-referral-qr" aria-label="Đóng"></button>
         </div>
         <div id="booking-active-referral-qr-large" class="booking-active-referral-qr-large"></div>
-        <p class="booking-active-referral-qr-overlay-note small mb-0">Giảm ngay 2% khi hoàn tất chuyến.</p>
+        <p class="booking-active-referral-qr-overlay-note small mb-0" id="booking-active-referral-qr-overlay-note">Giảm ngay {{ $bookingQrDiscountLabel }}% khi hoàn tất chuyến.</p>
     </div>
 </div>

@@ -88,6 +88,7 @@ Route::middleware(['auth', 'role:driver'])->group(function () {
 
 // ── Admin ──────────────────────────────────────────────────────────────────
 Route::middleware(['auth', 'role:admin'])->group(function () {
+    Route::get('admin/referrals',              [AdminController::class, 'referrals'])->name('admin.referrals');
     Route::get('admin/dashboard',              [AdminController::class, 'dashboard'])->name('admin.dashboard');
     Route::post('admin/referrers',           [AdminController::class, 'storeReferrer'])->name('admin.referrers.store');
     Route::patch('admin/referrers/{referralCode}', [AdminController::class, 'updateReferrer'])->name('admin.referrers.update');
@@ -95,6 +96,7 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::post('admin/referrers/{referralCode}/hide', [AdminController::class, 'suspendReferrer'])->name('admin.referrers.hide');
     Route::post('admin/referrers/{referralCode}/show', [AdminController::class, 'showReferrer'])->name('admin.referrers.show');
     Route::post('admin/bank-settings',         [AdminController::class, 'updateBankSettings'])->name('admin.bankSettings.update');
+    Route::patch('admin/password',            [AdminController::class, 'updatePassword'])->name('admin.password.update');
     Route::post('admin/booking-page-settings', [AdminController::class, 'updateBookingPageSettings'])->name('admin.bookingPageSettings.update');
     Route::post('admin/branding-settings', [AdminController::class, 'updateBrandingSettings'])->name('admin.brandingSettings.update');
     Route::post('admin/push-settings', [AdminController::class, 'updatePushSettings'])->name('admin.pushSettings.update');

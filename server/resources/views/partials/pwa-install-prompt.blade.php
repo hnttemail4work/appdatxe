@@ -20,7 +20,16 @@
 
 <div id="pwa-ios-hint" class="pwa-ios-hint">
     <div class="d-flex justify-content-between align-items-start gap-2">
-        <p><strong>iPhone/iPad:</strong> nhấn <strong>Chia sẻ</strong> → <strong>Thêm vào Màn hình chính</strong> để ghim {{ $pwaAudienceLabel ?? 'ứng dụng' }}.</p>
+        <div>
+            <p class="mb-2"><strong>iPhone/iPad — ghim {{ $pwaAudienceLabel ?? 'ứng dụng' }}:</strong></p>
+            <ol class="pwa-ios-hint__steps mb-2">
+                <li>Mở trang bằng <strong>Safari</strong> (không Chrome, Zalo, Facebook).</li>
+                <li>Nhấn <strong>Chia sẻ</strong> (mũi tên lên, ở thanh dưới Safari).</li>
+                <li>Cuộn xuống chọn <strong>Thêm vào Màn hình chính</strong> (không phải Thêm dấu trang).</li>
+                <li>Nhấn <strong>Thêm</strong> góc phải trên.</li>
+            </ol>
+            <p class="pwa-ios-hint__note mb-0" data-pwa-ios-warning hidden></p>
+        </div>
         <button type="button" class="btn btn-sm btn-outline-light flex-shrink-0" data-pwa-ios-dismiss>Đóng</button>
     </div>
 </div>

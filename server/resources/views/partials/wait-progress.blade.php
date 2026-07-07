@@ -16,9 +16,7 @@ $kind = $waitProgress['kind'] ?? 'default';
      role="status"
      aria-live="polite">
     <div class="{{ $prefix }}-embedded-row">
-        @if(($waitProgress['kind'] ?? '') !== 'trip_accept')
-            <div class="{{ $prefix }}-timer" data-field="wait_time" aria-hidden="true"></div>
-        @endif
+        <div class="{{ $prefix }}-timer" data-field="wait_time" aria-hidden="true"></div>
         <div class="{{ $prefix }}-copy">
             <div class="{{ $prefix }}-label" data-field="wait_label">{{ $waitProgress['label'] ?? '' }}</div>
             @if(! empty($waitProgress['hint']))

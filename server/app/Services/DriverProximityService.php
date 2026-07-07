@@ -50,7 +50,7 @@ class DriverProximityService
         $candidates = DriverProfile::query()
             ->operational()
             ->with(['user', 'operator'])
-            ->where('availability_status', 'available')
+            ->where('availability_status', '!=', 'off_duty')
             ->get()
             ->filter(function (DriverProfile $profile) use ($schedule, $exclude, $requireCoordinates, $pickup, $booking): bool {
                 if ($exclude->contains((int) $profile->user_id)) {
@@ -58,6 +58,10 @@ class DriverProximityService
                 }
 
                 if (! $profile->isApproved()) {
+                    return false;
+                }
+
+                if (! $this->availability->catalogBookingButtonState($profile)['is_online']) {
                     return false;
                 }
 
@@ -74,7 +78,7 @@ class DriverProximityService
                 }
 
                 if ($requireCoordinates) {
-                    if ($pickup === null || ! $profile->hasFreshLocation(self::LOCATION_MAX_AGE_MINUTES)) {
+                    if ($pickup === null || ! $this->availability->hasAssignableLocation($profile, self::LOCATION_MAX_AGE_MINUTES)) {
                         return false;
                     }
 
@@ -117,7 +121,7 @@ class DriverProximityService
     /** @param array{lat: float, lng: float} $pickup */
     public function withinAssignRadius(DriverProfile $profile, Booking $booking, array $pickup): bool
     {
-        if (! $profile->hasFreshLocation(self::LOCATION_MAX_AGE_MINUTES)) {
+        if (! $this->availability->hasAssignableLocation($profile, self::LOCATION_MAX_AGE_MINUTES)) {
             return false;
         }
 
@@ -205,13 +209,14 @@ class DriverProximityService
 
         $hints = [];
         $eligible = true;
+        $catalogState = $this->availability->catalogBookingButtonState($profile);
 
         if ($pickup === null) {
             $hints[] = 'Đơn thiếu tọa độ đón';
             $eligible = false;
         }
 
-        if (($profile->availability_status ?? 'off_duty') !== 'available') {
+        if (! $catalogState['is_online']) {
             $hints[] = 'Chưa bật Sẵn sàng';
             $eligible = false;
         }
@@ -231,10 +236,10 @@ class DriverProximityService
         }
 
         if ($pickup !== null) {
-            if (! $profile->hasFreshLocation(self::LOCATION_MAX_AGE_MINUTES)) {
-                $hints[] = 'GPS cũ (> ' . self::LOCATION_MAX_AGE_MINUTES . ' phút)';
+            if (! $catalogState['has_location']) {
+                $hints[] = 'Chưa chia sẻ vị trí';
                 $eligible = false;
-            } elseif ($distance !== null && ! $this->withinDiscoveryRadius($profile, $booking)) {
+            } elseif ($distance !== null && ! $this->withinAssignRadius($profile, $booking, $pickup)) {
                 $hints[] = 'Xa điểm đón (>' . (int) self::MAX_SAME_PROVINCE_KM . ' km)';
                 $eligible = false;
             }

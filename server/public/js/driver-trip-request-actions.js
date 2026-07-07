@@ -95,6 +95,35 @@
         }));
     }
 
+    function ensureReasonInput(form, reasonId) {
+        var input = form.querySelector('input[name="cancellation_reason_id"]');
+        if (!input) {
+            input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'cancellation_reason_id';
+            form.appendChild(input);
+        }
+        input.value = String(reasonId || '');
+    }
+
+    function pickCancelReason(form) {
+        if (!window.CancellationReasonModal || !window.CancellationReasonModal.pick) {
+            return Promise.reject(new Error('Không tải được lý do hủy.'));
+        }
+
+        return window.CancellationReasonModal.pick({
+            audience: form.getAttribute('data-audience') || 'driver',
+            title: form.getAttribute('data-reason-title') || 'Lý do hủy cuốc',
+            hint: form.getAttribute('data-reason-hint') || 'Chọn lý do để quản lý nắm thông tin và hỗ trợ khách.',
+        }).then(function (result) {
+            if (!result || !result.reasonId) {
+                return null;
+            }
+            ensureReasonInput(form, result.reasonId);
+            return result.reasonId;
+        });
+    }
+
     function postForm(form, submitBtn) {
         if (submitBtn) {
             submitBtn.disabled = true;
@@ -140,8 +169,11 @@
                     throw new Error(message);
                 }
                 removeRequestCard(form);
-                if (form.closest('[data-trip-request-id]')) {
-                    syncOffDuty(result.data && result.data.message);
+                if (result.data && result.data.message && window.AppFlash && window.AppFlash.show) {
+                    window.AppFlash.show(result.data.message, {
+                        variant: 'success',
+                        title: 'Đã hủy cuốc',
+                    });
                 }
             })
             .catch(function (err) {
@@ -236,8 +268,20 @@
         }
 
         if (isRejectForm(form)) {
-            confirmAction(form, submitBtn, function () {
+            pickCancelReason(form).then(function (reasonId) {
+                if (!reasonId) {
+                    return;
+                }
                 sendReject(form, submitBtn);
+            }).catch(function (err) {
+                if (window.AppFlash && window.AppFlash.show) {
+                    window.AppFlash.show(err.message || 'Không tải được lý do hủy.', {
+                        variant: 'danger',
+                        title: 'Không tải được lý do hủy',
+                    });
+                } else if (window.AppDialog && window.AppDialog.alert) {
+                    window.AppDialog.alert(err.message || 'Không tải được lý do hủy.', { variant: 'danger' });
+                }
             });
             return;
         }

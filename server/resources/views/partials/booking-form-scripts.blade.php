@@ -20,6 +20,7 @@ window.__referralDiscountLabel = @json($referralDiscountMeta['source_label'] ?? 
 window.__referralHasCode = @json((bool) ($appliedReferral ?? null));
 window.__bookingReferralSuccess = @json($bookingReferralSuccess ?? null);
 window.__bookingSuccess = @json(session('booking_success'));
+window.__bookingQrDiscountPercent = @json(\App\Support\PlatformFees::bookingQrDiscountPercent());
 window.__appContactPhone = @json(config('app.contact_phone'));
 window.__guestBrowserCancelCount = @json((int) ($browserCancelCount ?? session('guest_browser_cancel_count', 0)));
 window.__guestBrowserCancelBlockLimit = @json(\App\Services\BookingBrowserGuardService::CANCEL_BLOCK_LIMIT);

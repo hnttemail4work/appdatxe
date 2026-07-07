@@ -848,6 +848,50 @@
         return true;
     }
 
+    function validateStep2() {
+        var step2 = $('booking-step-2');
+        if (!step2) {
+            return false;
+        }
+
+        if (window.FormFieldValidation) {
+            var result = window.FormFieldValidation.validate(step2, {
+                selector: '#modal-passenger-name, #modal-contact-phone',
+                message: function (label) {
+                    return 'Vui lòng nhập ' + label.toLowerCase();
+                },
+            });
+            if (!result.valid) {
+                notify(result.message, { variant: 'warning', title: 'Thiếu thông tin' });
+                return false;
+            }
+            return true;
+        }
+
+        var nameEl = $('modal-passenger-name');
+        var phoneEl = $('modal-contact-phone');
+        if (!nameEl || !nameEl.value.trim()) {
+            notify('Vui lòng nhập tên.');
+            if (nameEl) {
+                nameEl.focus();
+            }
+            return false;
+        }
+        if (!phoneEl || !phoneEl.value.trim()) {
+            notify('Vui lòng nhập số điện thoại.');
+            if (phoneEl) {
+                phoneEl.focus();
+            }
+            return false;
+        }
+
+        return true;
+    }
+
+    if (window.FormFieldValidation) {
+        window.FormFieldValidation.bindClearOnInput(form);
+    }
+
     document.querySelectorAll('input[name="departure_plan"]').forEach(function (el) {
         el.addEventListener('change', function () {
             syncDeparturePlanUI();
@@ -924,6 +968,11 @@
             return;
         }
 
+        if (!validateStep2()) {
+            setStep(2);
+            return;
+        }
+
         ensureBrowserIdOnForm();
 
         var phoneEl = $('modal-contact-phone');
@@ -960,6 +1009,9 @@
 
     modalEl.addEventListener('hidden.bs.modal', function () {
         setStep(1);
+        if (window.FormFieldValidation) {
+            window.FormFieldValidation.clearAll(form);
+        }
         if (window.AppFlash && window.AppFlash.clear) {
             window.AppFlash.clear(document.getElementById('booking-modal-flash'));
         }

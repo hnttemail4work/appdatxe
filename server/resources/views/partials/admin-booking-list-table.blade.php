@@ -6,7 +6,8 @@ $showBulkDelete = (bool) ($showBulkDelete ?? false);
 $bookingList = $bookingList ?? 'active';
 $showAssignActions = (bool) ($showAssignActions ?? false);
 $showWaitingColumn = (bool) ($showWaitingColumn ?? $bookingList === 'active');
-$showFeedbackColumn = $bookingList === 'feedback';
+$showFeedbackColumn = in_array($bookingList, ['completed', 'feedback'], true);
+$showTripReviewInCustomer = in_array($bookingList, ['completed', 'feedback'], true);
 $showPickupAlertColumn = $bookingList === 'active';
 $showStatusColumn = $bookingList !== 'cancelled';
 $showDriverColumn = $bookingList !== 'active';
@@ -89,7 +90,7 @@ $showDriverColumn = $bookingList !== 'active';
                     </td>
                     @endif
                     <td>
-                        @include('partials.admin-booking-customer', ['booking' => $booking, 'showTripReview' => false])
+                        @include('partials.admin-booking-customer', ['booking' => $booking, 'showTripReview' => $showTripReviewInCustomer])
                     </td>
                     <td>
                         <div class="fw-semibold">{{ $booking->schedule->routeDepartureLabel() }} → {{ $booking->schedule->routeDestinationLabel() }}</div>
@@ -171,6 +172,8 @@ $showDriverColumn = $bookingList !== 'active';
                                 <div class="cell-muted mt-1">“{{ \Illuminate\Support\Str::limit($review->comment, 120) }}”</div>
                             @endif
                             <div class="cell-muted small mt-1">{{ $review->created_at?->format('d/m/Y H:i') }}</div>
+                        @elseif($bookingList === 'completed')
+                            <span class="text-muted">Chưa có phản hồi</span>
                         @endif
                     </td>
                     @endif

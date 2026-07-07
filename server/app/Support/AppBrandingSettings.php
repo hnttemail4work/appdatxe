@@ -98,13 +98,26 @@ class AppBrandingSettings
         $custom = self::appIconUrl();
 
         if ($custom) {
-            return $custom . '?v=' . self::appIconVersion();
+            return self::versionedAssetUrl($custom, self::appIconVersion());
         }
 
         $fallback = public_path('favicon.svg');
         $version = is_file($fallback) ? (filemtime($fallback) ?: time()) : time();
 
-        return asset('favicon.svg') . '?v=' . $version;
+        return self::versionedAssetUrl(asset('favicon.svg'), $version);
+    }
+
+    /** PNG icon for iOS home screen (Safari ignores SVG apple-touch-icon). */
+    public static function appleTouchIconAssetUrl(): string
+    {
+        if (self::appIconMimeType() !== 'image/svg+xml') {
+            return self::appIconAssetUrl();
+        }
+
+        $fallback = public_path('apple-touch-icon.png');
+        $version = is_file($fallback) ? (filemtime($fallback) ?: time()) : time();
+
+        return self::versionedAssetUrl(asset('apple-touch-icon.png'), $version);
     }
 
     public static function appIconVersion(): int
@@ -125,16 +138,32 @@ class AppBrandingSettings
     /** @return list<array{src: string, sizes: string, type: string, purpose: string}> */
     public static function manifestIcons(): array
     {
-        $url = self::appIconAssetUrl();
+        $url = self::absoluteUrl(self::appIconAssetUrl());
         $mime = self::appIconMimeType();
 
-        if (self::appIconMimeType() === 'image/svg+xml') {
-            return [[
-                'src'     => $url,
-                'sizes'   => 'any',
-                'type'    => 'image/svg+xml',
-                'purpose' => 'any maskable',
-            ]];
+        if ($mime === 'image/svg+xml') {
+            $pngUrl = self::absoluteUrl(self::appleTouchIconAssetUrl());
+
+            return [
+                [
+                    'src'     => $pngUrl,
+                    'sizes'   => '180x180',
+                    'type'    => 'image/png',
+                    'purpose' => 'any',
+                ],
+                [
+                    'src'     => $pngUrl,
+                    'sizes'   => '512x512',
+                    'type'    => 'image/png',
+                    'purpose' => 'maskable',
+                ],
+                [
+                    'src'     => $url,
+                    'sizes'   => 'any',
+                    'type'    => 'image/svg+xml',
+                    'purpose' => 'any',
+                ],
+            ];
         }
 
         return [
@@ -151,6 +180,20 @@ class AppBrandingSettings
                 'purpose' => 'maskable',
             ],
         ];
+    }
+
+    public static function absoluteUrl(string $url): string
+    {
+        if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://')) {
+            return $url;
+        }
+
+        return url($url);
+    }
+
+    private static function versionedAssetUrl(string $url, int $version): string
+    {
+        return $url . (str_contains($url, '?') ? '&' : '?') . 'v=' . $version;
     }
 
     public static function appIconMimeType(): string

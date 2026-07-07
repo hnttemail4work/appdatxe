@@ -195,11 +195,19 @@
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label class="form-label" for="modal-passenger-name">Tên <span class="text-danger">*</span></label>
-                                    <input type="text" name="passenger_name" id="modal-passenger-name" class="form-control" required value="{{ old('passenger_name') }}">
+                                    <input type="text" name="passenger_name" id="modal-passenger-name"
+                                           class="form-control @error('passenger_name') is-invalid @enderror"
+                                           required autocomplete="name"
+                                           value="{{ old('passenger_name') }}">
+                                    @error('passenger_name')<div class="invalid-feedback d-block guest-field-error" data-for="modal-passenger-name">{{ $message }}</div>@enderror
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label" for="modal-contact-phone">Số điện thoại <span class="text-danger">*</span></label>
-                                    <input type="tel" name="contact_phone" id="modal-contact-phone" class="form-control" required value="{{ old('contact_phone') }}">
+                                    <input type="tel" name="contact_phone" id="modal-contact-phone"
+                                           class="form-control @error('contact_phone') is-invalid @enderror"
+                                           required autocomplete="tel"
+                                           value="{{ old('contact_phone') }}">
+                                    @error('contact_phone')<div class="invalid-feedback d-block guest-field-error" data-for="modal-contact-phone">{{ $message }}</div>@enderror
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label d-block">Giới tính</label>

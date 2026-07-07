@@ -6,12 +6,17 @@
         ->where('type', 'deposit')
         ->where('status', 'pending')
         ->count();
+    $activeBookingReferralCount = (int) \App\Models\ReferralCode::query()
+        ->where('type', \App\Models\ReferralCode::TYPE_BOOKING_TEMP)
+        ->where('status', \App\Models\ReferralCode::STATUS_ACTIVE)
+        ->count();
 
     $tabs = [
         ['key' => 'bookings', 'label' => 'Đặt xe', 'href' => route('admin.bookings'), 'badge' => null, 'hot' => false],
         ['key' => 'revenue', 'label' => 'Doanh thu', 'href' => route('admin.revenue'), 'badge' => null, 'hot' => false],
         ['key' => 'drivers', 'label' => 'Tài xế', 'href' => route('admin.drivers'), 'badge' => $pendingDrivers ?: null, 'hot' => $pendingDrivers > 0],
         ['key' => 'deposits', 'label' => 'Nạp ví', 'href' => route('admin.driverWallet'), 'badge' => $pendingDeposits ?: null, 'hot' => $pendingDeposits > 0],
+        ['key' => 'referrals', 'label' => 'Mã giới thiệu', 'href' => route('admin.referrals'), 'badge' => $activeBookingReferralCount ?: null, 'hot' => $activeBookingReferralCount > 0],
         ['key' => 'config', 'label' => 'Cấu hình', 'href' => route('admin.dashboard'), 'badge' => null, 'hot' => false],
     ];
 @endphp

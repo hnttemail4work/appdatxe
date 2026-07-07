@@ -9,6 +9,7 @@ $schedule = $schedule ?? $tripRequest->schedule;
 $passengers = $passengers ?? $schedule->driverRelevantBookings();
 $tripTotal = (float) $passengers->sum(fn (\App\Models\Booking $b) => (float) $b->total_price);
 $expiresLabel = $tripRequest->acceptTimeRemainingLabel();
+$waitProgress = \App\Support\DriverWaitProgress::forTripRequest($tripRequest);
 $primaryBooking = $passengers->first();
 $mapNav = $primaryBooking ? MapNavigation::driverPickupTarget($primaryBooking) : null;
 @endphp
@@ -33,7 +34,7 @@ $mapNav = $primaryBooking ? MapNavigation::driverPickupTarget($primaryBooking) :
             </div>
         </div>
         <div class="driver-request-card__aside">
-            @if($expiresLabel)
+            @if($expiresLabel && ! $waitProgress)
                 <span class="driver-request-card__countdown">{{ $expiresLabel }}</span>
             @endif
             <div class="driver-request-card__fare">
@@ -91,22 +92,32 @@ $mapNav = $primaryBooking ? MapNavigation::driverPickupTarget($primaryBooking) :
         </div>
     @endif
 
+    @if($waitProgress)
+        @include('partials.wait-progress', [
+            'waitProgress' => $waitProgress,
+            'variant' => 'driver',
+            'layout' => 'embedded',
+        ])
+    @endif
+
     <div class="driver-card-actions driver-card-actions--job driver-request-card__actions">
-        <form method="POST" action="{{ route('driver.tripRequests.accept', $tripRequest) }}" class="driver-accept-form driver-request-card__accept-form"
-              data-confirm="Xác nhận nhận chuyến này?"
-              data-confirm-title="Xác nhận"
-              data-confirm-ok="Xác nhận"
-              data-confirm-variant="success">
-            @csrf
-            <button type="submit" class="btn btn-success driver-btn-accept driver-request-card__accept-btn">Xác nhận</button>
-        </form>
-        <form method="POST" action="{{ route('driver.tripRequests.reject', $tripRequest) }}" class="driver-reject-form"
-              data-confirm="Từ chối cuốc — hệ thống sẽ gán cho tài xế khác?"
-              data-confirm-title="Từ chối cuốc"
-              data-confirm-variant="danger"
-              data-confirm-ok="Từ chối">
-            @csrf
-            <button type="submit" class="btn btn-driver-reject-ghost">Từ chối</button>
-        </form>
+        <div class="driver-workflow-compact-actions">
+            <form method="POST" action="{{ route('driver.tripRequests.reject', $tripRequest) }}"
+                  class="driver-workflow-compact-action driver-reject-form cancel-reason-form"
+                  data-audience="driver"
+                  data-reason-title="Lý do hủy cuốc"
+                  data-reason-hint="Chọn lý do để quản lý nắm thông tin và hỗ trợ khách.">
+                @csrf
+                <button type="submit" class="btn btn-driver-reject-ghost">Hủy cuốc</button>
+            </form>
+            <form method="POST" action="{{ route('driver.tripRequests.accept', $tripRequest) }}" class="driver-workflow-compact-action driver-accept-form driver-request-card__accept-form"
+                  data-confirm="Xác nhận nhận chuyến này?"
+                  data-confirm-title="Xác nhận"
+                  data-confirm-ok="Xác nhận"
+                  data-confirm-variant="success">
+                @csrf
+                <button type="submit" class="btn btn-success driver-btn-accept driver-request-card__accept-btn">Xác nhận</button>
+            </form>
+        </div>
     </div>
 </article>
