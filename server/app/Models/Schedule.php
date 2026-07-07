@@ -21,8 +21,10 @@ class Schedule extends Model
         'driver_stage',
         'driver_assigned_at',
         'driver_movement_deadline_at',
+        'driver_movement_confirmed_at',
         'driver_late_pickup_prompt_at',
         'driver_late_pickup_continue_deadline_at',
+        'driver_depart_reminder_sent_at',
         'trip_code',
     ];
 
@@ -33,8 +35,10 @@ class Schedule extends Model
             'expected_arrival_at' => 'datetime',
             'driver_assigned_at' => 'datetime',
             'driver_movement_deadline_at' => 'datetime',
+            'driver_movement_confirmed_at' => 'datetime',
             'driver_late_pickup_prompt_at' => 'datetime',
             'driver_late_pickup_continue_deadline_at' => 'datetime',
+            'driver_depart_reminder_sent_at'        => 'datetime',
             'service_date'   => 'date',
             'whole_car_price' => 'decimal:2',
         ];
@@ -405,8 +409,15 @@ class Schedule extends Model
     /** Nhãn trạng thái thống nhất — khách, quản lý, theo dõi chuyến. */
     public function bookingStatusLabel(): string
     {
-        return match ($this->resolvedDriverStage()) {
-            self::DRIVER_STAGE_ASSIGNED  => 'Đã có tài xế',
+        $stage = $this->resolvedDriverStage();
+
+        if ($stage === self::DRIVER_STAGE_ASSIGNED) {
+            return $this->driver_movement_confirmed_at
+                ? 'Tài xế đang đi đón'
+                : 'Đã có tài xế';
+        }
+
+        return match ($stage) {
             self::DRIVER_STAGE_AT_PICKUP => 'Tài xế đã đến điểm đón',
             self::DRIVER_STAGE_PICKED_UP => 'Đã đón khách',
             self::DRIVER_STAGE_RUNNING   => 'Đang chạy',
@@ -417,11 +428,18 @@ class Schedule extends Model
 
     public function bookingStatusColor(): string
     {
-        return match ($this->resolvedDriverStage()) {
+        $stage = $this->resolvedDriverStage();
+
+        if ($stage === self::DRIVER_STAGE_ASSIGNED) {
+            return $this->driver_movement_confirmed_at
+                ? \App\Support\StatusBadge::ACCENT
+                : \App\Support\StatusBadge::INFO;
+        }
+
+        return match ($stage) {
             self::DRIVER_STAGE_RUNNING, self::DRIVER_STAGE_PICKED_UP => \App\Support\StatusBadge::GOLD,
             self::DRIVER_STAGE_AT_PICKUP => \App\Support\StatusBadge::ACCENT,
             self::DRIVER_STAGE_COMPLETED => \App\Support\StatusBadge::SUCCESS,
-            self::DRIVER_STAGE_ASSIGNED  => \App\Support\StatusBadge::INFO,
             default                      => \App\Support\StatusBadge::PENDING,
         };
     }
@@ -483,6 +501,33 @@ class Schedule extends Model
         return app(DriverMovementConfirmService::class)->movementDeadlineLabel($this);
     }
 
+    /** Chưa bấm «Xác nhận» đi đón — bắt buộc trước khi chuyển sang «Đến điểm đón». */
+    public function needsDriverMovementConfirm(): bool
+    {
+        return $this->resolvedDriverStage() === self::DRIVER_STAGE_ASSIGNED
+            && $this->driver_id
+            && $this->driver_movement_confirmed_at === null;
+    }
+
+    /** TX đã bấm «Xác nhận» — khách bắt đầu thấy ETA đến điểm đón. */
+    public function driverHasConfirmedMovement(): bool
+    {
+        if ($this->driver_movement_confirmed_at) {
+            return true;
+        }
+
+        if (! $this->driver_id) {
+            return false;
+        }
+
+        return in_array($this->resolvedDriverStage(), [
+            self::DRIVER_STAGE_AT_PICKUP,
+            self::DRIVER_STAGE_PICKED_UP,
+            self::DRIVER_STAGE_RUNNING,
+            self::DRIVER_STAGE_COMPLETED,
+        ], true);
+    }
+
     /** Bước xử lý trên dashboard tài xế — một lần cho cả chuyến xe. */
     public function driverWorkflowPhase(): string
     {
@@ -514,10 +559,17 @@ class Schedule extends Model
         return 'upcoming';
     }
 
-    /** Tài xế không hủy sau khi đã nhận cuốc — chỉ từ chối trước khi nhận. */
+    /** Tài xế có thể hủy sau khi nhận — chỉ khi chưa đón khách (hệ thống sẽ tìm TX khác). */
     public function driverCanCancelTrip(): bool
     {
-        return false;
+        if (! $this->driver_id) {
+            return false;
+        }
+
+        return in_array($this->resolvedDriverStage(), [
+            self::DRIVER_STAGE_ASSIGNED,
+            self::DRIVER_STAGE_AT_PICKUP,
+        ], true);
     }
 
     /** Hệ thống đã qua giờ kết thúc dự kiến — tài xế cần bấm hoàn thành. */
@@ -688,6 +740,21 @@ class Schedule extends Model
                 ->where('trip_status', 'awaiting_completion'));
     }
 
+    /** Chuyến đang hiện trên dashboard TX — chặn «Đặt ngay» và coi TX bận phục vụ. */
+    public function blocksDriverCatalogBooking(): bool
+    {
+        if ($this->driverRelevantBookings()->isEmpty()) {
+            return false;
+        }
+
+        $phase = $this->driverWorkflowPhase();
+        if ($phase === 'settled' || ! in_array($phase, ['upcoming', 'active'], true)) {
+            return false;
+        }
+
+        return $this->isVisibleOnDriverDashboard();
+    }
+
     /** Ẩn trên dashboard tài xế — chỉ quản lý xử lý. */
     public function isVisibleOnDriverDashboard(): bool
     {
@@ -699,9 +766,21 @@ class Schedule extends Model
             return false;
         }
 
-        return ! $this->driverRelevantBookings()->contains(
+        if ($this->driverRelevantBookings()->contains(
             fn (Booking $booking): bool => $booking->trip_status === 'awaiting_completion',
-        );
+        )) {
+            return false;
+        }
+
+        if ($this->resolvedDriverStage() === self::DRIVER_STAGE_ASSIGNED) {
+            $booking = $this->driverRelevantBookings()->first();
+            $pickupAt = $booking?->operationalPickupAt();
+            if ($pickupAt && $pickupAt->lte(now())) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public function scopeForDriverHistory($query, int $driverUserId)

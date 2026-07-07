@@ -805,7 +805,12 @@
             })
             .catch(function () {
                 teardownPicker();
-                if (window.AppDialog) {
+                if (window.AppFlash && window.AppFlash.show) {
+                    window.AppFlash.show('Không tải được bản đồ. Vui lòng nhập địa chỉ bằng tay.', {
+                        variant: 'warning',
+                        title: 'Không tải được bản đồ',
+                    });
+                } else if (window.AppDialog) {
                     window.AppDialog.alert('Không tải được bản đồ. Vui lòng nhập địa chỉ bằng tay.');
                 }
             });

@@ -74,10 +74,12 @@ class DuplicateBookingService
             'route'             => $booking->schedule?->route
                 ? $booking->schedule->route->departure . ' → ' . $booking->schedule->route->destination
                 : '—',
-            'service_date'      => $booking->schedule?->departure_time?->format('d/m/Y H:i'),
+            'service_date'      => $booking->guestPickupAt()?->format('d/m/Y H:i')
+                ?? $booking->schedule?->departure_time?->format('d/m/Y H:i'),
+            'pickup_time_label' => $booking->pickupTimeLabel(),
             'vehicle_label'     => $booking->vehicleBookingLabel(),
             'progress_label'    => $booking->primaryStatusLabel(),
-            'has_driver'        => $booking->hasDriverAccepted(),
+            'has_driver'        => $driver !== null,
             'driver_distance_km' => $driver['distance_km'] ?? null,
             'driver_distance_label' => $driver['distance_label'] ?? null,
             'driver_eta_label' => $driver['eta_label'] ?? null,
@@ -86,6 +88,7 @@ class DuplicateBookingService
             'driver_eta_line' => $driver['eta_line'] ?? null,
             'driver_proximity_hint' => $driver['proximity_hint'] ?? null,
             'driver_location_shared' => (bool) ($driver['location_shared'] ?? false),
+            'driver_movement_confirmed' => (bool) ($booking->schedule?->driverHasConfirmedMovement() ?? false),
             'driver'            => $driver,
         ];
     }

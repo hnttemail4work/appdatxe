@@ -32,6 +32,10 @@ if (! $viewOnly && $driver->isOperational()) {
 
         @include('partials.driver-profile-edit-header', ['driver' => $driver])
 
+        @if(session('driver_password_reset'))
+            @include('partials.driver-password-reset-alert')
+        @endif
+
         @if($driver->isRejected())
             @include('partials.driver-rejection-note', ['driver' => $driver])
         @endif

@@ -90,10 +90,13 @@
         if (firstInvalid) {
             firstInvalid.focus();
             if (firstInvalid.type === 'file') {
-                if (window.AppDialog) {
-                    window.AppDialog.alert(step === 1
-                        ? 'Vui lòng upload đủ giấy tờ, chân dung và ít nhất 1 ảnh xe.'
-                        : 'Vui lòng hoàn thành các trường bắt buộc ở bước này.');
+                var fileMsg = step === 1
+                    ? 'Vui lòng upload đủ giấy tờ, chân dung và ít nhất 1 ảnh xe.'
+                    : 'Vui lòng hoàn thành các trường bắt buộc ở bước này.';
+                if (window.AppFlash && window.AppFlash.show) {
+                    window.AppFlash.show(fileMsg, { variant: 'warning', title: 'Chưa đủ thông tin' });
+                } else if (window.AppDialog) {
+                    window.AppDialog.alert(fileMsg);
                 }
             }
             return false;
@@ -259,8 +262,13 @@
                 });
                 if (!dup) vehicleFiles.push(file);
             });
-            if (rejected.length && window.AppDialog) {
-                window.AppDialog.alert('Ảnh vượt quá 2MB: ' + rejected.join(', '));
+            if (rejected.length) {
+                var rejectedMsg = 'Ảnh vượt quá 2MB: ' + rejected.join(', ');
+                if (window.AppFlash && window.AppFlash.show) {
+                    window.AppFlash.show(rejectedMsg, { variant: 'warning', title: 'Ảnh quá lớn' });
+                } else if (window.AppDialog) {
+                    window.AppDialog.alert(rejectedMsg);
+                }
             }
             vehicleInput.value = '';
             vehicleInput.classList.remove('is-invalid');
@@ -278,8 +286,11 @@
                 if (file.size > max) oversize.push(file.name);
             });
             if (oversize.length) {
-                if (window.AppDialog) {
-                    window.AppDialog.alert('Ảnh vượt quá 2MB: ' + oversize.join(', '));
+                var oversizeMsg = 'Ảnh vượt quá 2MB: ' + oversize.join(', ');
+                if (window.AppFlash && window.AppFlash.show) {
+                    window.AppFlash.show(oversizeMsg, { variant: 'warning', title: 'Ảnh quá lớn' });
+                } else if (window.AppDialog) {
+                    window.AppDialog.alert(oversizeMsg);
                 }
                 input.value = '';
             }

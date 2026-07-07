@@ -299,5 +299,7 @@
 
     </div>
 
+    @include('partials.guest-trip-completion-modal')
+
 </div>
 

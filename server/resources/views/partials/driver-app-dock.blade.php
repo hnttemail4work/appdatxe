@@ -15,17 +15,21 @@
                 class="driver-dock-item {{ $isActive ? 'is-active' : '' }}"
                 data-driver-tab="{{ $tabKey }}"
                 aria-label="{{ $tab['label'] }}"
+                title="{{ $tab['label'] }}"
                 @if($isActive) aria-current="page" @endif>
             <span class="driver-dock-icon" aria-hidden="true">
                 @if($tabKey === 'trips')
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M3 12h18M3 18h12"/></svg>
                 @elseif($tabKey === 'history')
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 2.5"/></svg>
+                @elseif($tabKey === 'deposit')
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg>
+                @elseif($tabKey === 'account')
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/></svg>
                 @else
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg>
                 @endif
             </span>
-            <span class="driver-dock-label">{{ $tab['short'] ?? $tab['label'] }}</span>
             @if($showBadge)
                 <span class="driver-dock-badge {{ ! empty($tab['hot']) ? 'is-hot' : '' }}">{{ $badge }}</span>
             @endif

@@ -31,6 +31,7 @@ use App\Support\VehicleCapacityOptions;
 use App\Support\VehicleCapacityPricing;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
 class AdminController extends Controller
@@ -53,6 +54,7 @@ class AdminController extends Controller
 
         $referralCodes = ReferralCode::query()
             ->with('booking')
+            ->orderByRaw("CASE WHEN type = 'referrer' THEN 0 ELSE 1 END")
             ->orderByRaw("CASE WHEN type = 'referrer' AND status = 'suspended' THEN 1 ELSE 0 END")
             ->latest()
             ->paginate(PageList::PER_PAGE, ['*'], 'referrals_page')
@@ -70,7 +72,6 @@ class AdminController extends Controller
             'app_commission'           => PlatformFees::appCommissionPercent(),
             'referral_commission_first'  => PlatformFees::referralCommissionFirstPercent(),
             'referral_commission_repeat' => PlatformFees::referralCommissionRepeatPercent(),
-            'round_trip_discount'      => PlatformFees::roundTripDiscountPercent(),
             'km_rate_under_100'   => PlatformFees::kmRateUnder100(),
             'km_rate_over_100'    => PlatformFees::kmRateOver100(),
             'departure_plan_surcharge_today' => PlatformFees::departurePlanTodaySurchargePercent(),
@@ -124,18 +125,26 @@ class AdminController extends Controller
 
     public function storeReferrer(Request $request)
     {
-        $validated = $request->validate([
+        $validator = Validator::make($request->all(), [
             'name'  => ['required', 'string', 'max:255'],
             'phone' => ['required', 'string', 'max:30'],
         ]);
 
+        if ($validator->fails()) {
+            return redirect()->route('admin.dashboard', ['tab' => 'referrals'])
+                ->withErrors($validator)
+                ->withInput();
+        }
+
+        $validated = $validator->validated();
+
         $referral = $this->referralCodes->createReferrer(
             $validated['name'],
             $validated['phone'],
-            (int) Auth::id(),
+            Auth::id(),
         );
 
-        return redirect()->route('admin.dashboard', ['tab' => 'referrals'])
+        return redirect()->route('admin.dashboard', ['tab' => 'referrals', 'referrals_page' => 1])
             ->with('success', 'Đã tạo mã giới thiệu ' . $referral->code . ' cho ' . $referral->name . '.');
     }
 
@@ -284,7 +293,6 @@ class AdminController extends Controller
             'app_commission'        => ['required', 'numeric', 'min:0', 'max:100'],
             'referral_commission_first'  => ['required', 'numeric', 'min:0', 'max:100'],
             'referral_commission_repeat' => ['required', 'numeric', 'min:0', 'max:100'],
-            'round_trip_discount'   => ['required', 'numeric', 'min:0', 'max:100'],
             'km_rate_under_100'   => ['required', 'integer', 'min:0'],
             'km_rate_over_100'    => ['required', 'integer', 'min:0'],
             'departure_plan_surcharge_today' => ['required', 'numeric', 'min:0', 'max:500'],
@@ -324,10 +332,6 @@ class AdminController extends Controller
 
         PlatformSetting::setValue('referral_commission_repeat_percentage', [
             'value' => (float) $validated['referral_commission_repeat'],
-        ], 'finance');
-
-        PlatformSetting::setValue('round_trip_discount_percentage', [
-            'value' => (float) $validated['round_trip_discount'],
         ], 'finance');
 
         PlatformSetting::setValue('pricing_km_rate_under_100', [
@@ -487,6 +491,7 @@ class AdminController extends Controller
             'counts'                   => $data['bookingListCounts'],
             'catalog_off_duty_count'   => $data['catalogOffDutyBookingCount'],
             'late_pickup_alert_count'  => $data['latePickupAlertCount'],
+            'alerts'                   => app(\App\Services\AdminOperatorAlertService::class)->pullAlerts(),
             'html'                     => view('partials.admin-booking-list-table', [
                 'bookings'          => $data['passengers'],
                 'drivers'           => $data['drivers'],
@@ -526,7 +531,9 @@ class AdminController extends Controller
             ->operatorListBucket('active')
             ->with($bookingEagerLoad)
             ->latest()
-            ->get();
+            ->get()
+            ->reject(fn (Booking $booking): bool => $booking->shouldHideFromGuestAndOperatorActiveLists())
+            ->values();
 
         $waitingBookings = $activeAll
             ->filter(fn (Booking $booking): bool => $booking->needsAdminWaitingAttention())

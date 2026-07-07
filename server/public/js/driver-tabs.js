@@ -8,7 +8,7 @@
     }
 
     var baseUrl = root.dataset.driverTabsBase || window.location.pathname;
-    var validTabs = ['trips', 'history', 'deposit'];
+    var validTabs = ['trips', 'history', 'deposit', 'account'];
     var activeTab = root.dataset.driverTabsActive || 'trips';
 
     function isValidTab(tab) {

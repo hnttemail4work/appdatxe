@@ -33,6 +33,7 @@
                 </div>
 
                 <div class="modal-body pt-0 booking-modal-body">
+                    <div id="booking-modal-flash" class="app-flash-stack" aria-live="polite" aria-atomic="true"></div>
                     <div id="booking-step-1">
                         <div class="booking-sheet-section">
                             <div class="booking-panel-label mb-3">Hành trình</div>
@@ -49,7 +50,7 @@
                                         <div class="booking-address-input-wrap">
                                             <input type="text" name="pickup_detail" id="modal-pickup-detail"
                                                    class="form-control address-map-readonly-input" required readonly
-                                                   placeholder="Tìm địa chỉ hoặc chọn trên bản đồ"
+                                                   placeholder="Tự lấy GPS hoặc chọn trên bản đồ"
                                                    value="{{ old('pickup_detail') }}"
                                                    data-address-map-for="modal-pickup-detail"
                                                    data-address-map-lat="modal-pickup-lat"
@@ -129,15 +130,24 @@
                                 </div>
                                 <div class="form-text" id="modal-later-return-days-hint"></div>
                             </div>
-                            <input type="hidden" name="service_date" id="modal-service-date" value="{{ old('service_date', $defaultServiceDate) }}">
-                            <div id="modal-pickup-time-wrap">
-                                @include('partials.vi-pickup-time-input', [
-                                    'name' => 'pickup_time',
-                                    'id' => 'modal-pickup-time',
-                                    'value' => old('pickup_time', $defaultPickupTime),
-                                    'label' => 'Giờ đón',
-                                    'required' => false,
-                                ])
+                            <div class="row g-3 align-items-end">
+                                <div class="col-md-6" id="modal-pickup-date-wrap">
+                                    <label class="form-label" for="modal-service-date">Ngày đón <span class="text-danger">*</span></label>
+                                    <input type="date" name="service_date" id="modal-service-date"
+                                           class="form-control @error('service_date') is-invalid @enderror"
+                                           value="{{ old('service_date', $defaultServiceDate) }}"
+                                           min="{{ $defaultServiceDate }}" required>
+                                    @error('service_date')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="col-md-6" id="modal-pickup-time-wrap">
+                                    @include('partials.vi-pickup-time-input', [
+                                        'name' => 'pickup_time',
+                                        'id' => 'modal-pickup-time',
+                                        'value' => old('pickup_time', $defaultPickupTime),
+                                        'label' => 'Giờ đón',
+                                        'required' => true,
+                                    ])
+                                </div>
                             </div>
                         </div>
                     </div>

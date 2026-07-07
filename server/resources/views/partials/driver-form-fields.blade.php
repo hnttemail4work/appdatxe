@@ -57,14 +57,21 @@
         @error('email')<div class="invalid-feedback">{{ $message }}</div>@enderror
     </div>
 
-    @if(! $readonly)
+    @if(! $readonly && ! $isEdit)
     <div class="col-md-6">
         <label class="form-label">Mật khẩu</label>
         <input type="password" name="password"
                class="form-control @error('password') is-invalid @enderror"
-               placeholder="{{ $isEdit ? 'Nhập mật khẩu mới...' : 'Tối thiểu 8 ký tự' }}"
+               placeholder="Tối thiểu 8 ký tự"
                autocomplete="off" spellcheck="false">
         @error('password')<div class="invalid-feedback">{{ $message }}</div>@enderror
+    </div>
+    @elseif($isEdit && ! $readonly && ($driver?->isOperational() ?? false))
+    <div class="col-12">
+        @include('partials.driver-password-reset-admin', [
+            'driver' => $driver,
+            'canReset' => true,
+        ])
     </div>
     @endif
 

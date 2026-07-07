@@ -15,7 +15,7 @@ class BookingBrowserGuardService
 
     public function blockMessage(): string
     {
-        return 'Đã hủy quá nhiều lần trên trình duyệt này. Đóng tab hoặc trình duyệt (hết phiên) rồi mở lại để đặt cuốc mới.';
+        return 'Đã hủy quá nhiều lần trên trình duyệt này, vui lòng thử lại sau hoặc liên hệ tổng đài để biết thêm thông tin chi tiết.';
     }
 
     public function activeBookingBlockMessage(): string

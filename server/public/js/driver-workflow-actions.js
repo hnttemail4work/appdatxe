@@ -29,11 +29,13 @@
     }
 
     function showError(message) {
-        if (window.AppDialog && window.AppDialog.alert) {
-            window.AppDialog.alert(message || 'Không thực hiện được.', { variant: 'danger' });
+        if (window.AppFlash && window.AppFlash.show) {
+            window.AppFlash.show(message || 'Không thực hiện được.', { variant: 'danger', title: 'Không thực hiện được' });
             return;
         }
-        window.alert(message || 'Không thực hiện được.');
+        if (window.AppDialog && window.AppDialog.alert) {
+            window.AppDialog.alert(message || 'Không thực hiện được.', { variant: 'danger' });
+        }
     }
 
     function ensureReasonInput(form, reasonId) {

@@ -9,7 +9,8 @@ use App\Support\VehicleCapacityOptions;
 use App\Support\VehicleDisplay;
 
 /**
- * Thông tin tài xế + khoảng cách/ETA cho khách theo dõi — chỉ sau khi tài xế chia sẻ vị trí.
+ * Thông tin tài xế + khoảng cách/ETA cho khách theo dõi.
+ * Khoảng cách: sau khi TX nhận chuyến. ETA: sau khi TX bấm «Xác nhận».
  */
 class GuestBookingDriverStatusService
 {
@@ -22,29 +23,33 @@ class GuestBookingDriverStatusService
     /** @return array<string, mixed>|null */
     public function build(Booking $booking): ?array
     {
-        $booking->loadMissing('schedule.route');
+        $booking->loadMissing('schedule.route', 'schedule.template', 'schedule.vehicle');
         $schedule = $booking->schedule;
+        $acceptance = $booking->driverAcceptanceState();
+        $profile = $booking->guestDriverProfile();
 
-        if (! $schedule || ! $booking->hasDriverAccepted() || ! $schedule->driver_id) {
+        if (! $schedule || ! $profile) {
             return null;
         }
 
-        $profile = DriverProfile::query()
-            ->where('user_id', $schedule->driver_id)
-            ->with('user')
-            ->first();
-
-        if (! $profile) {
+        if ($acceptance === 'none' && ! $booking->catalogChosenDriverProfile()) {
             return null;
         }
 
-        $schedule->loadMissing('vehicle');
-
-        $stage = $schedule->resolvedDriverStage();
+        $stage = $schedule->driver_id
+            ? $schedule->resolvedDriverStage()
+            : Schedule::DRIVER_STAGE_ASSIGNED;
         $hasLiveLocation = $profile->hasFreshLocation();
-        $distanceKm = $hasLiveLocation
-            ? $this->resolveLiveDistanceKm($booking, $profile)
-            : null;
+        $movementConfirmed = $acceptance === 'accepted' && $schedule->driverHasConfirmedMovement();
+
+        $distanceKm = null;
+        if ($acceptance === 'accepted' && $schedule->driver_id) {
+            $distanceKm = $this->latePickup->pickupDistanceKmForProfile($profile, $booking);
+            if ($distanceKm !== null && $hasLiveLocation) {
+                $distanceKm = $this->resolveLiveDistanceKm($booking, $profile) ?? $distanceKm;
+            }
+        }
+
         $distanceLabel = $distanceKm !== null
             ? DriverProximityService::formatDistanceLabel($distanceKm)
             : null;
@@ -61,15 +66,22 @@ class GuestBookingDriverStatusService
         $distanceLine = null;
         $etaLine = null;
 
-        if ($stage === Schedule::DRIVER_STAGE_AT_PICKUP) {
+        if ($acceptance === 'pending') {
+            $statusLine = 'Chờ tài xế nhận chuyến';
+        } elseif ($acceptance === 'none' && $booking->catalogChosenDriverProfile()) {
+            $statusLine = 'Chờ tài xế nhận chuyến';
+        } elseif ($stage === Schedule::DRIVER_STAGE_AT_PICKUP) {
             $statusLine = 'Tài xế đã đến điểm đón';
         } elseif (in_array($stage, [Schedule::DRIVER_STAGE_PICKED_UP, Schedule::DRIVER_STAGE_RUNNING], true)) {
             $statusLine = 'Tài xế đang chở bạn trên chuyến';
         } elseif ($stage === Schedule::DRIVER_STAGE_ASSIGNED) {
-            $statusLine = 'Đã nhận';
+            $statusLine = $movementConfirmed ? 'Tài xế đang đi đón' : 'Đã nhận';
 
-            if ($hasLiveLocation && $distanceKm !== null && $distanceLabel) {
+            if ($distanceLabel) {
                 $distanceLine = 'Tài xế cách bạn ' . $distanceLabel;
+            }
+
+            if ($movementConfirmed && $hasLiveLocation && $distanceKm !== null) {
                 $etaLabel = $this->latePickup->pickupEtaLabel($schedule, $booking);
                 if ($etaLabel) {
                     $etaLine = 'Dự kiến ' . $etaLabel;
@@ -85,26 +97,27 @@ class GuestBookingDriverStatusService
         $proximityHint = implode("\n", array_filter([$statusLine, $distanceLine, $etaLine])) ?: null;
 
         return [
-            'name'               => $profile->user->name ?? $schedule->driver_name,
-            'code'               => $profile->driver_code,
-            'vehicle_type'       => $profile->vehicle_type,
-            'vehicle_type_label' => VehicleDisplay::typeLabel($profile->vehicle_type),
-            'vehicle_plate'      => $profile->vehicle_license_plate,
-            'vehicle_seats'      => $vehicleSeats,
-            'vehicle_seats_label' => $vehicleSeats > 0 ? VehicleCapacityOptions::label($vehicleSeats) : null,
-            'vehicle_name'       => $vehicleName !== '' ? $vehicleName : null,
-            'vehicle_photo_url'  => $vehiclePhotoUrl,
-            'vehicle_label'      => DriverTripRequestService::vehicleLabel($profile),
-            'stage'              => $stage,
-            'stage_label'        => $schedule->driverStageLabel(),
-            'location_shared'    => $hasLiveLocation,
-            'distance_km'        => $distanceKm,
-            'distance_label'     => $distanceLabel,
-            'eta_label'          => $etaLabel,
-            'status_line'        => $statusLine,
-            'distance_line'      => $distanceLine,
-            'eta_line'           => $etaLine,
-            'proximity_hint'     => $proximityHint,
+            'name'                 => $profile->user->name ?? $schedule->driver_name,
+            'code'                 => $profile->driver_code,
+            'vehicle_type'         => $profile->vehicle_type,
+            'vehicle_type_label'   => VehicleDisplay::typeLabel($profile->vehicle_type),
+            'vehicle_plate'        => $profile->vehicle_license_plate,
+            'vehicle_seats'        => $vehicleSeats,
+            'vehicle_seats_label'  => $vehicleSeats > 0 ? VehicleCapacityOptions::label($vehicleSeats) : null,
+            'vehicle_name'         => $vehicleName !== '' ? $vehicleName : null,
+            'vehicle_photo_url'    => $vehiclePhotoUrl,
+            'vehicle_label'        => DriverTripRequestService::vehicleLabel($profile),
+            'stage'                => $stage,
+            'stage_label'          => $schedule->driverStageLabel(),
+            'location_shared'      => $hasLiveLocation,
+            'movement_confirmed'   => $movementConfirmed,
+            'distance_km'          => $distanceKm,
+            'distance_label'       => $distanceLabel,
+            'eta_label'            => $etaLabel,
+            'status_line'          => $statusLine,
+            'distance_line'        => $distanceLine,
+            'eta_line'             => $etaLine,
+            'proximity_hint'       => $proximityHint,
         ];
     }
 

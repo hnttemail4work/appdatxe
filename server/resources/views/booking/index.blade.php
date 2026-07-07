@@ -5,7 +5,7 @@
 use App\Support\ServiceDate;
 
 $defaultServiceDate = $defaultServiceDate ?? ServiceDate::today();
-$defaultPickupTime = $defaultPickupTime ?? now()->addHour()->format('H:i');
+$defaultPickupTime = $defaultPickupTime ?? app(\App\Services\DriverAvailabilityService::class)->suggestedPickupClock();
 $bookingRestoreModal = $errors->any() && (old('template_id') || old('vehicle_id') || old('driver_profile_id'))
     ? [
         'driver_profile_id' => old('driver_profile_id'),
@@ -49,6 +49,8 @@ $driverCount = ($driverOffers ?? collect())->count();
         @include('partials.flash-close')
     </div>
     @endif
+
+    @include('partials.booking-active-session')
 
     @if($bookingPageBannerUrl ?? null)
     <section class="booking-page-hero booking-page-hero--banner" aria-label="Trang đặt xe">

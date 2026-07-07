@@ -65,4 +65,19 @@ class DriverCuocOfferHideService
             ->where('driver_user_id', $driverUserId)
             ->delete();
     }
+
+    /** Admin gán lại thủ công — gỡ chặn ẩn cuốc để TX thấy lời mời. */
+    public function clearForOffer(int $driverUserId, Schedule $schedule, string $contactPhone): void
+    {
+        $phone = $this->normalizePhone($contactPhone);
+        if ($phone === '') {
+            return;
+        }
+
+        DriverCuocOfferHide::query()
+            ->where('driver_user_id', $driverUserId)
+            ->where('schedule_id', $schedule->id)
+            ->where('contact_phone', $phone)
+            ->delete();
+    }
 }

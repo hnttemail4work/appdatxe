@@ -7,6 +7,7 @@ use App\Models\ReferralCode;
 use App\Services\BookingBrowserGuardService;
 use App\Services\BookingPhoneGuardService;
 use App\Services\BookingWorkflowService;
+use App\Services\DriverAvailabilityService;
 use App\Services\DuplicateBookingService;
 use App\Services\GuestTripStatusService;
 use App\Services\ReferralCodeService;
@@ -35,12 +36,27 @@ class GuestBookingController extends Controller
         private readonly DuplicateBookingService $duplicateBookings,
         private readonly BookingBrowserGuardService $browserGuard,
         private readonly GuestTripStatusService $guestTrips,
+        private readonly DriverAvailabilityService $driverAvailability,
     ) {
     }
 
     public function index(Request $request)
     {
         return view('booking.index', $this->bookingPageContext($request, true));
+    }
+
+    public function driverOffers()
+    {
+        $this->scheduleLifecycle->sync();
+
+        $offers = $this->tripListing->listBookableOffers()
+            ->map(fn ($profile) => $this->tripListing->serializeOffer($profile))
+            ->values();
+
+        return response()->json([
+            'offers' => $offers,
+            'count'  => $offers->count(),
+        ]);
     }
 
     public function trips(Request $request)
@@ -200,9 +216,8 @@ class GuestBookingController extends Controller
                 ->values()
             : collect();
 
-        $defaultPickupAt = now()->addHour();
-        $defaultServiceDate = $defaultPickupAt->toDateString();
-        $defaultPickupTime = $defaultPickupAt->format('H:i');
+        $defaultServiceDate = ServiceDate::today();
+        $defaultPickupTime = $this->driverAvailability->suggestedPickupClock();
 
         $prefillReferral = strtoupper(trim((string) $request->query('ref', '')));
         $appliedReferral = $prefillReferral !== ''
@@ -409,7 +424,7 @@ class GuestBookingController extends Controller
             'service_date'     => ['nullable', 'date', 'after_or_equal:today'],
             'departure_plan'   => ['required', 'string', 'in:oneway,today,tomorrow,later'],
             'later_return_days'=> ['nullable', 'integer', 'min:' . DeparturePlan::MIN_LATER_RETURN_DAYS, 'max:' . DeparturePlan::MAX_LATER_RETURN_DAYS],
-            'pickup_time'      => ['nullable', 'string', 'max:8', 'regex:/^\d{1,2}:\d{2}$/'],
+            'pickup_time'      => ['required', 'string', 'max:8', 'regex:/^\d{1,2}:\d{2}$/'],
             'passenger_name'   => ['required', 'string', 'max:255'],
             'passenger_gender' => ['nullable', 'in:male,female'],
             'passenger_age'    => ['nullable', 'integer', 'min:1', 'max:120'],
@@ -428,6 +443,7 @@ class GuestBookingController extends Controller
         ], [
             'service_date.after_or_equal' => 'Ngày đi phải từ hôm nay trở đi.',
             'pickup_time.regex'           => 'Giờ đón không hợp lệ.',
+            'pickup_time.required'        => 'Vui lòng chọn giờ đón.',
             'pickup_lat.required'         => 'Vui lòng ghim điểm đón trên bản đồ.',
             'pickup_lng.required'         => 'Vui lòng ghim điểm đón trên bản đồ.',
             'dropoff_lat.required'        => 'Vui lòng ghim điểm trả trên bản đồ.',
@@ -488,9 +504,7 @@ class GuestBookingController extends Controller
                 ->withInput();
         }
 
-        $pickupTime = ! empty($validated['pickup_time'])
-            ? DepartureTimeDisplay::storageValue($validated['pickup_time'])
-            : null;
+        $pickupTime = DepartureTimeDisplay::storageValue($validated['pickup_time']);
 
         $appliedReferral = $this->referralCodes->resolveUsableCode(session('guest_referral_code'));
         $appliedReferralId = $appliedReferral?->id;

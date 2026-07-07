@@ -97,7 +97,7 @@ class DriverProfile extends Model
             return ['key' => 'online', 'label' => 'Sẵn sàng'];
         }
 
-        return ['key' => 'offline', 'label' => 'Cập nhật vị trí để nhận chuyến'];
+        return ['key' => 'offline', 'label' => 'Đang lấy vị trí GPS…'];
     }
 
     /** Một nhãn trạng thái duy nhất (gộp tài khoản + làm việc). */

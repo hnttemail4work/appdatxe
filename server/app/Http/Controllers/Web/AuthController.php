@@ -70,7 +70,9 @@ class AuthController extends Controller
         $role = $user->role;
         $redirect = match ($role) {
             'admin'  => '/admin/dashboard',
-            'driver' => '/driver/dashboard',
+            'driver' => $user->must_change_password
+                ? route('driver.dashboard', ['tab' => 'account'], false)
+                : '/driver/dashboard',
             default  => '/',
         };
 

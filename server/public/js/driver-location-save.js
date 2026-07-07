@@ -1,5 +1,5 @@
 /**
- * Lưu tọa độ tài xế sau khi chọn/tìm trên bản đồ (dùng chung address-map-picker).
+ * Lưu tọa độ tài xế sau GPS hoặc chọn trên bản đồ.
  */
 (function () {
     var url = window.__driverLocationUrl;
@@ -9,51 +9,75 @@
 
     var csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
     var detailInput = document.getElementById('driver-location-detail');
-    var addressLine = document.getElementById('driver-location-address');
-    var metaLine = document.getElementById('driver-location-meta');
+    var fallbackDetailInput = document.getElementById('driver-location-fallback-detail');
     var locationBar = document.getElementById('driver-location-bar');
     var sending = false;
+    var pendingLocation = null;
 
     function isPaused() {
         return locationBar && locationBar.getAttribute('data-driver-paused') === '1';
     }
 
-    function setHeroReady(ready) {
-        if (!ready || isPaused()) {
+    function isDriverLocationTarget(targetInputId) {
+        return targetInputId === 'driver-location-detail'
+            || targetInputId === 'driver-location-fallback-detail';
+    }
+
+    function setHeroReady() {
+        if (isPaused()) {
             return;
         }
         if (window.DriverAvailabilityToggle && window.DriverAvailabilityToggle.refreshHeroStatus) {
-            window.DriverAvailabilityToggle.refreshHeroStatus(false);
+            window.DriverAvailabilityToggle.refreshHeroStatus();
+        }
+        if (window.DriverAvailabilityToggle && window.DriverAvailabilityToggle.hideLocationFallback) {
+            window.DriverAvailabilityToggle.hideLocationFallback();
         }
     }
 
-    function setAddressLine(text) {
-        if (!addressLine) {
+    function setPickupProximityLine(text) {
+        var section = document.getElementById('driver-pickup-proximity-sheet');
+        var line = document.getElementById('driver-pickup-proximity-line');
+        if (!section || !line) {
             return;
         }
         var value = String(text || '').trim();
-        addressLine.textContent = value;
-        addressLine.classList.toggle('is-empty', value === '');
-    }
-
-    function setMetaLine(text) {
-        if (metaLine) {
-            metaLine.textContent = text || '';
+        if (value) {
+            line.textContent = value;
+            section.classList.remove('d-none');
+            section.hidden = false;
+        } else {
+            line.textContent = '';
+            section.classList.add('d-none');
+            section.hidden = true;
         }
     }
 
     window.DriverLocationSave = {
-        setMetaLine: setMetaLine,
-        setAddressLine: setAddressLine,
+        setPickupProximityLine: setPickupProximityLine,
     };
 
+    function flushPendingLocation() {
+        if (!pendingLocation || sending) {
+            return;
+        }
+
+        var next = pendingLocation;
+        pendingLocation = null;
+        saveLocation(next.lat, next.lng, next.address);
+    }
+
     function saveLocation(lat, lng, address) {
-        if (sending || isPaused() || lat == null || lng == null || lat === '' || lng === '') {
+        if (isPaused() || lat == null || lng == null || lat === '' || lng === '') {
+            return;
+        }
+
+        if (sending) {
+            pendingLocation = { lat: lat, lng: lng, address: address };
             return;
         }
 
         sending = true;
-        setMetaLine('Đang lưu…');
 
         fetch(url, {
             method: 'POST',
@@ -76,46 +100,51 @@
             })
             .then(function (result) {
                 if (!result.ok || !result.data || !result.data.ok) {
-                    setMetaLine('Chưa lưu được — thử lại.');
+                    if (window.DriverAvailabilityToggle && window.DriverAvailabilityToggle.showLocationFallback) {
+                        window.DriverAvailabilityToggle.showLocationFallback('Chưa lưu được vị trí — chọn lại trên bản đồ.');
+                    }
                     return;
                 }
                 var data = result.data;
-                setAddressLine(data.address || address);
-                var meta = data.updated_at ? ('Cập nhật ' + data.updated_at) : '';
-                if (data.pickup_proximity_hint) {
-                    meta = (meta ? meta + ' · ' : '') + data.pickup_proximity_hint;
-                } else if (data.pickup_distance_label) {
-                    meta = (meta ? meta + ' · ' : '') + 'Cách điểm đón ~' + data.pickup_distance_label;
-                    if (data.pickup_eta_label) {
-                        meta += ' · dự kiến ' + data.pickup_eta_label;
-                    }
+                if (detailInput) {
+                    detailInput.value = data.address || address || '';
                 }
-                setMetaLine(meta);
-                setHeroReady(true);
+                setPickupProximityLine(data.pickup_proximity_line || '');
+                setHeroReady();
                 if (window.DriverAvailabilityToggle && window.DriverAvailabilityToggle.clearLocationSharePrompt) {
                     window.DriverAvailabilityToggle.clearLocationSharePrompt();
                 }
             })
             .catch(function () {
-                setMetaLine('Lỗi mạng — thử lại.');
+                if (window.DriverAvailabilityToggle && window.DriverAvailabilityToggle.showLocationFallback) {
+                    window.DriverAvailabilityToggle.showLocationFallback('Lỗi mạng — chọn lại vị trí trên bản đồ.');
+                }
             })
             .finally(function () {
                 sending = false;
+                flushPendingLocation();
             });
     }
 
     document.addEventListener('addressmap:applied', function (e) {
         var detail = e.detail || {};
-        if (detailInput && detail.targetInputId !== detailInput.id) {
-            return;
-        }
-        if (!detailInput && detail.targetInputId !== 'driver-location-detail') {
+        if (!isDriverLocationTarget(detail.targetInputId || '')) {
             return;
         }
         if (detail.lat == null || detail.lng == null) {
-            setMetaLine('Chưa có tọa độ — thử chia sẻ GPS lại');
+            if (window.DriverAvailabilityToggle && window.DriverAvailabilityToggle.showLocationFallback) {
+                window.DriverAvailabilityToggle.showLocationFallback('Chưa có tọa độ — chọn lại trên bản đồ.');
+            }
             return;
         }
+
+        if (detailInput) {
+            detailInput.value = String(detail.address || '').trim();
+        }
+        if (fallbackDetailInput && detail.targetInputId === 'driver-location-fallback-detail') {
+            fallbackDetailInput.value = String(detail.address || '').trim();
+        }
+
         saveLocation(detail.lat, detail.lng, detail.address);
     });
 })();

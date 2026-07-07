@@ -1,5 +1,6 @@
 <script>
 window.__bookingCheckDuplicateUrl = @json(route('booking.checkDuplicate'));
+window.__bookingDriverOffersUrl = @json(route('booking.driverOffers'));
 window.__quotePriceUrl = @json(route('booking.quotePrice'));
 window.__geocodeReverseUrl = @json(route('geocode.reverse'));
 window.__geocodeSearchUrl = @json(route('geocode.search'));
@@ -12,7 +13,8 @@ window.__laterReturnDaysMin = @json(\App\Support\DeparturePlan::MIN_LATER_RETURN
 window.__laterReturnDaysMax = @json(\App\Support\DeparturePlan::MAX_LATER_RETURN_DAYS);
 window.__laterReturnPercentPerDay = @json(\App\Support\PlatformFees::departurePlanLaterPercentPerDay());
 window.__departurePlanLabels = @json(\App\Support\DeparturePlan::labelsForJs());
-window.__defaultPickupTime = @json($defaultPickupTime ?? now()->addHour()->format('H:i'));
+window.__defaultPickupTime = @json($defaultPickupTime ?? app(\App\Services\DriverAvailabilityService::class)->suggestedPickupClock());
+window.__pickupLeadMinutes = @json(\App\Services\DriverAvailabilityService::MIN_PICKUP_LEAD_MINUTES);
 window.__referralDiscountPercent = @json($referralDiscountMeta['percent'] ?? 0);
 window.__referralDiscountLabel = @json($referralDiscountMeta['source_label'] ?? (($appliedReferral ?? null)?->customerDiscountSourceLabel()));
 window.__referralHasCode = @json((bool) ($appliedReferral ?? null));
@@ -23,8 +25,10 @@ window.__guestBrowserCancelCount = @json((int) ($browserCancelCount ?? session('
 window.__guestBrowserCancelBlockLimit = @json(\App\Services\BookingBrowserGuardService::CANCEL_BLOCK_LIMIT);
 </script>
 <script src="{{ asset('js/booking-browser-guard.js') }}?v={{ filemtime(public_path('js/booking-browser-guard.js')) }}"></script>
+<script src="{{ asset('js/idle-poll.js') }}?v={{ filemtime(public_path('js/idle-poll.js')) }}"></script>
 <script src="{{ asset('js/booking-active-session.js') }}?v={{ filemtime(public_path('js/booking-active-session.js')) }}"></script>
 <script src="{{ asset('js/geocode-search-ui.js') }}?v={{ filemtime(public_path('js/geocode-search-ui.js')) }}"></script>
 <script src="{{ asset('js/customer-booking.js') }}?v={{ filemtime(public_path('js/customer-booking.js')) }}"></script>
 <script src="{{ asset('js/address-map-picker.js') }}?v={{ filemtime(public_path('js/address-map-picker.js')) }}"></script>
+<script src="{{ asset('js/booking-catalog-sync.js') }}?v={{ filemtime(public_path('js/booking-catalog-sync.js')) }}"></script>
 <script src="{{ asset('js/customer-scroll-dock.js') }}?v={{ filemtime(public_path('js/customer-scroll-dock.js')) }}"></script>

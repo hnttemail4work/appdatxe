@@ -26,6 +26,20 @@ return Application::configure(basePath: dirname(__DIR__))
                 return response()->json(['message' => 'Phiên đã hết hạn. Tải lại trang và thử lại.'], 419);
             }
 
+            if ($request->user() && $request->is('admin/*')) {
+                $params = ['tab' => 'referrals'];
+                if ($request->routeIs('admin.referrers.store')) {
+                    $params['referrals_page'] = 1;
+                }
+
+                return redirect()
+                    ->route('admin.dashboard', $params)
+                    ->withInput()
+                    ->withErrors([
+                        'csrf' => 'Phiên đã hết hạn. Tải lại trang (F5) rồi thử tạo mã lại.',
+                    ]);
+            }
+
             return redirect()
                 ->to('/login')
                 ->withErrors(['login' => 'Phiên đã hết hạn hoặc cookie bị chặn. Tải lại trang và đăng nhập lại (dùng cùng một địa chỉ: 127.0.0.1 hoặc localhost).']);

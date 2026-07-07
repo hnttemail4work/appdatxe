@@ -67,7 +67,7 @@ class DriverAvailabilityService
     ): bool {
         $template->loadMissing('route');
 
-        if ($this->activeSchedulesForDriver($driverUserId)->isNotEmpty()) {
+        if ($this->assignmentBlockingSchedulesForDriver($driverUserId)->isNotEmpty()) {
             return true;
         }
 
@@ -86,7 +86,7 @@ class DriverAvailabilityService
     ): bool {
         $exclude = $excludeScheduleId ?? $candidateScheduleId;
 
-        foreach ($this->activeSchedulesForDriver($driverUserId, $exclude) as $schedule) {
+        foreach ($this->assignmentBlockingSchedulesForDriver($driverUserId, $exclude) as $schedule) {
             if ((int) $schedule->id !== $candidateScheduleId) {
                 return true;
             }
@@ -137,6 +137,31 @@ class DriverAvailabilityService
                 ->where('trip_status', 'awaiting_completion'))
             ->when($excludeScheduleId, fn ($q) => $q->where('id', '!=', $excludeScheduleId))
             ->get();
+    }
+
+    /** TX còn chuyến thực sự hiện trên dashboard — không tính chuyến đã ẩn (quá giờ đón, v.v.). */
+    public function hasVisibleDashboardBlockingTrip(int $driverUserId): bool
+    {
+        return $this->assignmentBlockingSchedulesForDriver($driverUserId)->isNotEmpty();
+    }
+
+    /**
+     * Chuyến đang chặn gán cuốc mới — cùng rule visible với dashboard tài xế.
+     *
+     * @return Collection<int, Schedule>
+     */
+    public function assignmentBlockingSchedulesForDriver(int $driverUserId, ?int $excludeScheduleId = null): Collection
+    {
+        if ($driverUserId <= 0) {
+            return collect();
+        }
+
+        return Schedule::query()
+            ->forDriverActiveTrips($driverUserId)
+            ->when($excludeScheduleId, fn ($q) => $q->where('id', '!=', $excludeScheduleId))
+            ->get()
+            ->filter(fn (Schedule $schedule): bool => $schedule->blocksDriverCatalogBooking())
+            ->values();
     }
 
     /** @return Collection<int, DriverProfile> */
@@ -196,6 +221,20 @@ class DriverAvailabilityService
 
             return $data;
         })->all();
+    }
+
+    public function suggestedPickupClock(?Carbon $from = null): string
+    {
+        $at = ($from ?? now())->copy()
+            ->addMinutes(self::MIN_PICKUP_LEAD_MINUTES)
+            ->seconds(0);
+
+        $remainder = $at->minute % 5;
+        if ($remainder !== 0) {
+            $at->addMinutes(5 - $remainder);
+        }
+
+        return DepartureTimeDisplay::normalizeForClock($at->format('H:i'));
     }
 
     public function resolveDepartureTime(
@@ -282,7 +321,7 @@ class DriverAvailabilityService
         Carbon $candidateEnd,
         ?int $excludeScheduleId = null,
     ): bool {
-        foreach ($this->activeSchedulesForDriver($driverUserId, $excludeScheduleId) as $schedule) {
+        foreach ($this->assignmentBlockingSchedulesForDriver($driverUserId, $excludeScheduleId) as $schedule) {
             $busyStart = $this->scheduleTripStart($schedule);
             $busyEnd = $this->scheduleBusyUntil($schedule);
 
@@ -396,6 +435,39 @@ class DriverAvailabilityService
         $this->markOffDuty($profile);
     }
 
+    /** Khách đặt ngay — TX bật Sẵn sàng, còn chia sẻ vị trí, không đang chạy chuyến. */
+    public function isBookableNow(DriverProfile $profile): bool
+    {
+        return $this->catalogBookingButtonState($profile)['book_now'];
+    }
+
+    /**
+     * Trạng thái nút «Đặt ngay» trên catalog khách.
+     *
+     * @return array{is_online: bool, has_location: bool, book_now: bool}
+     */
+    public function catalogBookingButtonState(DriverProfile $profile): array
+    {
+        // TODO (Fix Catalog Poll Book Now): Chỉ chặn «Đặt ngay» khi còn chuyến visible trên dashboard TX.
+        // TX on_trip do chuyến ẩn (ghost) vẫn coi là online — không đổi availability_status khi poll catalog.
+        $hasBlockingTrip = $this->hasVisibleDashboardBlockingTrip((int) $profile->user_id);
+        $status = $profile->availability_status ?? 'off_duty';
+        $isOnline = $status !== 'off_duty' && ! $hasBlockingTrip;
+        // TODO (Update Booking Button Logic): Location = GPS mới hoặc TX đang mở app + còn tọa độ.
+        $hasLocation = $this->hasAssignableLocation($profile, self::WEB_PRESENCE_MINUTES);
+
+        return [
+            'is_online'     => $isOnline,
+            'has_location'  => $hasLocation,
+            'book_now'      => $isOnline && $hasLocation,
+        ];
+    }
+
+    /** Đọc catalog — không ghi đè availability_status (tránh poll khách làm lệch TX / ẩn chuyến đang đặt). */
+    public function syncCatalogDriverStates(iterable $profiles): void
+    {
+    }
+
     /** @return array{active: bool, upcoming: bool} */
     public function driverDashboardTripFlags(int $driverUserId): array
     {
@@ -433,6 +505,21 @@ class DriverAvailabilityService
             1,
             now()->addMinutes(self::WEB_PRESENCE_MINUTES),
         );
+    }
+
+    public function hasWebPresence(int $driverUserId): bool
+    {
+        return Cache::has($this->webPresenceKey($driverUserId));
+    }
+
+    /** Admin / khách — TX đang mở app (GPS mới hoặc heartbeat poll tab tài xế). */
+    public function isDriverAppActiveForAdmin(DriverProfile $profile): bool
+    {
+        if ($profile->hasFreshLocation(self::WEB_PRESENCE_MINUTES)) {
+            return true;
+        }
+
+        return $this->hasWebPresence((int) $profile->user_id);
     }
 
     public function forgetWebPresence(int $driverUserId): void

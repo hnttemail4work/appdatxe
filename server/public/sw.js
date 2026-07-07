@@ -19,13 +19,27 @@ self.addEventListener('push', function (event) {
         }
     }
 
-    event.waitUntil(self.registration.showNotification(payload.title || 'gozviet', {
-        body: payload.body || '',
-        icon: payload.icon || '/favicon.svg',
-        badge: '/favicon.svg',
-        tag: payload.tag || undefined,
-        data: { url: payload.url || '/' },
-    }));
+    // TODO (Fix Stuck Offer UI): Đẩy payload vào tab đang mở để app tài xế tự thu hồi card hết hạn ngay.
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
+            clientList.forEach(function (client) {
+                if (client && 'postMessage' in client) {
+                    client.postMessage({
+                        type: 'push-event',
+                        payload: payload,
+                    });
+                }
+            });
+
+            return self.registration.showNotification(payload.title || 'gozviet', {
+                body: payload.body || '',
+                icon: payload.icon || '/favicon.svg',
+                badge: '/favicon.svg',
+                tag: payload.tag || undefined,
+                data: { url: payload.url || '/' },
+            });
+        })
+    );
 });
 
 self.addEventListener('notificationclick', function (event) {

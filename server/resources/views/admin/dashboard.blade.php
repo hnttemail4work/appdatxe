@@ -38,7 +38,7 @@ $referralCommissionStats = $referralCommissionStats ?? [];
                 ])
 
                 @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'referrals', 'active' => $adminDefaultTab === 'referrals'])
-                <form method="POST" action="{{ route('admin.referrers.store') }}" class="console-form mb-4">
+                <form method="POST" action="{{ route('admin.referrers.store') }}" class="console-form mb-4" id="referrer-create-form">
                     @csrf
                     <div class="row g-3 align-items-end">
                         <div class="col-md-5">
@@ -54,7 +54,7 @@ $referralCommissionStats = $referralCommissionStats ?? [];
                             @error('phone')<div class="invalid-feedback">{{ $message }}</div>@enderror
                         </div>
                         <div class="col-md-2">
-                            <button class="btn btn-primary w-100 fw-semibold">Tạo mã</button>
+                            <button type="submit" class="btn btn-primary w-100 fw-semibold">Tạo mã</button>
                         </div>
                     </div>
                 </form>
@@ -417,7 +417,7 @@ $referralCommissionStats = $referralCommissionStats ?? [];
                 @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'fees', 'active' => $adminDefaultTab === 'fees'])
                 <form method="POST" action="{{ route('admin.feeSettings.update') }}" class="console-form">
                     @csrf
-                    <p class="text-muted small">Giá tính theo km: ≤100 km dùng đơn giá thấp hơn, &gt;100 km dùng đơn giá cao hơn. Khứ hồi giảm theo % bên dưới (mặc định 15%).</p>
+                    <p class="text-muted small">Giá tính theo km: ≤100 km dùng đơn giá thấp hơn, &gt;100 km dùng đơn giá cao hơn. Khứ hồi / về trong ngày / về ngày mai tính thêm phụ thu ở mục bên dưới.</p>
                     <div class="row g-3">
                         <div class="col-md-6 col-lg-3">
                             <label class="form-label">Giá / km (≤ 100 km)</label>
@@ -433,14 +433,6 @@ $referralCommissionStats = $referralCommissionStats ?? [];
                                 <input type="number" name="km_rate_over_100" class="form-control" min="0" step="500"
                                        value="{{ old('km_rate_over_100', $feeSettings['km_rate_over_100']) }}" required>
                                 <span class="input-group-text">đ</span>
-                            </div>
-                        </div>
-                        <div class="col-md-6 col-lg-3">
-                            <label class="form-label">Giảm giá khứ hồi (%)</label>
-                            <div class="input-group">
-                                <input type="number" name="round_trip_discount" class="form-control" min="0" max="100" step="0.5"
-                                       value="{{ old('round_trip_discount', $feeSettings['round_trip_discount']) }}" required>
-                                <span class="input-group-text">%</span>
                             </div>
                         </div>
                         <div class="col-md-6 col-lg-3">
@@ -577,5 +569,52 @@ $referralCommissionStats = $referralCommissionStats ?? [];
 @endsection
 
 @push('scripts')
+<script>
+(function () {
+    var form = document.getElementById('referrer-create-form');
+    if (!form || form.dataset.csrfRefreshBound === '1') {
+        return;
+    }
+    form.dataset.csrfRefreshBound = '1';
+
+    function syncCsrfToken(token) {
+        if (!token) {
+            return;
+        }
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        if (meta) {
+            meta.setAttribute('content', token);
+        }
+        form.querySelectorAll('input[name="_token"]').forEach(function (input) {
+            input.value = token;
+        });
+    }
+
+    form.addEventListener('submit', function (event) {
+        if (form.dataset.csrfRefreshSubmitting === '1') {
+            form.dataset.csrfRefreshSubmitting = '';
+            return;
+        }
+
+        event.preventDefault();
+
+        fetch('/csrf-token', { credentials: 'same-origin' })
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                syncCsrfToken(data.token);
+                form.dataset.csrfRefreshSubmitting = '1';
+                if (typeof form.requestSubmit === 'function') {
+                    form.requestSubmit();
+                } else {
+                    form.submit();
+                }
+            })
+            .catch(function () {
+                form.dataset.csrfRefreshSubmitting = '1';
+                form.submit();
+            });
+    });
+})();
+</script>
 <script src="{{ asset('js/referral-qr.js') }}"></script>
 @endpush

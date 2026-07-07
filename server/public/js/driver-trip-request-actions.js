@@ -32,6 +32,21 @@
 
     function removeRequestCard(form) {
         var card = form.closest('[data-trip-request-id]');
+        removeRequestCardElement(card);
+    }
+
+    // TODO (Fix Stuck Offer UI): Cho phép gỡ card theo request id khi backend báo offer đã hết hạn/hủy.
+    function removeRequestCardById(requestId) {
+        if (!requestId) {
+            return;
+        }
+
+        var card = document.querySelector('[data-trip-request-id="' + String(requestId) + '"]');
+        removeRequestCardElement(card);
+    }
+
+    // TODO (Fix Stuck Offer UI): Dùng chung animation xóa card cho click Reject và revoke realtime từ backend.
+    function removeRequestCardElement(card) {
         if (!card) {
             return;
         }
@@ -52,6 +67,23 @@
                 window.__driverUpdateTripDockBadge();
             }
         }, 280);
+    }
+
+    // TODO (Fix Stuck Offer UI): Nhận message từ service worker để ẩn offer hết hạn ngay trên tab tài xế đang mở.
+    function bindServiceWorkerTripRequestSync() {
+        if (!('serviceWorker' in navigator)) {
+            return;
+        }
+
+        navigator.serviceWorker.addEventListener('message', function (event) {
+            var payload = event && event.data ? event.data.payload : null;
+            var data = payload && payload.data ? payload.data : null;
+            if (!data || data.client_event !== 'driver_trip_request_expired') {
+                return;
+            }
+
+            removeRequestCardById(data.driver_request_id);
+        });
     }
 
     function syncOffDuty(message) {
@@ -118,10 +150,10 @@
                 if (submitBtn) {
                     submitBtn.disabled = false;
                 }
-                if (window.AppDialog && window.AppDialog.alert) {
+                if (window.AppFlash && window.AppFlash.show) {
+                    window.AppFlash.show(err.message || 'Không từ chối được cuốc.', { variant: 'danger', title: 'Không từ chối được cuốc' });
+                } else if (window.AppDialog && window.AppDialog.alert) {
                     window.AppDialog.alert(err.message || 'Không từ chối được cuốc.', { variant: 'danger' });
-                } else {
-                    window.alert(err.message || 'Không từ chối được cuốc.');
                 }
             })
             .finally(function () {
@@ -151,10 +183,10 @@
                 if (submitBtn) {
                     submitBtn.disabled = false;
                 }
-                if (window.AppDialog && window.AppDialog.alert) {
+                if (window.AppFlash && window.AppFlash.show) {
+                    window.AppFlash.show(err.message || 'Không nhận được cuốc.', { variant: 'danger', title: 'Không nhận được cuốc' });
+                } else if (window.AppDialog && window.AppDialog.alert) {
                     window.AppDialog.alert(err.message || 'Không nhận được cuốc.', { variant: 'danger' });
-                } else {
-                    window.alert(err.message || 'Không nhận được cuốc.');
                 }
             });
     }
@@ -239,6 +271,7 @@
 
     bindClick('.driver-accept-form button[type="submit"]');
     bindClick('.driver-reject-form button[type="submit"]');
+    bindServiceWorkerTripRequestSync();
 
     document.addEventListener('submit', function (event) {
         var form = event.target;

@@ -28,14 +28,15 @@ class GuestTripStatusService
                 ->where('booking_reference', $bookingReference)
                 ->first();
 
-            if ($booking && $this->guestCanView($booking, $browserId, $phone)) {
+            if ($booking && ! $booking->shouldHideFromGuestAndOperatorActiveLists()
+                && $this->guestCanView($booking, $browserId, $phone)) {
                 return $booking;
             }
         }
 
         if ($browserId !== null && $browserId !== '') {
             $browserActive = $this->browserGuard->findActiveBooking($browserId);
-            if ($browserActive) {
+            if ($browserActive && ! $browserActive->shouldHideFromGuestAndOperatorActiveLists()) {
                 return $browserActive->loadMissing(['schedule.route', 'tripReview']);
             }
 
@@ -46,7 +47,8 @@ class GuestTripStatusService
                     ->where('booking_reference', $cachedReference)
                     ->first();
 
-                if ($booking && $this->guestCanView($booking, $browserId, $phone)) {
+                if ($booking && $this->guestCanView($booking, $browserId, $phone)
+                    && ! $booking->shouldHideFromGuestAndOperatorActiveLists()) {
                     return $booking;
                 }
             }
@@ -54,7 +56,7 @@ class GuestTripStatusService
 
         if ($phone !== null && $phone !== '') {
             $phoneActive = $this->duplicateBookings->findActiveBooking($phone);
-            if ($phoneActive) {
+            if ($phoneActive && ! $phoneActive->shouldHideFromGuestAndOperatorActiveLists()) {
                 return $phoneActive->loadMissing(['schedule.route', 'tripReview']);
             }
 
@@ -65,6 +67,7 @@ class GuestTripStatusService
                 ->limit(20)
                 ->get()
                 ->first(fn (Booking $booking): bool => $booking->matchesContactPhone($phone)
+                    && ! $booking->shouldHideFromGuestAndOperatorActiveLists()
                     && ($booking->blocksGuestRebooking()
                         || ($booking->trip_status === 'completed' && ! $booking->tripReview)));
 
@@ -84,11 +87,13 @@ class GuestTripStatusService
 
         return array_merge($base, [
             'passenger_name'    => $booking->passenger_name,
+            'contact_phone'     => (string) ($booking->contact_phone ?? ''),
             'pickup_address'    => $booking->pickup_address,
             'pickup_detail'     => $booking->pickup_detail,
             'dropoff_address'   => $booking->dropoff_address,
             'dropoff_detail'    => $booking->dropoff_detail,
-            'pickup_time_label' => $booking->pickupTimeLabel(),
+            'pickup_time_label' => $booking->pickupTimeLabel()
+                ?? $booking->guestPickupAt()?->format('H:i'),
             'service_date_label' => $booking->guestPickupAt()?->format('d/m/Y')
                 ?? $booking->schedule?->departure_time?->format('d/m/Y'),
             'trip_status'       => $booking->trip_status,
@@ -203,7 +208,7 @@ class GuestTripStatusService
 
         $booking->loadMissing('schedule');
 
-        return TripReview::query()->create([
+        $review = TripReview::query()->create([
             'booking_id'        => $booking->id,
             'schedule_id'       => $booking->schedule_id,
             'driver_id'         => $booking->schedule?->driver_id,
@@ -212,5 +217,9 @@ class GuestTripStatusService
             'comment'           => $comment,
             'contact_phone'     => AuthIdentifier::normalizePhone((string) ($phone ?: $booking->contact_phone)),
         ]);
+
+        $this->browserGuard->clearActiveBookingForBooking($booking->fresh());
+
+        return $review;
     }
 }

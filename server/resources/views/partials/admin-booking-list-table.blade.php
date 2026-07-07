@@ -113,14 +113,14 @@ $showDriverColumn = $bookingList !== 'active';
                                 @endif
                             </div>
                         @endif
-                        @if($activeDriver = $booking->activeDriverProfile())
+                        @if($activeDriver = $booking->adminTripDriverProfile())
                             @php
                                 $catalogId = (int) ($booking->catalogChosenDriverProfile()?->user_id ?? 0);
                                 $activeId = (int) $activeDriver->user_id;
                             @endphp
                             @if($catalogId <= 0 || $catalogId !== $activeId)
                                 <div class="cell-muted small">
-                                    TX đang nhận:
+                                    {{ ($bookingList ?? '') === 'cancelled' ? 'TX đã nhận:' : 'TX đang nhận:' }}
                                     <strong>{{ $activeDriver->user->name ?? '—' }}</strong>
                                     @if($activeDriver->driver_code)
                                         <span class="driver-meta-code">{{ $activeDriver->driver_code }}</span>

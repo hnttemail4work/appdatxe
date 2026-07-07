@@ -12,6 +12,7 @@ class TripListingService
 {
     public function __construct(
         private readonly DriverCatalogService $driverCatalog,
+        private readonly DriverAvailabilityService $driverAvailability,
     ) {
     }
 
@@ -30,6 +31,10 @@ class TripListingService
             ->orderBy('id')
             ->get();
 
+        // TODO (Update Booking Button Logic): Đọc catalog không gọi enforceWebPresenceIdleFor — tránh tự tắt TX khi khách mở trang.
+        $this->driverAvailability->syncCatalogDriverStates($drivers);
+        $drivers = $drivers->map(fn (DriverProfile $profile) => $profile->fresh(['user']))->values();
+
         return $drivers
             ->each(fn (DriverProfile $profile) => $this->driverCatalog->syncCatalogForDriver($profile))
             ->filter(fn (DriverProfile $profile) => $this->activeTemplateForDriver($profile) !== null)
@@ -39,21 +44,22 @@ class TripListingService
 
     private function bookingActionSortKey(DriverProfile $profile): string
     {
-        $status = $profile->effectiveAvailabilityStatus();
-
-        return ($status === 'available' ? '0' : '1') . '-' . ($profile->driver_code ?? $profile->id);
+        return ($this->driverAvailability->isBookableNow($profile) ? '0' : '1')
+            . '-' . ($profile->driver_code ?? $profile->id);
     }
 
     public function bookingActionLabel(DriverProfile $profile): string
     {
-        return $profile->effectiveAvailabilityStatus() === 'available'
+        // TODO (Update Booking Button Logic): Chỉ "Đặt ngay" khi TX online và có location hợp lệ.
+        return $this->driverAvailability->isBookableNow($profile)
             ? 'Đặt ngay'
             : 'Đặt sau';
     }
 
     public function bookingActionTone(DriverProfile $profile): string
     {
-        return $profile->effectiveAvailabilityStatus() === 'available' ? 'now' : 'later';
+        // TODO (Update Booking Button Logic): Tone nút bám cùng rule online + location với nhãn đặt xe.
+        return $this->driverAvailability->isBookableNow($profile) ? 'now' : 'later';
     }
 
     public function activeTemplateForDriver(DriverProfile $profile): ?ScheduleTemplate
@@ -124,6 +130,11 @@ class TripListingService
         $vehiclePhoto = $profile->firstVehiclePhotoUrl() ?: VehicleDisplay::photoFromVehicle($vehicle);
         $typeLabel = VehicleDisplay::typeLabel($profile->vehicle_type ?? $vehicle?->type);
         $capacityLabel = $capacity > 0 ? VehicleCapacityOptions::label($capacity) : '—';
+        // TODO (Update Booking Button Logic): Dùng chung rule catalog — online + location shared (GPS hoặc heartbeat app).
+        $catalogState = $this->driverAvailability->catalogBookingButtonState($profile);
+        $driverIsOnline = $catalogState['is_online'];
+        $driverHasLocation = $catalogState['has_location'];
+        $bookableNow = $catalogState['book_now'];
 
         return [
             'driver_profile_id'           => $profile->id,
@@ -143,15 +154,23 @@ class TripListingService
             'driver_code'                 => $profile->driver_code,
             'driver_photo_url'            => $profile->photoUrl('photo_portrait'),
             'driver_initial'              => mb_substr($driverName, 0, 1),
-            'driver_availability'         => $profile->effectiveAvailabilityStatus(),
-            'driver_availability_label'   => $profile->availabilityLabel(),
-            'driver_availability_tone'    => match ($profile->effectiveAvailabilityStatus()) {
-                'available' => 'success',
-                'on_trip'   => 'warning',
-                default     => 'neutral',
+            // TODO (Update Booking Button Logic): Expose trạng thái online cho frontend render nút.
+            'driver_is_online'            => $driverIsOnline,
+            // TODO (Update Booking Button Logic): Expose trạng thái location shared cho frontend render nút.
+            'driver_has_location'         => $driverHasLocation,
+            'driver_availability'         => $bookableNow
+                ? 'available'
+                : $profile->effectiveAvailabilityStatus(),
+            'driver_availability_label'   => $bookableNow
+                ? 'Sẵn sàng'
+                : $profile->availabilityLabel(),
+            'driver_availability_tone'    => match (true) {
+                $bookableNow => 'success',
+                $profile->effectiveAvailabilityStatus() === 'on_trip' => 'warning',
+                default => 'neutral',
             },
-            'booking_action_label'        => $this->bookingActionLabel($profile),
-            'booking_action_tone'         => $this->bookingActionTone($profile),
+            'booking_action_label'        => $bookableNow ? 'Đặt ngay' : 'Đặt sau',
+            'booking_action_tone'         => $bookableNow ? 'now' : 'later',
         ];
     }
 }

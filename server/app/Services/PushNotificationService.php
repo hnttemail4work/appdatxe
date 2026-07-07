@@ -84,6 +84,31 @@ class PushNotificationService
         $this->notifyDriverTripRequest($request, 'driver:trip:' . $request->id . ':new');
     }
 
+    // TODO (Fix Stuck Offer UI): Báo app TX thu hồi offer đã hết hạn/hủy để ẩn UI ngay, không chờ poll reload.
+    public function onDriverTripRequestExpired(DriverTripRequest $request): void
+    {
+        $request->loadMissing('schedule.route');
+        $schedule = $request->schedule;
+        $routeLabel = trim(($schedule?->route?->departure ?? '') . ' → ' . ($schedule?->route?->destination ?? ''));
+
+        // TODO (Fix Stuck Offer UI): Dùng event đã bật sẵn cho tài xế và kèm payload client_event để tab đang mở tự gỡ card.
+        $this->sendToDriver(
+            (int) $request->driver_id,
+            'driver.trip_cancelled',
+            'Cuốc chờ nhận đã thu hồi',
+            $routeLabel !== '→'
+                ? 'Yêu cầu nhận cuốc đã hết hạn: ' . $routeLabel
+                : 'Yêu cầu nhận cuốc đã hết hạn.',
+            '/driver/dashboard',
+            'driver:trip:' . $request->id . ':expired:' . ($request->responded_at?->timestamp ?? now()->timestamp),
+            [
+                'client_event'     => 'driver_trip_request_expired',
+                'driver_request_id' => (int) $request->id,
+                'request_status'   => (string) $request->status,
+            ],
+        );
+    }
+
     public function nudgeDriverTripRequest(DriverTripRequest $request): bool
     {
         if ($request->status !== 'pending') {
@@ -262,6 +287,12 @@ class PushNotificationService
             $routeLabel !== '→' ? $routeLabel : 'Có chuyến mới cần xác nhận.',
             '/driver/dashboard',
             $dedupKey,
+            [
+                // TODO (Fix Stuck Offer UI): Kèm request id để tab đang mở có thể đồng bộ card đang hiển thị.
+                'client_event'      => 'driver_trip_request_created',
+                'driver_request_id' => (int) $request->id,
+                'request_status'    => (string) $request->status,
+            ],
         );
 
         return true;
@@ -413,13 +444,14 @@ class PushNotificationService
         string $body,
         string $url,
         string $dedupKey,
+        array $extraData = [],
     ): void {
         $subscriptions = PushSubscription::query()
             ->where('audience', PushAudience::DRIVER)
             ->where('user_id', $driverUserId)
             ->get();
 
-        $this->dispatch($subscriptions, $eventKey, $title, $body, $url, $dedupKey);
+        $this->dispatch($subscriptions, $eventKey, $title, $body, $url, $dedupKey, $extraData);
     }
 
     /** @param \Illuminate\Support\Collection<int, PushSubscription> $subscriptions */
@@ -430,6 +462,7 @@ class PushNotificationService
         string $body,
         string $url,
         string $dedupKey,
+        array $extraData = [],
     ): void {
         if (! PushNotificationSettings::isEventEnabled($eventKey)) {
             return;
@@ -463,6 +496,8 @@ class PushNotificationService
                 'url'   => url($url),
                 'tag'   => $dedupKey,
                 'icon'  => asset('favicon.svg'),
+                // TODO (Fix Stuck Offer UI): Kèm payload realtime để service worker đẩy message trực tiếp vào tab đang mở.
+                'data'  => $extraData,
             ], JSON_UNESCAPED_UNICODE);
 
             foreach ($subscriptions as $row) {

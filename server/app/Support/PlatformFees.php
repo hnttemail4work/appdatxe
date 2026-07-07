@@ -52,6 +52,7 @@ class PlatformFees
             : self::bookingQrDiscountPercent();
     }
 
+    /** @deprecated Không còn dùng — giá khứ hồi qua phụ thu thời điểm về. */
     public static function roundTripDiscountPercent(): float
     {
         $setting = PlatformSetting::getValue('round_trip_discount_percentage', ['value' => 15]);
@@ -118,6 +119,7 @@ class PlatformFees
         return round(1 + self::departurePlanSurchargePercent($plan) / 100, 4);
     }
 
+    /** @deprecated Không còn dùng — giá khứ hồi qua phụ thu thời điểm về. */
     public static function roundTripMultiplier(): float
     {
         $discount = self::roundTripDiscountPercent();

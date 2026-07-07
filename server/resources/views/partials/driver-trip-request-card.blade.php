@@ -3,15 +3,14 @@
 /** @var \App\Models\Schedule $schedule */
 /** @var \Illuminate\Support\Collection<int, \App\Models\Booking> $passengers */
 
-use App\Support\DriverWaitProgress;
+use App\Support\MapNavigation;
 
 $schedule = $schedule ?? $tripRequest->schedule;
 $passengers = $passengers ?? $schedule->driverRelevantBookings();
-$waitProgress = DriverWaitProgress::forTripRequest($tripRequest);
 $tripTotal = (float) $passengers->sum(fn (\App\Models\Booking $b) => (float) $b->total_price);
 $expiresLabel = $tripRequest->acceptTimeRemainingLabel();
 $primaryBooking = $passengers->first();
-$pickupAt = $primaryBooking?->tripStartAt();
+$mapNav = $primaryBooking ? MapNavigation::driverPickupTarget($primaryBooking) : null;
 @endphp
 
 <article class="driver-request-card driver-action-card driver-trip-request-card driver-request-card--incoming"
@@ -22,7 +21,7 @@ $pickupAt = $primaryBooking?->tripStartAt();
     <header class="driver-request-card__header">
         <div class="driver-request-card__header-copy">
             <div class="driver-request-card__eyebrow-row">
-                <span class="driver-request-card__eyebrow">Cuốc chờ nhận</span>
+                <span class="driver-request-card__eyebrow">Cuốc chờ xác nhận</span>
                 @if($schedule->shortTripCode())
                     <span class="driver-request-card__code">Mã {{ $schedule->shortTripCode() }}</span>
                 @endif
@@ -53,38 +52,53 @@ $pickupAt = $primaryBooking?->tripStartAt();
 
     @if($primaryBooking)
         <div class="driver-request-card__pickup">
-            <span class="driver-request-card__pickup-label">Đón</span>
-            <span class="driver-request-card__pickup-value">
-                {{ $primaryBooking->pickupTimeLabel() ? $primaryBooking->pickupTimeLabel() . ' · ' : '' }}{{ $primaryBooking->driverPickupDetailLabel() }}
-            </span>
+            @if($primaryBooking->pickupTimeLabel() || $primaryBooking->driverPickupDateLabel())
+                <div class="driver-request-card__pickup-schedule">
+                    @if($primaryBooking->pickupTimeLabel())
+                        <span><span class="driver-request-card__pickup-label">Giờ đón</span> {{ $primaryBooking->pickupTimeLabel() }}</span>
+                    @endif
+                    @if($primaryBooking->driverPickupDateLabel())
+                        <span><span class="driver-request-card__pickup-label">Ngày đi</span> {{ $primaryBooking->driverPickupDateLabel() }}</span>
+                    @endif
+                </div>
+            @endif
+            <div class="driver-request-card__pickup-address">
+                <span class="driver-request-card__pickup-label">Điểm đón</span>
+                <span class="driver-request-card__pickup-value">{{ $primaryBooking->driverPickupDetailLabel() }}</span>
+            </div>
+            @if($primaryBooking->passenger_name)
+                <div class="driver-request-card__pickup-address">
+                    <span class="driver-request-card__pickup-label">Khách</span>
+                    <span class="driver-request-card__pickup-value">{{ $primaryBooking->passenger_name }}</span>
+                </div>
+            @endif
+            <div class="driver-request-card__pickup-address">
+                <span class="driver-request-card__pickup-label">Điểm trả</span>
+                <span class="driver-request-card__pickup-value">{{ $primaryBooking->driverDropoffDetailLabel() }}</span>
+            </div>
+            @if($primaryBooking->notes)
+                <div class="driver-request-card__pickup-address">
+                    <span class="driver-request-card__pickup-label">Ghi chú</span>
+                    <span class="driver-request-card__pickup-value">{{ $primaryBooking->notes }}</span>
+                </div>
+            @endif
         </div>
     @endif
 
-    <details class="driver-request-card__details">
-        <summary class="driver-request-card__details-toggle">Chi tiết khách &amp; lộ trình</summary>
-        <div class="driver-request-card__details-body">
-            @include('partials.driver-schedule-passengers', [
-                'schedule' => $schedule,
-                'bookings' => $passengers,
-                'showTripTotal' => false,
-            ])
+    @if($mapNav)
+        <div class="driver-request-card__map-nav">
+            @include('partials.driver-map-nav-button', ['mapNav' => $mapNav, 'compact' => true])
         </div>
-    </details>
-
-    @include('partials.wait-progress', [
-        'waitProgress' => $waitProgress,
-        'variant' => 'driver',
-        'layout' => 'embedded',
-    ])
+    @endif
 
     <div class="driver-card-actions driver-card-actions--job driver-request-card__actions">
         <form method="POST" action="{{ route('driver.tripRequests.accept', $tripRequest) }}" class="driver-accept-form driver-request-card__accept-form"
-              data-confirm="Xác nhận nhận cuốc này?"
-              data-confirm-title="Nhận cuốc"
-              data-confirm-ok="Nhận cuốc"
+              data-confirm="Xác nhận nhận chuyến này?"
+              data-confirm-title="Xác nhận"
+              data-confirm-ok="Xác nhận"
               data-confirm-variant="success">
             @csrf
-            <button type="submit" class="btn btn-success driver-btn-accept driver-request-card__accept-btn">Nhận cuốc</button>
+            <button type="submit" class="btn btn-success driver-btn-accept driver-request-card__accept-btn">Xác nhận</button>
         </form>
         <form method="POST" action="{{ route('driver.tripRequests.reject', $tripRequest) }}" class="driver-reject-form"
               data-confirm="Từ chối cuốc — hệ thống sẽ gán cho tài xế khác?"

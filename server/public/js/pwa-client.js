@@ -139,13 +139,16 @@
             message = 'Nhấn biểu tượng cài đặt (⊕ hoặc máy tính) trên thanh địa chỉ Chrome/Edge → chọn Cài đặt ứng dụng.';
         }
 
-        if (window.AppDialog && window.AppDialog.alert) {
+        if (window.AppFlash && window.AppFlash.show) {
+            window.AppFlash.show(message, {
+                variant: 'info',
+                title: 'Ghim ' + (cfg.audienceLabel || 'ứng dụng'),
+            });
+        } else if (window.AppDialog && window.AppDialog.alert) {
             window.AppDialog.alert(message, {
                 variant: 'info',
                 title: 'Ghim ' + (cfg.audienceLabel || 'ứng dụng'),
             });
-        } else {
-            window.alert(message);
         }
     }
 

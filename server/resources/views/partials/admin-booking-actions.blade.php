@@ -8,12 +8,18 @@
     $isActiveTrip = ! in_array($booking->booking_status, ['cancelled', 'rejected'], true)
         && $booking->trip_status !== 'completed';
     $canModify = $isActiveTrip && $booking->adminCanModifyDriverOrCancel();
-    $canReassign = $canModify
+
+    // TODO (Fix Flow): Chỉ hiện gán thủ công khi có cảnh báo — ẩn khi auto-assign bình thường.
+    $showManualAssign = $canModify && $booking->adminShouldShowManualAssign();
+
+    $canReassign = $showManualAssign
         && $booking->driverAcceptanceState() === 'accepted';
-    $canAssign = $canModify && (
-        in_array($booking->driverAcceptanceState(), ['none', 'pending'], true)
-        || $booking->needs_operator_help_at
-    );
+
+    $canAssign = $showManualAssign
+        && (
+            in_array($booking->driverAcceptanceState(), ['none', 'pending'], true)
+            || $booking->adminReleasedAfterDriverEngagement()
+        );
     $canCancelAfterTimeout = $canModify && $booking->adminCanCancelAfterInviteTimeout();
     $chosenProfile = $booking->catalogChosenDriverProfile();
     $chosenCode = $chosenProfile?->driver_code ? strtoupper(trim($chosenProfile->driver_code)) : '';
@@ -27,9 +33,27 @@
         <div class="admin-booking-wait-hint mb-2">
             Chờ tài xế · còn ~{{ $waitMinutes }} phút
         </div>
+    @elseif($booking->adminStillSearchingReplacementDriver())
+        <div class="admin-booking-wait-hint mb-2">
+            Tài xế đã hủy cuốc — hệ thống đang tìm tài xế khác
+        </div>
+    @elseif($booking->adminReleasedAfterDriverEngagement())
+        <div class="admin-booking-wait-hint admin-booking-wait-hint--expired mb-2">
+            Tài xế đã hủy cuốc — gán tài xế khác hoặc hủy chuyến
+        </div>
     @elseif($canCancelAfterTimeout)
         <div class="admin-booking-wait-hint admin-booking-wait-hint--expired mb-2">
-            TX không nhận trong 15 phút — gán lại hoặc hủy chuyến
+            @if($booking->operator_help_reason === 'driver_movement_timeout')
+                TX chưa xác nhận đi đón — gán lại hoặc hủy chuyến
+            @elseif($booking->operator_help_reason === 'driver_search_timeout')
+                Chưa có tài xế nhận — gán tài xế hoặc hủy chuyến
+            @elseif($booking->operator_help_reason === 'driver_cancelled_trip')
+                Tài xế đã hủy cuốc — gán tài xế khác hoặc hủy chuyến
+            @elseif($booking->needs_operator_help_at)
+                Cần gán lại tài xế hoặc hủy chuyến
+            @else
+                Đã tới khung giờ đón − 15 phút — có thể hủy chuyến
+            @endif
         </div>
     @endif
 

@@ -9,10 +9,12 @@ use App\Support\ProvinceResolver;
 use App\Models\DriverTripRequest;
 use App\Models\Schedule;
 use App\Support\DriverFieldRules;
+use App\Support\DriverDefaultPassword;
 use App\Services\BookingWorkflowService;
 use App\Services\DriverAvailabilityService;
 use App\Services\DriverCancelRateService;
 use App\Services\DriverLatePickupService;
+use App\Services\DriverMovementConfirmService;
 use App\Services\DriverMissedTripService;
 use App\Services\DriverPhotoService;
 use App\Services\DriverProfileSyncService;
@@ -24,6 +26,7 @@ use App\Services\ScheduleLifecycleService;
 use App\Support\PageList;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use InvalidArgumentException;
 
@@ -40,6 +43,7 @@ class DriverController extends Controller
         private readonly DriverCancelRateService $cancelRates,
         private readonly DriverWalletService $driverWallet,
         private readonly DriverLatePickupService $latePickup,
+        private readonly DriverMovementConfirmService $movementConfirm,
         private readonly DriverProximityService $proximity,
         private readonly GuestBookingDriverStatusService $guestDriverStatus,
     ) {
@@ -58,12 +62,12 @@ class DriverController extends Controller
         $walletNotice = null;
 
         if ($profile) {
+            if (in_array($profile->availability_status ?? 'off_duty', ['available', 'on_trip'], true)) {
+                $this->driverAvailability->touchWebPresence((int) $profile->user_id);
+            }
             $this->driverAvailability->enforceWebPresenceIdleFor($profile);
             $this->driverAvailability->syncAfterTripCompleted((int) $profile->user_id);
             $profile = $profile->fresh(['operator']);
-            if (($profile->availability_status ?? 'off_duty') === 'available') {
-                $this->driverAvailability->touchWebPresence((int) $profile->user_id);
-            }
             $driverWallet = $this->driverWallet->reconcileWallet($profile);
             $walletNotice = $this->driverWallet->walletNoticeForDriver($profile);
         }
@@ -111,10 +115,23 @@ class DriverController extends Controller
         $tripHistory = PageList::paginateCollection($tripHistoryAll, $request, 'history_page');
 
         $tripActionCount = $this->driverRequests->tripActionCountForDriver($user->id);
-        $tripFlags = $this->driverAvailability->driverDashboardTripFlags($user->id);
-        $driverTripActive = $tripFlags['active'];
-        $driverTripUpcoming = $tripFlags['upcoming'];
+        // TODO (Fix Driver Toggle): Khóa switch theo đúng danh sách chuyến đang hiện trên dashboard, tránh cờ stale.
+        $driverTripActive = $tripSchedulesAll->contains(
+            fn (Schedule $schedule): bool => $schedule->driverWorkflowPhase() === 'active',
+        );
+        // TODO (Fix Driver Toggle): Chỉ đánh dấu upcoming khi thực sự còn chuyến upcoming đang visible.
+        $driverTripUpcoming = $tripSchedulesAll->contains(
+            fn (Schedule $schedule): bool => $schedule->driverWorkflowPhase() === 'upcoming',
+        );
         $driverOnTrip = $driverTripActive;
+
+        $driverPickupProximityLine = null;
+        foreach ($tripSchedulesAll as $schedule) {
+            if ($schedule->resolvedDriverStage() === Schedule::DRIVER_STAGE_ASSIGNED) {
+                $driverPickupProximityLine = $this->latePickup->driverPickupProximityLine($schedule);
+                break;
+            }
+        }
 
         $pendingTripRequestGroups = $this->driverRequests->visiblePendingGroupsForDriver($user->id);
 
@@ -126,6 +143,7 @@ class DriverController extends Controller
             ? $this->driverWallet->walletActivityHistory($driverWallet, depositsOnly: true)
             : collect();
         $walletHistory = PageList::paginateCollection($walletHistoryAll, $request, 'history_page');
+        $mustChangePassword = (bool) $user->must_change_password;
 
         return view('driver.dashboard', compact(
             'user',
@@ -143,7 +161,78 @@ class DriverController extends Controller
             'driverTripUpcoming',
             'tripHistory',
             'pendingTripRequestGroups',
+            'driverPickupProximityLine',
+            'mustChangePassword',
         ));
+    }
+
+    public function dashboardPoll(Request $request)
+    {
+        $this->scheduleLifecycle->sync();
+        $this->driverRequests->expireStale();
+
+        $user = Auth::user();
+        $profile = DriverProfile::query()->where('user_id', $user->id)->first();
+
+        if ($profile) {
+            if (in_array($profile->availability_status ?? 'off_duty', ['available', 'on_trip'], true)) {
+                $this->driverAvailability->touchWebPresence((int) $profile->user_id);
+            }
+            // TODO (Fix Driver Toggle): Poll chỉ giữ heartbeat — không tự tắt Hoạt động giữa lúc TX đang thao tác switch.
+            $this->driverAvailability->syncAfterTripCompleted((int) $profile->user_id);
+            $profile = $profile->fresh();
+        }
+
+        $tripActionCount = $this->driverRequests->tripActionCountForDriver($user->id);
+        $pendingTripRequestCount = $profile
+            ? $this->driverRequests->visiblePendingGroupsForDriver($user->id)->count()
+            : 0;
+
+        $driverPickupProximityLine = null;
+        $driverSchedules = collect();
+        if ($profile) {
+            $driverSchedules = Schedule::query()
+                ->forDriverActiveTrips($user->id)
+                ->get()
+                ->filter(fn (Schedule $schedule): bool => $schedule->driverRelevantBookings()->isNotEmpty()
+                    && $schedule->driverWorkflowPhase() !== 'settled'
+                    && $schedule->isVisibleOnDriverDashboard())
+                ->values();
+
+            foreach ($driverSchedules as $schedule) {
+                if ($schedule->resolvedDriverStage() === Schedule::DRIVER_STAGE_ASSIGNED) {
+                    $driverPickupProximityLine = $this->latePickup->driverPickupProximityLine($schedule);
+                    break;
+                }
+            }
+        }
+
+        // TODO (Fix Driver Toggle): Poll dùng cùng nguồn trips visible như dashboard để không khóa switch oan.
+        $driverTripActive = $driverSchedules->contains(
+            fn (Schedule $schedule): bool => $schedule->driverWorkflowPhase() === 'active',
+        );
+        $driverTripUpcoming = $driverSchedules->contains(
+            fn (Schedule $schedule): bool => $schedule->driverWorkflowPhase() === 'upcoming',
+        );
+
+        $fingerprint = sha1(implode('|', [
+            $tripActionCount,
+            $pendingTripRequestCount,
+            $driverTripActive ? '1' : '0',
+            $driverTripUpcoming ? '1' : '0',
+            $profile?->availability_status ?? 'off_duty',
+            (string) ($driverPickupProximityLine ?? ''),
+        ]));
+
+        return response()->json([
+            'trip_action_count'       => $tripActionCount,
+            'pending_trip_requests'   => $pendingTripRequestCount,
+            'driver_trip_active'      => $driverTripActive,
+            'driver_trip_upcoming'    => $driverTripUpcoming,
+            'availability_status'     => $profile?->availability_status ?? 'off_duty',
+            'pickup_proximity_line'   => $driverPickupProximityLine,
+            'fingerprint'             => $fingerprint,
+        ]);
     }
 
     public function advanceSchedule(Request $request, Schedule $schedule)
@@ -170,6 +259,30 @@ class DriverController extends Controller
         }
 
         return redirect()->route('driver.dashboard', ['tab' => 'trips'])->with('success', $message);
+    }
+
+    public function confirmMovement(Request $request, Schedule $schedule)
+    {
+        try {
+            $this->movementConfirm->confirmMovement($schedule, (int) Auth::id());
+        } catch (InvalidArgumentException $e) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+
+            return back()->withErrors(['booking' => $e->getMessage()]);
+        }
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok'       => true,
+                'redirect' => route('driver.dashboard', ['tab' => 'trips']),
+                'message'  => 'Đã xác nhận — di chuyển đến điểm đón khi sẵn sàng.',
+            ]);
+        }
+
+        return redirect()->route('driver.dashboard', ['tab' => 'trips'])
+            ->with('success', 'Đã xác nhận — di chuyển đến điểm đón khi sẵn sàng.');
     }
 
     public function acceptTripRequest(Request $request, DriverTripRequest $driverTripRequest)
@@ -263,7 +376,8 @@ class DriverController extends Controller
         if (! empty($proximityPayload['distance_label'])) {
             $schedule = $this->driverAvailability->activeSchedulesForDriver((int) $profile->user_id)->first();
             $booking = $schedule?->driverRelevantBookings()->first();
-            if ($booking && ($schedule->resolvedDriverStage() ?? '') === Schedule::DRIVER_STAGE_ASSIGNED) {
+            if ($booking && ($schedule->resolvedDriverStage() ?? '') === Schedule::DRIVER_STAGE_ASSIGNED
+                && $schedule->driverHasConfirmedMovement()) {
                 try {
                     app(\App\Services\PushNotificationService::class)->onDriverEnRoute(
                         $booking,
@@ -274,6 +388,8 @@ class DriverController extends Controller
             }
         }
 
+        $activeSchedule = $this->driverAvailability->activeSchedulesForDriver((int) $profile->user_id)->first();
+
         return response()->json([
             'ok'                    => true,
             'address'               => $address !== '' ? $address : null,
@@ -283,6 +399,9 @@ class DriverController extends Controller
             'pickup_distance_label' => $proximityPayload['distance_label'] ?? ($pickupDistances[0]['distance_label'] ?? null),
             'pickup_eta_label'      => $proximityPayload['eta_label'] ?? null,
             'pickup_proximity_hint' => $proximityPayload['proximity_hint'] ?? null,
+            'pickup_proximity_line' => $activeSchedule
+                ? $this->latePickup->driverPickupProximityLine($activeSchedule)
+                : null,
         ]);
     }
 
@@ -302,6 +421,32 @@ class DriverController extends Controller
         return $this->guestDriverStatus->build($booking) ?? [];
     }
 
+    public function updatePassword(Request $request)
+    {
+        $user = Auth::user();
+
+        $validated = $request->validate([
+            'current_password'      => ['required', 'string'],
+            'password'              => ['required', 'string', 'min:6', 'confirmed'],
+            'password_confirmation' => ['required', 'string', 'min:6'],
+        ]);
+
+        if (! Hash::check($validated['current_password'], $user->password)) {
+            return back()
+                ->withErrors(['current_password' => 'Mật khẩu hiện tại không đúng.'])
+                ->withInput($request->except('current_password', 'password', 'password_confirmation'));
+        }
+
+        $user->update([
+            'password'             => $validated['password'],
+            'must_change_password' => false,
+        ]);
+
+        return redirect()
+            ->route('driver.dashboard', ['tab' => 'account'])
+            ->with('success', 'Đã đổi mật khẩu thành công.');
+    }
+
     public function updateAvailability(Request $request)
     {
         $validated = $request->validate([
@@ -309,17 +454,6 @@ class DriverController extends Controller
         ]);
 
         $profile = DriverProfile::query()->where('user_id', Auth::id())->firstOrFail();
-
-        if ($validated['availability_status'] === 'off_duty'
-            && $this->driverAvailability->activeTripCount((int) $profile->user_id) > 0) {
-            $message = 'Đang có chuyến — hoàn thành chuyến trước khi tạm nghỉ.';
-
-            if ($request->expectsJson()) {
-                return response()->json(['message' => $message], 422);
-            }
-
-            return back()->withErrors(['availability' => $message]);
-        }
 
         if ($validated['availability_status'] === 'off_duty') {
             $this->driverAvailability->markOffDuty($profile);
@@ -624,10 +758,11 @@ class DriverController extends Controller
         }
 
         $this->profileSync->approve($driverProfile, Auth::id());
+        $driverProfile->loadMissing('user');
 
         return redirect()
             ->route('admin.drivers')
-            ->with('success', 'Đã duyệt tài xế — trạng thái Sẵn sàng.');
+            ->with('success', 'Đã duyệt tài xế. Tài xế đăng nhập bằng SĐT và mật khẩu đã đăng ký.');
     }
 
     public function reject(Request $request, DriverProfile $driverProfile)
@@ -688,6 +823,34 @@ class DriverController extends Controller
         $this->cancelRates->reset($driverProfile);
 
         return back()->with('success', 'Đã đặt lại tỷ lệ hủy cuốc về 0%.');
+    }
+
+    public function resetPassword(DriverProfile $driverProfile)
+    {
+        if (! $this->canManageDriver($driverProfile)) {
+            abort(403);
+        }
+
+        if ($driverProfile->isPendingApproval() || $driverProfile->isRejected()) {
+            return back()->withErrors(['driver' => 'Chỉ đặt lại mật khẩu cho tài xế đã được duyệt.']);
+        }
+
+        $driverProfile->loadMissing('user');
+        $user = $driverProfile->user;
+
+        if ($user === null) {
+            return back()->withErrors(['driver' => 'Không tìm thấy tài khoản đăng nhập của tài xế.']);
+        }
+
+        $plain = DriverDefaultPassword::resetToRandom($user);
+
+        return back()
+            ->with('success', 'Đã đặt lại mật khẩu cho tài xế.')
+            ->with('driver_password_reset', [
+                'password'    => $plain,
+                'driver_name' => $user->name,
+                'phone'       => $user->phone,
+            ]);
     }
 
     private function canManageDriver(DriverProfile $driverProfile): bool

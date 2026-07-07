@@ -56,6 +56,7 @@ Route::post('chuyen/cancel', [GuestBookingController::class, 'cancelTrip'])->nam
 Route::redirect('dat-chuyen', '/chuyen');
 Route::get('gioi-thieu', [GuestBookingController::class, 'about'])->name('about');
 Route::get('booking/check-duplicate', [GuestBookingController::class, 'checkDuplicateBooking'])->name('booking.checkDuplicate');
+Route::get('booking/driver-offers', [GuestBookingController::class, 'driverOffers'])->name('booking.driverOffers');
 Route::get('quote-price', [GuestBookingController::class, 'quotePrice'])->name('booking.quotePrice');
 Route::post('bookings', [GuestBookingController::class, 'store'])->name('booking.store');
 Route::get('bookings', fn () => redirect()->route('home'));
@@ -70,12 +71,15 @@ Route::post('dat-xe/bookings', [GuestBookingController::class, 'store']);
 // ── Driver ────────────────────────────────────────────────────────────────
 Route::middleware(['auth', 'role:driver'])->group(function () {
     Route::get('driver/dashboard', [DriverController::class, 'myDashboard'])->name('driver.dashboard');
+    Route::get('driver/dashboard/poll', [DriverController::class, 'dashboardPoll'])->name('driver.dashboard.poll');
     Route::post('driver/location', [DriverController::class, 'updateLocation'])->name('driver.location.update');
     Route::post('driver/trip-requests/{driverTripRequest}/accept', [DriverController::class, 'acceptTripRequest'])->name('driver.tripRequests.accept');
     Route::post('driver/trip-requests/{driverTripRequest}/reject', [DriverController::class, 'rejectTripRequest'])->name('driver.tripRequests.reject');
     Route::patch('driver/availability', [DriverController::class, 'updateAvailability'])->name('driver.availability.update');
+    Route::patch('driver/password', [DriverController::class, 'updatePassword'])->name('driver.password.update');
     Route::post('driver/bookings/{booking}/complete', [DriverController::class, 'completeTrip'])->name('driver.bookings.complete');
     Route::post('driver/schedules/{schedule}/advance', [DriverController::class, 'advanceSchedule'])->name('driver.schedules.advance');
+    Route::post('driver/schedules/{schedule}/confirm-movement', [DriverController::class, 'confirmMovement'])->name('driver.schedules.confirmMovement');
     Route::post('driver/schedules/{schedule}/complete', [DriverController::class, 'completeSchedule'])->name('driver.schedules.complete');
     Route::post('driver/schedules/{schedule}/cancel', [DriverController::class, 'cancelSchedule'])->name('driver.schedules.cancel');
     Route::post('driver/schedules/{schedule}/late-pickup-continue', [DriverController::class, 'latePickupContinue'])->name('driver.schedules.latePickupContinue');
@@ -118,6 +122,7 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::delete('admin/drivers/{driverProfile}/rejection-note', [DriverController::class, 'clearRejectionNote'])->name('admin.drivers.rejection-note.destroy');
     Route::post('admin/drivers/{driverProfile}/unlock', [DriverController::class, 'unlock'])->name('admin.drivers.unlock');
     Route::post('admin/drivers/{driverProfile}/reset-cancel-rate', [DriverController::class, 'resetCancelRate'])->name('admin.drivers.resetCancelRate');
+    Route::post('admin/drivers/{driverProfile}/reset-password', [DriverController::class, 'resetPassword'])->name('admin.drivers.resetPassword');
     Route::post('admin/drivers/{driverProfile}/photos', [DriverController::class, 'uploadPhotos'])->name('admin.drivers.photos');
     Route::delete('admin/drivers/{driverProfile}',  [DriverController::class, 'destroy'])->name('admin.drivers.destroy');
 

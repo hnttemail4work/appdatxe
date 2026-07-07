@@ -9,7 +9,7 @@ use App\Support\PlatformFees;
 
 class ReferralCodeService
 {
-    public function createReferrer(string $name, string $phone, int $adminUserId): ReferralCode
+    public function createReferrer(string $name, string $phone, ?int $adminUserId): ReferralCode
     {
         return ReferralCode::query()->create([
             'type'                      => ReferralCode::TYPE_REFERRER,
@@ -18,7 +18,7 @@ class ReferralCodeService
             'status'                    => ReferralCode::STATUS_ACTIVE,
             'commission_percent'        => PlatformFees::referralCommissionFirstPercent(),
             'customer_discount_percent' => 0,
-            'created_by'                => $adminUserId,
+            'created_by'                => $adminUserId > 0 ? $adminUserId : null,
             'activated_at'              => now(),
         ]);
     }

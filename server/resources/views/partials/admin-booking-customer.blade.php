@@ -21,9 +21,6 @@ $showTripReview = $showTripReview ?? true;
         <div class="cell-muted small mt-1 text-muted">Chưa có phản hồi khách</div>
     @endif
 @endif
-@if($booking->pickupTimeLabel())
-    <div class="cell-muted small mt-1">🕐 Giờ đón: {{ $booking->pickupTimeLabel() }}</div>
-@endif
 @if($booking->pickup_address || $booking->pickup_detail)
     <div class="cell-muted small mt-1">📍 Địa chỉ đón: {{ $booking->driverPickupDetailLabel() }}</div>
 @endif

@@ -5,6 +5,10 @@ $phase = $schedule->driverWorkflowPhase();
 $showActions = $showActions ?? true;
 $needsAction = $showActions && in_array($phase, ['upcoming', 'active'], true);
 $isRunning = in_array($phase, ['upcoming', 'active'], true);
+$primaryBooking = $bookings->first();
+$mapNav = ($primaryBooking && $isRunning)
+    ? \App\Support\MapNavigation::driverTargetForSchedule($schedule, $primaryBooking)
+    : null;
 @endphp
 
 <article class="driver-trip-card driver-trip-card--compact {{ $needsAction ? 'is-action' : '' }} {{ $isRunning ? 'is-running' : '' }}" data-schedule-id="{{ $schedule->id }}">
@@ -17,6 +21,20 @@ $isRunning = in_array($phase, ['upcoming', 'active'], true);
             @if($schedule->shortTripCode())
                 <div class="meta driver-schedule-trip-code">
                     Mã chuyến: <code class="driver-trip-code">{{ $schedule->shortTripCode() }}</code>
+                </div>
+            @endif
+            @php
+                $pickupTimeLabel = $primaryBooking?->pickupTimeLabel();
+                $pickupDateLabel = $primaryBooking?->driverPickupDateLabel();
+            @endphp
+            @if($pickupTimeLabel || $pickupDateLabel)
+                <div class="meta driver-schedule-pickup-meta">
+                    @if($pickupTimeLabel)
+                        <span>Giờ đón: <strong>{{ $pickupTimeLabel }}</strong></span>
+                    @endif
+                    @if($pickupDateLabel)
+                        <span>Ngày đi: <strong>{{ $pickupDateLabel }}</strong></span>
+                    @endif
                 </div>
             @endif
         </div>
@@ -32,6 +50,12 @@ $isRunning = in_array($phase, ['upcoming', 'active'], true);
             'showTripTotal' => $showTripTotal ?? ($showActions ?? true),
         ])
     </div>
+
+    @if($mapNav)
+        <div class="driver-card-map-nav">
+            @include('partials.driver-map-nav-button', ['mapNav' => $mapNav])
+        </div>
+    @endif
 
     @if($showActions && $phase !== 'settled')
     <div class="driver-card-actions driver-card-actions--compact">

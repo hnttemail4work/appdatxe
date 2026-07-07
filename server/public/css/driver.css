@@ -260,6 +260,7 @@ body:has(.driver-page) {
 }
 
 .driver-activity-toggle {
+    position: relative;
     display: inline-flex;
     align-items: center;
     cursor: pointer;
@@ -273,10 +274,15 @@ body:has(.driver-page) {
 
 .driver-activity-toggle-input {
     position: absolute;
+    inset: 0;
+    z-index: 3;
+    width: 100%;
+    height: 100%;
+    margin: 0;
     opacity: 0;
-    width: 0;
-    height: 0;
-    pointer-events: none;
+    cursor: pointer;
+    /* TODO (Fix Driver Toggle): Cho phép bấm trực tiếp lên switch — tránh kẹt không tắt/bật app. */
+    pointer-events: auto;
 }
 
 .driver-activity-switch {
@@ -466,6 +472,21 @@ body:has(.driver-page) {
 
 .driver-pickup-reminder strong {
     color: #fff;
+}
+
+.driver-pickup-distance {
+    padding: .5rem .75rem;
+    border-radius: .65rem;
+    background: rgba(16, 185, 129, .1);
+    border: 1px solid rgba(16, 185, 129, .22);
+    color: #d1fae5;
+    font-size: .875rem;
+    margin-bottom: 0;
+}
+
+.driver-pickup-distance strong {
+    color: #fff;
+    font-weight: 600;
 }
 
 .driver-hero-title-row {
@@ -761,9 +782,8 @@ body:has(.driver-page) {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: .15rem;
-    min-height: 3rem;
-    padding: .25rem .2rem;
+    min-height: 2.75rem;
+    padding: .35rem .2rem;
     border: none;
     border-radius: .55rem;
     background: transparent;
@@ -789,10 +809,7 @@ body:has(.driver-page) {
 }
 
 .driver-dock-label {
-    font-size: .62rem;
-    font-weight: 700;
-    line-height: 1.1;
-    text-align: center;
+    display: none;
 }
 
 .driver-dock-badge {
@@ -813,6 +830,111 @@ body:has(.driver-page) {
 
 .driver-dock-badge.is-hot {
     background: #ef4444;
+}
+
+/* Phone + Zalo — góc phải dưới (giống trang đặt xe) */
+.driver-page .customer-contact-fab {
+    display: flex;
+    flex-direction: column;
+    gap: .45rem;
+    pointer-events: auto;
+}
+
+.driver-page .customer-contact-fab--fixed {
+    position: fixed;
+    right: .7rem;
+    bottom: calc(5.1rem + env(safe-area-inset-bottom, 0px));
+    z-index: 1035;
+}
+
+.driver-page .customer-contact-fab-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3.35rem;
+    height: 3.35rem;
+    border-radius: 50%;
+    border: 1px solid rgba(212, 175, 55, .42);
+    background: rgba(12, 12, 12, .94);
+    color: #d4af37;
+    text-decoration: none;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
+}
+
+.driver-page .customer-contact-fab-btn:hover,
+.driver-page .customer-contact-fab-btn:focus-visible {
+    color: #fde68a;
+    background: rgba(20, 18, 12, .98);
+    border-color: rgba(212, 175, 55, .68);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, .48);
+    outline: none;
+}
+
+.driver-page .customer-contact-fab-btn--phone svg {
+    width: 1.5rem;
+    height: 1.5rem;
+    stroke: currentColor;
+}
+
+.driver-page .customer-contact-fab-zalo-label {
+    font-size: .88rem;
+    font-weight: 800;
+    letter-spacing: -.02em;
+    line-height: 1;
+    text-transform: lowercase;
+    color: inherit;
+}
+
+@media (min-width: 768px) {
+    .driver-page .customer-contact-fab--fixed {
+        right: 1rem;
+        bottom: 2rem;
+    }
+}
+
+.driver-card-map-nav,
+.driver-request-card__map-nav {
+    padding: 0 .85rem .65rem;
+}
+
+.driver-map-nav-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .45rem;
+    width: 100%;
+    min-height: 2.5rem;
+    padding: .55rem .85rem;
+    border-radius: .65rem;
+    border: 1px solid rgba(59, 130, 246, .45);
+    background: rgba(59, 130, 246, .12);
+    color: #93c5fd;
+    font-size: .84rem;
+    font-weight: 700;
+    line-height: 1.2;
+    text-decoration: none;
+    transition: background .15s ease, border-color .15s ease, color .15s ease, transform .15s ease;
+}
+
+.driver-map-nav-btn:hover,
+.driver-map-nav-btn:focus-visible {
+    color: #dbeafe;
+    background: rgba(59, 130, 246, .2);
+    border-color: rgba(96, 165, 250, .65);
+    transform: translateY(-1px);
+    outline: none;
+}
+
+.driver-map-nav-btn__icon {
+    display: flex;
+    line-height: 0;
+}
+
+.driver-map-nav-btn--compact {
+    min-height: 2.35rem;
+    font-size: .8rem;
 }
 
 .driver-main-panel {
@@ -1356,6 +1478,36 @@ body:has(.driver-page) {
     font-weight: 700;
 }
 
+.driver-pickup-proximity-sheet {
+    padding: .75rem .9rem;
+    border-radius: .85rem;
+    background: rgba(16, 185, 129, .1);
+    border: 1px solid rgba(16, 185, 129, .28);
+}
+
+.driver-pickup-proximity-sheet__text {
+    color: #d1fae5;
+    font-size: .875rem;
+    line-height: 1.45;
+}
+
+.driver-account-card {
+    border: 1px solid rgba(212, 175, 55, .18);
+    border-radius: .85rem;
+    background: linear-gradient(180deg, #1c1c1c 0%, #141414 100%);
+    padding: 1rem .9rem 1.1rem;
+}
+
+.driver-account-hint {
+    color: rgba(245, 245, 245, .62);
+    font-size: .84rem;
+}
+
+.driver-account-form .form-label {
+    color: rgba(245, 245, 245, .78);
+    font-size: .84rem;
+}
+
 .driver-location-test-tools {
     font-size: 0.75rem;
     color: rgba(245, 245, 245, 0.55);
@@ -1451,6 +1603,20 @@ body:has(.driver-page) {
     border-color: rgba(212, 175, 55, .5);
     color: #fff;
     outline: none;
+}
+
+.driver-location-fallback {
+    border: 1px solid rgba(212, 175, 55, .28);
+    border-radius: .85rem;
+    background: linear-gradient(180deg, #1c1c1c 0%, #141414 100%);
+    padding: .85rem .9rem;
+}
+
+.driver-location-fallback__hint {
+    margin: 0;
+    font-size: .8125rem;
+    line-height: 1.45;
+    color: #fde68a;
 }
 
 /* Wallet tab tiles */
@@ -1666,6 +1832,36 @@ body:has(.driver-page) {
 }
 .driver-schedule-trip-code {
     margin-top: .15rem;
+}
+.driver-schedule-pickup-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem .75rem;
+    margin-top: .35rem;
+    font-size: .78rem;
+    color: rgba(255, 255, 255, .72);
+}
+.driver-schedule-pickup-meta strong {
+    color: #f3f4f6;
+    font-weight: 600;
+}
+.driver-info-sep {
+    margin: 0 .2rem;
+    opacity: .45;
+}
+.driver-request-card__pickup-schedule {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem .85rem;
+    margin-bottom: .35rem;
+    font-size: .82rem;
+    font-weight: 600;
+    color: #f3f4f6;
+}
+.driver-request-card__pickup-address {
+    font-size: .8rem;
+    line-height: 1.45;
+    color: rgba(255, 255, 255, .78);
 }
 .driver-notify-btn--active {
     background: #fffbeb;

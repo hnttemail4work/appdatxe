@@ -2,14 +2,17 @@
  * Trang Chuyến — theo dõi chuyến đã đặt và đánh giá sau khi hoàn tất.
  */
 (function () {
-    var POLL_MS = 15000;
     var QR_SMALL = 72;
     var QR_LARGE = 220;
     var selectedSentiment = '';
+    var modalSelectedSentiment = '';
     var currentBooking = null;
     var currentReferralUrl = '';
     var qrLibLoading = false;
     var referralOverlayBound = false;
+    var completionModalBound = false;
+    var completionModal = null;
+    var COMPLETION_SHOWN_PREFIX = 'guest_trip_completion_shown:';
 
     function qs(sel, root) {
         return (root || document).querySelector(sel);
@@ -71,6 +74,27 @@
         }
         var stage = String(booking.driver.stage || 'assigned');
         return stage === 'assigned' || stage === 'at_pickup';
+    }
+
+    /** Khoảng cách — khi TX đã nhận, chưa tới «Đến điểm đón». */
+    function showGuestDriverDistance(booking) {
+        if (!showGuestDriverProximity(booking)) {
+            return false;
+        }
+        return !!(booking.driver_distance_label
+            || (booking.driver && booking.driver.distance_label)
+            || booking.driver_distance_line
+            || (booking.driver && booking.driver.distance_line));
+    }
+
+    /** ETA — chỉ sau khi TX bấm «Xác nhận», chưa «Đến điểm đón». */
+    function showGuestDriverEta(booking) {
+        if (!showGuestDriverLiveProximity(booking)) {
+            return false;
+        }
+        var confirmed = booking.driver_movement_confirmed
+            || (booking.driver && booking.driver.movement_confirmed);
+        return !!confirmed;
     }
 
     /** Khoảng cách / ETA — chỉ khi TX đang đi đón, chưa bấm «Đến điểm đón». */
@@ -157,6 +181,9 @@
     }
 
     function getContactPhone() {
+        if (currentBooking && currentBooking.contact_phone) {
+            return String(currentBooking.contact_phone);
+        }
         if (window.BookingActiveSession && window.BookingActiveSession.load) {
             var stored = window.BookingActiveSession.load();
             if (stored && stored.contact_phone) {
@@ -209,11 +236,231 @@
         var stored = window.BookingActiveSession.load() || {};
         window.BookingActiveSession.saveFromBooking(booking, {
             booking_reference: booking.booking_reference || stored.booking_reference || '',
-            contact_phone: stored.contact_phone || getContactPhone(),
+            contact_phone: booking.contact_phone || stored.contact_phone || getContactPhone(),
             referral_code: (booking.referral && booking.referral.code) || stored.referral_code || '',
             referral_url: (booking.referral && booking.referral.url) || stored.referral_url || '',
             referral_discount_percent: (booking.referral && booking.referral.discount_percent) || stored.referral_discount_percent || 0,
         });
+    }
+
+    function completionShownKey(bookingReference) {
+        return COMPLETION_SHOWN_PREFIX + String(bookingReference || '');
+    }
+
+    function hasCompletionModalBeenShown(bookingReference) {
+        if (!bookingReference) {
+            return true;
+        }
+        try {
+            return sessionStorage.getItem(completionShownKey(bookingReference)) === '1';
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function markCompletionModalShown(bookingReference) {
+        if (!bookingReference) {
+            return;
+        }
+        try {
+            sessionStorage.setItem(completionShownKey(bookingReference), '1');
+        } catch (e) {}
+    }
+
+    function shouldShowCompletionModal(booking, previousBooking) {
+        if (!booking || booking.trip_status !== 'completed') {
+            return false;
+        }
+        if (hasCompletionModalBeenShown(booking.booking_reference)) {
+            return false;
+        }
+
+        var hasReferral = !!(booking.referral && booking.referral.url);
+        var canReview = !!booking.can_review;
+        if (!hasReferral && !canReview) {
+            return false;
+        }
+
+        if (!previousBooking) {
+            return true;
+        }
+
+        return previousBooking.trip_status !== 'completed';
+    }
+
+    function hideCompletionReviewError() {
+        var err = document.getElementById('guest-trip-completion-review-error');
+        if (err) {
+            err.textContent = '';
+            err.classList.add('d-none');
+        }
+    }
+
+    function showCompletionReviewError(message) {
+        var err = document.getElementById('guest-trip-completion-review-error');
+        if (!err) {
+            return;
+        }
+        err.textContent = message;
+        err.classList.remove('d-none');
+    }
+
+    function renderCompletionModalContent(booking) {
+        var referralSection = document.getElementById('guest-trip-completion-referral');
+        var reviewSection = document.getElementById('guest-trip-completion-review');
+        var reviewDone = document.getElementById('guest-trip-completion-review-done');
+        var referral = booking && booking.referral ? booking.referral : null;
+        var hasReferral = !!(referral && referral.url);
+
+        if (referralSection) {
+            referralSection.classList.toggle('d-none', !hasReferral);
+            if (hasReferral) {
+                var note = document.getElementById('guest-trip-completion-referral-note');
+                if (note) {
+                    note.textContent = referralDiscountNote(referral.discount_percent);
+                }
+                loadQrLib(function () {
+                    drawQr(
+                        document.getElementById('guest-trip-completion-referral-qr'),
+                        referral.url,
+                        QR_LARGE,
+                    );
+                });
+            }
+        }
+
+        if (reviewSection) {
+            reviewSection.classList.toggle('d-none', !booking.can_review);
+        }
+        if (reviewDone) {
+            reviewDone.classList.add('d-none');
+        }
+
+        if (booking.can_review) {
+            modalSelectedSentiment = '';
+            document.querySelectorAll('[data-completion-review-sentiment]').forEach(function (btn) {
+                btn.classList.remove('active');
+            });
+            var form = document.getElementById('guest-trip-completion-review-form');
+            if (form) {
+                form.classList.add('d-none');
+            }
+            var comment = document.getElementById('guest-trip-completion-review-comment');
+            if (comment) {
+                comment.value = '';
+            }
+            hideCompletionReviewError();
+        }
+    }
+
+    function openCompletionModal(booking) {
+        var modalEl = document.getElementById('guestTripCompletionModal');
+        if (!modalEl || typeof bootstrap === 'undefined' || !booking) {
+            return;
+        }
+
+        markCompletionModalShown(booking.booking_reference);
+        renderCompletionModalContent(booking);
+
+        if (!completionModal) {
+            completionModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        }
+        completionModal.show();
+    }
+
+    function closeCompletionModal() {
+        if (completionModal) {
+            completionModal.hide();
+        }
+    }
+
+    function maybeOpenCompletionModal(booking, previousBooking) {
+        if (!shouldShowCompletionModal(booking, previousBooking)) {
+            return;
+        }
+        openCompletionModal(booking);
+    }
+
+    function bindCompletionModalReview() {
+        if (completionModalBound) {
+            return;
+        }
+        completionModalBound = true;
+
+        document.querySelectorAll('[data-completion-review-sentiment]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                modalSelectedSentiment = btn.getAttribute('data-completion-review-sentiment') || '';
+                document.querySelectorAll('[data-completion-review-sentiment]').forEach(function (other) {
+                    other.classList.toggle('active', other === btn);
+                });
+                var form = document.getElementById('guest-trip-completion-review-form');
+                if (form) {
+                    form.classList.remove('d-none');
+                }
+                hideCompletionReviewError();
+            });
+        });
+
+        var submitBtn = document.getElementById('guest-trip-completion-review-submit');
+        if (submitBtn) {
+            submitBtn.addEventListener('click', submitCompletionReview);
+        }
+    }
+
+    function submitCompletionReview() {
+        if (!currentBooking || !modalSelectedSentiment || !window.__bookingTripReviewUrl) {
+            return;
+        }
+
+        var submitBtn = document.getElementById('guest-trip-completion-review-submit');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+        }
+        hideCompletionReviewError();
+
+        var token = document.querySelector('meta[name="csrf-token"]');
+        var commentEl = document.getElementById('guest-trip-completion-review-comment');
+
+        fetch(window.__bookingTripReviewUrl, {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': token ? token.getAttribute('content') : '',
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                booking_reference: currentBooking.booking_reference,
+                sentiment: modalSelectedSentiment,
+                comment: commentEl ? commentEl.value.trim() : '',
+                contact_phone: getContactPhone(),
+                booking_browser_id: getBrowserId(),
+            }),
+        })
+            .then(function (r) {
+                return r.json().then(function (data) {
+                    if (!r.ok) {
+                        throw new Error(data.message || 'Không gửi được đánh giá.');
+                    }
+                    return data;
+                });
+            })
+            .then(function (data) {
+                if (data.booking) {
+                    renderBooking(data.booking);
+                } else {
+                    fetchStatus();
+                }
+                closeCompletionModal();
+            })
+            .catch(function (err) {
+                showCompletionReviewError(err.message || 'Không gửi được đánh giá.');
+            })
+            .finally(function () {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                }
+            });
     }
 
     function loadQrLib(cb) {
@@ -358,7 +605,7 @@
     }
 
     function clearActiveSessionIfDone(booking) {
-        if (!booking || booking.is_active) {
+        if (!booking || booking.is_active || booking.can_review) {
             return;
         }
         if (window.BookingActiveSession && window.BookingActiveSession.clear) {
@@ -433,27 +680,26 @@
         var distanceLine = '';
         var etaLine = '';
 
-        if (showGuestDriverLiveProximity(booking)) {
-            var locationShared = booking.driver_location_shared
-                || (driver && driver.location_shared);
-            if (locationShared) {
-                distanceLine = booking.driver_distance_line
-                    || (driver && driver.distance_line)
-                    || '';
-                if (!distanceLine) {
-                    var distanceLabel = booking.driver_distance_label
-                        || (driver && driver.distance_label)
-                        || driverDistanceGuestLabel(booking);
-                    if (distanceLabel) {
-                        distanceLine = 'Tài xế cách bạn ' + distanceLabel;
-                    }
+        if (showGuestDriverDistance(booking)) {
+            distanceLine = booking.driver_distance_line
+                || (driver && driver.distance_line)
+                || '';
+            if (!distanceLine) {
+                var distanceLabel = booking.driver_distance_label
+                    || (driver && driver.distance_label)
+                    || driverDistanceGuestLabel(booking);
+                if (distanceLabel) {
+                    distanceLine = 'Tài xế cách bạn ' + distanceLabel;
                 }
-                etaLine = booking.driver_eta_line || (driver && driver.eta_line) || '';
-                if (!etaLine) {
-                    var etaLabel = booking.driver_eta_label || (driver && driver.eta_label) || '';
-                    if (etaLabel) {
-                        etaLine = 'Dự kiến ' + etaLabel;
-                    }
+            }
+        }
+
+        if (showGuestDriverEta(booking)) {
+            etaLine = booking.driver_eta_line || (driver && driver.eta_line) || '';
+            if (!etaLine) {
+                var etaLabel = booking.driver_eta_label || (driver && driver.eta_label) || '';
+                if (etaLabel) {
+                    etaLine = 'Dự kiến ' + etaLabel;
                 }
             }
         }
@@ -537,6 +783,7 @@
     }
 
     function renderBooking(booking) {
+        var previousBooking = currentBooking;
         currentBooking = booking;
         var empty = document.getElementById('guest-trip-empty');
         var card = document.getElementById('guest-trip-card');
@@ -610,6 +857,7 @@
         renderCancelAction(booking);
         syncActiveSession(booking);
         clearActiveSessionIfDone(booking);
+        maybeOpenCompletionModal(booking, previousBooking);
     }
 
     function renderCancelAction(booking) {
@@ -735,6 +983,7 @@
                 } else {
                     fetchStatus();
                 }
+                closeCompletionModal();
             })
             .catch(function (err) {
                 showReviewError(err.message || 'Không gửi được đánh giá.');
@@ -820,10 +1069,9 @@
                 currentBooking = null;
                 renderBooking(null);
                 if (window.AppDialog && window.AppDialog.alert) {
-                    var msg = data.message || 'Đã hủy chuyến.';
-                    if (data.cancel_blocked && data.block_message) {
-                        msg += ' ' + data.block_message;
-                    }
+                    var msg = data.cancel_blocked && data.block_message
+                        ? data.block_message
+                        : (data.message || 'Đã hủy chuyến.');
                     window.AppDialog.alert(msg, { variant: 'success', title: 'Đã hủy chuyến' });
                 }
             })
@@ -887,12 +1135,18 @@
     function init() {
         bindReview();
         bindReferralOverlay();
+        bindCompletionModalReview();
         var cancelBtn = document.getElementById('guest-trip-cancel-btn');
         if (cancelBtn) {
             cancelBtn.addEventListener('click', cancelTrip);
         }
         fetchStatus();
-        window.setInterval(fetchStatus, POLL_MS);
+
+        if (window.IdlePoll) {
+            window.IdlePoll.create({ onPoll: fetchStatus }).start();
+        } else {
+            window.setInterval(fetchStatus, 5000);
+        }
     }
 
     if (document.readyState === 'loading') {

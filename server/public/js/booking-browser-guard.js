@@ -122,7 +122,7 @@
 
     function cancelBlockMessage() {
 
-        return 'Đã hủy quá nhiều lần trên trình duyệt này. Đóng tab hoặc trình duyệt (hết phiên) rồi mở lại để đặt cuốc mới.';
+        return 'Đã hủy quá nhiều lần trên trình duyệt này, vui lòng thử lại sau hoặc liên hệ tổng đài để biết thêm thông tin chi tiết.';
 
     }
 
@@ -326,27 +326,63 @@
 
         var banner = document.getElementById('booking-browser-guard-banner');
 
-        if (!banner) {
+        var flashStack = document.getElementById('app-flash-stack');
+
+        if (!isBookingBlocked()) {
+
+            if (banner) {
+
+                banner.classList.add('d-none');
+
+            }
+
+            if (flashStack && window.AppFlash && window.AppFlash.clear) {
+
+                window.AppFlash.clear(flashStack);
+
+            }
 
             return;
 
         }
 
-        var textEl = banner.querySelector('.booking-browser-guard-text');
+        var msg = blockMessage();
 
-        if (isBookingBlocked()) {
+        if (banner) {
 
-            banner.classList.remove('d-none');
+            if (flashStack && window.AppFlash && window.AppFlash.clear) {
 
-            if (textEl) {
-
-                textEl.textContent = blockMessage();
+                window.AppFlash.clear(flashStack);
 
             }
 
-        } else {
+            banner.classList.remove('d-none');
 
-            banner.classList.add('d-none');
+            var textEl = banner.querySelector('.booking-browser-guard-text');
+
+            if (textEl) {
+
+                textEl.textContent = msg;
+
+            }
+
+            return;
+
+        }
+
+        if (window.AppFlash && window.AppFlash.show && flashStack) {
+
+            window.AppFlash.show(msg, {
+
+                variant: 'warning',
+
+                title: 'Chưa thể đặt cuốc mới',
+
+                target: '#app-flash-stack',
+
+                autoDismiss: 0,
+
+            });
 
         }
 
@@ -362,19 +398,21 @@
 
         }
 
-        var msg = blockMessage();
+        syncBanner();
 
-        if (window.AppDialog && window.AppDialog.alert) {
+        var focusTarget = document.getElementById('booking-browser-guard-banner')
 
-            window.AppDialog.alert(msg, { variant: 'warning', title: 'Chưa thể đặt cuốc' });
+            || document.querySelector('#app-flash-stack .app-flash-banner');
 
-        } else {
+        if (focusTarget) {
 
-            window.alert(msg);
+            window.requestAnimationFrame(function () {
+
+                focusTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+            });
 
         }
-
-        syncBanner();
 
         return true;
 

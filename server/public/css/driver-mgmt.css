@@ -451,3 +451,41 @@
         min-width: 7rem;
     }
 }
+
+.driver-password-reset-codes {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.65rem 0.85rem;
+}
+
+.driver-password-reset-label {
+    font-size: 0.875rem;
+    color: var(--bs-secondary-color, #6c757d);
+}
+
+.driver-password-reset-value {
+    font-size: 1.35rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    padding: 0.35rem 0.75rem;
+    border-radius: 0.5rem;
+    background: #fff;
+    border: 1px dashed rgba(0, 0, 0, 0.2);
+}
+
+.driver-password-reset-badge {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(255, 193, 7, 0.25);
+    color: #664d03;
+}
+
+.driver-password-reset-actions {
+    margin-top: 0.25rem;
+}

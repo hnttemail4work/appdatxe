@@ -7,14 +7,12 @@
     var locationBar = document.getElementById('driver-location-bar');
     var heroPill = document.getElementById('driver-hero-status-pill');
     var heroLabel = document.getElementById('driver-hero-status-label');
-    var statusPill = document.getElementById('driver-location-status');
-    var addressLine = document.getElementById('driver-location-address');
-    var metaLine = document.getElementById('driver-location-meta');
     var detailInput = document.getElementById('driver-location-detail');
+    var fallbackDetailInput = document.getElementById('driver-location-fallback-detail');
+    var fallbackSection = document.getElementById('driver-location-fallback');
     var latInput = document.getElementById('driver-location-lat');
     var lngInput = document.getElementById('driver-location-lng');
-    var actionsWrap = document.querySelector('.driver-location-sheet-actions');
-    var mapBtn = document.querySelector('.driver-location-map-btn');
+    var mapBtn = document.querySelector('#driver-location-fallback .driver-location-map-btn');
 
     if (!url || !toggle || !locationBar) {
         return;
@@ -22,73 +20,52 @@
 
     var csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
     var sending = false;
+    var suppressNextChange = false;
     var onTrip = locationBar.getAttribute('data-driver-trip-active') === '1';
     var tripUpcoming = locationBar.getAttribute('data-driver-trip-upcoming') === '1';
-    var shareBtn = document.getElementById('driver-location-share-btn');
-
-    function sharePromptMessage() {
-        if (tripUpcoming) {
-            return 'Chia sẻ vị trí GPS để khách biết bạn còn bao nhiêu km đến điểm đón.';
-        }
-        if (onTrip) {
-            return 'Cập nhật vị trí GPS khi đang chạy chuyến.';
-        }
-        return 'Chia sẻ vị trí GPS để nhận cuốc gần bạn.';
-    }
 
     function hasLocationCoords() {
         return !!(latInput && lngInput && String(latInput.value || '').trim() && String(lngInput.value || '').trim());
     }
 
-    function ensureSharePromptElement() {
-        var message = sharePromptMessage();
-        if (!message) {
-            return null;
-        }
-
-        var prompt = document.getElementById('driver-location-share-prompt');
-        if (prompt) {
-            prompt.hidden = false;
-            prompt.textContent = message;
-            return prompt;
-        }
-
-        prompt = document.createElement('div');
-        prompt.id = 'driver-location-share-prompt';
-        prompt.className = 'driver-location-share-prompt';
-        prompt.setAttribute('role', 'status');
-        prompt.textContent = message;
-        locationBar.insertBefore(prompt, locationBar.firstChild);
-
-        return prompt;
+    function isFallbackVisible() {
+        return !!(fallbackSection && !fallbackSection.hidden && !fallbackSection.classList.contains('d-none'));
     }
 
-    function focusLocationShare(options) {
-        var opts = options || {};
-
-        if (locationBar.getAttribute('data-driver-paused') === '1' || hasLocationCoords()) {
+    function showLocationFallback(message) {
+        if (!fallbackSection || locationBar.getAttribute('data-driver-paused') === '1') {
             return;
         }
 
-        locationBar.setAttribute('data-needs-location', '1');
-        locationBar.classList.add('driver-location-sheet--needs-share');
-        ensureSharePromptElement();
-
-        if (metaLine) {
-            metaLine.textContent = sharePromptMessage();
+        var hint = document.getElementById('driver-location-fallback-hint');
+        if (hint && message) {
+            hint.textContent = message;
         }
 
-        if (opts.scroll !== false) {
-            locationBar.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        fallbackSection.classList.remove('d-none');
+        fallbackSection.hidden = false;
+
+        refreshHeroStatus();
+
+        if (fallbackDetailInput) {
+            fallbackDetailInput.disabled = false;
+        }
+        if (mapBtn) {
+            mapBtn.disabled = false;
+        }
+    }
+
+    function hideLocationFallback() {
+        if (!fallbackSection) {
+            return;
         }
 
-        window.setTimeout(function () {
-            if (shareBtn && !shareBtn.disabled) {
-                shareBtn.focus({ preventScroll: true });
-            } else if (mapBtn && !mapBtn.disabled) {
-                mapBtn.focus({ preventScroll: true });
-            }
-        }, opts.scroll === false ? 50 : 420);
+        fallbackSection.classList.add('d-none');
+        fallbackSection.hidden = true;
+
+        if (fallbackDetailInput) {
+            fallbackDetailInput.value = '';
+        }
     }
 
     function clearLocationSharePrompt() {
@@ -97,47 +74,74 @@
         }
 
         locationBar.setAttribute('data-needs-location', '0');
-        locationBar.classList.remove('driver-location-sheet--needs-share');
+    }
 
-        var prompt = document.getElementById('driver-location-share-prompt');
-        if (prompt) {
-            prompt.hidden = true;
+    function requestAutoLocation() {
+        if (locationBar.getAttribute('data-driver-paused') === '1') {
+            return;
         }
+
+        hideLocationFallback();
+
+        if (window.DriverLocationGps && window.DriverLocationGps.shareCurrentLocation) {
+            window.DriverLocationGps.shareCurrentLocation();
+        }
+    }
+
+    function startGpsTracking() {
+        if (window.DriverLocationGps && window.DriverLocationGps.startAutoTracking) {
+            window.DriverLocationGps.startAutoTracking();
+        }
+    }
+
+    function stopGpsTracking() {
+        if (window.DriverLocationGps && window.DriverLocationGps.stopAutoTracking) {
+            window.DriverLocationGps.stopAutoTracking();
+        }
+    }
+
+    function refreshHeroStatus() {
+        if (!heroPill || !heroLabel || onTrip || tripUpcoming) {
+            return;
+        }
+
+        if (locationBar.getAttribute('data-driver-paused') === '1') {
+            heroPill.className = 'driver-status-pill driver-status-pill--offline';
+            heroLabel.textContent = 'Tạm nghỉ';
+            return;
+        }
+
+        if (hasLocationCoords()) {
+            heroPill.className = 'driver-status-pill driver-status-pill--online';
+            heroLabel.textContent = 'Sẵn sàng';
+            clearLocationSharePrompt();
+            hideLocationFallback();
+            return;
+        }
+
+        if (isFallbackVisible()) {
+            heroPill.className = 'driver-status-pill driver-status-pill--offline';
+            heroLabel.textContent = 'Chọn vị trí trên bản đồ';
+            return;
+        }
+
+        heroPill.className = 'driver-status-pill driver-status-pill--offline';
+        heroLabel.textContent = 'Đang lấy vị trí GPS…';
     }
 
     function setPaused(paused, options) {
         options = options || {};
         locationBar.setAttribute('data-driver-paused', paused ? '1' : '0');
 
-        if (toggle && !onTrip) {
+        if (toggle) {
             toggle.checked = !paused;
         }
 
-        if (actionsWrap) {
-            actionsWrap.classList.toggle('is-disabled', paused);
+        if (fallbackDetailInput) {
+            fallbackDetailInput.disabled = paused;
         }
-
-        if (detailInput) {
-            detailInput.disabled = paused;
-            detailInput.placeholder = paused
-                ? 'Bật sẵn sàng để cập nhật vị trí'
-                : '';
-        }
-
         if (mapBtn) {
             mapBtn.disabled = paused;
-        }
-        if (shareBtn) {
-            shareBtn.disabled = paused;
-        }
-
-        if (statusPill) {
-            statusPill.textContent = paused ? 'Tạm nghỉ' : 'Chưa có';
-            statusPill.className = 'driver-location-status driver-location-status--idle';
-        }
-
-        if (metaLine) {
-            metaLine.textContent = options.message || '';
         }
 
         if (heroPill && heroLabel) {
@@ -151,14 +155,18 @@
                 heroPill.className = 'driver-status-pill driver-status-pill--offline';
                 heroLabel.textContent = 'Tạm nghỉ';
                 clearLocationSharePrompt();
+                hideLocationFallback();
+                stopGpsTracking();
             } else {
-                heroPill.className = 'driver-status-pill driver-status-pill--offline';
-                heroLabel.textContent = 'Cập nhật vị trí để nhận chuyến';
+                refreshHeroStatus();
             }
         }
 
-        if (!paused && !hasLocationCoords()) {
-            focusLocationShare({ scroll: false });
+        if (paused) {
+            stopGpsTracking();
+            hideLocationFallback();
+        } else {
+            startGpsTracking();
         }
     }
 
@@ -166,35 +174,38 @@
         if (detailInput) {
             detailInput.value = '';
         }
+        if (fallbackDetailInput) {
+            fallbackDetailInput.value = '';
+        }
         if (latInput) {
             latInput.value = '';
         }
         if (lngInput) {
             lngInput.value = '';
         }
-        if (addressLine) {
-            addressLine.textContent = '';
-            addressLine.classList.add('is-empty');
+    }
+
+    function showToggleError(message) {
+        var text = message || 'Không đổi được trạng thái Hoạt động.';
+        if (window.AppFlash && window.AppFlash.show) {
+            window.AppFlash.show(text, { variant: 'danger', title: 'Không đổi được trạng thái' });
+        } else if (window.AppDialog && window.AppDialog.alert) {
+            window.AppDialog.alert(text, { variant: 'danger' });
         }
     }
 
-    if (toggle && locationBar.getAttribute('data-driver-paused') === '1') {
-        setPaused(true);
-    } else if (locationBar.getAttribute('data-needs-location') === '1') {
-        focusLocationShare({ scroll: false });
-    }
-
-    toggle.addEventListener('change', function () {
-        if (onTrip || sending) {
-            toggle.checked = true;
+    // TODO (Fix Driver Toggle): Gửi PATCH bật/tắt app — tách khỏi event change để tránh kẹt UI.
+    function submitAvailability(wantAvailable) {
+        if (sending || !toggle) {
             return;
         }
 
-        var wantAvailable = toggle.checked;
-        var previousChecked = !wantAvailable;
+        var previousChecked = toggle.checked;
 
         sending = true;
         toggle.disabled = true;
+        suppressNextChange = true;
+        toggle.checked = wantAvailable;
 
         fetch(url, {
             method: 'PATCH',
@@ -209,17 +220,29 @@
             credentials: 'same-origin',
         })
             .then(function (r) {
-                return r.json().then(function (data) {
-                    return { ok: r.ok, data: data };
+                return r.text().then(function (text) {
+                    var data = {};
+                    if (text) {
+                        try {
+                            data = JSON.parse(text);
+                        } catch (e) {
+                            data = {};
+                        }
+                    }
+
+                    return { ok: r.ok, data: data, status: r.status };
                 });
             })
             .then(function (result) {
                 if (!result.ok) {
+                    suppressNextChange = true;
                     toggle.checked = previousChecked;
-                    var message = (result.data && result.data.message) || 'Không cập nhật được trạng thái.';
-                    if (metaLine && !onTrip) {
-                        metaLine.textContent = message;
-                    }
+                    var message = result.data && result.data.message
+                        ? result.data.message
+                        : (result.status === 419
+                            ? 'Phiên đăng nhập hết hạn — tải lại trang rồi thử lại.'
+                            : 'Không đổi được trạng thái Hoạt động.');
+                    showToggleError(message);
                     return;
                 }
 
@@ -229,28 +252,71 @@
                     return;
                 }
 
-                clearLocationFields();
+                hideLocationFallback();
                 setPaused(false);
-                focusLocationShare({ scroll: true });
+                if (!hasLocationCoords()) {
+                    requestAutoLocation();
+                } else {
+                    refreshHeroStatus();
+                }
             })
             .catch(function () {
+                suppressNextChange = true;
                 toggle.checked = previousChecked;
-                if (metaLine) {
-                    metaLine.textContent = 'Lỗi mạng — thử lại.';
-                }
+                showToggleError('Lỗi mạng — thử lại.');
             })
             .finally(function () {
                 sending = false;
-                if (!onTrip) {
-                    toggle.disabled = false;
-                }
+                toggle.disabled = false;
             });
-    });
+    }
+
+    if (toggle && locationBar.getAttribute('data-driver-paused') === '1') {
+        setPaused(true);
+        } else {
+            startGpsTracking();
+            if (!hasLocationCoords()) {
+                requestAutoLocation();
+            }
+            if (!hasLocationCoords() && locationBar.getAttribute('data-needs-location') === '1') {
+                refreshHeroStatus();
+            }
+        }
+
+    if (toggle) {
+        toggle.addEventListener('change', function () {
+            if (suppressNextChange) {
+                suppressNextChange = false;
+                return;
+            }
+
+            if (sending) {
+                toggle.checked = !toggle.checked;
+                return;
+            }
+
+            submitAvailability(toggle.checked);
+        });
+    }
+
+    var toggleLabel = document.getElementById('driver-activity-toggle-label');
+    if (toggleLabel && toggle) {
+        toggleLabel.addEventListener('click', function (event) {
+            if (sending) {
+                event.preventDefault();
+                return;
+            }
+
+            if (event.target === toggle) {
+                return;
+            }
+
+            event.preventDefault();
+            submitAvailability(!toggle.checked);
+        });
+    }
 
     document.addEventListener('driver:availability-sync', function (event) {
-        if (onTrip) {
-            return;
-        }
         var detail = event.detail || {};
         var paused = detail.availability === 'off_duty';
         if (!paused && detail.availability !== 'available') {
@@ -260,16 +326,16 @@
             return;
         }
         clearLocationFields();
-        setPaused(true, {
-            message: detail.message || 'Đã tắt Hoạt động — bật lại để nhận cuốc mới.',
-        });
+        setPaused(true);
     });
 
     window.DriverAvailabilityToggle = {
         setPaused: setPaused,
         clearLocationFields: clearLocationFields,
-        focusLocationShare: focusLocationShare,
         clearLocationSharePrompt: clearLocationSharePrompt,
+        refreshHeroStatus: refreshHeroStatus,
+        requestAutoLocation: requestAutoLocation,
+        showLocationFallback: showLocationFallback,
+        hideLocationFallback: hideLocationFallback,
     };
 })();
-

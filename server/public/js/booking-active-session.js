@@ -311,20 +311,24 @@
         }
 
         var stage = String((driver && driver.stage) || 'assigned');
-        var locationShared = !!(driver && driver.location_shared)
-            || !!(booking && booking.driver_location_shared);
+        var movementConfirmed = !!(booking && booking.driver_movement_confirmed)
+            || !!(driver && driver.movement_confirmed);
 
-        if (stage !== 'assigned' || !locationShared) {
+        if (stage !== 'assigned' && stage !== 'at_pickup') {
             distanceLine = '';
             etaLine = '';
-        } else if (!distanceLine && driver && driver.distance_label) {
-            distanceLine = 'Tài xế cách bạn ' + driver.distance_label;
-        } else if (!distanceLine && booking && booking.driver_distance_label) {
-            distanceLine = 'Tài xế cách bạn ' + booking.driver_distance_label;
-        }
-
-        if (stage !== 'assigned' || !locationShared) {
+        } else if (stage === 'at_pickup') {
             etaLine = '';
+        } else {
+            if (!distanceLine && driver && driver.distance_label) {
+                distanceLine = 'Tài xế cách bạn ' + driver.distance_label;
+            } else if (!distanceLine && booking && booking.driver_distance_label) {
+                distanceLine = 'Tài xế cách bạn ' + booking.driver_distance_label;
+            }
+
+            if (!movementConfirmed) {
+                etaLine = '';
+            }
         }
 
         return {
@@ -429,7 +433,7 @@
         return save({
             trip_code: booking.trip_code,
             booking_reference: booking.booking_reference || (extra && extra.booking_reference) || '',
-            contact_phone: (extra && extra.contact_phone) || '',
+            contact_phone: (extra && extra.contact_phone) || booking.contact_phone || '',
             hotline_phone: resolveHotlinePhone() || ((extra && extra.hotline_phone) || ''),
             referral_code: (extra && extra.referral_code) || '',
             referral_url: (extra && extra.referral_url) || '',
@@ -457,7 +461,10 @@
         }
 
         if (!data || !data.duplicate) {
-            clear();
+            var stored = load();
+            if (!stored || !stored.booking || stored.booking.can_review !== true) {
+                clear();
+            }
         }
     }
 
@@ -518,6 +525,7 @@
                         stored.booking = data.booking;
                         stored.driver_distance_label = data.booking.driver_distance_label || null;
                         stored.driver_eta_label = data.booking.driver_eta_label || null;
+                        stored.driver_movement_confirmed = !!data.booking.driver_movement_confirmed;
                         stored.driver_status_line = data.booking.driver_status_line || null;
                         stored.driver_distance_line = data.booking.driver_distance_line || null;
                         stored.driver_eta_line = data.booking.driver_eta_line || null;
@@ -531,7 +539,10 @@
                 }
 
                 if (!data || !data.duplicate) {
-                    clear();
+                    var stored = load();
+                    if (!stored || !stored.booking || stored.booking.can_review !== true) {
+                        clear();
+                    }
                 }
             })
             .catch(function () {});
@@ -549,7 +560,12 @@
         syncHeroHotline();
 
         pollActiveBookingStatus();
-        window.setInterval(pollActiveBookingStatus, 15000);
+
+        if (window.IdlePoll) {
+            window.IdlePoll.create({ onPoll: pollActiveBookingStatus }).start();
+        } else {
+            window.setInterval(pollActiveBookingStatus, 5000);
+        }
     }
 
     window.BookingActiveSession = {

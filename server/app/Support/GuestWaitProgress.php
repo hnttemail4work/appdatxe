@@ -66,19 +66,18 @@ class GuestWaitProgress
             }
 
             $driverRequests = app(DriverTripRequestService::class);
-            $started = $driverRequests->customerSearchStartedAt($booking);
-            $deadline = $started->copy()->addMinutes(DriverTripRequestService::CUSTOMER_SEARCH_DEADLINE_MINUTES);
+            $pickupLead = $booking->pickupAdminActionStartsAt();
 
-            if ($deadline->isFuture()) {
+            if ($pickupLead?->isFuture()) {
+                $started = $driverRequests->customerSearchStartedAt($booking);
+
                 return [
                     'kind'          => 'driver_search',
                     'label'         => $booking->primaryStatusLabel(),
-                    'hint'          => 'Hệ thống có '
-                        . DriverTripRequestService::CUSTOMER_SEARCH_DEADLINE_MINUTES
-                        . ' phút để ghép tài xế cho bạn.',
+                    'hint'          => 'Đơn được giữ đến giờ đón. Quản lý sẽ gán tài xế cho bạn.',
                     'started_at'    => $started->toIso8601String(),
-                    'deadline_at'   => $deadline->toIso8601String(),
-                    'total_seconds' => max(60, (int) $started->diffInSeconds($deadline)),
+                    'deadline_at'   => $pickupLead->toIso8601String(),
+                    'total_seconds' => max(60, (int) now()->diffInSeconds($pickupLead)),
                     'indeterminate' => false,
                 ];
             }

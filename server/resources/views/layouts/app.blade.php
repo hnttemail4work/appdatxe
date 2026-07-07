@@ -91,6 +91,7 @@
     <link rel="stylesheet" href="{{ asset('css/screen-tabs.css') }}?v={{ filemtime(public_path('css/screen-tabs.css')) }}">
     <link rel="stylesheet" href="{{ asset('css/app-layout.css') }}?v={{ filemtime(public_path('css/app-layout.css')) }}">
     <link rel="stylesheet" href="{{ asset('css/app-dialog.css') }}?v={{ filemtime(public_path('css/app-dialog.css')) }}">
+    <link rel="stylesheet" href="{{ asset('css/app-flash.css') }}?v={{ filemtime(public_path('css/app-flash.css')) }}">
     @if($pwaEnabled)
     <link rel="stylesheet" href="{{ asset('css/pwa-install.css') }}?v={{ filemtime(public_path('css/pwa-install.css')) }}">
     @endif
@@ -194,6 +195,7 @@
 <main class="app-main">
 <div class="container py-4">
     @include('partials.alerts')
+    <div id="app-flash-stack" class="app-flash-stack" aria-live="polite" aria-atomic="true"></div>
     @yield('content')
 </div>
 </main>
@@ -222,6 +224,7 @@
 @include('partials.cancellation-reason-modal')
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{{ asset('js/app-flash.js') }}?v={{ filemtime(public_path('js/app-flash.js')) }}"></script>
 <script src="{{ asset('js/app-dialog.js') }}"></script>
 <script>window.__cancellationReasonsUrl = @json(route('cancellationReasons.index'));</script>
 <script src="{{ asset('js/cancellation-reason-modal.js') }}"></script>

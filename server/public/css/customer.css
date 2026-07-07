@@ -4329,6 +4329,79 @@ body.booking-active-referral-qr-open {
     line-height: 1.4;
 }
 
+.guest-trip-completion-modal {
+    border-radius: 1rem;
+    background: linear-gradient(180deg, #1f1f1f 0%, #141414 100%);
+    border: 1px solid rgba(212, 175, 55, 0.22);
+    color: #f5f5f5;
+}
+
+.guest-trip-completion-modal .modal-title,
+.guest-trip-completion-modal .guest-trip-completion-section-title,
+.guest-trip-completion-modal .guest-trip-review-title {
+    color: #fff;
+}
+
+.guest-trip-completion-modal .btn-close {
+    filter: invert(1) grayscale(1) brightness(1.8);
+    opacity: 0.75;
+}
+
+.guest-trip-completion-eyebrow {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #fcd34d;
+}
+
+.guest-trip-completion-section-lead,
+.guest-trip-completion-section-hint {
+    font-size: 0.82rem;
+    color: #d1d5db;
+}
+
+.guest-trip-completion-referral {
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.guest-trip-completion-referral:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: 0;
+}
+
+.guest-trip-completion-qr-wrap {
+    display: flex;
+    justify-content: center;
+    margin: 0.75rem 0;
+}
+
+.guest-trip-completion-qr {
+    display: inline-flex;
+    padding: 0.65rem;
+    border-radius: 0.85rem;
+    background: #fff;
+}
+
+.guest-trip-completion-qr img,
+.guest-trip-completion-qr canvas {
+    display: block;
+}
+
+.guest-trip-completion-review {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+.guest-trip-completion-review-done {
+    margin-top: 0.25rem;
+}
+
 .guest-trip-cancel {
     margin: 0;
     padding: 1rem 1rem 1.1rem;
@@ -4439,9 +4512,8 @@ body.booking-active-referral-qr-open {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: .15rem;
-    min-height: 3rem;
-    padding: .3rem .35rem;
+    min-height: 2.75rem;
+    padding: .35rem;
     border: none;
     border-radius: .65rem;
     background: transparent;
@@ -4478,10 +4550,7 @@ body.booking-active-referral-qr-open {
 }
 
 .customer-scroll-dock-label {
-    font-size: .64rem;
-    font-weight: 700;
-    line-height: 1.1;
-    text-align: center;
+    display: none;
 }
 
 .customer-scroll-dock-badge {
@@ -4586,6 +4655,28 @@ body.booking-active-referral-qr-open {
     right: .7rem;
     bottom: calc(5.1rem + env(safe-area-inset-bottom, 0px));
     z-index: 1035;
+}
+
+.customer-contact-fab--dock {
+    flex-shrink: 0;
+    gap: .25rem;
+    padding-left: .35rem;
+    border-left: 1px solid rgba(212, 175, 55, .18);
+}
+
+.customer-contact-fab--dock .customer-contact-fab-btn {
+    width: 2.55rem;
+    height: 2.55rem;
+    box-shadow: none;
+}
+
+.customer-contact-fab--dock .customer-contact-fab-btn--phone svg {
+    width: 1.25rem;
+    height: 1.25rem;
+}
+
+.customer-contact-fab--dock .customer-contact-fab-zalo-label {
+    font-size: .72rem;
 }
 
 .customer-contact-fab--banner {

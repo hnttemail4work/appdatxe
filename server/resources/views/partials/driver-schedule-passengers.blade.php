@@ -19,8 +19,8 @@ $phase = $phase ?? $schedule->driverWorkflowPhase();
             @if($booking->passengerProfileDetail())
                 <div class="driver-info-line">{{ $booking->passengerProfileDetail() }}</div>
             @endif
-            <div class="driver-info-line"><span class="driver-info-k">Đón</span> {{ $booking->pickupTimeLabel() ?? '—' }} · {{ $booking->driverPickupDetailLabel() }}</div>
-            <div class="driver-info-line"><span class="driver-info-k">Trả</span> {{ $booking->driverDropoffDetailLabel() }}</div>
+            <div class="driver-info-line"><span class="driver-info-k">Điểm đón</span> {{ $booking->driverPickupDetailLabel() }}</div>
+            <div class="driver-info-line"><span class="driver-info-k">Điểm trả</span> {{ $booking->driverDropoffDetailLabel() }}</div>
             @if($booking->notes)
                 <div class="driver-info-line driver-info-line--note">{{ $booking->notes }}</div>
             @endif

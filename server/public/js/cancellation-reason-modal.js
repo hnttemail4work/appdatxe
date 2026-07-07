@@ -141,10 +141,10 @@
                 form.submit();
             }
         }).catch(function (err) {
-            if (window.AppDialog) {
+            if (window.AppFlash && window.AppFlash.show) {
+                window.AppFlash.show(err.message || 'Không tải được lý do hủy.', { variant: 'danger', title: 'Không tải được lý do hủy' });
+            } else if (window.AppDialog) {
                 window.AppDialog.alert(err.message || 'Không tải được lý do hủy.', { variant: 'danger' });
-            } else {
-                window.alert(err.message || 'Không tải được lý do hủy.');
             }
         });
     }, true);

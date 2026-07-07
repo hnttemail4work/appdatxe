@@ -73,8 +73,11 @@
             }
         });
         if (oversize.length) {
-            if (window.AppDialog) {
-                window.AppDialog.alert('Ảnh vượt quá 2MB: ' + oversize.join(', ') + '\nVui lòng chọn ảnh nhỏ hơn.');
+            var oversizeMsg = 'Ảnh vượt quá 2MB: ' + oversize.join(', ') + '\nVui lòng chọn ảnh nhỏ hơn.';
+            if (window.AppFlash && window.AppFlash.show) {
+                window.AppFlash.show(oversizeMsg, { variant: 'warning', title: 'Ảnh quá lớn' });
+            } else if (window.AppDialog) {
+                window.AppDialog.alert(oversizeMsg);
             }
             input.value = '';
         }

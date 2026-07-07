@@ -15,7 +15,7 @@
         </div>
     @endif
     @if(! empty($passenger['dropoff']))
-        <div class="driver-info-line"><span class="driver-info-k">Trả</span> {{ $passenger['dropoff'] }}</div>
+        <div class="driver-info-line"><span class="driver-info-k">Điểm trả</span> {{ $passenger['dropoff'] }}</div>
     @endif
     @if(! empty($passenger['notes']))
         <div class="driver-info-line driver-info-line--note">{{ $passenger['notes'] }}</div>

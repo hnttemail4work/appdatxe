@@ -76,8 +76,11 @@
     function validateSize(input, file) {
         var max = parseInt(input.dataset.maxBytes, 10);
         if (max && file.size > max) {
-            if (window.AppDialog) {
-                window.AppDialog.alert('Ảnh "' + file.name + '" vượt quá 2MB. Vui lòng chọn file nhỏ hơn.');
+            var sizeMsg = 'Ảnh "' + file.name + '" vượt quá 2MB. Vui lòng chọn file nhỏ hơn.';
+            if (window.AppFlash && window.AppFlash.show) {
+                window.AppFlash.show(sizeMsg, { variant: 'warning', title: 'Ảnh quá lớn' });
+            } else if (window.AppDialog) {
+                window.AppDialog.alert(sizeMsg);
             }
             input.value = '';
             return false;

@@ -17,30 +17,30 @@ class DriverMovementConfirmServiceTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_urgent_pickup_gets_five_minute_window(): void
-    {
-        Carbon::setTestNow(Carbon::parse('2026-06-27 10:00:00'));
-
-        $service = new DriverMovementConfirmService();
-        [$schedule, $booking] = $this->fixtures(minutesToPickup: 45, distanceKm: 12.0);
-
-        $deadline = $service->computeDeadline($schedule, $booking, now());
-
-        $this->assertTrue($deadline->equalTo(now()->addMinutes(5)));
-    }
-
-    public function test_long_booking_caps_window_by_travel_time(): void
+    public function test_deadline_is_pickup_minus_travel_and_lead_minutes(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-06-27 08:00:00'));
 
         $service = new DriverMovementConfirmService();
-        [$schedule, $booking] = $this->fixtures(minutesToPickup: 180, distanceKm: 40.0);
+        [$schedule, $booking] = $this->fixtures(minutesToPickup: 180, distanceKm: 30.0);
 
         $deadline = $service->computeDeadline($schedule, $booking, now());
-        $window = (int) now()->diffInMinutes($deadline);
+        $travelMinutes = $service->travelMinutesForBooking($schedule, $booking);
+        $expected = now()->addMinutes(180)->subMinutes($travelMinutes + DriverMovementConfirmService::MOVEMENT_CONFIRM_LEAD_MINUTES);
 
-        $this->assertGreaterThanOrEqual(10, $window);
-        $this->assertLessThanOrEqual(30, $window);
+        $this->assertTrue($deadline->equalTo($expected));
+    }
+
+    public function test_deadline_not_before_now_plus_buffer(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-06-27 11:50:00'));
+
+        $service = new DriverMovementConfirmService();
+        [$schedule, $booking] = $this->fixtures(minutesToPickup: 10, distanceKm: 5.0);
+
+        $deadline = $service->computeDeadline($schedule, $booking, now());
+
+        $this->assertTrue($deadline->greaterThanOrEqualTo(now()->addMinutes(DriverMovementConfirmService::MIN_DEADLINE_BUFFER_MINUTES)));
     }
 
     /** @return array{0: Schedule, 1: Booking} */

@@ -4,7 +4,6 @@ namespace App\Support;
 
 use App\Models\DriverTripRequest;
 use App\Models\Schedule;
-use App\Services\DriverTripRequestService;
 
 class DriverWaitProgress
 {
@@ -29,28 +28,9 @@ class DriverWaitProgress
         return null;
     }
 
-    /** @return array<string, mixed>|null */
+    /** Cuốc chờ nhận — hết giờ xử lý ngầm (poll/expireStale), không hiện banner «Khách đang đợi bạn». */
     public static function forTripRequest(DriverTripRequest $request): ?array
     {
-        if (! $request->isPending() || ! $request->expires_at?->isFuture()) {
-            return null;
-        }
-
-        $started = $request->created_at ?? now();
-        $totalSeconds = max(
-            60,
-            DriverTripRequestService::ACCEPT_TIMEOUT_MINUTES * 60,
-            (int) $started->diffInSeconds($request->expires_at),
-        );
-
-        return [
-            'kind'          => 'trip_accept',
-            'label'         => 'Khách đang đợi bạn',
-            'hint'          => 'Nhận hoặc từ chối — hệ thống sẽ gán chuyến cho tài xế khác nếu hết giờ.',
-            'started_at'    => $started->toIso8601String(),
-            'deadline_at'   => $request->expires_at->toIso8601String(),
-            'total_seconds' => $totalSeconds,
-            'indeterminate' => false,
-        ];
+        return null;
     }
 }

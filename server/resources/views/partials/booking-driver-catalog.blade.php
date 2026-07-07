@@ -59,6 +59,7 @@ $filterTypes = $driverOffers->pluck('vehicle_type')->filter()->unique()->sort()-
             $driverName = $offer['driver_name'] ?? '—';
             $typeLabel = $offer['type_label'] ?? '—';
             $licensePlate = $offer['license_plate'] ?? '—';
+            // TODO (Update Booking Button Logic): Nhãn nút lấy từ API — đã tính online + location shared.
             $bookingActionLabel = $offer['booking_action_label'] ?? 'Đặt sau';
             $bookingActionTone = $offer['booking_action_tone'] ?? 'later';
             $offerLabel = $offer['offer_label'] ?? collect([$driverName, $licensePlate, $typeLabel, $capacityLabel])->filter(fn ($p) => filled($p) && $p !== '—')->implode(' - ');

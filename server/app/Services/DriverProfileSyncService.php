@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\DriverProfile;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 
 class DriverProfileSyncService
 {
@@ -159,10 +158,6 @@ class DriverProfileSyncService
             if (array_key_exists($field, $validated) && $validated[$field] !== null && $validated[$field] !== '') {
                 $userData[$field] = $validated[$field];
             }
-        }
-
-        if (! empty($validated['password'])) {
-            $userData['password'] = Hash::make($validated['password']);
         }
 
         if ($userData !== []) {

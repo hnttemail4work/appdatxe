@@ -17,7 +17,7 @@ $nextStage = $schedule->driverNextStage();
 
 $pendingClosure = $schedule->driverPendingClosure();
 
-
+$needsMovementConfirm = $schedule->needsDriverMovementConfirm();
 
 $steps = [
 
@@ -30,8 +30,6 @@ $steps = [
     ['key' => \App\Models\Schedule::DRIVER_STAGE_COMPLETED, 'label' => 'Hoàn thành'],
 
 ];
-
-
 
 $order = array_flip(\App\Models\Schedule::driverStageOrder());
 
@@ -53,15 +51,8 @@ $currentOrder = $order[$highlightStage] ?? 0;
 
     @php
         $latePickup = app(\App\Services\DriverLatePickupService::class);
-        $departReminder = $latePickup->departReminderPayload($schedule);
         $latePickupPrompt = $latePickup->latePickupPromptPayload($schedule);
     @endphp
-    @if($departReminder)
-        <div class="driver-pickup-reminder mb-2" role="status">
-            <strong>{{ $departReminder['message'] }}</strong>
-            <p class="mb-0 small">{{ $departReminder['hint'] }}</p>
-        </div>
-    @endif
     @if($latePickupPrompt && ($latePickupPrompt['active'] ?? false))
         <div class="driver-late-pickup-banner mb-2" data-schedule-id="{{ $schedule->id }}" data-late-pickup-banner>
             <strong>{{ $latePickupPrompt['message'] }}</strong>
@@ -114,13 +105,15 @@ $currentOrder = $order[$highlightStage] ?? 0;
 
             $showComplete = $pendingClosure || $nextStage === \App\Models\Schedule::DRIVER_STAGE_COMPLETED;
 
-            $showAdvance = ! $pendingClosure && $nextAction && ! $showComplete;
+            $showMovementConfirm = ! $pendingClosure && $needsMovementConfirm;
+
+            $showAdvance = ! $pendingClosure && $nextAction && ! $showComplete && ! $showMovementConfirm;
 
         @endphp
 
 
 
-        @if($showCancel || $showAdvance || $showComplete)
+        @if($showCancel || $showMovementConfirm || $showAdvance || $showComplete)
 
         <div class="driver-workflow-compact-actions">
 
@@ -146,7 +139,19 @@ $currentOrder = $order[$highlightStage] ?? 0;
 
 
 
-            @if($showComplete)
+            @if($showMovementConfirm)
+
+                <form method="POST" action="{{ route('driver.schedules.confirmMovement', $schedule) }}"
+
+                      class="driver-workflow-compact-action">
+
+                    @csrf
+
+                    <button type="submit" class="btn btn-success btn-sm">Xác nhận</button>
+
+                </form>
+
+            @elseif($showComplete)
 
                 <form method="POST" action="{{ route('driver.schedules.complete', $schedule) }}"
 

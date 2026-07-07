@@ -130,7 +130,16 @@ final class DeparturePlan
         $reference ??= now();
         $plan = self::normalize($plan);
 
-        if (in_array($plan, [self::ONE_WAY, self::TODAY], true)) {
+        if (in_array($plan, [self::TODAY], true)) {
+            return ServiceDate::dayStart($reference)->toDateString();
+        }
+
+        if ($plan === self::ONE_WAY) {
+            $requested = trim((string) $requested);
+            if ($requested !== '') {
+                return ServiceDate::parse($requested)->toDateString();
+            }
+
             return ServiceDate::dayStart($reference)->toDateString();
         }
 

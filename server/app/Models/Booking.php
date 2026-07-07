@@ -35,7 +35,7 @@ class Booking extends Model
 
                 try {
                     $push = app(\App\Services\PushNotificationService::class);
-                    if ($booking->cancelled_by === 'system' && ! $booking->hasDriverAccepted()) {
+                    if ($booking->cancelled_by === 'system' && ! $booking->hadDriverEngagedForPickup()) {
                         $push->onNoDriverFound($booking);
                     } else {
                         $push->onTripCancelled($booking);
@@ -200,6 +200,30 @@ class Booking extends Model
         return \App\Support\DepartureTimeDisplay::label($this->pickup_time);
     }
 
+    /** Ngày đón thực tế — đồng bộ với trang chuyến khách. */
+    public function driverPickupDateLabel(): ?string
+    {
+        return $this->guestPickupAt()?->format('d/m/Y');
+    }
+
+    /** Giờ đón · ngày đón cho màn tài xế. */
+    public function driverPickupScheduleLabel(): ?string
+    {
+        $at = $this->guestPickupAt();
+        if (! $at instanceof \Carbon\Carbon) {
+            return null;
+        }
+
+        $time = $this->pickupTimeLabel();
+        $date = $at->format('d/m/Y');
+
+        if ($time) {
+            return $time . ' · ' . $date;
+        }
+
+        return $at->format('H:i') . ' · ' . $date;
+    }
+
     public function tripDistanceKm(): int
     {
         if ($this->pickup_lat !== null && $this->pickup_lng !== null
@@ -292,11 +316,70 @@ class Booking extends Model
         return $this->schedule->departure_time?->copy();
     }
 
+    /** Giờ đón dùng cho cảnh báo admin / ẩn dashboard TX — ưu tiên {@see guestPickupAt()}. */
+    public function operationalPickupAt(): ?\Carbon\Carbon
+    {
+        return $this->guestPickupAt() ?? $this->tripStartAt();
+    }
+
+    // TODO (Fix Flow): Đặt Ngay = còn ≤ 30 phút tới giờ đón dự kiến.
+    public function minutesUntilOperationalPickup(): ?int
+    {
+        $pickupAt = $this->operationalPickupAt();
+        if (! $pickupAt instanceof \Carbon\Carbon) {
+            return null;
+        }
+
+        return (int) now()->diffInMinutes($pickupAt, false);
+    }
+
+    public function isOnDemandPickup(): bool
+    {
+        $minutes = $this->minutesUntilOperationalPickup();
+
+        return $minutes !== null && $minutes <= 30;
+    }
+
+    public function isScheduledPickup(): bool
+    {
+        return ! $this->isOnDemandPickup();
+    }
+
     public function isPastPickupTime(): bool
     {
-        $pickupAt = $this->tripStartAt();
+        $pickupAt = $this->operationalPickupAt();
 
         return $pickupAt !== null && $pickupAt->lte(now());
+    }
+
+    /** Giờ đón − 15 phút — lúc admin có thể hủy / hết hạn nhận cuốc. */
+    public function pickupAdminActionStartsAt(): ?\Carbon\Carbon
+    {
+        $pickupAt = $this->operationalPickupAt();
+
+        return $pickupAt?->copy()->subMinutes(\App\Services\DriverTripRequestService::PICKUP_INVITE_LEAD_MINUTES);
+    }
+
+    /** Ẩn khỏi khách + admin (tab đặt xe) sau giờ đón nếu chưa đón khách. */
+    public function shouldHideFromGuestAndOperatorActiveLists(): bool
+    {
+        if (! $this->isPastPickupTime()) {
+            return false;
+        }
+
+        if (in_array($this->booking_status, ['cancelled', 'rejected'], true)) {
+            return false;
+        }
+
+        if ($this->trip_status === 'completed') {
+            return false;
+        }
+
+        if ($this->passengerPickedUp()) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -458,13 +541,9 @@ class Booking extends Model
         }
     }
 
-    /** Tài xế đã gắn với vé — từ cột, chuyến, hoặc yêu cầu nhận chuyến. */
+    /** Tài xế đã gắn với vé — chuyến đã nhận hoặc đang chờ TX xác nhận. */
     public function resolveAssignedDriverId(?Schedule $schedule = null): ?int
     {
-        if ($this->assigned_driver_id) {
-            return (int) $this->assigned_driver_id;
-        }
-
         $schedule ??= $this->relationLoaded('schedule') ? $this->schedule : $this->schedule()->first();
 
         if ($schedule?->driver_id) {
@@ -478,7 +557,16 @@ class Booking extends Model
         $fromRequest = DriverTripRequest::query()
             ->where('schedule_id', $this->schedule_id)
             ->where('contact_phone', $this->contact_phone)
-            ->whereIn('status', ['accepted', 'pending', 'cancelled'])
+            ->where(function ($query): void {
+                $query->where('status', 'accepted')
+                    ->orWhere(function ($query): void {
+                        $query->where('status', 'pending')
+                            ->where(function ($query): void {
+                                $query->whereNull('expires_at')
+                                    ->orWhere('expires_at', '>', now());
+                            });
+                    });
+            })
             ->orderByDesc('updated_at')
             ->value('driver_id');
 
@@ -534,7 +622,7 @@ class Booking extends Model
                                     ->whereColumn('driver_trip_requests.schedule_id', 'bookings.schedule_id')
                                     ->whereColumn('driver_trip_requests.contact_phone', 'bookings.contact_phone')
                                     ->where('driver_trip_requests.driver_id', $driverUserId)
-                                    ->whereIn('driver_trip_requests.status', ['accepted', 'pending', 'cancelled']);
+                                    ->whereIn('driver_trip_requests.status', ['accepted', 'pending']);
                             });
                     });
             } else {
@@ -659,6 +747,12 @@ class Booking extends Model
             ->first();
     }
 
+    /** Hồ sơ TX hiển thị cho khách — đã gán, đang mời, hoặc chọn từ catalog. */
+    public function guestDriverProfile(): ?DriverProfile
+    {
+        return $this->activeDriverProfile() ?? $this->catalogChosenDriverProfile();
+    }
+
     public function activeDriverProfile(): ?DriverProfile
     {
         $driverUserId = (int) ($this->resolveAssignedDriverId() ?? 0);
@@ -708,9 +802,19 @@ class Booking extends Model
             return false;
         }
 
+        // Đã giao / đang mời TX (admin gán thủ công hoặc auto-assign) — không báo catalog.
+        if ($this->driverAcceptanceState() === 'pending') {
+            return false;
+        }
+
         $this->loadMissing('schedule.template');
         $templateDriverId = (int) ($this->schedule?->template?->driver_id ?? 0);
         if ($templateDriverId <= 0) {
+            return false;
+        }
+
+        $assignedId = (int) ($this->resolveAssignedDriverId() ?? 0);
+        if ($assignedId > 0 && $assignedId !== $templateDriverId) {
             return false;
         }
 
@@ -753,7 +857,89 @@ class Booking extends Model
     {
         $this->loadMissing('schedule');
 
-        return $this->resolveAssignedDriverId($this->schedule) !== null;
+        return (int) ($this->schedule?->driver_id ?? 0) > 0;
+    }
+
+    /** Đã từng có TX nhận / được mời nhận — dùng phân biệt «không có TX» vs «TX không đến». */
+    public function hadDriverEngagedForPickup(): bool
+    {
+        if ($this->hasDriverAccepted()) {
+            return true;
+        }
+
+        if (Schema::hasColumn('bookings', 'assigned_driver_id')
+            && (int) ($this->assigned_driver_id ?? 0) > 0) {
+            return true;
+        }
+
+        if (! $this->schedule_id || ! $this->contact_phone) {
+            return false;
+        }
+
+        return DriverTripRequest::query()
+            ->where('schedule_id', $this->schedule_id)
+            ->where('contact_phone', (string) $this->contact_phone)
+            ->whereIn('status', ['accepted', 'expired', 'cancelled', 'rejected'])
+            ->exists();
+    }
+
+    /** TX đã từng gắn với vé — hiển thị tab Đã hủy (không lấy cuốc chờ nhận). */
+    public function historicalAssignedDriverProfile(): ?DriverProfile
+    {
+        if (Schema::hasColumn('bookings', 'assigned_driver_id')) {
+            $assignedId = (int) ($this->assigned_driver_id ?? 0);
+            if ($assignedId > 0) {
+                return DriverProfile::query()
+                    ->where('user_id', $assignedId)
+                    ->with('user')
+                    ->first();
+            }
+        }
+
+        if (! $this->schedule_id || ! $this->contact_phone) {
+            return null;
+        }
+
+        $driverUserId = (int) (DriverTripRequest::query()
+            ->where('schedule_id', $this->schedule_id)
+            ->where('contact_phone', (string) $this->contact_phone)
+            ->whereIn('status', ['accepted', 'expired', 'cancelled'])
+            ->orderByDesc('id')
+            ->value('driver_id') ?? 0);
+
+        if ($driverUserId <= 0) {
+            return null;
+        }
+
+        return DriverProfile::query()
+            ->where('user_id', $driverUserId)
+            ->with('user')
+            ->first();
+    }
+
+    /** TX hiển thị trên bảng quản lý — đang chạy hoặc đã từng nhận (tab hủy). */
+    public function adminTripDriverProfile(): ?DriverProfile
+    {
+        if (in_array($this->booking_status, ['cancelled', 'rejected'], true)
+            || $this->trip_status === 'cancelled') {
+            return $this->historicalAssignedDriverProfile();
+        }
+
+        return $this->activeDriverProfile();
+    }
+
+    /** Khách thấy thẻ tài xế — đã nhận, đang mời, hoặc đã chọn TX từ catalog. */
+    public function guestShowsDriverInfo(): bool
+    {
+        if ($this->guestDriverProfile() === null) {
+            return false;
+        }
+
+        if (in_array($this->driverAcceptanceState(), ['pending', 'accepted'], true)) {
+            return true;
+        }
+
+        return $this->catalogChosenDriverProfile() !== null && $this->blocksGuestRebooking();
     }
 
     public function passengerPickedUp(): bool
@@ -763,11 +949,19 @@ class Booking extends Model
         return (bool) $this->schedule?->passengerPickedUp();
     }
 
-    /** Admin hủy khi TX không nhận sau 15 phút (gán / gán lại). */
+    /** Admin hủy khi đã tới khung giờ đón − 15 phút. */
     public function adminCanCancelAfterInviteTimeout(): bool
     {
-        return $this->needs_operator_help_at
-            && $this->adminCanModifyDriverOrCancel();
+        if (! $this->adminCanModifyDriverOrCancel()) {
+            return false;
+        }
+
+        $windowStart = $this->pickupAdminActionStartsAt();
+        if (! $windowStart) {
+            return false;
+        }
+
+        return now()->gte($windowStart);
     }
 
     /** Admin còn được gán / đổi tài xế hoặc hủy chuyến. */
@@ -784,6 +978,39 @@ class Booking extends Model
         return ! $this->passengerPickedUp();
     }
 
+    // TODO (Fix Flow): Chỉ hiện nút gán thủ công khi có cảnh báo — không khi auto-assign đang chạy bình thường.
+    public function adminShouldShowManualAssign(): bool
+    {
+        if (! $this->adminCanModifyDriverOrCancel()) {
+            return false;
+        }
+
+        if ($this->needs_operator_help_at) {
+            return true;
+        }
+
+        if ($this->adminReleasedAfterDriverEngagement()) {
+            return true;
+        }
+
+        if (in_array($this->operator_help_reason, [
+            'driver_search_timeout',
+            'driver_invite_timeout',
+            'driver_movement_timeout',
+            'driver_late_no_show',
+            'driver_cancelled_trip',
+        ], true)) {
+            return true;
+        }
+
+        $alert = app(\App\Services\DriverLatePickupService::class)->adminAlertForBooking($this);
+        if ($alert && in_array($alert['level'] ?? '', ['warning', 'danger'], true)) {
+            return true;
+        }
+
+        return false;
+    }
+
     public function adminWaitingMinutesRemaining(): ?int
     {
         $this->loadMissing('schedule');
@@ -793,29 +1020,51 @@ class Booking extends Model
             return null;
         }
 
-        $pendingRequest = DriverTripRequest::query()
-            ->where('schedule_id', $schedule->id)
-            ->where('contact_phone', (string) $this->contact_phone)
-            ->where('status', 'pending')
-            ->latest('id')
-            ->first();
+        $pendingRequest = $this->eligiblePendingDriverTripRequest();
 
         if ($pendingRequest?->expires_at?->isFuture()) {
             return max(1, (int) now()->diffInMinutes($pendingRequest->expires_at, false));
         }
 
-        if (! $schedule->driver_id && $this->driver_search_started_at) {
-            $deadline = app(\App\Services\DriverTripRequestService::class)
-                ->customerSearchStartedAt($this)
-                ->copy()
-                ->addMinutes(\App\Services\DriverTripRequestService::CUSTOMER_SEARCH_DEADLINE_MINUTES);
+        if ($this->driverAcceptanceState() !== 'accepted') {
+            return null;
+        }
 
-            if ($deadline->isFuture()) {
-                return max(1, (int) now()->diffInMinutes($deadline, false));
-            }
+        $inviteDeadline = $this->pickupAdminActionStartsAt();
+        if ($inviteDeadline?->isFuture()) {
+            return max(1, (int) now()->diffInMinutes($inviteDeadline, false));
         }
 
         return null;
+    }
+
+    /** TX đã nhận rồi bị gỡ — không còn offer đang chờ. */
+    public function adminReleasedAfterDriverEngagement(): bool
+    {
+        if ($this->schedule?->driver_id) {
+            return false;
+        }
+
+        if ($this->driverAcceptanceState() === 'pending') {
+            return false;
+        }
+
+        return $this->hadDriverEngagedForPickup();
+    }
+
+    /** Còn trong khung tự động tìm TX sau khi TX cũ hủy / bị gỡ. */
+    public function adminStillSearchingReplacementDriver(): bool
+    {
+        if (! $this->adminReleasedAfterDriverEngagement()) {
+            return false;
+        }
+
+        if ($this->needs_operator_help_at) {
+            return false;
+        }
+
+        return ! app(\App\Services\DriverTripRequestService::class)
+            ->hasExceededCustomerSearchDeadline($this);
     }
 
     /** Chuyến đang chờ tài xế hoặc cần admin gán / gán lại TX. */
@@ -851,15 +1100,16 @@ class Booking extends Model
     {
         $this->loadMissing('schedule.template', 'schedule.driverTripRequests');
 
-        if ($this->schedule?->driverTripRequests
-            ?->where('status', 'pending')
-            ->filter(fn ($request) => $request->expires_at === null || $request->expires_at->isFuture())
-            ->isNotEmpty()) {
+        if ($this->driverAcceptanceState() === 'pending') {
             return 'Chờ tài xế nhận';
         }
 
-        if ($this->schedule?->designatedDriverProfile()) {
-            return 'Chờ tài xế nhận';
+        if ($this->adminReleasedAfterDriverEngagement()) {
+            if ($this->adminStillSearchingReplacementDriver()) {
+                return 'Đang tìm tài xế khác';
+            }
+
+            return 'TX hủy — cần gán lại';
         }
 
         return 'Đang tìm tài xế';
@@ -900,12 +1150,39 @@ class Booking extends Model
             return 'accepted';
         }
 
-        $request = $this->latestDriverTripRequest();
-        if ($request?->isPending() && ($request->expires_at === null || $request->expires_at->isFuture())) {
+        if ($this->eligiblePendingDriverTripRequest() !== null) {
             return 'pending';
         }
 
         return 'none';
+    }
+
+    /** Offer pending còn hiệu lực — bỏ qua TX đã từ chối / hủy / hết hạn trên cùng đơn. */
+    public function eligiblePendingDriverTripRequest(): ?DriverTripRequest
+    {
+        $request = $this->latestDriverTripRequest();
+        if (! $request?->isPending()) {
+            return null;
+        }
+
+        if ($request->expires_at !== null && $request->expires_at->isPast()) {
+            return null;
+        }
+
+        $this->loadMissing('schedule');
+        $schedule = $this->schedule;
+        if (! $schedule || trim((string) $this->contact_phone) === '') {
+            return $request;
+        }
+
+        $exclude = app(\App\Services\DriverTripRequestService::class)
+            ->assignmentExcludeDriverIds($schedule, (string) $this->contact_phone);
+
+        if ($exclude->contains((int) $request->driver_id)) {
+            return null;
+        }
+
+        return $request;
     }
 
     public function assignedDriverHasPushSubscription(): bool
@@ -919,6 +1196,18 @@ class Booking extends Model
             ->where('audience', PushAudience::DRIVER)
             ->where('user_id', $driverUserId)
             ->exists();
+    }
+
+    /** TX đang bật app và chia sẻ GPS (hoặc heartbeat poll tab tài xế). */
+    public function assignedDriverSharesLiveLocation(): bool
+    {
+        $profile = $this->activeDriverProfile();
+        if (! $profile) {
+            return false;
+        }
+
+        return app(\App\Services\DriverAvailabilityService::class)
+            ->isDriverAppActiveForAdmin($profile);
     }
 
     /** @return array{label: string, color: string, can_nudge: bool}|null */
@@ -938,35 +1227,51 @@ class Booking extends Model
         }
 
         $hasPush = $this->assignedDriverHasPushSubscription();
+        $sharesLocation = $this->assignedDriverSharesLiveLocation();
         $pushReady = PushNotificationSettings::isEnabled()
             && PushNotificationSettings::vapidKeys() !== null
             && PushNotificationSettings::isEventEnabled('driver.new_trip_request');
 
         if ($state === 'pending') {
-            if (! $hasPush) {
+            if ($hasPush) {
                 return [
-                    'label'     => 'TX chưa bật app',
-                    'color'     => 'danger',
+                    'label'     => $pushReady ? 'Đã gửi TB · chờ TX nhận' : 'TB đẩy chưa sẵn sàng',
+                    'color'     => $pushReady ? 'pending' : 'neutral',
+                    'can_nudge' => $pushReady,
+                ];
+            }
+
+            if ($sharesLocation) {
+                return [
+                    'label'     => 'TX đã chia sẻ vị trí · chờ nhận',
+                    'color'     => 'success',
                     'can_nudge' => false,
                 ];
             }
 
             return [
-                'label'     => $pushReady ? 'Đã gửi TB · chờ TX nhận' : 'TB đẩy chưa sẵn sàng',
-                'color'     => $pushReady ? 'pending' : 'neutral',
-                'can_nudge' => $pushReady,
-            ];
-        }
-
-        if (! $hasPush) {
-            return [
                 'label'     => 'TX chưa bật app',
-                'color'     => 'neutral',
+                'color'     => 'danger',
                 'can_nudge' => false,
             ];
         }
 
-        return null;
+        $driverName = trim((string) ($this->schedule?->driver_name ?? ''));
+        if ($driverName === '') {
+            $driverName = 'Tài xế';
+        }
+
+        $suffix = match (true) {
+            $sharesLocation => ' · đã chia sẻ vị trí',
+            $hasPush        => ' · đã bật app',
+            default         => ' · chưa bật app',
+        };
+
+        return [
+            'label'     => 'TX đã nhận cuốc · ' . $driverName . $suffix,
+            'color'     => $sharesLocation ? 'success' : ($hasPush ? 'info' : 'neutral'),
+            'can_nudge' => false,
+        ];
     }
 
     public function chargedTotal(): float
@@ -1054,13 +1359,22 @@ class Booking extends Model
 
         if ($this->needs_operator_help_at) {
             return match ($this->operator_help_reason) {
-                'driver_invite_timeout' => 'TX không nhận — cần gán lại',
-                default                 => 'Cần quản lý xử lý',
+                'driver_invite_timeout'    => 'TX không nhận — cần gán lại',
+                'driver_late_no_show'      => 'Quá giờ đón — cần gán lại',
+                'driver_movement_timeout'  => 'TX chưa xác nhận đi đón',
+                'driver_cancelled_trip'    => 'TX hủy cuốc — cần gán lại',
+                default                    => 'Cần quản lý xử lý',
             };
         }
 
         $acceptance = $this->driverAcceptanceState();
         if ($acceptance === 'none') {
+            if ($this->adminReleasedAfterDriverEngagement()) {
+                return $this->adminStillSearchingReplacementDriver()
+                    ? 'Đang tìm tài xế khác'
+                    : 'TX hủy cuốc — cần gán lại';
+            }
+
             return $this->awaitingDriverLabel();
         }
 
@@ -1100,7 +1414,7 @@ class Booking extends Model
         }
 
         if ($this->needs_operator_help_at) {
-            return \App\Support\StatusBadge::WARNING;
+            return \App\Support\StatusBadge::DANGER;
         }
 
         $acceptance = $this->driverAcceptanceState();
@@ -1128,8 +1442,8 @@ class Booking extends Model
         return match ($label) {
             'Đã hủy', 'Từ chối'     => \App\Support\StatusBadge::DANGER,
             'Hoàn thành'            => \App\Support\StatusBadge::SUCCESS,
-            'Đang phục vụ', 'Đang chạy', 'Đã đón khách', 'Tài xế đã đến điểm đón', 'Đã có tài xế' => \App\Support\StatusBadge::GOLD,
-            'Chờ QL xác nhận', 'Chờ tài xế nhận', 'Đang tìm tài xế' => \App\Support\StatusBadge::PENDING,
+            'Đang phục vụ', 'Đang chạy', 'Đã đón khách', 'Tài xế đã đến điểm đón', 'Tài xế đang đi đón', 'Đã có tài xế' => \App\Support\StatusBadge::GOLD,
+            'Chờ QL xác nhận', 'Chờ tài xế nhận', 'Đang tìm tài xế', 'Đang tìm tài xế khác', 'TX hủy — cần gán lại', 'TX hủy cuốc — cần gán lại' => \App\Support\StatusBadge::PENDING,
             'Cần QL hỗ trợ'        => \App\Support\StatusBadge::DANGER,
             default                 => \App\Support\StatusBadge::NEUTRAL,
         };
