@@ -26,9 +26,13 @@ class CancellationReasonController extends Controller
             'reasons' => $this->reasons->serializeForAudience($validated['audience']),
         ];
 
-        if ($validated['audience'] === 'customer' && filled($validated['contact_phone'] ?? null)) {
-            $payload['requires_reason'] = $this->phoneGuard->requiresCancelReason($validated['contact_phone']);
-            $payload['cancel_count'] = $this->phoneGuard->customerCancelCount($validated['contact_phone']);
+        if ($validated['audience'] === 'customer') {
+            $payload['requires_reason'] = filled($validated['contact_phone'] ?? null)
+                ? $this->phoneGuard->requiresCancelReason($validated['contact_phone'])
+                : true;
+            if (filled($validated['contact_phone'] ?? null)) {
+                $payload['cancel_count'] = $this->phoneGuard->customerCancelCount($validated['contact_phone']);
+            }
         }
 
         if ($validated['audience'] === 'driver') {

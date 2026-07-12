@@ -136,19 +136,21 @@
 
                 <div class="guest-trip-driver__header">
 
-                    <div class="guest-trip-driver__main">
+                    <div class="guest-trip-driver__vehicle-line d-none" data-field="driver_vehicle"></div>
 
-                        <div class="guest-trip-driver__vehicle-line d-none" data-field="driver_vehicle"></div>
+                    <div class="guest-trip-driver__top">
 
-                        <div class="guest-trip-driver__top">
+                        <strong class="guest-trip-driver__name" data-field="driver_name">—</strong>
 
-                            <strong class="guest-trip-driver__name" data-field="driver_name">—</strong>
+                        <span class="guest-trip-driver__code d-none" data-field="driver_code"></span>
 
-                            <span class="guest-trip-driver__code d-none" data-field="driver_code"></span>
+                    </div>
 
-                        </div>
+                    <div class="guest-trip-driver__badges">
 
                         <span class="guest-trip-driver__plate d-none" data-field="driver_plate"></span>
+
+                        <span class="guest-trip-driver__seats d-none" data-field="driver_seats"></span>
 
                     </div>
 
@@ -300,6 +302,14 @@
     </div>
 
     @include('partials.guest-trip-completion-modal')
+
+    <div id="guest-trip-vehicle-photo-overlay" class="guest-trip-vehicle-photo-overlay d-none" role="dialog" aria-modal="true" aria-label="Ảnh xe" hidden>
+        <button type="button" class="guest-trip-vehicle-photo-overlay__backdrop" data-close-guest-vehicle-photo aria-label="Đóng"></button>
+        <div class="guest-trip-vehicle-photo-overlay__panel">
+            <button type="button" class="btn-close btn-close-white guest-trip-vehicle-photo-overlay__close" data-close-guest-vehicle-photo aria-label="Đóng"></button>
+            <img src="" alt="" class="guest-trip-vehicle-photo-overlay__image" id="guest-trip-vehicle-photo-overlay-image">
+        </div>
+    </div>
 
 </div>
 

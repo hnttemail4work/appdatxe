@@ -16,7 +16,7 @@
             <form method="POST" action="/login" autocomplete="on">
                 @csrf
                 <div class="mb-3">
-                    <label class="form-label">Số điện thoại hoặc tài khoản</label>
+                    <label class="form-label">Số điện thoại</label>
                     <input type="text" name="phone" value="{{ old('phone') }}"
                         class="form-control @error('phone') is-invalid @enderror"
                         required autofocus autocomplete="username">

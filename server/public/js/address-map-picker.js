@@ -2,8 +2,9 @@
  * Map picker — search + map pin, preview selection, confirm to apply.
  */
 (function () {
-    var LEAFLET_CSS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-    var LEAFLET_JS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    var GOONG_JS_CSS = 'https://cdn.jsdelivr.net/npm/@goongmaps/goong-js@1.0.9/dist/goong-js.css';
+    var GOONG_JS = 'https://cdn.jsdelivr.net/npm/@goongmaps/goong-js@1.0.9/dist/goong-js.js';
+    var goongMaptilesKey = String(window.__goongMaptilesKey || '').trim();
 
     var PROVINCE_CENTERS = (function () {
         var raw = window.__provinceCenters || {};
@@ -42,6 +43,7 @@
     var previewEl = document.getElementById('address-map-preview');
     var titleEl = document.getElementById('addressMapPickerTitle');
     var searchInput = document.getElementById('address-map-search');
+    var searchClearBtn = document.getElementById('address-map-search-clear');
     var searchResultsEl = document.getElementById('address-map-search-results');
     var confirmBtn = document.getElementById('address-map-confirm');
     var confirmStatusEl = document.getElementById('address-map-confirm-status');
@@ -70,59 +72,100 @@
     var searchAbort = null;
     var isResolving = false;
     var needsPinFineTune = false;
-    var leafletAssetsPromise = null;
+    var goongAssetsPromise = null;
     var searchTimer = null;
     var lastSearchQuery = '';
+    var searchResultCache = Object.create(null);
     var provinceChangeHandler = null;
 
-    function loadStylesheet(href) {
+    function loadStylesheet(href, assetTag) {
         return new Promise(function (resolve, reject) {
             var link = document.createElement('link');
             link.rel = 'stylesheet';
             link.href = href;
-            link.setAttribute('data-address-map-asset', 'leaflet-css');
+            link.setAttribute('data-address-map-asset', assetTag);
             link.onload = function () { resolve(link); };
             link.onerror = reject;
             document.head.appendChild(link);
         });
     }
 
-    function loadScript(src) {
+    function loadScript(src, assetTag) {
         return new Promise(function (resolve, reject) {
             var script = document.createElement('script');
             script.src = src;
             script.async = true;
-            script.setAttribute('data-address-map-asset', 'leaflet-js');
+            script.setAttribute('data-address-map-asset', assetTag);
             script.onload = function () { resolve(script); };
             script.onerror = reject;
             document.body.appendChild(script);
         });
     }
 
-    function loadLeafletAssets() {
-        if (window.L) {
-            return Promise.resolve();
-        }
-        if (!leafletAssetsPromise) {
-            leafletAssetsPromise = loadStylesheet(LEAFLET_CSS).then(function () {
-                return loadScript(LEAFLET_JS);
-            });
-        }
-        return leafletAssetsPromise;
+    function goongApi() {
+        return window.goongjs || null;
     }
 
-    function unloadLeafletAssets() {
-        leafletAssetsPromise = null;
+    function loadGoongAssets() {
+        if (!goongMaptilesKey) {
+            return Promise.reject(new Error('goong_maptiles_key_missing'));
+        }
+        if (goongApi()) {
+            return Promise.resolve();
+        }
+        if (!goongAssetsPromise) {
+            goongAssetsPromise = loadStylesheet(GOONG_JS_CSS, 'goong-js-css').then(function () {
+                return loadScript(GOONG_JS, 'goong-js');
+            });
+        }
+        return goongAssetsPromise;
+    }
+
+    function loadMapAssets() {
+        return loadGoongAssets();
+    }
+
+    function unloadMapAssets() {
+        goongAssetsPromise = null;
         document.querySelectorAll('[data-address-map-asset]').forEach(function (node) {
             node.remove();
         });
-        if (window.L) {
+        if (window.goongjs) {
             try {
-                delete window.L;
+                delete window.goongjs;
             } catch (e) {
-                window.L = undefined;
+                window.goongjs = undefined;
             }
         }
+    }
+
+    function invalidateMapSize() {
+        if (mapInstance && typeof mapInstance.resize === 'function') {
+            mapInstance.resize();
+        }
+    }
+
+    function mapZoomLevel(options) {
+        options = options || {};
+        var base = isDriverMode() ? DRIVER_FOCUS_ZOOM : PROVINCE_FOCUS_ZOOM;
+        if (!mapInstance) {
+            return options.fromSearch ? PICKUP_PIN_ZOOM : base;
+        }
+        var current = typeof mapInstance.getZoom === 'function' ? mapInstance.getZoom() : base;
+        if (options.fromSearch) {
+            return Math.max(current, PICKUP_PIN_ZOOM);
+        }
+        return Math.max(current, base);
+    }
+
+    function mapFlyTo(lat, lng, options) {
+        if (!mapInstance) {
+            return;
+        }
+        mapInstance.flyTo({
+            center: [lng, lat],
+            zoom: mapZoomLevel(options || {}),
+        });
     }
 
     function isDriverMode() {
@@ -160,7 +203,8 @@
         if (!mapInstance) {
             return;
         }
-        mapInstance.setView(provinceCenter(), focusZoomLevel());
+        var center = provinceCenter();
+        mapFlyTo(center[0], center[1], {});
     }
 
     function hideAddressSuggestions() {
@@ -356,19 +400,88 @@
         }
     }
 
+    function showSearchResultsPanel() {
+        if (searchResultsEl) {
+            searchResultsEl.classList.remove('d-none');
+        }
+        if (searchInput) {
+            var wrap = searchInput.closest('.address-map-search-wrap');
+            if (wrap) {
+                wrap.classList.add('address-map-search-wrap--open');
+            }
+        }
+    }
+
     function hideSearchResults() {
         if (!searchResultsEl) return;
         searchResultsEl.innerHTML = '';
         searchResultsEl.classList.add('d-none');
+        searchResultsEl.classList.remove('geocode-search-results--loading');
+        if (searchInput) {
+            var wrap = searchInput.closest('.address-map-search-wrap');
+            if (wrap) {
+                wrap.classList.remove('address-map-search-wrap--open');
+            }
+        }
+        if (mapInstance) {
+            window.setTimeout(function () {
+                invalidateMapSize();
+            }, 30);
+        }
+    }
+
+    function syncSearchClearButton() {
+        if (!searchClearBtn || !searchInput) {
+            return;
+        }
+        searchClearBtn.classList.toggle('d-none', !String(searchInput.value || '').trim());
+    }
+
+    function scrollSearchInputToCaret() {
+        if (!searchInput) {
+            return;
+        }
+        var len = searchInput.value.length;
+        var pos = searchInput.selectionStart;
+        if (pos === len || pos === null) {
+            searchInput.scrollLeft = searchInput.scrollWidth;
+        }
+    }
+
+    function moveSearchCaretToEnd() {
+        if (!searchInput) {
+            return;
+        }
+        var len = searchInput.value.length;
+        window.requestAnimationFrame(function () {
+            try {
+                searchInput.setSelectionRange(len, len);
+            } catch (e) {
+            }
+            searchInput.scrollLeft = searchInput.scrollWidth;
+        });
+    }
+
+    function clearSearchInput() {
+        if (!searchInput) {
+            return;
+        }
+        searchInput.value = '';
+        hideSearchResults();
+        syncSearchClearButton();
+        searchInput.focus();
+        moveSearchCaretToEnd();
     }
 
     function destroyMap() {
-        if (mapInstance) {
-            mapInstance.off();
+        if (marker && typeof marker.remove === 'function') {
+            marker.remove();
+            marker = null;
+        }
+        if (mapInstance && typeof mapInstance.remove === 'function') {
             mapInstance.remove();
             mapInstance = null;
         }
-        marker = null;
         if (canvasEl) {
             canvasEl.innerHTML = '';
             canvasEl.removeAttribute('style');
@@ -389,7 +502,7 @@
             searchTimer = null;
         }
         destroyMap();
-        unloadLeafletAssets();
+        unloadMapAssets();
         unbindProvinceChange();
         syncDriverProvinceUi(false);
         isResolving = false;
@@ -540,7 +653,8 @@
 
     function placeMarker(lat, lng, moveView, options) {
         options = options || {};
-        if (!mapInstance || !window.L || isResolving) {
+        var goongjs = goongApi();
+        if (!mapInstance || isResolving || !goongjs) {
             return;
         }
 
@@ -554,21 +668,22 @@
         pendingLng = lng;
 
         if (marker) {
-            marker.setLatLng([lat, lng]);
+            marker.setLngLat([lng, lat]);
         } else {
-            marker = window.L.marker([lat, lng], { draggable: true }).addTo(mapInstance);
+            marker = new goongjs.Marker({ draggable: true })
+                .setLngLat([lng, lat])
+                .addTo(mapInstance);
             marker.on('dragend', function () {
-                if (isResolving) return;
-                var pos = marker.getLatLng();
+                if (isResolving) {
+                    return;
+                }
+                var pos = marker.getLngLat();
                 placeMarker(pos.lat, pos.lng, false);
             });
         }
 
         if (moveView) {
-            var targetZoom = isDriverMode()
-                ? Math.max(mapInstance.getZoom(), DRIVER_FOCUS_ZOOM)
-                : Math.max(mapInstance.getZoom(), options.fromSearch ? PICKUP_PIN_ZOOM : PROVINCE_FOCUS_ZOOM);
-            mapInstance.setView([lat, lng], targetZoom);
+            mapFlyTo(lat, lng, options);
         }
 
         if (options.address) {
@@ -605,6 +720,39 @@
         finishWithAddress(text);
     }
 
+    function selectSearchItem(item) {
+        if (isResolving || !item) {
+            return;
+        }
+
+        hideSearchResults();
+
+        var applyItem = function (resolved) {
+            if (!resolved) {
+                return;
+            }
+
+            if (resolved.lat != null && resolved.lon != null) {
+                placeMarker(resolved.lat, resolved.lon, true, {
+                    address: resolved.address,
+                    fromSearch: true,
+                });
+                return;
+            }
+
+            pendingLat = null;
+            pendingLng = null;
+            previewResolvedAddress(resolved.address);
+        };
+
+        if (window.GeocodeResolve && window.GeocodeResolve.resolvePlace) {
+            window.GeocodeResolve.resolvePlace(item).then(applyItem);
+            return;
+        }
+
+        applyItem(item);
+    }
+
     function renderSearchResults(results, query) {
         if (!searchResultsEl) return;
 
@@ -614,17 +762,10 @@
                 emptyClass: 'address-map-search-empty',
                 emptyText: 'Không thấy địa chỉ phù hợp — thử thêm số nhà, phường hoặc quận.',
                 onSelect: function (item) {
-                    if (isResolving) return;
-                    hideSearchResults();
-                    if (item.lat != null && item.lon != null) {
-                        placeMarker(item.lat, item.lon, true, { address: item.address, fromSearch: true });
-                    } else {
-                        pendingLat = null;
-                        pendingLng = null;
-                        previewResolvedAddress(item.address);
-                    }
+                    selectSearchItem(item);
                 },
             });
+            showSearchResultsPanel();
             return;
         }
 
@@ -645,15 +786,7 @@
             btn.className = 'address-map-search-item';
             btn.textContent = item.address;
             btn.addEventListener('click', function () {
-                if (isResolving) return;
-                hideSearchResults();
-                if (item.lat != null && item.lon != null) {
-                    placeMarker(item.lat, item.lon, true, { address: item.address, fromSearch: true });
-                } else {
-                    pendingLat = null;
-                    pendingLng = null;
-                    previewResolvedAddress(item.address);
-                }
+                selectSearchItem(item);
             });
             searchResultsEl.appendChild(btn);
         });
@@ -667,6 +800,11 @@
         }
 
         lastSearchQuery = query;
+        var cacheKey = query + '\0' + provinceName();
+        if (searchResultCache[cacheKey]) {
+            renderSearchResults(searchResultCache[cacheKey], query);
+            return;
+        }
 
         if (searchAbort) {
             searchAbort.abort();
@@ -676,6 +814,7 @@
         if (window.GeocodeSearchUi && window.GeocodeSearchUi.setLoading) {
             window.GeocodeSearchUi.setLoading(searchResultsEl, 'Đang tìm địa chỉ…');
         }
+        showSearchResultsPanel();
 
         var url = searchUrl
             + '?q=' + encodeURIComponent(query)
@@ -686,37 +825,62 @@
             headers: { Accept: 'application/json' },
             credentials: 'same-origin',
         })
-            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (r) {
+                if (!r.ok) {
+                    throw new Error('search_http_' + r.status);
+                }
+                return r.json();
+            })
             .then(function (data) {
-                renderSearchResults((data && data.results) || [], query);
+                var results = (data && data.results) || [];
+                searchResultCache[cacheKey] = results;
+                renderSearchResults(results, query);
             })
             .catch(function (err) {
-                if (err && err.name === 'AbortError') return;
-                hideSearchResults();
+                if (err && err.name === 'AbortError') {
+                    return;
+                }
+                if (!searchResultsEl) {
+                    return;
+                }
+                searchResultsEl.innerHTML = '';
+                var error = document.createElement('div');
+                error.className = 'address-map-search-empty';
+                error.textContent = 'Không tìm được địa chỉ — thử thêm phường/quận hoặc cấu hình GOONG_API_KEY.';
+                searchResultsEl.appendChild(error);
+                showSearchResultsPanel();
             });
     }
 
     function initMap() {
         destroyMap();
-        if (!canvasEl || !window.L) {
+        var goongjs = goongApi();
+        if (!canvasEl || !goongjs) {
             return;
         }
 
+        goongjs.accessToken = goongMaptilesKey;
         var center = mapCenter();
-        mapInstance = window.L.map(canvasEl, {
-            zoomControl: true,
+
+        mapInstance = new goongjs.Map({
+            container: canvasEl,
+            style: 'https://tiles.goong.io/assets/goong_map_web.json',
+            center: [center[1], center[0]],
+            zoom: isDriverMode() ? DRIVER_FOCUS_ZOOM : PROVINCE_FOCUS_ZOOM,
             attributionControl: true,
-        }).setView(center, isDriverMode() ? DRIVER_FOCUS_ZOOM : 14);
-
-        window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '&copy; OpenStreetMap',
-        }).addTo(mapInstance);
-
-        mapInstance.on('click', function (e) {
-            placeMarker(e.latlng.lat, e.latlng.lng, false);
         });
 
+        mapInstance.on('click', function (e) {
+            if (!e.lngLat) {
+                return;
+            }
+            placeMarker(e.lngLat.lat, e.lngLat.lng, false);
+        });
+
+        seedExistingMarker();
+    }
+
+    function seedExistingMarker() {
         var placedExisting = false;
         if (latInputId && lngInputId) {
             var latEl = document.getElementById(latInputId);
@@ -775,6 +939,7 @@
         var existingValue = existing ? String(existing.value || '').trim() : '';
         if (searchInput) {
             searchInput.value = existingValue;
+            syncSearchClearButton();
         }
 
         var provinceLabel = provinceName();
@@ -791,12 +956,13 @@
             ? ('Chỉnh ghim hoặc tìm lại — ' + provinceHint)
             : provinceHint, false);
 
-        loadLeafletAssets()
+        loadMapAssets()
             .then(function () {
                 modal.show();
                 window.setTimeout(function () {
                     if (searchInput) {
-                        searchInput.focus();
+                        searchInput.focus({ preventScroll: true });
+                        moveSearchCaretToEnd();
                         if (existingValue.length >= 2) {
                             searchAddress(existingValue);
                         }
@@ -805,13 +971,14 @@
             })
             .catch(function () {
                 teardownPicker();
+                var mapMsg = 'Không tải được bản đồ Goong. Kiểm tra GOONG_MAPTILES_KEY trong .env.';
                 if (window.AppFlash && window.AppFlash.show) {
-                    window.AppFlash.show('Không tải được bản đồ. Vui lòng nhập địa chỉ bằng tay.', {
+                    window.AppFlash.show(mapMsg, {
                         variant: 'warning',
                         title: 'Không tải được bản đồ',
                     });
                 } else if (window.AppDialog) {
-                    window.AppDialog.alert('Không tải được bản đồ. Vui lòng nhập địa chỉ bằng tay.');
+                    window.AppDialog.alert(mapMsg);
                 }
             });
     }
@@ -845,8 +1012,17 @@
         myLocationBtn.addEventListener('click', locateMe);
     }
 
+    if (searchClearBtn) {
+        searchClearBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            clearSearchInput();
+        });
+    }
+
     if (searchInput) {
         searchInput.addEventListener('input', function () {
+            syncSearchClearButton();
+            scrollSearchInputToCaret();
             var q = searchInput.value.trim();
             if (searchTimer) {
                 window.clearTimeout(searchTimer);
@@ -858,6 +1034,10 @@
             searchTimer = window.setTimeout(function () {
                 searchAddress(q);
             }, 400);
+        });
+
+        searchInput.addEventListener('focus', function () {
+            moveSearchCaretToEnd();
         });
 
         searchInput.addEventListener('keydown', function (e) {
@@ -879,9 +1059,7 @@
     modalEl.addEventListener('shown.bs.modal', function () {
         initMap();
         window.setTimeout(function () {
-            if (mapInstance) {
-                mapInstance.invalidateSize();
-            }
+            invalidateMapSize();
         }, 60);
     });
 
@@ -890,6 +1068,7 @@
         if (searchInput) {
             searchInput.value = '';
         }
+        syncSearchClearButton();
         setPreview('Chạm bản đồ hoặc tìm địa chỉ, rồi bấm Xác nhận.', false);
     });
 })();

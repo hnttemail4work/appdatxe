@@ -103,7 +103,7 @@ $mapNav = $primaryBooking ? MapNavigation::driverPickupTarget($primaryBooking) :
     <div class="driver-card-actions driver-card-actions--job driver-request-card__actions">
         <div class="driver-workflow-compact-actions">
             <form method="POST" action="{{ route('driver.tripRequests.reject', $tripRequest) }}"
-                  class="driver-workflow-compact-action driver-reject-form cancel-reason-form"
+                  class="driver-workflow-compact-action driver-reject-form"
                   data-audience="driver"
                   data-reason-title="Lý do hủy cuốc"
                   data-reason-hint="Chọn lý do để quản lý nắm thông tin và hỗ trợ khách.">

@@ -2,9 +2,7 @@
 window.__bookingCheckDuplicateUrl = @json(route('booking.checkDuplicate'));
 window.__bookingDriverOffersUrl = @json(route('booking.driverOffers'));
 window.__quotePriceUrl = @json(route('booking.quotePrice'));
-window.__geocodeReverseUrl = @json(route('geocode.reverse'));
-window.__geocodeSearchUrl = @json(route('geocode.search'));
-window.__provinceCenters = @json(\App\Support\ProvinceCenters::centersForCatalog());
+@include('partials.geocode-client-config')
 window.__bookingTemplates = @json($bookingTemplates ?? collect());
 window.__bookingRestoreModal = @json($bookingRestoreModal ?? null);
 window.__defaultServiceDate = @json($defaultServiceDate ?? now()->toDateString());
@@ -29,6 +27,7 @@ window.__guestBrowserCancelBlockLimit = @json(\App\Services\BookingBrowserGuardS
 <script src="{{ asset('js/idle-poll.js') }}?v={{ filemtime(public_path('js/idle-poll.js')) }}"></script>
 <script src="{{ asset('js/booking-active-session.js') }}?v={{ filemtime(public_path('js/booking-active-session.js')) }}"></script>
 <script src="{{ asset('js/geocode-search-ui.js') }}?v={{ filemtime(public_path('js/geocode-search-ui.js')) }}"></script>
+<script src="{{ asset('js/geocode-resolve.js') }}?v={{ filemtime(public_path('js/geocode-resolve.js')) }}"></script>
 <script src="{{ asset('js/customer-booking.js') }}?v={{ filemtime(public_path('js/customer-booking.js')) }}"></script>
 <script src="{{ asset('js/address-map-picker.js') }}?v={{ filemtime(public_path('js/address-map-picker.js')) }}"></script>
 <script src="{{ asset('js/booking-catalog-sync.js') }}?v={{ filemtime(public_path('js/booking-catalog-sync.js')) }}"></script>

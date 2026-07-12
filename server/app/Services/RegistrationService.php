@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\DriverProfile;
 use App\Models\User;
+use App\Support\AuthIdentifier;
 use App\Support\DriverFieldRules;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -33,7 +34,7 @@ class RegistrationService
                 'name'          => $validated['name'],
                 'email'         => $email,
                 'password'      => Hash::make($validated['password']),
-                'phone'         => $validated['phone'],
+                'phone'         => AuthIdentifier::normalizePhone((string) $validated['phone']),
                 'id_number'     => $validated['id_number'] ?? null,
                 'date_of_birth' => $validated['date_of_birth'] ?? null,
                 'address'       => $validated['address'] ?? null,

@@ -2,8 +2,8 @@
 
 namespace App\Support;
 
+use App\Services\GoongGeocodeService;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Http;
 
 /** Tọa độ trung tâm tỉnh/thành — tĩnh + tự tra cứu cho điểm admin thêm. */
 final class ProvinceCenters
@@ -40,7 +40,9 @@ final class ProvinceCenters
         return Cache::remember(
             self::geocodeCacheKey($name),
             now()->addDays(self::GEOCODE_CACHE_DAYS),
-            fn (): ?array => self::geocodeCenter($name),
+            fn (): ?array => app(GoongGeocodeService::class)->geocodeCenter(
+                self::searchLabelFor($name).', Việt Nam',
+            ),
         );
     }
 
@@ -139,52 +141,6 @@ final class ProvinceCenters
             + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) ** 2;
 
         return $earth * 2 * atan2(sqrt($a), sqrt(1 - $a));
-    }
-
-  /** @return array{lat: float, lng: float}|null */
-    private static function geocodeCenter(string $name): ?array
-    {
-        $query = self::searchLabelFor($name).', Việt Nam';
-        $name = (string) config('app.name', 'App');
-        $email = (string) config('app.contact_email', 'noreply@localhost');
-
-        try {
-            $client = Http::timeout(8)->withHeaders([
-                'User-Agent' => $name.' ('.$email.')',
-            ]);
-
-            if (! (bool) config('app.geocode_verify_ssl', true)) {
-                $client = $client->withOptions(['verify' => false]);
-            }
-
-            $response = $client->get('https://nominatim.openstreetmap.org/search', [
-                'q'              => $query,
-                'format'         => 'json',
-                'countrycodes'   => 'vn',
-                'limit'          => 1,
-                'accept-language'=> 'vi',
-            ]);
-        } catch (\Throwable) {
-            return null;
-        }
-
-        if (! $response->successful()) {
-            return null;
-        }
-
-        $rows = $response->json();
-        if (! is_array($rows) || $rows === [] || ! is_array($rows[0])) {
-            return null;
-        }
-
-        $lat = isset($rows[0]['lat']) ? (float) $rows[0]['lat'] : null;
-        $lng = isset($rows[0]['lon']) ? (float) $rows[0]['lon'] : null;
-
-        if ($lat === null || $lng === null) {
-            return null;
-        }
-
-        return ['lat' => $lat, 'lng' => $lng];
     }
 
     private static function geocodeCacheKey(string $name): string

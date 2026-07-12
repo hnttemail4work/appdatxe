@@ -403,16 +403,6 @@ class BookingWorkflowService
             $booking->update($updates);
 
             if ($schedule) {
-                DriverTripRequest::query()
-                    ->where('schedule_id', $schedule->id)
-                    ->where('contact_phone', (string) $booking->contact_phone)
-                    ->whereIn('status', ['pending', 'accepted'])
-                    ->update([
-                        'status'       => 'cancelled',
-                        'responded_at' => now(),
-                        'expires_at'   => null,
-                    ]);
-
                 $stillActive = Booking::query()
                     ->where('schedule_id', $schedule->id)
                     ->whereNotIn('booking_status', ['cancelled', 'rejected'])
@@ -450,7 +440,15 @@ class BookingWorkflowService
             $this->driverAvailability->syncAfterTripCompleted($formerDriverId);
         }
 
-        $this->browserGuard->clearActiveBookingForBooking($booking->fresh());
+        $freshBooking = $booking->fresh();
+        $this->driverRequests->revokePendingOffersForGuestBooking($freshBooking);
+
+        try {
+            app(PushNotificationService::class)->onTripCancelled($freshBooking);
+        } catch (\Throwable) {
+        }
+
+        $this->browserGuard->clearActiveBookingForBooking($freshBooking);
     }
 
     /** Quá giờ đón — hủy hệ thống để khách đặt lại, admin thấy tab Đã hủy. */

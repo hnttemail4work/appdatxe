@@ -6,8 +6,8 @@ $compact = $compact ?? false;
 @if(! empty($mapNav['url']))
     <a href="{{ $mapNav['url'] }}"
        class="driver-map-nav-btn {{ $compact ? 'driver-map-nav-btn--compact' : '' }}"
-       target="_blank"
-       rel="noopener noreferrer"
+       data-driver-map-nav
+       @if(! empty($mapNav['use_current_origin'])) data-map-nav-use-current-origin="1" @endif
        aria-label="{{ $mapNav['label'] }}">
         <span class="driver-map-nav-btn__icon" aria-hidden="true">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

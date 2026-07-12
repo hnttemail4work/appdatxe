@@ -34,6 +34,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    @if(request()->routeIs('home', 'about', 'booking.trips', 'driver.dashboard', 'register', 'login'))
+    <script src="{{ asset('js/mobile-app-chrome.js') }}?v={{ filemtime(public_path('js/mobile-app-chrome.js')) }}"></script>
+    @endif
     <title>{{ $appBrandName }}</title>
     @if($pwaEnabled)
     <meta name="theme-color" content="#0f1419">
@@ -107,7 +110,7 @@
     @endif
     @stack('styles')
 </head>
-<body class="app-shell @if(request()->routeIs('login', 'register')) app-shell--auth @endif @if(request()->routeIs('home', 'about', 'booking.trips', 'driver.dashboard')) app-shell--mobile-app @endif">
+<body class="app-shell @if(request()->routeIs('login', 'register')) app-shell--auth @endif @if(request()->routeIs('home', 'about', 'booking.trips', 'driver.dashboard', 'register', 'login')) app-shell--mobile-app @endif">
 <nav class="navbar navbar-expand-lg app-navbar navbar-dark">
     <div class="container app-navbar-inner">
         <a class="navbar-brand app-brand-link app-brand-link--stacked" href="{{ $brandHref }}" aria-label="{{ $appBrandName }}">
@@ -125,15 +128,10 @@
                     <div class="navbar-console-role">Quản trị</div>
                     <div class="navbar-console-name">{{ auth()->user()->name }}</div>
                 </div>
-            @else
-                @include('partials.driver-emergency-call')
             @endif
             @include('partials.logout-button')
         </div>
         <div class="app-navbar-mobile d-flex d-lg-none ms-auto align-items-center gap-2">
-            @if(auth()->user()->role === 'driver')
-                @include('partials.driver-emergency-call')
-            @endif
             @include('partials.logout-button')
         </div>
         @elseif(! $hidePublicNav)
@@ -151,13 +149,16 @@
                         <a class="btn btn-sm btn-outline-primary {{ request()->routeIs('home') ? 'active' : '' }}"
                            href="{{ route('home') }}">Đặt vé</a>
                     </li>
-                    @if(request()->routeIs('register'))
+                    @if(! request()->routeIs('login'))
                     <li class="nav-item ms-1">
-                        <a class="btn btn-sm btn-primary" href="{{ route('login') }}">Đăng nhập</a>
+                        <a class="btn btn-sm btn-outline-primary {{ request()->routeIs('login') ? 'active' : '' }}"
+                           href="{{ route('login') }}">Đăng nhập</a>
                     </li>
-                    @elseif(! request()->routeIs('login'))
+                    @endif
+                    @if(! request()->routeIs('register'))
                     <li class="nav-item ms-1">
-                        <a class="btn btn-sm btn-primary" href="{{ route('register') }}">Đăng ký tài xế</a>
+                        <a class="btn btn-sm btn-outline-primary {{ request()->routeIs('register') ? 'active' : '' }}"
+                           href="{{ route('register') }}">Đăng ký tài xế</a>
                     </li>
                     @endif
                 @endauth
@@ -199,6 +200,10 @@
     @yield('content')
 </div>
 </main>
+
+@if(request()->routeIs('home', 'booking.trips', 'about'))
+    @include('partials.customer-scroll-dock')
+@endif
 
 <footer class="app-footer bg-dark text-secondary border-top">
     <div class="container">

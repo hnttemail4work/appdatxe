@@ -206,7 +206,7 @@ class GuestBookingController extends Controller
         $booking = $booking->fresh(['schedule.route', 'tripReview']);
 
         return response()->json([
-            'message'        => 'Đã hủy chuyến.',
+            'message'        => 'Hủy chuyến thành công.',
             'cancel_count'   => $cancelCount,
             'cancel_blocked' => $browserId !== '' && $this->browserGuard->isCancelBlocked($browserId),
             'block_message'  => $this->browserGuard->blockMessage(),

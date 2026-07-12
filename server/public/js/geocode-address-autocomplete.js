@@ -48,6 +48,7 @@
 
         var timer = null;
         var searchAbort = null;
+        var searchResultCache = Object.create(null);
         var coordsLocked = !!(latEl && latEl.value && lngEl && lngEl.value);
         var lockedDetailValue = coordsLocked ? String(detailEl.value || '').trim() : '';
         var suppressSuggestUntilType = coordsLocked;
@@ -120,6 +121,13 @@
                 }
                 searchAbort = new AbortController();
 
+                var province = provinceName(options.provinceInputId, options.defaultProvince || '');
+                var cacheKey = query + '\0' + province;
+                if (searchResultCache[cacheKey]) {
+                    renderSuggestResults(searchResultCache[cacheKey], query);
+                    return;
+                }
+
                 if (window.GeocodeSearchUi && window.GeocodeSearchUi.setLoading) {
                     window.GeocodeSearchUi.setLoading(suggestEl, 'Đang tìm…');
                     showSuggest();
@@ -127,7 +135,7 @@
 
                 var url = searchUrl
                     + '?q=' + encodeURIComponent(query)
-                    + '&province=' + encodeURIComponent(provinceName(options.provinceInputId, options.defaultProvince || ''));
+                    + '&province=' + encodeURIComponent(province);
 
                 fetch(url, {
                     signal: searchAbort.signal,
@@ -141,70 +149,87 @@
                         }
 
                         var results = (data && data.results) || [];
-
-                        if (window.GeocodeSearchUi && window.GeocodeSearchUi.renderResults) {
-                            window.GeocodeSearchUi.renderResults(suggestEl, results, query, {
-                                itemClass: 'booking-address-suggest-item geocode-search-item',
-                                emptyClass: 'booking-address-suggest-empty',
-                                emptyText: 'Không thấy địa chỉ phù hợp — thử thêm quận/huyện hoặc chọn trên bản đồ.',
-                                onSelect: function (item) {
-                                    applySuggestion(item);
-                                },
-                            });
-                            showSuggest();
-                            return;
-                        }
-
-                        suggestEl.innerHTML = '';
-
-                        if (!results.length) {
-                            var empty = document.createElement('div');
-                            empty.className = 'booking-address-suggest-empty';
-                            empty.textContent = 'Không thấy địa chỉ phù hợp — thử thêm quận/huyện hoặc chọn trên bản đồ.';
-                            suggestEl.appendChild(empty);
-                            showSuggest();
-                            return;
-                        }
-
-                        results.forEach(function (item) {
-                            var btn = document.createElement('button');
-                            btn.type = 'button';
-                            btn.className = 'booking-address-suggest-item';
-                            btn.textContent = item.address;
-                            btn.addEventListener('click', function () {
-                                applySuggestion(item);
-                            });
-                            suggestEl.appendChild(btn);
-                        });
-                        showSuggest();
+                        searchResultCache[cacheKey] = results;
+                        renderSuggestResults(results, query);
                     })
                     .catch(function () {});
             }, 400);
         }
 
-        function applySuggestion(item) {
-            detailEl.value = item.address;
-            if (latEl && item.lat != null) {
-                latEl.value = String(item.lat);
+        function renderSuggestResults(results, query) {
+            if (window.GeocodeSearchUi && window.GeocodeSearchUi.renderResults) {
+                window.GeocodeSearchUi.renderResults(suggestEl, results, query, {
+                    itemClass: 'booking-address-suggest-item geocode-search-item',
+                    emptyClass: 'booking-address-suggest-empty',
+                    emptyText: 'Không thấy địa chỉ phù hợp — thử thêm quận/huyện hoặc chọn trên bản đồ.',
+                    onSelect: function (item) {
+                        applySuggestion(item);
+                    },
+                });
+                showSuggest();
+                return;
             }
-            if (lngEl && item.lon != null) {
-                lngEl.value = String(item.lon);
-                lngEl.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-            lockCoords(item.address);
 
-            dispatchApplied({
-                targetInputId: options.detailInputId,
-                latInputId: options.latInputId || null,
-                lngInputId: options.lngInputId || null,
-                lat: item.lat != null ? Number(item.lat) : null,
-                lng: item.lon != null ? Number(item.lon) : null,
-                address: item.address,
+            suggestEl.innerHTML = '';
+
+            if (!results.length) {
+                var empty = document.createElement('div');
+                empty.className = 'booking-address-suggest-empty';
+                empty.textContent = 'Không thấy địa chỉ phù hợp — thử thêm quận/huyện hoặc chọn trên bản đồ.';
+                suggestEl.appendChild(empty);
+                showSuggest();
+                return;
+            }
+
+            results.forEach(function (item) {
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'booking-address-suggest-item';
+                btn.textContent = item.address;
+                btn.addEventListener('click', function () {
+                    applySuggestion(item);
+                });
+                suggestEl.appendChild(btn);
             });
+            showSuggest();
+        }
 
-            if (typeof options.onSelect === 'function') {
-                options.onSelect(item);
+        function applySuggestion(item) {
+            var finalize = function (resolved) {
+                if (!resolved) {
+                    return;
+                }
+
+                detailEl.value = resolved.address;
+                if (latEl && resolved.lat != null) {
+                    latEl.value = String(resolved.lat);
+                }
+                if (lngEl && resolved.lon != null) {
+                    lngEl.value = String(resolved.lon);
+                    lngEl.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                lockCoords(resolved.address);
+
+                dispatchApplied({
+                    targetInputId: options.detailInputId,
+                    latInputId: options.latInputId || null,
+                    lngInputId: options.lngInputId || null,
+                    lat: resolved.lat != null ? Number(resolved.lat) : null,
+                    lng: resolved.lon != null ? Number(resolved.lon) : null,
+                    address: resolved.address,
+                });
+
+                if (typeof options.onSelect === 'function') {
+                    options.onSelect(resolved);
+                }
+            };
+
+            if (window.GeocodeResolve && window.GeocodeResolve.resolvePlace) {
+                window.GeocodeResolve.resolvePlace(item).then(finalize);
+                return;
             }
+
+            finalize(item);
         }
 
         detailEl.addEventListener('keydown', function (e) {

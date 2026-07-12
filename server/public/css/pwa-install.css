@@ -1,23 +1,28 @@
 .pwa-install-banner {
     position: relative;
     z-index: 1035;
-    max-height: 0;
-    overflow: hidden;
+    display: grid;
+    grid-template-rows: 0fr;
     padding: 0 1rem;
     margin: 0;
     background: rgba(15, 20, 25, 0.96);
     border-bottom: 1px solid transparent;
     box-shadow: none;
     opacity: 0;
-    transition: max-height 0.28s ease, opacity 0.28s ease, padding 0.28s ease, border-color 0.28s ease, box-shadow 0.28s ease;
+    transition: grid-template-rows 0.28s ease, opacity 0.28s ease, padding 0.28s ease, border-color 0.28s ease, box-shadow 0.28s ease;
 }
 
 .pwa-install-banner.is-visible {
-    max-height: 8rem;
+    grid-template-rows: 1fr;
     padding: 0.75rem 1rem;
     border-bottom-color: rgba(212, 175, 55, 0.35);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
     opacity: 1;
+}
+
+.pwa-install-banner__collapse {
+    overflow: hidden;
+    min-height: 0;
 }
 
 .pwa-install-banner__inner {
@@ -68,12 +73,14 @@
 }
 
 @media (max-width: 575.98px) {
-    .pwa-install-banner.is-visible {
-        max-height: 10rem;
-    }
-
     .pwa-install-banner__inner {
         flex-wrap: wrap;
+        align-items: flex-start;
+    }
+
+    .pwa-install-banner__text {
+        flex: 1 1 calc(100% - 3.25rem);
+        min-width: 0;
     }
 
     .pwa-install-banner__actions {
@@ -85,21 +92,26 @@
 .pwa-ios-hint {
     position: relative;
     z-index: 1035;
-    max-height: 0;
-    overflow: hidden;
+    display: grid;
+    grid-template-rows: 0fr;
     padding: 0 1rem;
     margin: 0;
     background: rgba(15, 20, 25, 0.98);
     border-bottom: 1px solid transparent;
     opacity: 0;
-    transition: max-height 0.28s ease, opacity 0.28s ease, padding 0.28s ease, border-color 0.28s ease;
+    transition: grid-template-rows 0.28s ease, opacity 0.28s ease, padding 0.28s ease, border-color 0.28s ease;
 }
 
 .pwa-ios-hint.is-visible {
-    max-height: 16rem;
+    grid-template-rows: 1fr;
     padding: 1rem;
     border-bottom-color: rgba(212, 175, 55, 0.35);
     opacity: 1;
+}
+
+.pwa-ios-hint__collapse {
+    overflow: hidden;
+    min-height: 0;
 }
 
 .pwa-ios-hint__steps {

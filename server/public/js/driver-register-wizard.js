@@ -250,55 +250,20 @@
 
     if (vehicleInput && vehiclePreview) {
         vehicleInput.addEventListener('change', function () {
-            var max = parseInt(vehicleInput.dataset.maxBytes, 10) || 2097152;
-            var rejected = [];
             Array.from(vehicleInput.files || []).forEach(function (file) {
-                if (file.size > max) {
-                    rejected.push(file.name);
-                    return;
-                }
                 var dup = vehicleFiles.some(function (f) {
                     return f.name === file.name && f.size === file.size && f.lastModified === file.lastModified;
                 });
                 if (!dup) vehicleFiles.push(file);
             });
-            if (rejected.length) {
-                var rejectedMsg = 'Ảnh vượt quá 2MB: ' + rejected.join(', ');
-                if (window.AppFlash && window.AppFlash.show) {
-                    window.AppFlash.show(rejectedMsg, { variant: 'warning', title: 'Ảnh quá lớn' });
-                } else if (window.AppDialog) {
-                    window.AppDialog.alert(rejectedMsg);
-                }
-            }
             vehicleInput.value = '';
             vehicleInput.classList.remove('is-invalid');
             renderVehiclePreview();
         });
     }
 
-    // Giới hạn dung lượng ảnh (trừ ảnh xe — xử lý riêng ở trên)
-    form.querySelectorAll('[data-max-bytes]').forEach(function (input) {
-        if (input.name === 'photo_vehicles[]') return;
-        input.addEventListener('change', function () {
-            var max = parseInt(input.dataset.maxBytes, 10);
-            var oversize = [];
-            Array.from(input.files || []).forEach(function (file) {
-                if (file.size > max) oversize.push(file.name);
-            });
-            if (oversize.length) {
-                var oversizeMsg = 'Ảnh vượt quá 2MB: ' + oversize.join(', ');
-                if (window.AppFlash && window.AppFlash.show) {
-                    window.AppFlash.show(oversizeMsg, { variant: 'warning', title: 'Ảnh quá lớn' });
-                } else if (window.AppDialog) {
-                    window.AppDialog.alert(oversizeMsg);
-                }
-                input.value = '';
-            }
-        });
-    });
-
     // Xem trước ảnh giấy tờ
-    form.querySelectorAll('input[type="file"][data-max-bytes]').forEach(function (input) {
+    form.querySelectorAll('[data-field-section="documents"] input[type="file"]').forEach(function (input) {
         if (input.name === 'photo_vehicles[]') return;
         var preview = input.closest('.col-md-6, .col-lg-4')?.querySelector('[data-doc-preview]');
         if (!preview) return;

@@ -10,7 +10,7 @@
 
             <label class="form-label">Ảnh chân dung <span class="text-danger">*</span></label>
 
-            <input type="file" name="photo_portrait" accept="image/jpeg,image/png,image/webp" data-max-bytes="2097152"
+            <input type="file" name="photo_portrait" accept="image/jpeg,image/png,image/webp"
 
                    class="form-control form-control-sm @error('photo_portrait') is-invalid @enderror" required>
 
@@ -24,7 +24,7 @@
 
             <label class="form-label">CCCD mặt trước <span class="text-danger">*</span></label>
 
-            <input type="file" name="photo_id_card" accept="image/jpeg,image/png,image/webp" data-max-bytes="2097152"
+            <input type="file" name="photo_id_card" accept="image/jpeg,image/png,image/webp"
 
                    class="form-control form-control-sm @error('photo_id_card') is-invalid @enderror" required>
 
@@ -38,7 +38,7 @@
 
             <label class="form-label">CCCD mặt sau <span class="text-danger">*</span></label>
 
-            <input type="file" name="photo_id_card_back" accept="image/jpeg,image/png,image/webp" data-max-bytes="2097152"
+            <input type="file" name="photo_id_card_back" accept="image/jpeg,image/png,image/webp"
 
                    class="form-control form-control-sm @error('photo_id_card_back') is-invalid @enderror" required>
 
@@ -52,7 +52,7 @@
 
             <label class="form-label">Bằng lái mặt trước <span class="text-danger">*</span></label>
 
-            <input type="file" name="photo_license_front" accept="image/jpeg,image/png,image/webp" data-max-bytes="2097152"
+            <input type="file" name="photo_license_front" accept="image/jpeg,image/png,image/webp"
 
                    class="form-control form-control-sm @error('photo_license_front') is-invalid @enderror" required>
 
@@ -66,7 +66,7 @@
 
             <label class="form-label">Bằng lái mặt sau</label>
 
-            <input type="file" name="photo_license_back" accept="image/jpeg,image/png,image/webp" data-max-bytes="2097152"
+            <input type="file" name="photo_license_back" accept="image/jpeg,image/png,image/webp"
 
                    class="form-control form-control-sm @error('photo_license_back') is-invalid @enderror">
 
@@ -79,7 +79,7 @@
         <div class="col-12">
             <label class="form-label">Ảnh xe <span class="text-danger">*</span></label>
             <input type="file" name="photo_vehicles[]" accept="image/jpeg,image/png,image/webp" multiple
-                   data-max-bytes="2097152" data-vehicle-picker
+                   data-vehicle-picker
                    class="form-control form-control-sm @error('photo_vehicles') is-invalid @enderror @error('photo_vehicles.*') is-invalid @enderror">
             @error('photo_vehicles')<div class="invalid-feedback">{{ $message }}</div>@enderror
             @error('photo_vehicles.*')<div class="invalid-feedback">{{ $message }}</div>@enderror

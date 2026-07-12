@@ -55,11 +55,13 @@
                                                    data-address-map-for="modal-pickup-detail"
                                                    data-address-map-lat="modal-pickup-lat"
                                                    data-address-map-lng="modal-pickup-lng"
+                                                   data-address-map-default-province="TP.HCM"
                                                    data-address-map-label="Chọn điểm đón">
                                             <button type="button" class="booking-address-map-btn"
                                                     data-address-map-for="modal-pickup-detail"
                                                     data-address-map-lat="modal-pickup-lat"
                                                     data-address-map-lng="modal-pickup-lng"
+                                                    data-address-map-default-province="TP.HCM"
                                                     data-address-map-label="Chọn điểm đón"
                                                     aria-label="Chọn điểm đón trên bản đồ" title="Bản đồ">
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
@@ -84,11 +86,13 @@
                                                    data-address-map-for="modal-dropoff-detail"
                                                    data-address-map-lat="modal-dropoff-lat"
                                                    data-address-map-lng="modal-dropoff-lng"
+                                                   data-address-map-default-province="TP.HCM"
                                                    data-address-map-label="Chọn điểm trả">
                                             <button type="button" class="booking-address-map-btn"
                                                     data-address-map-for="modal-dropoff-detail"
                                                     data-address-map-lat="modal-dropoff-lat"
                                                     data-address-map-lng="modal-dropoff-lng"
+                                                    data-address-map-default-province="TP.HCM"
                                                     data-address-map-label="Chọn điểm trả"
                                                     aria-label="Chọn điểm trả trên bản đồ" title="Bản đồ">
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
@@ -130,8 +134,8 @@
                                 </div>
                                 <div class="form-text" id="modal-later-return-days-hint"></div>
                             </div>
-                            <div class="row g-3 align-items-end">
-                                <div class="col-md-6" id="modal-pickup-date-wrap">
+                            <div class="row g-2 g-md-3 align-items-end booking-pickup-schedule-row">
+                                <div class="col-6 col-md-6" id="modal-pickup-date-wrap">
                                     <label class="form-label" for="modal-service-date">Ngày đón <span class="text-danger">*</span></label>
                                     <input type="date" name="service_date" id="modal-service-date"
                                            class="form-control @error('service_date') is-invalid @enderror"
@@ -139,7 +143,7 @@
                                            min="{{ $defaultServiceDate }}" required>
                                     @error('service_date')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
                                 </div>
-                                <div class="col-md-6" id="modal-pickup-time-wrap">
+                                <div class="col-6 col-md-6" id="modal-pickup-time-wrap">
                                     @include('partials.vi-pickup-time-input', [
                                         'name' => 'pickup_time',
                                         'id' => 'modal-pickup-time',
@@ -184,7 +188,7 @@
                                         </div>
                                         <div class="booking-price-summary-row booking-price-summary-row--total">
                                             <span class="booking-price-summary-label">Thành tiền:</span>
-                                            <span class="booking-price-summary-value booking-footer-price" id="modal-total-price">0 đ</span>
+                                            <span class="booking-price-summary-value booking-footer-price" id="modal-total-price">Chọn đủ thông tin</span>
                                         </div>
                                     </div>
                                 </div>
@@ -226,7 +230,7 @@
                 </div>
 
                 <div class="modal-footer border-0 booking-modal-footer" id="modal-footer-step1">
-                    <div class="booking-footer-price-wrap me-auto">
+                    <div class="booking-footer-price-wrap flex-grow-1">
                         <div class="booking-price-summary" id="modal-price-summary-step1">
                             <div class="booking-price-summary-row" id="modal-price-departure-row-step1">
                                 <span class="booking-price-summary-label">Đặt xe:</span>
@@ -246,15 +250,20 @@
                             </div>
                             <div class="booking-price-summary-row booking-price-summary-row--total">
                                 <span class="booking-price-summary-label">Thành tiền:</span>
-                                <span class="booking-price-summary-value booking-footer-price" id="modal-total-price-step1"></span>
+                                <span class="booking-price-summary-value booking-footer-price" id="modal-total-price-step1">Chọn đủ thông tin</span>
                             </div>
                         </div>
                     </div>
-                    <button type="button" class="btn btn-primary fw-semibold px-4" id="modal-next-btn">Tiếp tục</button>
+                    <div class="booking-modal-footer-actions">
+                        <button type="button" class="btn btn-outline-secondary" data-modal-back>← Quay lại</button>
+                        <button type="button" class="btn btn-primary fw-semibold" id="modal-next-btn">Tiếp tục</button>
+                    </div>
                 </div>
                 <div class="modal-footer border-0 booking-modal-footer d-none" id="modal-footer-step2">
-                    <button type="button" class="btn btn-outline-secondary" id="modal-back-btn">← Quay lại</button>
-                    <button type="submit" class="btn btn-primary px-4 fw-semibold ms-auto" id="modal-submit-btn">Đặt vé</button>
+                    <div class="booking-modal-footer-actions booking-modal-footer-actions--step2">
+                        <button type="button" class="btn btn-outline-secondary" data-modal-back id="modal-back-btn">← Quay lại</button>
+                        <button type="submit" class="btn btn-primary fw-semibold" id="modal-submit-btn">Đặt vé</button>
+                    </div>
                 </div>
             </form>
         </div>

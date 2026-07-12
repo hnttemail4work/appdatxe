@@ -153,8 +153,13 @@
 
     <section class="driver-location-fallback mb-3 d-none" id="driver-location-fallback" hidden aria-label="Chọn vị trí trên bản đồ">
         <p class="driver-location-fallback__hint mb-2" id="driver-location-fallback-hint">
-            Không lấy được GPS. Chọn vị trí hiện tại trên bản đồ.
+            Không lấy được GPS. Bấm «Lấy GPS» hoặc chọn vị trí trên bản đồ.
         </p>
+        <div class="driver-location-fallback__actions mb-2">
+            <button type="button" class="btn btn-outline-primary btn-sm" id="driver-location-gps-btn">
+                Lấy GPS
+            </button>
+        </div>
         <div class="driver-location-input-wrap">
             <input type="text" id="driver-location-fallback-detail" class="form-control driver-location-input"
                    placeholder="Tìm địa chỉ hoặc chọn trên bản đồ"
@@ -305,17 +310,17 @@
 <script>
 window.__driverLocationUrl = @json(route('driver.location.update'));
 window.__driverAvailabilityUrl = @json(route('driver.availability.update'));
-window.__geocodeReverseUrl = @json(route('geocode.reverse'));
-window.__geocodeSearchUrl = @json(route('geocode.search'));
-window.__provinceCenters = @json(\App\Support\ProvinceCenters::centersForCatalog());
+@include('partials.geocode-client-config')
 window.__driverDashboardUrl = @json(route('driver.dashboard', ['tab' => 'trips']));
 window.__driverDashboardPollUrl = @json(route('driver.dashboard.poll'));
 </script>
 <script src="{{ asset('js/geocode-search-ui.js') }}?v={{ filemtime(public_path('js/geocode-search-ui.js')) }}"></script>
+<script src="{{ asset('js/geocode-resolve.js') }}?v={{ filemtime(public_path('js/geocode-resolve.js')) }}"></script>
 <script src="{{ asset('js/geocode-address-autocomplete.js') }}?v={{ filemtime(public_path('js/geocode-address-autocomplete.js')) }}"></script>
 <script src="{{ asset('js/address-map-picker.js') }}?v={{ filemtime(public_path('js/address-map-picker.js')) }}"></script>
 <script src="{{ asset('js/driver-location-save.js') }}?v={{ filemtime(public_path('js/driver-location-save.js')) }}"></script>
 <script src="{{ asset('js/driver-location-gps.js') }}?v={{ filemtime(public_path('js/driver-location-gps.js')) }}"></script>
+<script src="{{ asset('js/driver-map-nav.js') }}?v={{ filemtime(public_path('js/driver-map-nav.js')) }}"></script>
 <script src="{{ asset('js/driver-availability-toggle.js') }}?v={{ filemtime(public_path('js/driver-availability-toggle.js')) }}"></script>
 <script>
 (function () {

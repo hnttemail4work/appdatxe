@@ -68,7 +68,7 @@
     function pick(options) {
         var opts = options || {};
         return fetchReasons(opts.audience || 'customer', opts.contactPhone || null, opts.location || null).then(function (data) {
-            if (!data.requires_reason && opts.audience === 'customer') {
+            if (opts.audience === 'customer' && data.requires_reason === false) {
                 return { skipped: true, reasonId: null };
             }
             if (!data.reasons || !data.reasons.length) {

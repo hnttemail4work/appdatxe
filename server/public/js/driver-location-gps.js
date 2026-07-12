@@ -99,6 +99,24 @@
         }));
     }
 
+    function geolocationErrorMessage(error) {
+        if (!error || typeof error.code !== 'number') {
+            return 'Không lấy được GPS. Chọn vị trí hiện tại trên bản đồ.';
+        }
+
+        if (error.code === 1) {
+            return 'Trình duyệt đã chặn quyền vị trí. Vào Cài đặt trình duyệt → cho phép Vị trí cho trang này, rồi bấm «Lấy GPS».';
+        }
+        if (error.code === 2) {
+            return 'Không xác định được vị trí. Ra ngoài trời hoặc chọn trên bản đồ.';
+        }
+        if (error.code === 3) {
+            return 'GPS phản hồi quá lâu. Thử lại hoặc chọn trên bản đồ.';
+        }
+
+        return 'Không lấy được GPS. Chọn vị trí hiện tại trên bản đồ.';
+    }
+
     function notifyGpsFailed(message) {
         if (latInput && lngInput && String(latInput.value || '').trim() && String(lngInput.value || '').trim()) {
             return;
@@ -180,8 +198,8 @@
                         sharing = false;
                     });
                 },
-                function () {
-                    notifyGpsFailed('Không lấy được GPS. Chọn vị trí hiện tại trên bản đồ.');
+                function (err) {
+                    notifyGpsFailed(geolocationErrorMessage(err));
                     sharing = false;
                     resolve(false);
                 },
@@ -205,9 +223,9 @@
         });
     }
 
-    function onWatchError() {
+    function onWatchError(err) {
         if (!hasLocationCoords()) {
-            notifyGpsFailed('Không lấy được GPS. Chọn vị trí hiện tại trên bản đồ.');
+            notifyGpsFailed(geolocationErrorMessage(err));
         }
     }
 
@@ -287,10 +305,34 @@
         }
     });
 
+    var gpsBtn = document.getElementById('driver-location-gps-btn');
+    if (gpsBtn) {
+        gpsBtn.addEventListener('click', function () {
+            shareCurrentLocation({ force: true, reverseGeocode: true });
+        });
+    }
+
+    function getLastKnownCoords() {
+        if (lastSavedLat != null && lastSavedLng != null) {
+            return { lat: lastSavedLat, lng: lastSavedLng };
+        }
+
+        if (latInput && lngInput && latInput.value && lngInput.value) {
+            var lat = parseFloat(latInput.value);
+            var lng = parseFloat(lngInput.value);
+            if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
+                return { lat: lat, lng: lng };
+            }
+        }
+
+        return null;
+    }
+
     window.DriverLocationGps = {
         shareCurrentLocation: shareCurrentLocation,
         startAutoTracking: startAutoTracking,
         stopAutoTracking: stopAutoTracking,
         ensureFreshLocation: ensureFreshLocation,
+        getLastKnownCoords: getLastKnownCoords,
     };
 })();

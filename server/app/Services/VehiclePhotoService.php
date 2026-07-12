@@ -32,10 +32,6 @@ class VehiclePhotoService
 
     public static function publicUrl(?string $path): ?string
     {
-        if (! $path) {
-            return null;
-        }
-
-        return Storage::disk('public')->url($path);
+        return \App\Support\PublicStorageUrl::url($path);
     }
 }

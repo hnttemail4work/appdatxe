@@ -12,9 +12,6 @@ use InvalidArgumentException;
 
 class DriverPhotoService
 {
-    /** Khớp với upload_max_filesize PHP (thường 2M) */
-    private const MAX_KB = 2048;
-
     private const ALLOWED_MIMES = ['jpeg', 'jpg', 'png', 'webp'];
 
     private const SINGLE_FIELDS = [
@@ -178,7 +175,7 @@ class DriverPhotoService
                 $file = $request->file($field);
                 $this->assertFileReceived($file, $field, $attributes[$field] ?? $field);
 
-                $rules[$field] = ['file', 'mimes:' . implode(',', self::ALLOWED_MIMES), 'max:' . self::MAX_KB];
+                $rules[$field] = ['file', 'mimes:' . implode(',', self::ALLOWED_MIMES)];
             }
         }
 
@@ -186,7 +183,7 @@ class DriverPhotoService
         foreach ($vehicleFiles as $index => $file) {
             $key = "photo_vehicles.{$index}";
             $this->assertFileReceived($file, $key, 'ảnh xe #' . ($index + 1));
-            $rules[$key] = ['file', 'mimes:' . implode(',', self::ALLOWED_MIMES), 'max:' . self::MAX_KB];
+            $rules[$key] = ['file', 'mimes:' . implode(',', self::ALLOWED_MIMES)];
         }
 
         if ($rules === [] && ! $request->filled('delete_vehicle_idx')) {
@@ -195,7 +192,6 @@ class DriverPhotoService
 
         if ($rules !== []) {
             Validator::make($request->all(), $rules, [
-                'max'   => ':attribute không được lớn hơn 2MB.',
                 'mimes' => ':attribute phải là JPG, PNG hoặc WebP.',
                 'file'  => ':attribute không hợp lệ.',
             ], array_merge($attributes, [
@@ -223,7 +219,7 @@ class DriverPhotoService
     {
         return match ($file->getError()) {
             UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE =>
-                "{$label} quá lớn. Mỗi ảnh tối đa 2MB — hãy nén ảnh hoặc chọn file nhỏ hơn.",
+                "{$label} quá lớn so với giới hạn upload của server. Liên hệ quản trị nếu cần hỗ trợ.",
             UPLOAD_ERR_PARTIAL =>
                 "{$label} upload không hoàn tất. Vui lòng thử lại.",
             UPLOAD_ERR_NO_FILE =>
@@ -237,11 +233,7 @@ class DriverPhotoService
 
     public static function publicUrl(?string $path): ?string
     {
-        if (! $path) {
-            return null;
-        }
-
-        return Storage::disk('public')->url($path);
+        return \App\Support\PublicStorageUrl::url($path);
     }
 
     /** Lưu ảnh hồ sơ khi đăng ký tài xế (bắt buộc đủ ảnh). */

@@ -39,7 +39,7 @@ class BookingPageSettings
     {
         $path = self::bannerStoragePath();
 
-        return $path ? Storage::disk('public')->url($path) : null;
+        return PublicStorageUrl::url($path);
     }
 
     public static function hasBanner(): bool

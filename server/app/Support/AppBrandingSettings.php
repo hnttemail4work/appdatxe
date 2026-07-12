@@ -90,7 +90,7 @@ class AppBrandingSettings
     {
         $path = self::appIconStoragePath();
 
-        return $path ? Storage::disk('public')->url($path) : null;
+        return PublicStorageUrl::url($path);
     }
 
     public static function appIconAssetUrl(): string

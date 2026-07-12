@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Rules\UniqueNormalizedPhone;
 use Illuminate\Validation\Rule;
 
 /** Quy tắc validation thống nhất cho hồ sơ tài xế trên toàn hệ thống. */
@@ -47,10 +48,7 @@ class DriverFieldRules
             $emailUnique->ignore($userId);
         }
 
-        $phoneUnique = Rule::unique('users', 'phone');
-        if ($userId) {
-            $phoneUnique->ignore($userId);
-        }
+        $phoneUnique = new UniqueNormalizedPhone($userId);
 
         $req = fn (string $field) => self::isRequired($context, $field) ? 'required' : 'nullable';
 
@@ -60,7 +58,7 @@ class DriverFieldRules
         }
 
         $phoneRules = [$req('phone'), 'string', 'max:30'];
-        if ($context === 'register') {
+        if ($context === 'register' || $userId !== null) {
             $phoneRules[] = $phoneUnique;
         }
 
@@ -114,16 +112,16 @@ class DriverFieldRules
     /** @return array<string, mixed> */
     public static function registrationPhotoRules(): array
     {
-        $imageRule = ['required', 'file', 'mimes:jpeg,jpg,png,webp', 'max:2048'];
+        $imageRule = ['required', 'file', 'mimes:jpeg,jpg,png,webp'];
 
         return [
             'photo_portrait'      => $imageRule,
             'photo_id_card'       => $imageRule,
             'photo_id_card_back'  => $imageRule,
             'photo_license_front' => $imageRule,
-            'photo_license_back'  => ['nullable', 'file', 'mimes:jpeg,jpg,png,webp', 'max:2048'],
+            'photo_license_back'  => ['nullable', 'file', 'mimes:jpeg,jpg,png,webp'],
             'photo_vehicles'      => ['required', 'array', 'min:1'],
-            'photo_vehicles.*'    => ['required', 'file', 'mimes:jpeg,jpg,png,webp', 'max:2048'],
+            'photo_vehicles.*'    => ['required', 'file', 'mimes:jpeg,jpg,png,webp'],
         ];
     }
 
@@ -148,7 +146,7 @@ class DriverFieldRules
 
         if ($contactLocked) {
             $rules['name'] = ['nullable', 'string', 'max:255'];
-            $rules['phone'] = ['nullable', 'string', 'max:30', Rule::unique('users', 'phone')->ignore($userId)];
+            $rules['phone'] = ['nullable', 'string', 'max:30', new UniqueNormalizedPhone($userId)];
         }
 
         return $rules;

@@ -1,11 +1,12 @@
 @php
     $user = $driver->user;
+    $portraitUrl = $driver->photoUrl('photo_portrait');
 @endphp
 <div class="driver-edit-header">
     <div class="driver-edit-identity">
-        @if($driver->photo_portrait)
-            <a href="{{ $driver->photoUrl('photo_portrait') }}" target="_blank" rel="noopener">
-                <img src="{{ $driver->photoUrl('photo_portrait') }}" alt=""
+        @if($portraitUrl)
+            <a href="{{ $portraitUrl }}" target="_blank" rel="noopener">
+                <img src="{{ $portraitUrl }}" alt=""
                      class="driver-edit-avatar rounded-circle object-fit-cover border">
             </a>
         @else

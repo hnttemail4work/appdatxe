@@ -26,7 +26,7 @@ class GuestBookingDriverStatusService
         $booking->loadMissing('schedule.route', 'schedule.template', 'schedule.vehicle');
         $schedule = $booking->schedule;
         $acceptance = $booking->driverAcceptanceState();
-        $profile = $booking->guestDriverProfile();
+        $profile = $this->resolveGuestDriverProfile($booking);
 
         if (! $schedule || ! $profile) {
             return null;
@@ -67,9 +67,9 @@ class GuestBookingDriverStatusService
         $etaLine = null;
 
         if ($acceptance === 'pending') {
-            $statusLine = 'Chờ tài xế nhận chuyến';
+            $statusLine = 'Chờ tài xế';
         } elseif ($acceptance === 'none' && $booking->catalogChosenDriverProfile()) {
-            $statusLine = 'Chờ tài xế nhận chuyến';
+            $statusLine = 'Chờ tài xế';
         } elseif ($stage === Schedule::DRIVER_STAGE_AT_PICKUP) {
             $statusLine = 'Tài xế đã đến điểm đón';
         } elseif (in_array($stage, [Schedule::DRIVER_STAGE_PICKED_UP, Schedule::DRIVER_STAGE_RUNNING], true)) {
@@ -134,5 +134,25 @@ class GuestBookingDriverStatusService
         }
 
         return $live;
+    }
+
+    private function resolveGuestDriverProfile(Booking $booking): ?DriverProfile
+    {
+        $profile = $booking->guestDriverProfile();
+        if ($profile) {
+            return $profile;
+        }
+
+        if ($booking->driverAcceptanceState() === 'pending') {
+            $pending = $booking->eligiblePendingDriverTripRequest();
+            if ($pending) {
+                return DriverProfile::query()
+                    ->where('user_id', $pending->driver_id)
+                    ->with('user')
+                    ->first();
+            }
+        }
+
+        return $booking->catalogChosenDriverProfile();
     }
 }

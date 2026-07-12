@@ -2,6 +2,7 @@
     use App\Support\AppBrandingSettings;
 @endphp
 <div id="pwa-install-banner" class="pwa-install-banner" aria-live="polite">
+    <div class="pwa-install-banner__collapse">
     <div class="pwa-install-banner__inner">
         <div class="pwa-install-banner__icon" aria-hidden="true">
             <img src="{{ AppBrandingSettings::appIconAssetUrl() }}" alt="">
@@ -16,9 +17,11 @@
             <button type="button" class="btn btn-sm btn-outline-warning d-none" data-pwa-enable-push>Bật TB</button>
         </div>
     </div>
+    </div>
 </div>
 
 <div id="pwa-ios-hint" class="pwa-ios-hint">
+    <div class="pwa-ios-hint__collapse">
     <div class="d-flex justify-content-between align-items-start gap-2">
         <div>
             <p class="mb-2"><strong>iPhone/iPad — ghim {{ $pwaAudienceLabel ?? 'ứng dụng' }}:</strong></p>
@@ -31,5 +34,6 @@
             <p class="pwa-ios-hint__note mb-0" data-pwa-ios-warning hidden></p>
         </div>
         <button type="button" class="btn btn-sm btn-outline-light flex-shrink-0" data-pwa-ios-dismiss>Đóng</button>
+    </div>
     </div>
 </div>

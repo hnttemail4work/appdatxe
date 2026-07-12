@@ -1113,7 +1113,7 @@ class Booking extends Model
         $this->loadMissing('schedule.template', 'schedule.driverTripRequests');
 
         if ($this->driverAcceptanceState() === 'pending') {
-            return 'Chờ tài xế nhận';
+            return 'Chờ tài xế';
         }
 
         if ($this->adminReleasedAfterDriverEngagement()) {

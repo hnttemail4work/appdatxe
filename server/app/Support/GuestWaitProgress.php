@@ -56,7 +56,7 @@ class GuestWaitProgress
 
                 return [
                     'kind'          => 'trip_accept',
-                    'label'         => 'Đang chờ tài xế nhận chuyến',
+                    'label'         => 'Chờ tài xế',
                     'hint'          => 'Tài xế cần xác nhận trong thời gian quy định.',
                     'started_at'    => $started->toIso8601String(),
                     'deadline_at'   => $pendingRequest->expires_at->toIso8601String(),

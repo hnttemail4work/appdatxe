@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Web\PublicStorageController;
 use App\Http\Controllers\Web\PwaController;
 use App\Http\Controllers\Web\AdminController;
 use App\Http\Controllers\Web\AuthController;
@@ -15,6 +16,10 @@ use Illuminate\Support\Facades\Route;
 Route::get('csrf-token', function () {
     return response()->json(['token' => csrf_token()]);
 });
+
+Route::get('storage/{path}', [PublicStorageController::class, 'show'])
+    ->where('path', '.*')
+    ->name('storage.public');
 
 Route::get('pwa/manifest.webmanifest', [PwaController::class, 'manifest'])->name('pwa.manifest');
 Route::get('pwa/push/vapid-public-key', [PwaController::class, 'vapidPublicKey'])->name('pwa.vapid');
@@ -62,6 +67,7 @@ Route::post('bookings', [GuestBookingController::class, 'store'])->name('booking
 Route::get('bookings', fn () => redirect()->route('home'));
 Route::get('geocode/reverse', [GeocodeController::class, 'reverse'])->name('geocode.reverse');
 Route::get('geocode/search', [GeocodeController::class, 'search'])->name('geocode.search');
+Route::get('geocode/resolve', [GeocodeController::class, 'resolve'])->name('geocode.resolve');
 Route::get('cancellation-reasons', [CancellationReasonController::class, 'index'])->name('cancellationReasons.index');
 
 Route::permanentRedirect('dat-xe', '/');

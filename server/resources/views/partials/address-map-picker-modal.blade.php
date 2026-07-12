@@ -6,17 +6,25 @@
                 <h5 class="modal-title fw-bold" id="addressMapPickerTitle">Chọn điểm trên bản đồ</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
             </div>
-            <div class="modal-body pt-2">
+            <div class="modal-body pt-2 address-map-picker-body">
                 <div class="address-map-province-wrap d-none" id="address-map-province-wrap">
                     <label class="form-label small text-muted mb-1" for="address-map-province">Khu vực hoạt động</label>
                     <select id="address-map-province" class="form-select form-select-sm mb-2">
                         @include('partials.province-options', ['selected' => ''])
                     </select>
                 </div>
-                <label class="form-label small text-muted mb-1" for="address-map-search">Tìm địa chỉ</label>
-                <input type="search" class="form-control form-control-sm mb-2" id="address-map-search"
-                       placeholder="Số nhà, tên đường, phường, quận… (vd: 123 Nguyễn Huệ, Quận 1)" autocomplete="off">
-                <div id="address-map-search-results" class="address-map-search-results d-none" role="listbox" aria-label="Kết quả tìm kiếm"></div>
+                <div class="address-map-search-wrap">
+                    <label class="form-label small text-muted mb-1" for="address-map-search">Tìm địa chỉ</label>
+                    <div class="address-map-search-field">
+                        <input type="text" class="form-control address-map-search-input" id="address-map-search"
+                               placeholder="Số nhà, tên đường, phường, quận…"
+                               autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                               inputmode="search" enterkeyhint="search">
+                        <button type="button" class="address-map-search-clear d-none" id="address-map-search-clear" aria-label="Xóa từ khóa">×</button>
+                    </div>
+                    <div id="address-map-search-results" class="address-map-search-results d-none" role="listbox" aria-label="Kết quả tìm kiếm"></div>
+                </div>
+                <div class="address-map-main">
                 <div class="address-map-toolbar d-none" id="address-map-driver-toolbar">
                     <button type="button" class="btn btn-outline-primary btn-sm" id="address-map-my-location">
                         Vị trí của tôi
@@ -27,6 +35,7 @@
                     Tìm địa chỉ để bay tới khu vực, kéo ghim đến đúng điểm đón, rồi bấm Xác nhận.
                 </p>
                 <p class="address-map-confirm-status small text-muted mb-0 mt-1 d-none" id="address-map-confirm-status"></p>
+                </div>
             </div>
             <div class="modal-footer border-0 pt-0">
                 <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Hủy</button>

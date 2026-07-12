@@ -92,13 +92,18 @@ class PushNotificationService
         $routeLabel = trim(($schedule?->route?->departure ?? '') . ' → ' . ($schedule?->route?->destination ?? ''));
 
         // TODO (Fix Stuck Offer UI): Dùng event đã bật sẵn cho tài xế và kèm payload client_event để tab đang mở tự gỡ card.
+        $cancelledByGuest = $request->status === 'cancelled';
         $this->sendToDriver(
             (int) $request->driver_id,
             'driver.trip_cancelled',
-            'Cuốc chờ nhận đã thu hồi',
-            $routeLabel !== '→'
-                ? 'Yêu cầu nhận cuốc đã hết hạn: ' . $routeLabel
-                : 'Yêu cầu nhận cuốc đã hết hạn.',
+            $cancelledByGuest ? 'Khách đã hủy chuyến' : 'Cuốc chờ nhận đã thu hồi',
+            $cancelledByGuest
+                ? ($routeLabel !== '→'
+                    ? 'Khách đã hủy chuyến: ' . $routeLabel
+                    : 'Khách đã hủy chuyến.')
+                : ($routeLabel !== '→'
+                    ? 'Yêu cầu nhận cuốc đã hết hạn: ' . $routeLabel
+                    : 'Yêu cầu nhận cuốc đã hết hạn.'),
             '/driver/dashboard',
             'driver:trip:' . $request->id . ':expired:' . ($request->responded_at?->timestamp ?? now()->timestamp),
             [

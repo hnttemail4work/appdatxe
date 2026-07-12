@@ -110,6 +110,8 @@ class DriverTripRequestService
 
     public function expireStale(): void
     {
+        $this->revokePendingOffersWithoutActiveBooking();
+
         DriverTripRequest::query()
             ->where('status', 'pending')
             ->whereNotNull('expires_at')
@@ -1387,7 +1389,53 @@ class DriverTripRequestService
                     'passengers' => $this->passengersForPendingGroup($schedule, $requests),
                 ];
             })
+            ->filter(fn (array $group): bool => $group['passengers']->isNotEmpty())
             ->values();
+    }
+
+    /** Thu hồi cuốc chờ nhận khi khách hủy — khớp SĐT chuẩn hóa, báo app tài xế gỡ card. */
+    public function revokePendingOffersForGuestBooking(Booking $booking): void
+    {
+        $booking->loadMissing('schedule');
+        $schedule = $booking->schedule;
+        if (! $schedule) {
+            return;
+        }
+
+        DriverTripRequest::query()
+            ->where('schedule_id', $schedule->id)
+            ->whereIn('status', ['pending', 'accepted'])
+            ->get()
+            ->filter(fn (DriverTripRequest $request): bool => $booking->matchesContactPhone((string) $request->contact_phone))
+            ->each(function (DriverTripRequest $request): void {
+                if ($request->status !== 'pending') {
+                    return;
+                }
+
+                $request->update([
+                    'status'       => 'cancelled',
+                    'responded_at' => now(),
+                    'expires_at'   => null,
+                ]);
+                $this->notifyDriverOfferRevoked($request->fresh(['schedule.route']));
+            });
+    }
+
+    private function revokePendingOffersWithoutActiveBooking(): void
+    {
+        DriverTripRequest::query()
+            ->where('status', 'pending')
+            ->with(['schedule.bookings'])
+            ->get()
+            ->filter(fn (DriverTripRequest $request): bool => ! $request->relatedBooking())
+            ->each(function (DriverTripRequest $request): void {
+                $request->update([
+                    'status'       => 'cancelled',
+                    'responded_at' => now(),
+                    'expires_at'   => null,
+                ]);
+                $this->notifyDriverOfferRevoked($request->fresh(['schedule.route']));
+            });
     }
 
     /** Cuốc chờ nhận còn hiển thị trên dashboard — loại cuốc tài xế đã ẩn / bỏ lỡ. */

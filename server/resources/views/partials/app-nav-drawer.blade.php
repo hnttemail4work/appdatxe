@@ -21,10 +21,11 @@
             </div>
         @else
             <a href="{{ route('home') }}" class="app-nav-drawer-link {{ request()->routeIs('home') ? 'is-active' : '' }}">Đặt vé</a>
-            @if(request()->routeIs('register'))
-                <a href="{{ route('login') }}" class="app-nav-drawer-link app-nav-drawer-link--primary">Đăng nhập</a>
-            @elseif(! request()->routeIs('login'))
-                <a href="{{ route('register') }}" class="app-nav-drawer-link">Đăng ký tài xế</a>
+            @if(! request()->routeIs('login'))
+                <a href="{{ route('login') }}" class="app-nav-drawer-link {{ request()->routeIs('login') ? 'is-active' : '' }}">Đăng nhập</a>
+            @endif
+            @if(! request()->routeIs('register'))
+                <a href="{{ route('register') }}" class="app-nav-drawer-link {{ request()->routeIs('register') ? 'is-active' : '' }}">Đăng ký tài xế</a>
             @endif
             <a href="{{ route('about') }}" class="app-nav-drawer-link {{ request()->routeIs('about') ? 'is-active' : '' }}">Giới thiệu</a>
         @endif

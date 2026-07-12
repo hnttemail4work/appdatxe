@@ -212,6 +212,32 @@
         return '';
     }
 
+    function getHomeUrl() {
+        var link = document.querySelector('.customer-scroll-dock a[href]:not([href*="chuyen"])')
+            || document.querySelector('.customer-scroll-dock [href$="/"]');
+        if (link && link.href) {
+            return link.href;
+        }
+
+        return window.location.origin + '/';
+    }
+
+    function shouldRedirectEmptyTripToHome() {
+        if (window.__bookingSuccess) {
+            return false;
+        }
+
+        return true;
+    }
+
+    function redirectEmptyTripToHome() {
+        if (!shouldRedirectEmptyTripToHome()) {
+            return;
+        }
+
+        window.location.replace(getHomeUrl());
+    }
+
     function buildStatusParams() {
         var params = new URLSearchParams();
         var phone = getContactPhone();
@@ -681,12 +707,24 @@
         if (!seatsLabel && Number(driver.vehicle_seats || 0) > 0) {
             seatsLabel = driver.vehicle_seats + ' chỗ';
         }
-        if (plateText && seatsLabel) {
-            plateText = plateText + ', ' + seatsLabel;
-        } else if (!plateText && seatsLabel) {
-            plateText = seatsLabel;
-        }
         setText(qs('[data-field="driver_plate"]', panel), plateText, !!plateText);
+        setText(qs('[data-field="driver_seats"]', panel), seatsLabel, !!seatsLabel);
+
+        if (photoWrap) {
+            if (vehiclePhoto) {
+                photoWrap.classList.add('is-zoomable');
+                photoWrap.setAttribute('role', 'button');
+                photoWrap.setAttribute('tabindex', '0');
+                photoWrap.setAttribute('aria-label', 'Xem ảnh xe');
+                photoWrap.dataset.vehiclePhotoUrl = vehiclePhoto;
+            } else {
+                photoWrap.classList.remove('is-zoomable');
+                photoWrap.removeAttribute('role');
+                photoWrap.removeAttribute('tabindex');
+                photoWrap.removeAttribute('aria-label');
+                delete photoWrap.dataset.vehiclePhotoUrl;
+            }
+        }
 
         var statusLine = booking.driver_status_line || driver.status_line || '';
         setText(qs('[data-field="driver_status"]', panel), statusLine, !!statusLine);
@@ -939,13 +977,20 @@
         err.classList.remove('d-none');
     }
 
-    function fetchStatus() {
+    function fetchStatus(options) {
+        options = options || {};
+
         if (!window.__bookingTripStatusUrl) {
             return Promise.resolve(null);
         }
 
         var params = buildStatusParams();
         if (!params.toString()) {
+            if (options.initial) {
+                redirectEmptyTripToHome();
+            } else {
+                renderBooking(null);
+            }
             return Promise.resolve(null);
         }
 
@@ -959,6 +1004,12 @@
                     renderBooking(data.booking);
                     return data.booking;
                 }
+
+                if (options.initial) {
+                    redirectEmptyTripToHome();
+                    return null;
+                }
+
                 renderBooking(null);
                 return null;
             })
@@ -1031,8 +1082,8 @@
             return window.AppDialog.confirm({
                 title: 'Hủy chuyến',
                 message: 'Bạn chắc chắn muốn hủy chuyến này?',
-                confirmLabel: 'Hủy chuyến',
-                cancelLabel: 'Giữ chuyến',
+                confirmText: 'Hủy chuyến',
+                cancelText: 'Giữ chuyến',
                 variant: 'danger',
             });
         }
@@ -1078,6 +1129,7 @@
                 Accept: 'application/json',
                 'Content-Type': 'application/json',
                 'X-CSRF-TOKEN': token ? token.getAttribute('content') : '',
+                'X-Requested-With': 'XMLHttpRequest',
             },
             credentials: 'same-origin',
             body: JSON.stringify(payload),
@@ -1105,8 +1157,8 @@
                 if (window.AppDialog && window.AppDialog.alert) {
                     var msg = data.cancel_blocked && data.block_message
                         ? data.block_message
-                        : (data.message || 'Đã hủy chuyến.');
-                    window.AppDialog.alert(msg, { variant: 'success', title: 'Đã hủy chuyến' });
+                        : (data.message || 'Hủy chuyến thành công.');
+                    window.AppDialog.alert(msg, { variant: 'success', title: 'Hủy chuyến thành công.' });
                 }
             })
             .catch(function (err) {
@@ -1166,18 +1218,77 @@
         }
     }
 
+    function bindVehiclePhotoOverlay() {
+        var overlay = document.getElementById('guest-trip-vehicle-photo-overlay');
+        var image = document.getElementById('guest-trip-vehicle-photo-overlay-image');
+        if (!overlay || !image) {
+            return;
+        }
+
+        function closeOverlay() {
+            overlay.classList.add('d-none');
+            overlay.setAttribute('hidden', 'hidden');
+            image.removeAttribute('src');
+            document.body.classList.remove('guest-trip-vehicle-photo-open');
+        }
+
+        function openOverlay(url, altText) {
+            if (!url) {
+                return;
+            }
+            image.src = url;
+            image.alt = altText || 'Ảnh xe';
+            overlay.classList.remove('d-none');
+            overlay.removeAttribute('hidden');
+            document.body.classList.add('guest-trip-vehicle-photo-open');
+        }
+
+        document.addEventListener('click', function (event) {
+            var trigger = event.target.closest('[data-field="driver_photo_wrap"].is-zoomable');
+            if (!trigger || !trigger.dataset.vehiclePhotoUrl) {
+                return;
+            }
+            event.preventDefault();
+            var photo = trigger.querySelector('[data-field="driver_photo"]');
+            openOverlay(trigger.dataset.vehiclePhotoUrl, photo ? photo.alt : 'Ảnh xe');
+        });
+
+        document.addEventListener('keydown', function (event) {
+            var trigger = event.target.closest('[data-field="driver_photo_wrap"].is-zoomable');
+            if (!trigger || (event.key !== 'Enter' && event.key !== ' ')) {
+                return;
+            }
+            event.preventDefault();
+            if (trigger.dataset.vehiclePhotoUrl) {
+                var photo = trigger.querySelector('[data-field="driver_photo"]');
+                openOverlay(trigger.dataset.vehiclePhotoUrl, photo ? photo.alt : 'Ảnh xe');
+            }
+        });
+
+        overlay.querySelectorAll('[data-close-guest-vehicle-photo]').forEach(function (btn) {
+            btn.addEventListener('click', closeOverlay);
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape' && !overlay.classList.contains('d-none')) {
+                closeOverlay();
+            }
+        });
+    }
+
     function init() {
         bindReview();
         bindReferralOverlay();
         bindCompletionModalReview();
+        bindVehiclePhotoOverlay();
         var cancelBtn = document.getElementById('guest-trip-cancel-btn');
         if (cancelBtn) {
             cancelBtn.addEventListener('click', cancelTrip);
         }
-        fetchStatus();
+        fetchStatus({ initial: true });
 
         if (window.IdlePoll) {
-            window.IdlePoll.create({ onPoll: fetchStatus }).start();
+            window.IdlePoll.create({ onPoll: function () { fetchStatus(); } }).start();
         } else {
             window.setInterval(fetchStatus, 5000);
         }

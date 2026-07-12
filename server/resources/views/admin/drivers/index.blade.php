@@ -108,8 +108,9 @@ $driverTabs = [
                                 @endif
                             @else
                             <div class="driver-mgmt-name">
-                                @if($d->photo_portrait)
-                                    <img src="{{ $d->photoUrl('photo_portrait') }}" alt=""
+                                @php $portraitUrl = $d->photoUrl('photo_portrait'); @endphp
+                                @if($portraitUrl)
+                                    <img src="{{ $portraitUrl }}" alt=""
                                          class="driver-mgmt-avatar rounded-circle object-fit-cover border">
                                 @else
                                     <div class="driver-mgmt-avatar driver-mgmt-avatar-fallback">

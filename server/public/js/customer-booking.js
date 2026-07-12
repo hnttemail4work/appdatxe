@@ -383,8 +383,16 @@
         }
 
         if (totalEl) {
-            totalEl.textContent = displayTotal > 0 ? formatMoney(displayTotal) : '';
-            totalEl.classList.toggle('d-none', displayTotal <= 0);
+            if (displayTotal > 0) {
+                totalEl.textContent = formatMoney(displayTotal);
+            } else if (totalEl.getAttribute('data-price-loading') === '1') {
+                totalEl.textContent = 'Đang tính…';
+            } else if (routeReady()) {
+                totalEl.textContent = '—';
+            } else {
+                totalEl.textContent = 'Chọn đủ thông tin';
+            }
+            totalEl.classList.remove('d-none');
             totalEl.classList.toggle('booking-price-discounted', hasDiscount && displayTotal > 0);
         }
 
@@ -406,8 +414,11 @@
                 return;
             }
             if (loading && routeReady()) {
+                totalEl.setAttribute('data-price-loading', '1');
                 totalEl.textContent = 'Đang tính…';
                 totalEl.classList.remove('d-none');
+            } else {
+                totalEl.removeAttribute('data-price-loading');
             }
         });
     }
@@ -429,6 +440,17 @@
         }
     }
 
+    function currentStep() {
+        return $('booking-step-2') && !$('booking-step-2').classList.contains('d-none') ? 2 : 1;
+    }
+
+    function scrollModalBodyToTop() {
+        var body = document.querySelector('#bookingModal .booking-modal-body');
+        if (body) {
+            body.scrollTop = 0;
+        }
+    }
+
     function setStep(step) {
         var s1 = $('booking-step-1');
         var s2 = $('booking-step-2');
@@ -445,6 +467,7 @@
         document.querySelectorAll('.booking-step').forEach(function (el) {
             el.classList.toggle('active', Number(el.dataset.step) === step);
         });
+        scrollModalBodyToTop();
     }
 
     function updatePriceDisplay(total, data) {
@@ -931,10 +954,19 @@
         });
     }
 
-    var backBtn = $('modal-back-btn');
-    if (backBtn) {
-        backBtn.addEventListener('click', function () { setStep(1); });
+    function handleModalBack() {
+        if (currentStep() === 1) {
+            if (modal) {
+                modal.hide();
+            }
+            return;
+        }
+        setStep(1);
     }
+
+    document.querySelectorAll('[data-modal-back]').forEach(function (btn) {
+        btn.addEventListener('click', handleModalBack);
+    });
 
     ['modal-contact-phone'].forEach(function (id) {
         var el = $(id);
@@ -1004,6 +1036,7 @@
     }
 
     modalEl.addEventListener('shown.bs.modal', function () {
+        scrollModalBodyToTop();
         autoFillPickupFromGps();
     });
 

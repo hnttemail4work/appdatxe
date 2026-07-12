@@ -233,7 +233,7 @@
     }
 
     function showInstallBanner() {
-        if (isStandalone() || isDismissed(storageInstallKey)) {
+        if (isStandalone() || isDismissed(storageInstallKey) || isIos()) {
             return;
         }
 
@@ -439,12 +439,7 @@
             }
 
             if (isIos()) {
-                window.setTimeout(function () {
-                    showInstallBanner();
-                    if (isIosSafari()) {
-                        showIosHint();
-                    }
-                }, 1500);
+                window.setTimeout(showIosHint, 1500);
             }
         });
     });

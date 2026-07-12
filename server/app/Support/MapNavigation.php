@@ -5,32 +5,42 @@ namespace App\Support;
 use App\Models\Booking;
 use App\Models\Schedule;
 
-/** Liên kết mở Google Maps chỉ đường cho tài xế. */
+/** Liên kết mở bản đồ chỉ đường trên điện thoại (geo URI). */
 final class MapNavigation
 {
     public static function directionsUrl(?float $lat, ?float $lng, ?string $address = null): ?string
     {
         if ($lat !== null && $lng !== null) {
-            return 'https://www.google.com/maps/dir/?' . http_build_query([
-                'api'         => '1',
-                'destination' => sprintf('%F,%F', $lat, $lng),
-                'travelmode'  => 'driving',
-            ]);
+            $label = trim((string) $address);
+
+            return self::geoUrl($lat, $lng, $label !== '' && $label !== '—' ? $label : null);
         }
 
         $address = trim((string) $address);
-        if ($address === '') {
+        if ($address === '' || $address === '—' || $address === 'liên hệ khách') {
             return null;
         }
 
-        return 'https://www.google.com/maps/dir/?' . http_build_query([
-            'api'         => '1',
-            'destination' => $address,
-            'travelmode'  => 'driving',
-        ]);
+        return 'geo:0,0?q='.rawurlencode($address);
     }
 
-    /** @return array{label: string, url: string}|null */
+    private static function formatCoordinate(float $value): string
+    {
+        return number_format($value, 6, '.', '');
+    }
+
+    private static function geoUrl(float $lat, float $lng, ?string $label = null): string
+    {
+        $coords = self::formatCoordinate($lat).','.self::formatCoordinate($lng);
+        $query = $coords;
+        if ($label !== null && $label !== '') {
+            $query .= '('.str_replace(['(', ')'], '', $label).')';
+        }
+
+        return 'geo:'.$coords.'?q='.rawurlencode($query);
+    }
+
+    /** @return array{label: string, url: string, use_current_origin?: bool}|null */
     public static function driverTargetForSchedule(Schedule $schedule, Booking $booking): ?array
     {
         $stage = $schedule->resolvedDriverStage();
@@ -43,19 +53,22 @@ final class MapNavigation
             $url = self::directionsUrl(
                 $booking->dropoff_lat !== null ? (float) $booking->dropoff_lat : null,
                 $booking->dropoff_lng !== null ? (float) $booking->dropoff_lng : null,
-                $booking->dropoffLabel() !== '—' ? $booking->dropoffLabel() : $booking->driverDropoffDetailLabel(),
+                self::dropoffNavigationLabel($booking),
             );
 
-            return $url ? ['label' => 'Chỉ đường điểm trả', 'url' => $url] : null;
+            return $url ? [
+                'label' => 'Chỉ đường',
+                'url'   => $url,
+            ] : null;
         }
 
         $url = self::directionsUrl(
             $booking->pickup_lat !== null ? (float) $booking->pickup_lat : null,
             $booking->pickup_lng !== null ? (float) $booking->pickup_lng : null,
-            $booking->pickupLabel() !== '—' ? $booking->pickupLabel() : $booking->driverPickupDetailLabel(),
+            self::pickupNavigationLabel($booking),
         );
 
-        return $url ? ['label' => 'Chỉ đường điểm đón', 'url' => $url] : null;
+        return $url ? ['label' => 'Chỉ đường', 'url' => $url] : null;
     }
 
     /** @return array{label: string, url: string}|null */
@@ -64,9 +77,23 @@ final class MapNavigation
         $url = self::directionsUrl(
             $booking->pickup_lat !== null ? (float) $booking->pickup_lat : null,
             $booking->pickup_lng !== null ? (float) $booking->pickup_lng : null,
-            $booking->pickupLabel() !== '—' ? $booking->pickupLabel() : $booking->driverPickupDetailLabel(),
+            self::pickupNavigationLabel($booking),
         );
 
-        return $url ? ['label' => 'Chỉ đường điểm đón', 'url' => $url] : null;
+        return $url ? ['label' => 'Chỉ đường', 'url' => $url] : null;
+    }
+
+    private static function pickupNavigationLabel(Booking $booking): string
+    {
+        $label = $booking->pickupLabel();
+
+        return $label !== '—' ? $label : $booking->driverPickupDetailLabel();
+    }
+
+    private static function dropoffNavigationLabel(Booking $booking): string
+    {
+        $label = $booking->dropoffLabel();
+
+        return $label !== '—' ? $label : $booking->driverDropoffDetailLabel();
     }
 }

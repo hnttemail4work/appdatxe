@@ -26,8 +26,6 @@ $platformHotlinePhone = (string) config('app.contact_phone');
 
     @include('partials.guest-trip-panel')
 
-    @include('partials.customer-scroll-dock')
-
     @include('partials.customer-contact-fab', [
         'hotlinePhone' => $platformHotlinePhone,
         'variant' => 'fixed',

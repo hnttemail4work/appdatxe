@@ -3,7 +3,6 @@
     $driver, $viewOnly (bool), $action, $submitLabel, $allowVehicleDelete (bool)
 --}}
 @php
-    $maxMb = 2;
     $viewOnly = $viewOnly ?? false;
     $allowVehicleDelete = $allowVehicleDelete ?? false;
     $lockIdentityPhotos = $lockIdentityPhotos ?? false;
@@ -50,17 +49,17 @@
     <h6 class="text-muted mb-3">Giấy tờ</h6>
     <div class="row g-3">
         @foreach($singleSlots as $field => $meta)
-            @php $hasPhoto = filled($driver->{$field}); @endphp
+            @php $photoUrl = $driver->photoUrl($field); @endphp
             <div class="col-sm-6 col-lg-4">
-                <div class="photo-slot {{ $hasPhoto ? 'has-photo' : 'is-empty' }}">
+                <div class="photo-slot {{ $photoUrl ? 'has-photo' : 'is-empty' }}">
                     <div class="photo-slot-header">
                         <span class="photo-slot-title">{{ $meta['label'] }}</span>
                     </div>
                     <div class="photo-slot-preview photo-ratio-{{ $meta['ratio'] }}">
-                        @if($hasPhoto)
-                            <a href="{{ $driver->photoUrl($field) }}" target="_blank" rel="noopener"
+                        @if($photoUrl)
+                            <a href="{{ $photoUrl }}" target="_blank" rel="noopener"
                                class="photo-thumb photo-current-link" title="Bấm để xem ảnh gốc">
-                                <img src="{{ $driver->photoUrl($field) }}" alt="{{ $meta['label'] }}" class="photo-current-img">
+                                <img src="{{ $photoUrl }}" alt="{{ $meta['label'] }}" class="photo-current-img">
                                 <span class="photo-zoom-hint">Phóng to</span>
                             </a>
                         @else
@@ -136,7 +135,6 @@
                 </span>
                 <input type="file" name="photo_vehicles[]" accept="image/jpeg,image/png,image/webp" multiple
                        class="photo-file-input @error('photo_vehicles') is-invalid @enderror @error('photo_vehicles.*') is-invalid @enderror"
-                       data-max-bytes="{{ $maxMb * 1024 * 1024 }}"
                        data-photo-input="photo_vehicles" data-multiple>
             </label>
             <div class="photo-vehicle-new-grid d-none mt-2" data-vehicle-new-grid></div>
@@ -150,20 +148,21 @@
     <div class="row g-3">
         @foreach($singleSlots as $field => $meta)
             @php
-                $hasPhoto = filled($driver->{$field});
+                $photoUrl = $driver->photoUrl($field);
+                $hasStoredPath = filled($driver->{$field});
                 $isLocked = $lockIdentityPhotos && ($meta['identity'] ?? false);
             @endphp
             <div class="col-sm-6 col-lg-4">
-                <div class="photo-slot {{ $hasPhoto ? 'has-photo' : 'is-empty' }} {{ $isLocked ? 'is-locked' : '' }}" data-photo-slot="{{ $field }}">
+                <div class="photo-slot {{ $photoUrl ? 'has-photo' : 'is-empty' }} {{ $isLocked ? 'is-locked' : '' }}" data-photo-slot="{{ $field }}">
                     <div class="photo-slot-header">
                         <span class="photo-slot-title">{{ $meta['label'] }}</span>
                     </div>
                     <div class="photo-slot-preview photo-ratio-{{ $meta['ratio'] }}">
-                        @if($hasPhoto)
-                            <a href="{{ $driver->photoUrl($field) }}" target="_blank" rel="noopener"
+                        @if($photoUrl)
+                            <a href="{{ $photoUrl }}" target="_blank" rel="noopener"
                                class="photo-thumb photo-current-link" data-current-wrap
                                title="Bấm để xem ảnh gốc">
-                                <img src="{{ $driver->photoUrl($field) }}" alt="{{ $meta['label'] }}" class="photo-current-img" data-current-img>
+                                <img src="{{ $photoUrl }}" alt="{{ $meta['label'] }}" class="photo-current-img" data-current-img>
                                 <span class="photo-zoom-hint">Phóng to</span>
                             </a>
                         @else
@@ -176,10 +175,9 @@
                     </div>
                     @unless($isLocked)
                         <label class="photo-file-label">
-                            <span data-file-label>{{ $hasPhoto ? 'Thay ảnh' : 'Chọn ảnh' }}</span>
+                            <span data-file-label>{{ $hasStoredPath ? 'Thay ảnh' : 'Chọn ảnh' }}</span>
                             <input type="file" name="{{ $field }}" accept="image/jpeg,image/png,image/webp"
                                    class="photo-file-input @error($field) is-invalid @enderror"
-                                   data-max-bytes="{{ $maxMb * 1024 * 1024 }}"
                                    data-photo-input="{{ $field }}">
                         </label>
                         @error($field)<div class="invalid-feedback d-block small">{{ $message }}</div>@enderror

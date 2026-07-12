@@ -120,8 +120,7 @@ $filterTypes = $driverOffers->pluck('vehicle_type')->filter()->unique()->sort()-
                     <path d="M5 17h14v-4H5v4zM6 13l2-7h8l2 7M7 17v2M17 17v2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
             </div>
-            <h3 class="booking-empty-state__title">Chưa có tài xế</h3>
-            <p class="booking-empty-state__text">Chưa có tài xế đã duyệt với đủ thông tin xe. Liên hệ tổng đài <strong>{{ config('app.contact_phone') }}</strong>.</p>
+            <h3 class="booking-empty-state__title">Chưa có chuyến được hiển thị.</h3>
         </div>
         @endforelse
     </div>

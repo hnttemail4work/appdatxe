@@ -136,8 +136,6 @@ $driverCount = ($driverOffers ?? collect())->count();
 
     @include('partials.booking-driver-catalog', ['driverOffers' => $driverOffers])
 
-    @include('partials.customer-scroll-dock')
-
     @include('partials.customer-contact-fab', [
         'hotlinePhone' => $platformHotlinePhone,
         'variant' => 'fixed',

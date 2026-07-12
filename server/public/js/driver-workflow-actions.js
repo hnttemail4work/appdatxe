@@ -5,7 +5,10 @@
     var csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
 
     function isWorkflowForm(form) {
-        return form && form.classList.contains('driver-workflow-compact-action');
+        return form
+            && form.classList.contains('driver-workflow-compact-action')
+            && !form.classList.contains('driver-reject-form')
+            && !form.classList.contains('driver-accept-form');
     }
 
     function setWorkflowBusy(busy) {
