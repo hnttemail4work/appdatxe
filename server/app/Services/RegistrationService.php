@@ -30,7 +30,10 @@ class RegistrationService
     public function customerRules(): array
     {
         return [
+            'name'                  => ['required', 'string', 'max:255'],
             'phone'                 => ['required', 'string', 'max:30', new UniqueNormalizedPhone()],
+            'gender'                => ['required', 'in:male,female'],
+            'age'                   => ['required', 'integer', 'min:1', 'max:120'],
             'email'                 => ['nullable', 'email', 'max:255'],
             'password'              => ['required', 'confirmed', Password::min(8)],
             'password_confirmation' => ['required', 'string'],
@@ -44,15 +47,19 @@ class RegistrationService
             $email = filled($validated['email'] ?? null)
                 ? trim((string) $validated['email'])
                 : null;
-            $displayName = 'Khách ' . substr($phone, -4);
+            $gender = ($validated['gender'] ?? 'male') === 'female' ? 'female' : 'male';
+            $age = (int) $validated['age'];
+            $birthYear = now()->year - $age;
 
             $user = User::query()->create([
-                'name'     => $displayName,
-                'email'    => $email,
-                'password' => Hash::make($validated['password']),
-                'phone'    => $phone,
-                'role'     => 'customer',
-                'status'   => 'active',
+                'name'          => trim((string) $validated['name']),
+                'email'         => $email,
+                'password'      => Hash::make($validated['password']),
+                'phone'         => $phone,
+                'gender'        => $gender,
+                'date_of_birth' => sprintf('%04d-01-01', $birthYear),
+                'role'          => 'customer',
+                'status'        => 'active',
             ]);
 
             app(CustomerAccountService::class)->linkExistingBookings($user);

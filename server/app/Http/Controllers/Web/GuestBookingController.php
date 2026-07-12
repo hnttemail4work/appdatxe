@@ -258,6 +258,13 @@ class GuestBookingController extends Controller
         $browserCancelCount = (int) $request->session()->get('guest_browser_cancel_count', 0);
         $bookingPageHeroTitle = BookingPageSettings::heroTitle();
         $bookingPageBannerUrl = BookingPageSettings::bannerUrl();
+        $customerBookingPrefill = null;
+        $authUser = auth()->user();
+
+        if ($authUser && $authUser->role === 'customer') {
+            $customerBookingPrefill = app(\App\Services\CustomerAccountService::class)
+                ->bookingPrefill($authUser);
+        }
 
         return compact(
             'driverOffers',
@@ -270,6 +277,7 @@ class GuestBookingController extends Controller
             'browserCancelCount',
             'bookingPageHeroTitle',
             'bookingPageBannerUrl',
+            'customerBookingPrefill',
         );
     }
 

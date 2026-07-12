@@ -22,9 +22,34 @@ class CustomerAccountService
             'name'            => $user->name,
             'phone'           => $phone,
             'email'           => $user->emailForForm(),
+            'gender'          => $user->gender,
+            'gender_label'    => $user->genderLabel(),
+            'age'             => $user->age(),
+            'avatar_initial'  => $user->avatarInitial(),
             'has_biometric'   => app(WebAuthnService::class)->userHasCredentials($user),
             'trip_count'      => $this->bookingsQuery($user)->count(),
             'review_count'    => $this->reviewsQuery($user)->count(),
+        ];
+    }
+
+    /** @return array<string, mixed>|null */
+    public function bookingPrefill(User $user): ?array
+    {
+        if (! $user->isCustomer()) {
+            return null;
+        }
+
+        $phone = AuthIdentifier::normalizePhone((string) ($user->phone ?? ''));
+
+        if ($phone === '') {
+            return null;
+        }
+
+        return [
+            'passenger_name'   => trim((string) $user->name),
+            'contact_phone'    => $phone,
+            'passenger_gender' => ($user->gender ?? 'male') === 'female' ? 'female' : 'male',
+            'passenger_age'    => $user->age(),
         ];
     }
 

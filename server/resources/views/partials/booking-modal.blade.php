@@ -1,3 +1,10 @@
+@php
+$bookingPrefill = is_array($customerBookingPrefill ?? null) ? $customerBookingPrefill : [];
+$prefillName = old('passenger_name', $bookingPrefill['passenger_name'] ?? '');
+$prefillPhone = old('contact_phone', $bookingPrefill['contact_phone'] ?? '');
+$prefillGender = old('passenger_gender', $bookingPrefill['passenger_gender'] ?? 'male');
+$prefillAge = old('passenger_age', $bookingPrefill['passenger_age'] ?? '');
+@endphp
 <div class="modal fade" id="bookingModal" tabindex="-1" aria-labelledby="modal-route" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable booking-modal-dialog">
         <div class="modal-content border-0 shadow booking-modal-sheet">
@@ -202,7 +209,7 @@
                                     <input type="text" name="passenger_name" id="modal-passenger-name"
                                            class="form-control @error('passenger_name') is-invalid @enderror"
                                            required autocomplete="name"
-                                           value="{{ old('passenger_name') }}">
+                                           value="{{ $prefillName }}">
                                     @error('passenger_name')<div class="invalid-feedback d-block guest-field-error" data-for="modal-passenger-name">{{ $message }}</div>@enderror
                                 </div>
                                 <div class="col-md-6">
@@ -210,15 +217,23 @@
                                     <input type="tel" name="contact_phone" id="modal-contact-phone"
                                            class="form-control @error('contact_phone') is-invalid @enderror"
                                            required autocomplete="tel"
-                                           value="{{ old('contact_phone') }}">
+                                           value="{{ $prefillPhone }}">
                                     @error('contact_phone')<div class="invalid-feedback d-block guest-field-error" data-for="modal-contact-phone">{{ $message }}</div>@enderror
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label d-block">Giới tính</label>
                                     <div class="booking-chip-group booking-chip-group--inline">
-                                        <label class="form-check booking-chip"><input type="radio" name="passenger_gender" value="male" class="form-check-input" @checked(old('passenger_gender', 'male') === 'male')> Nam</label>
-                                        <label class="form-check booking-chip"><input type="radio" name="passenger_gender" value="female" class="form-check-input" @checked(old('passenger_gender') === 'female')> Nữ</label>
+                                        <label class="form-check booking-chip"><input type="radio" name="passenger_gender" value="male" class="form-check-input" @checked($prefillGender === 'male')> Nam</label>
+                                        <label class="form-check booking-chip"><input type="radio" name="passenger_gender" value="female" class="form-check-input" @checked($prefillGender === 'female')> Nữ</label>
                                     </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label" for="modal-passenger-age">Tuổi</label>
+                                    <input type="number" name="passenger_age" id="modal-passenger-age"
+                                           class="form-control @error('passenger_age') is-invalid @enderror"
+                                           min="1" max="120" inputmode="numeric"
+                                           value="{{ $prefillAge }}">
+                                    @error('passenger_age')<div class="invalid-feedback d-block guest-field-error" data-for="modal-passenger-age">{{ $message }}</div>@enderror
                                 </div>
                                 <div class="col-12">
                                     <label class="form-label" for="modal-notes">Ghi chú</label>

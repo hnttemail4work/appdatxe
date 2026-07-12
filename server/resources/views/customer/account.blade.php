@@ -8,7 +8,7 @@
 <div class="customer-page customer-account-page" data-customer-tabs data-customer-tabs-active="{{ $activeTab }}" data-customer-tabs-base="{{ route('customer.account') }}">
     <header class="customer-account-hero mb-3">
         <div class="customer-account-hero__avatar" aria-hidden="true">
-            {{ mb_strtoupper(mb_substr($user->name, 0, 1)) }}
+            {{ $user->avatarInitial() }}
         </div>
         <div class="customer-account-hero__copy">
             <p class="customer-account-hero__eyebrow">Tài khoản khách</p>
@@ -41,8 +41,20 @@
                 <h2 class="customer-account-card__title">Thông tin cá nhân</h2>
                 <dl class="customer-account-dl">
                     <div>
+                        <dt>Họ và tên</dt>
+                        <dd>{{ $profile['name'] ?? $user->name }}</dd>
+                    </div>
+                    <div>
                         <dt>Số điện thoại</dt>
                         <dd>{{ $profile['phone'] ?? '—' }}</dd>
+                    </div>
+                    <div>
+                        <dt>Tuổi</dt>
+                        <dd>{{ ($profile['age'] ?? null) ? $profile['age'] . ' tuổi' : '—' }}</dd>
+                    </div>
+                    <div>
+                        <dt>Giới tính</dt>
+                        <dd>{{ $profile['gender_label'] ?? '—' }}</dd>
                     </div>
                     <div>
                         <dt>Gmail</dt>

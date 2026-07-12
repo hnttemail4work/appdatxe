@@ -720,6 +720,35 @@
         });
     }
 
+    function applyCustomerPrefill() {
+        var prefill = window.__customerBookingPrefill;
+        if (!prefill || typeof prefill !== 'object') {
+            return;
+        }
+
+        var nameEl = $('modal-passenger-name');
+        if (nameEl && !nameEl.value.trim() && prefill.passenger_name) {
+            nameEl.value = String(prefill.passenger_name);
+        }
+
+        var phoneEl = $('modal-contact-phone');
+        if (phoneEl && !phoneEl.value.trim() && prefill.contact_phone) {
+            phoneEl.value = String(prefill.contact_phone);
+        }
+
+        if (prefill.passenger_gender) {
+            var genderEl = form.querySelector('input[name="passenger_gender"][value="' + prefill.passenger_gender + '"]');
+            if (genderEl) {
+                genderEl.checked = true;
+            }
+        }
+
+        var ageEl = $('modal-passenger-age');
+        if (ageEl && !ageEl.value.trim() && prefill.passenger_age != null && prefill.passenger_age !== '') {
+            ageEl.value = String(prefill.passenger_age);
+        }
+    }
+
     function openBookingModal(btn) {
         ctx = {
             driverProfileId: btn.dataset.driverProfileId || '',
@@ -789,6 +818,7 @@
 
         updatePriceDisplay(0);
         setStep(1);
+        applyCustomerPrefill();
         ensureBrowserIdOnForm();
         refreshQuote();
         if (modal) modal.show();

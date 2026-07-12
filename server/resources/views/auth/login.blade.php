@@ -30,7 +30,7 @@
                         class="form-control @error('password') is-invalid @enderror"
                         required autocomplete="current-password">
                 </div>
-                <button class="btn btn-outline-primary w-100">Tiếp tục</button>
+                <button class="btn btn-outline-primary w-100">Đăng nhập</button>
             </form>
         </div>
     </div>

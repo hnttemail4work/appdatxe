@@ -1,7 +1,7 @@
 @if(auth()->check() && auth()->user()->role === 'customer')
 <section class="customer-account-banner mb-3" aria-label="Tài khoản">
     <a href="{{ route('customer.account') }}" class="customer-account-banner__link">
-        <span class="customer-account-banner__avatar" aria-hidden="true">{{ mb_strtoupper(mb_substr(auth()->user()->name, 0, 1)) }}</span>
+        <span class="customer-account-banner__avatar" aria-hidden="true">{{ auth()->user()->avatarInitial() }}</span>
         <span class="customer-account-banner__copy">
             <strong>{{ auth()->user()->name }}</strong>
             <span class="customer-account-banner__hint">Xem lịch sử chuyến &amp; đánh giá</span>

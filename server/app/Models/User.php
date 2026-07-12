@@ -24,6 +24,7 @@ class User extends Authenticatable
         'address',
         'id_number',
         'date_of_birth',
+        'gender',
     ];
 
     protected $hidden = [
@@ -101,5 +102,28 @@ class User extends Authenticatable
     public function isCustomer(): bool
     {
         return $this->role === 'customer';
+    }
+
+    public function age(): ?int
+    {
+        if (! $this->date_of_birth) {
+            return null;
+        }
+
+        return $this->date_of_birth->age;
+    }
+
+    public function genderLabel(): string
+    {
+        return ($this->gender ?? 'male') === 'female' ? 'Nữ' : 'Nam';
+    }
+
+    public function avatarInitial(): string
+    {
+        $name = trim((string) $this->name);
+
+        return $name !== ''
+            ? mb_strtoupper(mb_substr($name, 0, 1))
+            : '?';
     }
 }
