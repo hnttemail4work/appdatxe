@@ -49,3 +49,20 @@ Thumbs.db
 # PHPUnit
 server/.phpunit.result.cache
 server/.phpunit.cache
+
+# Local debug / curl captures (không cần git hay deploy)
+server/composer-setup.php
+server/dash.html
+server/h1.txt
+server/h2.txt
+server/hdr.txt
+server/headers.txt
+server/login.html
+server/login_hdr.txt
+server/login_local.html
+server/post.html
+server/post.txt
+server/post_hdr.txt
+server/scripts/test-login-*.php
+server/storage/framework/cj.txt
+server/storage/framework/login-cj.txt
