@@ -9,6 +9,7 @@ class RoleDashboard
         return match ($role) {
             'admin' => route('admin.bookings'),
             'driver'   => route('driver.dashboard'),
+            'customer' => route('customer.account'),
             default    => route('home'),
         };
     }
@@ -24,6 +25,7 @@ class RoleDashboard
         return match ($role) {
             'admin' => str_starts_with($path, '/admin'),
             'driver'   => str_starts_with($path, '/driver'),
+            'customer' => $path === '/' || str_starts_with($path, '/chuyen') || str_starts_with($path, '/tai-khoan'),
             default    => $path === '/' || str_starts_with($path, '/dat-xe'),
         };
     }

@@ -9,6 +9,8 @@ use App\Http\Controllers\Web\DriverController;
 use App\Http\Controllers\Web\DriverWalletController;
 use App\Http\Controllers\Web\GeocodeController;
 use App\Http\Controllers\Web\GuestBookingController;
+use App\Http\Controllers\Web\CustomerAuthController;
+use App\Http\Controllers\Web\CustomerController;
 use App\Support\RoleDashboard;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -32,7 +34,16 @@ Route::middleware('guest')->group(function () {
     Route::post('login',   [AuthController::class, 'login']);
     Route::get('register', [AuthController::class, 'showRegister'])->name('register');
     Route::post('register',[AuthController::class, 'register']);
+    Route::get('dang-ky', [CustomerAuthController::class, 'showRegister'])->name('customer.register');
+    Route::post('dang-ky', [CustomerAuthController::class, 'register']);
 });
+
+Route::get('xac-thuc-sinh-trac', [CustomerAuthController::class, 'showBiometric'])->name('auth.biometric');
+Route::post('auth/webauthn/register/options', [CustomerAuthController::class, 'registrationOptions'])->name('auth.webauthn.register.options');
+Route::post('auth/webauthn/register/verify', [CustomerAuthController::class, 'verifyRegistration'])->name('auth.webauthn.register.verify');
+Route::post('auth/webauthn/login/options', [CustomerAuthController::class, 'assertionOptions'])->name('auth.webauthn.login.options');
+Route::post('auth/webauthn/login/verify', [CustomerAuthController::class, 'verifyAssertion'])->name('auth.webauthn.login.verify');
+Route::post('auth/webauthn/skip', [CustomerAuthController::class, 'skipBiometric'])->name('auth.webauthn.skip');
 
 Route::post('logout', [AuthController::class, 'logout'])->name('logout');
 
@@ -48,6 +59,7 @@ Route::get('trips/search', function (Request $request) {
     return match (auth()->user()->role) {
         'driver' => redirect()->route('driver.dashboard'),
         'admin'  => redirect()->route('admin.bookings'),
+        'customer' => redirect()->route('customer.account'),
         default  => redirect()->route('home', $request->query()),
     };
 })->name('trips.search');
@@ -60,6 +72,10 @@ Route::post('chuyen/review', [GuestBookingController::class, 'storeTripReview'])
 Route::post('chuyen/cancel', [GuestBookingController::class, 'cancelTrip'])->name('booking.tripCancel');
 Route::redirect('dat-chuyen', '/chuyen');
 Route::get('gioi-thieu', [GuestBookingController::class, 'about'])->name('about');
+
+Route::middleware(['auth', 'role:customer', 'customer.biometric'])->group(function () {
+    Route::get('tai-khoan', [CustomerController::class, 'account'])->name('customer.account');
+});
 Route::get('booking/check-duplicate', [GuestBookingController::class, 'checkDuplicateBooking'])->name('booking.checkDuplicate');
 Route::get('booking/driver-offers', [GuestBookingController::class, 'driverOffers'])->name('booking.driverOffers');
 Route::get('quote-price', [GuestBookingController::class, 'quotePrice'])->name('booking.quotePrice');

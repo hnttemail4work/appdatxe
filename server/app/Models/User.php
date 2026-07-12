@@ -87,4 +87,19 @@ class User extends Authenticatable
     {
         return $this->hasMany(BookingAudit::class, 'actor_id');
     }
+
+    public function webauthnCredentials()
+    {
+        return $this->hasMany(WebauthnCredential::class);
+    }
+
+    public function customerBookings()
+    {
+        return $this->hasMany(Booking::class, 'customer_id');
+    }
+
+    public function isCustomer(): bool
+    {
+        return $this->role === 'customer';
+    }
 }

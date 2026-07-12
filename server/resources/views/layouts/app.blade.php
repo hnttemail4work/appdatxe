@@ -19,7 +19,7 @@
         PushAudience::DRIVER => 'Mở nhanh bảng chuyến và nhận cuốc mới.',
         default => 'Mở nhanh trang đặt xe và nhận thông báo chuyến.',
     };
-    $isGuestBookingPage = request()->routeIs('home', 'booking.trips');
+    $isGuestBookingPage = request()->routeIs('home', 'booking.trips', 'customer.account');
     $hidePublicNav = $isGuestBookingPage || request()->routeIs('about') || request()->routeIs('admin.*');
     $minimalNav = auth()->check()
         && in_array(auth()->user()->role, ['admin', 'driver'], true)
@@ -27,6 +27,8 @@
     $brandHref = route('home');
     if (auth()->check() && auth()->user()->role === 'driver') {
         $brandHref = \App\Support\RoleDashboard::route('driver');
+    } elseif (auth()->check() && auth()->user()->role === 'customer') {
+        $brandHref = route('customer.account');
     }
 @endphp
 <html lang="vi" data-bs-theme="dark">
@@ -34,7 +36,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    @if(request()->routeIs('home', 'about', 'booking.trips', 'driver.dashboard', 'register', 'login'))
+    @if(request()->routeIs('home', 'about', 'booking.trips', 'customer.account', 'driver.dashboard', 'register', 'login', 'customer.register', 'auth.biometric'))
     <script src="{{ asset('js/mobile-app-chrome.js') }}?v={{ filemtime(public_path('js/mobile-app-chrome.js')) }}"></script>
     @endif
     <title>{{ $appBrandName }}</title>
@@ -110,7 +112,7 @@
     @endif
     @stack('styles')
 </head>
-<body class="app-shell @if(request()->routeIs('login', 'register')) app-shell--auth @endif @if(request()->routeIs('home', 'about', 'booking.trips', 'driver.dashboard', 'register', 'login')) app-shell--mobile-app @endif">
+<body class="app-shell @if(request()->routeIs('login', 'register', 'customer.register', 'auth.biometric')) app-shell--auth @endif @if(request()->routeIs('home', 'about', 'booking.trips', 'driver.dashboard', 'register', 'login', 'customer.register', 'auth.biometric')) app-shell--mobile-app @endif">
 <nav class="navbar navbar-expand-lg app-navbar navbar-dark">
     <div class="container app-navbar-inner">
         <a class="navbar-brand app-brand-link app-brand-link--stacked" href="{{ $brandHref }}" aria-label="{{ $appBrandName }}">

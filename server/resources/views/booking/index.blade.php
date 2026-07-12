@@ -51,6 +51,7 @@ $driverCount = ($driverOffers ?? collect())->count();
     @endif
 
     @include('partials.booking-active-session')
+    @include('partials.customer-account-banner')
 
     @if($bookingPageBannerUrl ?? null)
     <section class="booking-page-hero booking-page-hero--banner" aria-label="Trang đặt xe">

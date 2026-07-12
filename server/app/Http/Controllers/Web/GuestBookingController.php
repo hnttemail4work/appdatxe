@@ -571,6 +571,11 @@ class GuestBookingController extends Controller
             return $this->bookingFormError($e);
         }
 
+        $authUser = auth()->user();
+        if ($authUser && $authUser->role === 'customer') {
+            $booking->update(['customer_id' => $authUser->id]);
+        }
+
         session()->forget('guest_referral_code');
 
         $this->browserGuard->recordActiveBooking($browserId, $booking);

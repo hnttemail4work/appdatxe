@@ -41,6 +41,27 @@ class AuthController extends Controller
                 ->withInput();
         }
 
+        if ($user->status !== 'active') {
+            $message = $user->status === 'suspended'
+                ? 'Tài khoản của bạn bị tạm ngưng.'
+                : 'Tài khoản của bạn chưa được kích hoạt.';
+
+            return back()
+                ->withErrors(['login' => $message])
+                ->withInput();
+        }
+
+        if ($user->role === 'customer') {
+            $request->session()->regenerate();
+            $intended = $request->session()->pull('url.intended');
+            $request->session()->put('pending_auth.user_id', $user->id);
+            if ($intended) {
+                $request->session()->put('pending_auth.intended', $intended);
+            }
+
+            return redirect()->route('auth.biometric');
+        }
+
         Auth::login($user, $request->boolean('remember'));
         $request->session()->regenerate();
 
@@ -53,18 +74,6 @@ class AuthController extends Controller
                     // Không chặn đăng nhập nếu đồng bộ trạng thái tài xế lỗi.
                 }
             }
-        }
-
-        if ($user->status !== 'active') {
-            Auth::logout();
-
-            $message = $user->status === 'suspended'
-                ? 'Tài khoản của bạn bị tạm ngưng.'
-                : 'Tài khoản của bạn chưa được kích hoạt.';
-
-            return back()
-                ->withErrors(['login' => $message])
-                ->withInput();
         }
 
         $role = $user->role;

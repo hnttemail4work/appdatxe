@@ -16,7 +16,12 @@ class RedirectIfAuthenticated
 
         foreach ($guards as $guard) {
             if (Auth::guard($guard)->check()) {
-                return redirect(RoleDashboard::route(Auth::guard($guard)->user()->role));
+                $user = Auth::guard($guard)->user();
+                if ($user->role === 'customer' && ! $request->session()->get('customer_biometric_verified')) {
+                    return redirect()->route('auth.biometric');
+                }
+
+                return redirect(RoleDashboard::route($user->role));
             }
         }
 

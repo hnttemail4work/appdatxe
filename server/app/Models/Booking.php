@@ -47,6 +47,7 @@ class Booking extends Model
     }
 
     protected $fillable = [
+        'customer_id',
         'contact_phone',
         'passenger_name',
         'passenger_gender',
@@ -471,6 +472,11 @@ class Booking extends Model
     public function schedule()
     {
         return $this->belongsTo(Schedule::class);
+    }
+
+    public function customer()
+    {
+        return $this->belongsTo(User::class, 'customer_id');
     }
 
     public function laterReturnBooking()

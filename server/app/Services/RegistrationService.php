@@ -4,12 +4,15 @@ namespace App\Services;
 
 use App\Models\DriverProfile;
 use App\Models\User;
+use App\Rules\UniqueNormalizedPhone;
+use App\Services\CustomerAccountService;
 use App\Support\AuthIdentifier;
 use App\Support\DriverFieldRules;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rules\Password;
 
 class RegistrationService
 {
@@ -21,6 +24,41 @@ class RegistrationService
     public function driverRules(): array
     {
         return DriverFieldRules::registrationRules();
+    }
+
+    /** @return array<string, mixed> */
+    public function customerRules(): array
+    {
+        return [
+            'phone'                 => ['required', 'string', 'max:30', new UniqueNormalizedPhone()],
+            'email'                 => ['nullable', 'email', 'max:255'],
+            'password'              => ['required', 'confirmed', Password::min(8)],
+            'password_confirmation' => ['required', 'string'],
+        ];
+    }
+
+    public function registerCustomer(array $validated): User
+    {
+        return DB::transaction(function () use ($validated): User {
+            $phone = AuthIdentifier::normalizePhone((string) $validated['phone']);
+            $email = filled($validated['email'] ?? null)
+                ? trim((string) $validated['email'])
+                : null;
+            $displayName = 'Khách ' . substr($phone, -4);
+
+            $user = User::query()->create([
+                'name'     => $displayName,
+                'email'    => $email,
+                'password' => Hash::make($validated['password']),
+                'phone'    => $phone,
+                'role'     => 'customer',
+                'status'   => 'active',
+            ]);
+
+            app(CustomerAccountService::class)->linkExistingBookings($user);
+
+            return $user;
+        });
     }
 
     public function registerDriver(array $validated, Request $request): User

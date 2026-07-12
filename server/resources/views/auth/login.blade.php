@@ -5,7 +5,10 @@
     <div class="col-md-5 col-lg-4">
         <div class="card shadow-lg p-4 auth-card border-0">
             <h2 class="mb-1">Đăng nhập</h2>
-            <p class="text-muted mb-4">Tài xế chưa có tài khoản?
+            <p class="text-muted mb-4">
+                Khách hàng chưa có tài khoản?
+                <a href="{{ route('customer.register') }}">Đăng ký</a>
+                · Tài xế?
                 <a href="{{ route('register') }}">Đăng ký tài xế</a>
             </p>
 
@@ -17,9 +20,9 @@
                 @csrf
                 <div class="mb-3">
                     <label class="form-label">Số điện thoại</label>
-                    <input type="text" name="phone" value="{{ old('phone') }}"
+                    <input type="tel" name="phone" value="{{ old('phone') }}"
                         class="form-control @error('phone') is-invalid @enderror"
-                        required autofocus autocomplete="username">
+                        required autofocus autocomplete="username" inputmode="tel">
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Mật khẩu</label>
@@ -27,13 +30,7 @@
                         class="form-control @error('password') is-invalid @enderror"
                         required autocomplete="current-password">
                 </div>
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="remember" id="remember">
-                        <label class="form-check-label" for="remember">Ghi nhớ đăng nhập</label>
-                    </div>
-                </div>
-                <button class="btn btn-outline-primary w-100">Đăng nhập</button>
+                <button class="btn btn-outline-primary w-100">Tiếp tục</button>
             </form>
         </div>
     </div>

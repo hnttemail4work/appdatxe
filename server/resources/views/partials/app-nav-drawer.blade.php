@@ -21,13 +21,29 @@
             </div>
         @else
             <a href="{{ route('home') }}" class="app-nav-drawer-link {{ request()->routeIs('home') ? 'is-active' : '' }}">Đặt vé</a>
-            @if(! request()->routeIs('login'))
-                <a href="{{ route('login') }}" class="app-nav-drawer-link {{ request()->routeIs('login') ? 'is-active' : '' }}">Đăng nhập</a>
-            @endif
-            @if(! request()->routeIs('register'))
-                <a href="{{ route('register') }}" class="app-nav-drawer-link {{ request()->routeIs('register') ? 'is-active' : '' }}">Đăng ký tài xế</a>
-            @endif
-            <a href="{{ route('about') }}" class="app-nav-drawer-link {{ request()->routeIs('about') ? 'is-active' : '' }}">Giới thiệu</a>
+            @auth
+                @if(auth()->user()->role === 'customer')
+                    <a href="{{ route('customer.account') }}" class="app-nav-drawer-link {{ request()->routeIs('customer.account') ? 'is-active' : '' }}">Tài khoản</a>
+                    <div class="app-nav-drawer-footer mt-4">
+                        @include('partials.logout-button', ['class' => 'app-nav-drawer-link app-nav-drawer-link--logout w-100 text-start'])
+                    </div>
+                @else
+                    <div class="app-nav-drawer-footer mt-4">
+                        @include('partials.logout-button', ['class' => 'app-nav-drawer-link app-nav-drawer-link--logout w-100 text-start'])
+                    </div>
+                @endif
+            @else
+                @if(! request()->routeIs('login'))
+                    <a href="{{ route('login') }}" class="app-nav-drawer-link {{ request()->routeIs('login') ? 'is-active' : '' }}">Đăng nhập</a>
+                @endif
+                @if(! request()->routeIs('customer.register'))
+                    <a href="{{ route('customer.register') }}" class="app-nav-drawer-link {{ request()->routeIs('customer.register') ? 'is-active' : '' }}">Đăng ký khách</a>
+                @endif
+                @if(! request()->routeIs('register'))
+                    <a href="{{ route('register') }}" class="app-nav-drawer-link {{ request()->routeIs('register') ? 'is-active' : '' }}">Đăng ký tài xế</a>
+                @endif
+                <a href="{{ route('about') }}" class="app-nav-drawer-link {{ request()->routeIs('about') ? 'is-active' : '' }}">Giới thiệu</a>
+            @endauth
         @endif
     </div>
 </div>

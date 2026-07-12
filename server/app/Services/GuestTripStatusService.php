@@ -194,6 +194,17 @@ class GuestTripStatusService
 
     public function guestCanView(Booking $booking, ?string $browserId, ?string $phone): bool
     {
+        $user = auth()->user();
+        if ($user && $user->role === 'customer' && $user->status === 'active') {
+            if ((int) $booking->customer_id === (int) $user->id) {
+                return true;
+            }
+
+            if ($user->phone && $booking->matchesContactPhone((string) $user->phone)) {
+                return true;
+            }
+        }
+
         if ($phone !== null && $phone !== '' && $booking->matchesContactPhone($phone)) {
             return true;
         }
