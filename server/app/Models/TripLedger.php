@@ -33,47 +33,4 @@ class TripLedger extends Model
         ];
     }
 
-    public function outcomeLabel(): string
-    {
-        return match ($this->outcome) {
-            self::OUTCOME_COMPLETED => 'Chạy thành công',
-            self::OUTCOME_CANCELLED_CUSTOMER => 'Khách hủy',
-            self::OUTCOME_CANCELLED_DRIVER => 'Tài xế hủy',
-            default => $this->outcome,
-        };
-    }
-
-    public function outcomeColor(): string
-    {
-        return match ($this->outcome) {
-            self::OUTCOME_COMPLETED => 'success',
-            self::OUTCOME_CANCELLED_CUSTOMER => 'warning',
-            self::OUTCOME_CANCELLED_DRIVER => 'danger',
-            default => 'neutral',
-        };
-    }
-
-    public function actorSummary(): string
-    {
-        if ($this->outcome === self::OUTCOME_COMPLETED) {
-            $who = trim(($this->actor_code ? $this->actor_code . ' — ' : '') . ($this->actor_label ?? ''));
-
-            return $who !== '' ? $who : '—';
-        }
-
-        if ($this->outcome === self::OUTCOME_CANCELLED_CUSTOMER) {
-            $phone = $this->actor_code ?? '';
-            $name = $this->actor_label ?? '';
-
-            return trim($name . ($phone !== '' ? ' (' . $phone . ')' : '')) ?: '—';
-        }
-
-        if ($this->outcome === self::OUTCOME_CANCELLED_DRIVER) {
-            $who = trim(($this->actor_code ? $this->actor_code . ' — ' : '') . ($this->actor_label ?? ''));
-
-            return $who !== '' ? $who : '—';
-        }
-
-        return '—';
-    }
 }

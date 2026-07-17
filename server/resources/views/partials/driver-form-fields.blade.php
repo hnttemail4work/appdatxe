@@ -1,5 +1,8 @@
 {{-- Trường form tài xế — dùng chung create/edit quản lý --}}
 @php
+    use App\Support\BankOptions;
+    use App\Support\DriverVehicleOptions;
+
     $isEdit = $mode === 'edit';
     $user = $driver?->user;
     $readonly = $readonly ?? false;
@@ -9,6 +12,9 @@
     if ($profileEmail === null && $user) {
         $profileEmail = $user->emailForForm();
     }
+    $vehicleType = old('vehicle_type', $driver?->vehicle_type);
+    $bankOptions = BankOptions::names();
+    $currentBank = old('bank_name', $driver?->bank_name ?? '');
 @endphp
 
 <div class="row g-3">
@@ -66,18 +72,11 @@
                autocomplete="off" spellcheck="false">
         @error('password')<div class="invalid-feedback">{{ $message }}</div>@enderror
     </div>
-    @elseif($isEdit && ! $readonly && ($driver?->isOperational() ?? false))
-    <div class="col-12">
-        @include('partials.driver-password-reset-admin', [
-            'driver' => $driver,
-            'canReset' => true,
-        ])
-    </div>
     @endif
 
     <div class="col-12"><hr class="my-1"><h6 class="text-muted mb-0">Thông tin xe</h6></div>
 
-    <div class="col-md-4">
+    <div class="col-md-6">
         <label class="form-label">Biển số xe</label>
         <input type="text" name="vehicle_license_plate"
                value="{{ old('vehicle_license_plate', $driver?->vehicle_license_plate ?? '') }}"
@@ -85,32 +84,24 @@
                placeholder="51A-12345" {{ $ro }}>
         @error('vehicle_license_plate')<div class="invalid-feedback">{{ $message }}</div>@enderror
     </div>
-    <div class="col-md-4">
+    <div class="col-md-6">
         <label class="form-label">Loại xe</label>
         <select name="vehicle_type" class="form-select @error('vehicle_type') is-invalid @enderror" {{ $readonly ? 'disabled' : '' }}>
             <option value="">-- Chọn --</option>
-            @foreach(['limousine' => 'Limousine', 'sedan' => 'Sedan', 'suv' => 'SUV'] as $val => $lbl)
-                <option value="{{ $val }}" {{ old('vehicle_type', $driver?->vehicle_type) === $val ? 'selected' : '' }}>{{ $lbl }}</option>
+            @foreach(DriverVehicleOptions::labels() as $val => $lbl)
+                <option value="{{ $val }}" {{ $vehicleType === $val ? 'selected' : '' }}>{{ $lbl }}</option>
             @endforeach
+            @if($vehicleType && ! array_key_exists($vehicleType, DriverVehicleOptions::labels()))
+                <option value="{{ $vehicleType }}" selected>{{ DriverVehicleOptions::label($vehicleType) }}</option>
+            @endif
         </select>
         @error('vehicle_type')<div class="invalid-feedback">{{ $message }}</div>@enderror
-    </div>
-    <div class="col-md-4">
-        <label class="form-label">Số ghế</label>
-        <input type="number" name="vehicle_seats" min="4" max="50"
-               value="{{ old('vehicle_seats', $driver?->vehicle_seats ?? '') }}"
-               class="form-control @error('vehicle_seats') is-invalid @enderror" {{ $ro }}>
-        @error('vehicle_seats')<div class="invalid-feedback">{{ $message }}</div>@enderror
     </div>
 
     <div class="col-12"><hr class="my-1"><h6 class="text-muted mb-0">Thông tin ngân hàng</h6></div>
 
     <div class="col-md-6">
         <label class="form-label">Tên ngân hàng @if(! $readonly)<span class="text-danger">*</span>@endif</label>
-        @php
-            $bankOptions = ['Vietcombank', 'Techcombank', 'BIDV', 'VietinBank', 'MB Bank', 'ACB', 'Sacombank', 'TPBank', 'VPBank'];
-            $currentBank = old('bank_name', $driver?->bank_name ?? '');
-        @endphp
         <select name="bank_name" class="form-select @error('bank_name') is-invalid @enderror" {{ $readonly ? 'disabled' : '' }} @if(! $readonly) required @endif>
             <option value="">-- Chọn ngân hàng --</option>
             @foreach($bankOptions as $bank)

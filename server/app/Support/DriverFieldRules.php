@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Rules\UniqueNormalizedPhone;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 
 /** Quy tắc validation thống nhất cho hồ sơ tài xế trên toàn hệ thống. */
 class DriverFieldRules
@@ -11,9 +12,10 @@ class DriverFieldRules
     /** @return list<string> */
     public static function requiredFieldsFor(string $context): array
     {
-        $contact = ['name', 'phone'];
+        // Đăng ký: họ tên tùy chọn; SĐT + mật khẩu bắt buộc.
+        $contact = $context === 'register' ? ['phone'] : ['name', 'phone'];
         $account = $context === 'register' ? ['password', 'password_confirmation'] : [];
-        $vehicle = ['vehicle_license_plate', 'vehicle_type', 'vehicle_seats'];
+        $vehicle = ['vehicle_license_plate', 'vehicle_type'];
         $bank = ['bank_name', 'bank_account'];
 
         return match ($context) {
@@ -37,7 +39,7 @@ class DriverFieldRules
     /** @return list<string> */
     public static function vehicleTypes(): array
     {
-        return ['limousine', 'sedan', 'suv'];
+        return DriverVehicleOptions::allowedKeys();
     }
 
     /** @return array<string, mixed> */
@@ -63,11 +65,11 @@ class DriverFieldRules
         }
 
         $passwordRules = $context === 'register'
-            ? ['required', 'string', 'min:8', 'confirmed']
+            ? ['required', 'string', 'confirmed', Password::min(8)->mixedCase()->numbers()]
             : ['nullable', 'string', 'min:8'];
 
         $passwordConfirmRules = $context === 'register'
-            ? ['required', 'string', 'min:8']
+            ? ['required', 'string']
             : ['nullable'];
 
         return [
@@ -105,7 +107,8 @@ class DriverFieldRules
             'vehicle_brand'           => ['nullable', 'string', 'max:100'],
             'vehicle_model'           => ['nullable', 'string', 'max:100'],
             'vehicle_color'           => ['nullable', 'string', 'max:50'],
-            'vehicle_seats'           => [$req('vehicle_seats'), 'integer', 'min:4', 'max:50'],
+            // Số chỗ suy ra từ loại xe khi đăng ký; admin vẫn có thể gửi kèm.
+            'vehicle_seats'           => ['nullable', 'integer', 'min:0', 'max:50'],
         ];
     }
 

@@ -4,7 +4,7 @@ namespace App\Services;
 
 use App\Models\Booking;
 use App\Models\ReferralCode;
-
+use App\Support\AuthIdentifier;
 use App\Support\PlatformFees;
 
 class ReferralCodeService
@@ -120,7 +120,7 @@ class ReferralCodeService
 
     public static function normalizePhone(string $phone): string
     {
-        return preg_replace('/\D/', '', $phone);
+        return AuthIdentifier::normalizePhone($phone);
     }
 
     /** So khớp SĐT theo 9 số cuối (0xxx / +84xxx). */

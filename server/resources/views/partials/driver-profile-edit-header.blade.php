@@ -5,7 +5,7 @@
 <div class="driver-edit-header">
     <div class="driver-edit-identity">
         @if($portraitUrl)
-            <a href="{{ $portraitUrl }}" target="_blank" rel="noopener">
+            <a href="{{ $portraitUrl }}" data-photo-zoom title="Bấm để phóng to">
                 <img src="{{ $portraitUrl }}" alt=""
                      class="driver-edit-avatar rounded-circle object-fit-cover border">
             </a>

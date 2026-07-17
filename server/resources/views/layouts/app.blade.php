@@ -207,6 +207,7 @@
     @include('partials.customer-scroll-dock')
 @endif
 
+@unless(request()->routeIs('login', 'register', 'customer.register', 'auth.biometric'))
 <footer class="app-footer bg-dark text-secondary border-top">
     <div class="container">
         <div class="row g-2 app-footer-grid">
@@ -224,6 +225,7 @@
         <p class="small text-center mb-0 app-footer-copy">© Bản quyền thuộc về {{ $appBrandName }}.</p>
     </div>
 </footer>
+@endunless
 
 @stack('modals')
 

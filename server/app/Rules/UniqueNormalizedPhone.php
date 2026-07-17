@@ -35,7 +35,7 @@ class UniqueNormalizedPhone implements ValidationRule
         $existing = AuthIdentifier::findUserByPhone($normalized);
 
         if ($existing && ($this->ignoreUserId === null || $existing->id !== $this->ignoreUserId)) {
-            $fail('Số điện thoại này đã được đăng ký. Vui lòng dùng số khác hoặc đăng nhập.');
+            $fail('Số điện thoại này đã được đăng ký. Vui lòng dùng số khác hoặc đăng nhập bằng số đó.');
         }
     }
 }

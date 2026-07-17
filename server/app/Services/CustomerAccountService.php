@@ -6,6 +6,7 @@ use App\Models\Booking;
 use App\Models\TripReview;
 use App\Models\User;
 use App\Support\AuthIdentifier;
+use App\Support\Money;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -115,7 +116,7 @@ class CustomerAccountService
             'trip_status'         => $booking->trip_status,
             'booking_status'      => $booking->booking_status,
             'guest_status_label'  => $booking->primaryStatusLabel(),
-            'total_price_label'   => number_format((float) $booking->total_price, 0, ',', '.') . ' đ',
+            'total_price_label'   => Money::vnd((float) $booking->total_price),
             'service_date_label'  => $booking->guestPickupAt()?->format('d/m/Y H:i'),
             'created_at_label'    => $booking->created_at?->format('d/m/Y H:i'),
             'can_review'          => $booking->trip_status === 'completed' && ! $booking->tripReview,

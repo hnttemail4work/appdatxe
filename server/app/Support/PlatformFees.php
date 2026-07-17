@@ -42,24 +42,6 @@ class PlatformFees
         return self::bookingQrDiscountPercent();
     }
 
-    /**
-     * @deprecated Không còn phân tầng lần đầu / lần sau.
-     */
-    public static function referralCommissionPercentForOccurrence(int $occurrence): float
-    {
-        return $occurrence <= 1
-            ? self::referralCommissionFirstPercent()
-            : self::bookingQrDiscountPercent();
-    }
-
-    /** @deprecated Không còn dùng — giá khứ hồi qua phụ thu thời điểm về. */
-    public static function roundTripDiscountPercent(): float
-    {
-        $setting = PlatformSetting::getValue('round_trip_discount_percentage', ['value' => 15]);
-
-        return (float) ($setting['value'] ?? 15);
-    }
-
     public static function kmRateUnder100(): int
     {
         $setting = PlatformSetting::getValue('pricing_km_rate_under_100', ['value' => 13000]);
@@ -119,14 +101,6 @@ class PlatformFees
         return round(1 + self::departurePlanSurchargePercent($plan) / 100, 4);
     }
 
-    /** @deprecated Không còn dùng — giá khứ hồi qua phụ thu thời điểm về. */
-    public static function roundTripMultiplier(): float
-    {
-        $discount = self::roundTripDiscountPercent();
-
-        return round(2 * (1 - $discount / 100), 4);
-    }
-
     /** Giá khách — làm tròn đến chục nghìn gần nhất (1.096.200 → 1.100.000; 1.254.567 → 1.250.000). */
     public static function roundDisplayPrice(float|int $amount): int
     {
@@ -153,24 +127,6 @@ class PlatformFees
         }
 
         return (int) round((100 * $underRate) + (($km - 100) * $overRate));
-    }
-
-    /** @deprecated Dùng {@see roundDisplayPrice()} */
-    public static function roundDownToHundred(float|int $amount): int
-    {
-        return self::roundDisplayPrice($amount);
-    }
-
-    /** Làm tròn lên bội 10.000đ — giữ cho tương thích nội bộ cũ. */
-    public static function roundUpToThousand(float|int $amount): int
-    {
-        if ($amount <= 0) {
-            return 0;
-        }
-
-        $unit = 10_000;
-
-        return (int) (ceil($amount / $unit) * $unit);
     }
 
     /** @deprecated Dùng {@see roundDisplayPrice()} */

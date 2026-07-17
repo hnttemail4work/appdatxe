@@ -319,36 +319,17 @@ if ($errors->hasAny(['current_password', 'password', 'password_confirmation'])) 
                     </div>
 
                     <hr class="my-4">
-                    <h3 class="h6 fw-semibold mb-3">Loại chỗ hiển thị trên form đặt xe</h3>
-                    <div class="row g-2 mb-3">
-                        @foreach($vehicleCapacityKnown ?? \App\Support\VehicleCapacityOptions::knownCapacities() as $capacity)
-                        <div class="col-6 col-md-4 col-lg-3">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="capacity_enabled[]"
-                                       value="{{ $capacity }}" id="cap-enabled-{{ $capacity }}"
-                                       @checked(in_array($capacity, $vehicleCapacityEnabled ?? [], true))>
-                                <label class="form-check-label" for="cap-enabled-{{ $capacity }}">
-                                    {{ \App\Support\VehicleCapacityOptions::label($capacity) }}
-                                </label>
-                            </div>
-                        </div>
-                        @endforeach
-                    </div>
-                    <div class="row g-3 mb-4">
-                        <div class="col-md-4 col-lg-3">
-                            <label class="form-label">Thêm số chỗ mới</label>
-                            <input type="number" name="capacity_custom_add" class="form-control" min="1" max="60" step="1"
-                                   placeholder="VD: 45">
-                        </div>
-                    </div>
-
-                    <h3 class="h6 fw-semibold mb-3">Hệ số giá cả xe theo loại chỗ</h3>
+                    <h3 class="h6 fw-semibold mb-3">Hệ số giá cả xe theo loại xe</h3>
+                    <p class="text-muted small mb-3">
+                        Chuẩn giá: <strong>{{ $feeSettings['vehicleTypeLabels'][$feeSettings['vehicle_types']['baseline']] ?? '4 chỗ - Phổ thông (Sedan)' }}</strong> = 100%.
+                        Form đặt xe lấy hệ số theo loại xe khách chọn (đồng bộ quote).
+                    </p>
                     <div class="row g-3 mb-3">
                         <div class="col-md-4 col-lg-3">
-                            <label class="form-label">Bước tăng mỗi loại xe (%)</label>
+                            <label class="form-label">Bước tăng mặc định (%)</label>
                             <div class="input-group">
-                                <input type="number" name="capacity_step_percent" class="form-control" min="0" max="50" step="0.1"
-                                       value="{{ old('capacity_step_percent', $feeSettings['vehicle_capacity']['step_percent']) }}" required>
+                                <input type="number" name="vehicle_type_step_percent" class="form-control" min="0" max="50" step="0.1"
+                                       value="{{ old('vehicle_type_step_percent', $feeSettings['vehicle_types']['step_percent']) }}" required>
                                 <span class="input-group-text">%</span>
                             </div>
                         </div>
@@ -358,20 +339,25 @@ if ($errors->hasAny(['current_password', 'password', 'password_confirmation'])) 
                             <thead>
                                 <tr>
                                     <th>Loại xe</th>
-                                    <th>% so với 4 chỗ</th>
+                                    <th>% so với chuẩn</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach($vehicleCapacityEnabled ?? \App\Support\VehicleCapacityOptions::enabled() as $capacity)
+                                @foreach($feeSettings['vehicleTypeLabels'] ?? \App\Support\VehicleTypePricing::labels() as $typeKey => $typeLabel)
                                 <tr>
-                                    <td>{{ \App\Support\VehicleCapacityOptions::label($capacity) }}</td>
+                                    <td>
+                                        {{ $typeLabel }}
+                                        @if($typeKey === ($feeSettings['vehicle_types']['baseline'] ?? \App\Support\VehicleTypePricing::BASELINE_TYPE))
+                                            <span class="status-pill status-pill--accent ms-1">Chuẩn</span>
+                                        @endif
+                                    </td>
                                     <td style="max-width: 12rem;">
                                         <div class="input-group input-group-sm">
                                             <input type="number"
-                                                   name="capacity_percents[{{ $capacity }}]"
+                                                   name="vehicle_type_percents[{{ $typeKey }}]"
                                                    class="form-control"
                                                    min="50" max="500" step="0.1"
-                                                   value="{{ old('capacity_percents.'.$capacity, $feeSettings['vehicle_capacity']['percents'][$capacity] ?? \App\Support\VehicleCapacityPricing::defaultPercentForCapacity($capacity)) }}"
+                                                   value="{{ old('vehicle_type_percents.'.$typeKey, $feeSettings['vehicle_types']['percents'][$typeKey] ?? \App\Support\VehicleTypePricing::defaultPercentForType($typeKey)) }}"
                                                    required>
                                             <span class="input-group-text">%</span>
                                         </div>

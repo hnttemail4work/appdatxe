@@ -57,13 +57,6 @@ class BookingBrowserGuardService
         return $this->cancelCount($browserSessionId) >= self::CANCEL_BLOCK_LIMIT;
     }
 
-    /** @deprecated Use isCancelBlocked() */
-    public function isBookingBlocked(string $browserSessionId): bool
-    {
-        return $this->isCancelBlocked($browserSessionId)
-            || $this->hasActiveBooking($browserSessionId);
-    }
-
     public function hasActiveBooking(string $browserSessionId): bool
     {
         return $this->findActiveBooking($browserSessionId) !== null;

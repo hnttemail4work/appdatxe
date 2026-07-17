@@ -51,8 +51,13 @@
     var modalProvinceEl = document.getElementById('address-map-province');
     var driverToolbarEl = document.getElementById('address-map-driver-toolbar');
     var myLocationBtn = document.getElementById('address-map-my-location');
+    var recentWrapEl = document.getElementById('address-map-recent-wrap');
+    var recentListEl = document.getElementById('address-map-recent-list');
+    var confirmCtaLabelEl = confirmBtn ? confirmBtn.querySelector('span') : null;
     var reverseUrl = window.__geocodeReverseUrl || '';
     var searchUrl = window.__geocodeSearchUrl || '';
+    var RECENT_STORAGE_KEY = 'appdatxe:recentAddresses';
+    var RECENT_MAX = 6;
 
     var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     var mapInstance = null;
@@ -205,6 +210,82 @@
         }
         var center = provinceCenter();
         mapFlyTo(center[0], center[1], {});
+    }
+
+    function loadRecentAddresses() {
+        try {
+            var raw = window.localStorage.getItem(RECENT_STORAGE_KEY);
+            var list = raw ? JSON.parse(raw) : [];
+            return Array.isArray(list) ? list : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function saveRecentAddress(address, lat, lng) {
+        var text = String(address || '').trim();
+        if (!text || lat == null || lng == null) {
+            return;
+        }
+        try {
+            var list = loadRecentAddresses().filter(function (item) {
+                return String(item.address || '').trim().toLowerCase() !== text.toLowerCase();
+            });
+            list.unshift({ address: text, lat: lat, lng: lng });
+            window.localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(list.slice(0, RECENT_MAX)));
+        } catch (e) {
+        }
+    }
+
+    function hideRecentPanel() {
+        if (recentWrapEl) {
+            recentWrapEl.classList.add('d-none');
+        }
+    }
+
+    function renderRecentAddresses() {
+        if (!recentListEl || !recentWrapEl) {
+            return;
+        }
+        var list = loadRecentAddresses();
+        recentListEl.innerHTML = '';
+        if (!list.length) {
+            hideRecentPanel();
+            return;
+        }
+        list.forEach(function (item) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'address-map-search-item address-map-recent-item';
+            var row = document.createElement('span');
+            row.className = 'geocode-search-item__row';
+            var icon = document.createElement('span');
+            icon.className = 'geocode-search-item__icon';
+            icon.textContent = '⏱';
+            var copy = document.createElement('span');
+            copy.className = 'geocode-search-item__copy';
+            var title = document.createElement('span');
+            title.className = 'geocode-search-item__title';
+            title.textContent = item.address;
+            copy.appendChild(title);
+            row.appendChild(icon);
+            row.appendChild(copy);
+            btn.appendChild(row);
+            btn.addEventListener('click', function () {
+                hideRecentPanel();
+                if (item.lat != null && item.lng != null) {
+                    placeMarker(item.lat, item.lng, true, { address: item.address, fromSearch: true });
+                }
+            });
+            recentListEl.appendChild(btn);
+        });
+        recentWrapEl.classList.remove('d-none');
+    }
+
+    function showRecentPanelIfIdle() {
+        if (!searchResultsEl || searchResultsEl.classList.contains('d-none')) {
+            renderRecentAddresses();
+        }
     }
 
     function hideAddressSuggestions() {
@@ -401,6 +482,7 @@
     }
 
     function showSearchResultsPanel() {
+        hideRecentPanel();
         if (searchResultsEl) {
             searchResultsEl.classList.remove('d-none');
         }
@@ -468,6 +550,7 @@
         }
         searchInput.value = '';
         hideSearchResults();
+        showRecentPanelIfIdle();
         syncSearchClearButton();
         searchInput.focus();
         moveSearchCaretToEnd();
@@ -563,6 +646,7 @@
         if (latInputId && pendingLat !== null && pendingLng !== null) {
             applyCoords(pendingLat, pendingLng);
         }
+        saveRecentAddress(text, pendingLat, pendingLng);
 
         syncSheetProvinceFromModal();
 
@@ -925,6 +1009,9 @@
         if (titleEl) {
             titleEl.textContent = label;
         }
+        if (confirmCtaLabelEl) {
+            confirmCtaLabelEl.textContent = isDriverMode() ? 'Xác nhận vị trí' : (label + ' này');
+        }
 
         isResolving = false;
         needsPinFineTune = false;
@@ -940,6 +1027,11 @@
         if (searchInput) {
             searchInput.value = existingValue;
             syncSearchClearButton();
+        }
+        if (!existingValue) {
+            showRecentPanelIfIdle();
+        } else {
+            hideRecentPanel();
         }
 
         var provinceLabel = provinceName();
@@ -1029,6 +1121,7 @@
             }
             if (q.length < 2) {
                 hideSearchResults();
+                showRecentPanelIfIdle();
                 return;
             }
             searchTimer = window.setTimeout(function () {
@@ -1065,6 +1158,7 @@
 
     modalEl.addEventListener('hidden.bs.modal', function () {
         teardownPicker();
+        hideRecentPanel();
         if (searchInput) {
             searchInput.value = '';
         }

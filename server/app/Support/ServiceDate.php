@@ -36,17 +36,4 @@ class ServiceDate
 
         return self::parse(trim((string) $value));
     }
-
-    public static function parseOrToday(?string $value): Carbon
-    {
-        if (is_string($value) && preg_match('/^\d{4}-\d{2}-\d{2}$/', trim($value))) {
-            $date = self::parse($value);
-
-            return $date->toDateString() >= self::today()
-                ? $date
-                : self::parse(self::today());
-        }
-
-        return self::parse(self::today());
-    }
 }

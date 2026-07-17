@@ -172,6 +172,8 @@
 
         </section>
 
+        @include('partials.trip-chat-panel', ['mode' => 'customer'])
+
 
 
         <section class="guest-trip-summary-section d-none" data-field="trip_summary_wrap" aria-label="Chi tiết chuyến">

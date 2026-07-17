@@ -4,7 +4,6 @@ namespace App\Models;
 
 use App\Support\PlatformFees;
 use App\Support\PushAudience;
-use App\Support\PushNotificationSettings;
 use App\Models\PushSubscription;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
@@ -128,101 +127,57 @@ class Booking extends Model
         return $stored !== '' && $stored === $given;
     }
 
+    public function presenter(): \App\Presenters\BookingPresenter
+    {
+        return new \App\Presenters\BookingPresenter($this);
+    }
+
     public function passengerGenderLabel(): string
     {
-        return ($this->passenger_gender ?? 'male') === 'female' ? 'Nữ' : 'Nam';
+        return $this->presenter()->passengerGenderLabel();
     }
 
     public function passengerAgeLabel(): ?string
     {
-        if ($this->passenger_age === null) {
-            return null;
-        }
-
-        return $this->passenger_age . ' tuổi';
+        return $this->presenter()->passengerAgeLabel();
     }
 
     public function passengerProfileDetail(): string
     {
-        $parts = [$this->passengerGenderLabel()];
-        if ($age = $this->passengerAgeLabel()) {
-            $parts[] = $age;
-        }
-
-        return implode(', ', $parts);
+        return $this->presenter()->passengerProfileDetail();
     }
 
     public function cancelledByLabel(): ?string
     {
-        if (! in_array($this->booking_status, ['cancelled', 'rejected'], true)
-            && $this->trip_status !== 'cancelled') {
-            return null;
-        }
-
-        return match ($this->cancelled_by) {
-            'customer' => 'Khách hủy',
-            'driver'   => 'Tài xế hủy',
-            'system'   => 'Hệ thống chặn',
-            default    => 'Đã hủy',
-        };
+        return $this->presenter()->cancelledByLabel();
     }
 
     public function pickupLabel(): string
     {
-        $city = trim((string) $this->pickup_address);
-        $detail = trim((string) $this->pickup_detail);
-
-        if ($city !== '' && $detail !== '') {
-            return $city . ', ' . $detail;
-        }
-
-        return $detail !== '' ? $detail : ($city !== '' ? $city : '—');
+        return $this->presenter()->pickupLabel();
     }
 
     /** Chỉ chi tiết đón — không ghép tỉnh/thành phố. */
     public function driverPickupDetailLabel(): string
     {
-        $detail = trim((string) $this->pickup_detail);
-        if ($detail !== '') {
-            return $detail;
-        }
-
-        $city = trim((string) $this->pickup_address);
-
-        return $city !== '' ? $city : 'liên hệ khách';
+        return $this->presenter()->driverPickupDetailLabel();
     }
 
     public function pickupTimeLabel(): ?string
     {
-        if (! $this->pickup_time) {
-            return null;
-        }
-
-        return \App\Support\DepartureTimeDisplay::label($this->pickup_time);
+        return $this->presenter()->pickupTimeLabel();
     }
 
     /** Ngày đón thực tế — đồng bộ với trang chuyến khách. */
     public function driverPickupDateLabel(): ?string
     {
-        return $this->guestPickupAt()?->format('d/m/Y');
+        return $this->presenter()->driverPickupDateLabel();
     }
 
     /** Giờ đón · ngày đón cho màn tài xế. */
     public function driverPickupScheduleLabel(): ?string
     {
-        $at = $this->guestPickupAt();
-        if (! $at instanceof \Carbon\Carbon) {
-            return null;
-        }
-
-        $time = $this->pickupTimeLabel();
-        $date = $at->format('d/m/Y');
-
-        if ($time) {
-            return $time . ' · ' . $date;
-        }
-
-        return $at->format('H:i') . ' · ' . $date;
+        return $this->presenter()->driverPickupScheduleLabel();
     }
 
     public function tripDistanceKm(): int
@@ -341,11 +296,6 @@ class Booking extends Model
         return $minutes !== null && $minutes <= 30;
     }
 
-    public function isScheduledPickup(): bool
-    {
-        return ! $this->isOnDemandPickup();
-    }
-
     public function isPastPickupTime(): bool
     {
         $pickupAt = $this->operationalPickupAt();
@@ -434,13 +384,6 @@ class Booking extends Model
         return $start->copy()->addMinutes($this->expectedTripDurationMinutes());
     }
 
-    public function isPastExpectedCompletion(): bool
-    {
-        $expected = $this->expectedTripCompletionAt();
-
-        return $expected !== null && now()->greaterThan($expected);
-    }
-
     public function isOperatorDismissed(): bool
     {
         return $this->operator_dismissed_at !== null;
@@ -449,24 +392,12 @@ class Booking extends Model
     /** Chỉ chi tiết trả — nếu trống thì báo liên hệ khách. */
     public function driverDropoffDetailLabel(): string
     {
-        $detail = trim((string) $this->dropoff_detail);
-        if ($detail !== '') {
-            return $detail;
-        }
-
-        return 'liên hệ khách';
+        return $this->presenter()->driverDropoffDetailLabel();
     }
 
     public function dropoffLabel(): string
     {
-        $city = trim((string) $this->dropoff_address);
-        $detail = trim((string) $this->dropoff_detail);
-
-        if ($city !== '' && $detail !== '') {
-            return $city . ', ' . $detail;
-        }
-
-        return $detail !== '' ? $detail : ($city !== '' ? $city : '—');
+        return $this->presenter()->dropoffLabel();
     }
 
     public function schedule()
@@ -477,11 +408,6 @@ class Booking extends Model
     public function customer()
     {
         return $this->belongsTo(User::class, 'customer_id');
-    }
-
-    public function laterReturnBooking()
-    {
-        return $this->belongsTo(self::class, 'later_return_booking_id');
     }
 
     public function isLaterDeparturePlan(): bool
@@ -590,11 +516,6 @@ class Booking extends Model
             && $this->cancelled_by === 'driver';
     }
 
-    public function isTerminalForDriverHistory(): bool
-    {
-        return $this->isVisibleInDriverHistory();
-    }
-
     public function scopeTerminalForDriverHistory(Builder $query): Builder
     {
         return $query->where(function (Builder $q): void {
@@ -655,13 +576,6 @@ class Booking extends Model
         return $this->hasMany(PaymentTransaction::class);
     }
 
-    public function isConfirmedForDriver(): bool
-    {
-        return $this->booking_status === 'confirmed'
-            && $this->payment_status === 'paid'
-            && $this->trip_status === 'confirmed';
-    }
-
     public function isExpired(): bool
     {
         return $this->expired_at !== null;
@@ -716,27 +630,9 @@ class Booking extends Model
         return $this->projectedReferrerCommissionAmount();
     }
 
-    public function referralCommissionAmount(): int
-    {
-        return $this->referrerCommissionAmount();
-    }
-
     public function referralDiscountLabel(): ?string
     {
-        $this->loadMissing('appliedReferralCode');
-        if (! $this->appliedReferralCode
-            || $this->appliedReferralCode->type !== ReferralCode::TYPE_BOOKING_TEMP) {
-            return null;
-        }
-
-        $percent = $this->appliedReferralCode->customerDiscountPercent();
-        if ($percent <= 0) {
-            return null;
-        }
-
-        $formatted = rtrim(rtrim(number_format($percent, 1, '.', ''), '0'), '.');
-
-        return 'Giảm ' . $formatted . '% (' . $this->appliedReferralCode->customerDiscountSourceLabel() . ')';
+        return $this->presenter()->referralDiscountLabel();
     }
 
     public function catalogChosenDriverProfile(): ?DriverProfile
@@ -844,22 +740,6 @@ class Booking extends Model
         return ($driver->availability_status ?? 'off_duty') !== 'available';
     }
 
-    public function scopeCatalogDriverOffDuty(Builder $query): Builder
-    {
-        return $query
-            ->whereNotIn('booking_status', ['cancelled', 'rejected'])
-            ->whereHas('schedule', function (Builder $scheduleQuery): void {
-                $scheduleQuery
-                    ->whereNull('driver_id')
-                    ->whereHas('template', fn (Builder $templateQuery) => $templateQuery->whereNotNull('driver_id'));
-            });
-    }
-
-    public function audits()
-    {
-        return $this->hasMany(BookingAudit::class);
-    }
-
     public function cancellationReason()
     {
         return $this->belongsTo(CancellationReason::class);
@@ -944,20 +824,6 @@ class Booking extends Model
         }
 
         return $this->activeDriverProfile();
-    }
-
-    /** Khách thấy thẻ tài xế — đã nhận, đang mời, hoặc đã chọn TX từ catalog. */
-    public function guestShowsDriverInfo(): bool
-    {
-        if ($this->guestDriverProfile() === null) {
-            return false;
-        }
-
-        if (in_array($this->driverAcceptanceState(), ['pending', 'accepted'], true)) {
-            return true;
-        }
-
-        return $this->catalogChosenDriverProfile() !== null && $this->blocksGuestRebooking();
     }
 
     public function passengerPickedUp(): bool
@@ -1114,25 +980,6 @@ class Booking extends Model
         return true;
     }
 
-    private function awaitingDriverLabel(): string
-    {
-        $this->loadMissing('schedule.template', 'schedule.driverTripRequests');
-
-        if ($this->driverAcceptanceState() === 'pending') {
-            return 'Chờ tài xế';
-        }
-
-        if ($this->adminReleasedAfterDriverEngagement()) {
-            if ($this->adminStillSearchingReplacementDriver()) {
-                return 'Đang tìm tài xế khác';
-            }
-
-            return 'TX hủy — cần gán lại';
-        }
-
-        return 'Đang tìm tài xế';
-    }
-
     public function latestDriverTripRequest(): ?DriverTripRequest
     {
         if (! $this->schedule_id || ! $this->contact_phone) {
@@ -1238,292 +1085,44 @@ class Booking extends Model
     /** @return array{label: string, color: string, can_nudge: bool}|null */
     public function adminDriverDispatchDetail(): ?array
     {
-        if (in_array($this->booking_status, ['cancelled', 'rejected'], true)) {
-            return null;
-        }
-
-        if ($this->trip_status === 'completed') {
-            return null;
-        }
-
-        $state = $this->driverAcceptanceState();
-        if ($state === 'none') {
-            return null;
-        }
-
-        $hasPush = $this->assignedDriverHasPushSubscription();
-        $sharesLocation = $this->assignedDriverSharesLiveLocation();
-        $pushReady = PushNotificationSettings::isEnabled()
-            && PushNotificationSettings::vapidKeys() !== null
-            && PushNotificationSettings::isEventEnabled('driver.new_trip_request');
-
-        if ($state === 'pending') {
-            if ($hasPush) {
-                return [
-                    'label'     => $pushReady ? 'Đã gửi TB · chờ TX nhận' : 'TB đẩy chưa sẵn sàng',
-                    'color'     => $pushReady ? 'pending' : 'neutral',
-                    'can_nudge' => $pushReady,
-                ];
-            }
-
-            if ($sharesLocation) {
-                return [
-                    'label'     => 'TX đã chia sẻ vị trí · chờ nhận',
-                    'color'     => 'success',
-                    'can_nudge' => false,
-                ];
-            }
-
-            return [
-                'label'     => 'TX chưa bật app',
-                'color'     => 'danger',
-                'can_nudge' => false,
-            ];
-        }
-
-        $driverName = trim((string) ($this->schedule?->driver_name ?? ''));
-        if ($driverName === '') {
-            $driverName = 'Tài xế';
-        }
-
-        $suffix = match (true) {
-            $sharesLocation => ' · đã chia sẻ vị trí',
-            $hasPush        => ' · đã bật app',
-            default         => ' · chưa bật app',
-        };
-
-        return [
-            'label'     => 'TX đã nhận cuốc · ' . $driverName . $suffix,
-            'color'     => $sharesLocation ? 'success' : ($hasPush ? 'info' : 'neutral'),
-            'can_nudge' => false,
-        ];
-    }
-
-    public function chargedTotal(): float
-    {
-        $stored = (float) $this->total_price;
-        $this->loadMissing('schedule');
-
-        if (! $this->schedule) {
-            return $stored;
-        }
-
-        return app(\App\Services\TripPricingService::class)->bookingTotal(
-            $this->schedule,
-            $this->pickup_address,
-            $this->dropoff_address,
-            $this->pickup_lat,
-            $this->pickup_lng,
-            $this->dropoff_lat,
-            $this->dropoff_lng,
-            $this->departure_plan ?? \App\Support\DeparturePlan::TODAY,
-            $this->laterReturnDays(),
-        );
+        return $this->presenter()->adminDriverDispatchDetail();
     }
 
     public function vehicleBookingLabel(): string
     {
-        $this->loadMissing('schedule.vehicle');
-
-        return \App\Support\VehicleDisplay::labelFromVehicle($this->schedule?->vehicle);
+        return $this->presenter()->vehicleBookingLabel();
     }
 
     /** Nhãn trạng thái thống nhất — luồng mới: khách → tài xế nhận → thu tiền trực tiếp. */
     public function primaryStatusLabel(): string
     {
-        if ($this->isExpired()) {
-            return 'Hết hạn';
-        }
-
-        if ($this->booking_status === 'cancelled') {
-            return 'Đã hủy';
-        }
-
-        if ($this->booking_status === 'rejected') {
-            return 'Từ chối';
-        }
-
-        if ($this->trip_status === 'completed') {
-            return 'Hoàn tất';
-        }
-
-        if (! $this->hasDriverAccepted()) {
-            return $this->awaitingDriverLabel();
-        }
-
-        $this->loadMissing('schedule');
-        if ($this->schedule?->driver_id) {
-            return $this->schedule->bookingStatusLabel();
-        }
-
-        return 'Sắp chạy';
+        return $this->presenter()->primaryStatusLabel();
     }
 
     /** Nhãn theo dõi trên dashboard quản lý — đồng bộ khách / tài xế. */
     public function operatorMonitorLabel(): string
     {
-        if ($this->isExpired()) {
-            return 'Hết hạn';
-        }
-
-        if ($this->booking_status === 'cancelled') {
-            return 'Đã hủy';
-        }
-
-        if ($this->booking_status === 'rejected') {
-            return 'Từ chối';
-        }
-
-        if ($this->trip_status === 'completed') {
-            if ($this->showsLaterPickupReminder()) {
-                return 'Nhắc đón khách';
-            }
-
-            return 'Hoàn thành';
-        }
-
-        if ($this->needs_operator_help_at) {
-            return match ($this->operator_help_reason) {
-                'driver_invite_timeout'    => 'TX không nhận — cần gán lại',
-                'driver_late_no_show'      => 'Quá giờ đón — cần gán lại',
-                'driver_movement_timeout'  => 'TX chưa xác nhận đi đón',
-                'driver_cancelled_trip'    => 'TX hủy cuốc — cần gán lại',
-                default                    => 'Cần quản lý xử lý',
-            };
-        }
-
-        $acceptance = $this->driverAcceptanceState();
-        if ($acceptance === 'none') {
-            if ($this->adminReleasedAfterDriverEngagement()) {
-                return $this->adminStillSearchingReplacementDriver()
-                    ? 'Đang tìm tài xế khác'
-                    : 'TX hủy cuốc — cần gán lại';
-            }
-
-            return $this->awaitingDriverLabel();
-        }
-
-        if ($acceptance === 'pending') {
-            return 'Chờ TX nhận cuốc';
-        }
-
-        $this->loadMissing('schedule');
-        if ($this->schedule?->driver_id) {
-            return $this->schedule->bookingStatusLabel();
-        }
-
-        return 'TX đã nhận';
+        return $this->presenter()->operatorMonitorLabel();
     }
 
     public function primaryStatusColor(): string
     {
-        return $this->statusColorForLabel($this->primaryStatusLabel());
+        return $this->presenter()->primaryStatusColor();
     }
 
     public function operatorMonitorColor(): string
     {
-        if (in_array($this->booking_status, ['cancelled', 'rejected'], true)) {
-            return \App\Support\StatusBadge::DANGER;
-        }
-
-        if ($this->isExpired()) {
-            return \App\Support\StatusBadge::NEUTRAL;
-        }
-
-        if ($this->trip_status === 'completed') {
-            if ($this->showsLaterPickupReminder()) {
-                return \App\Support\StatusBadge::ACCENT;
-            }
-
-            return \App\Support\StatusBadge::SUCCESS;
-        }
-
-        if ($this->needs_operator_help_at) {
-            return \App\Support\StatusBadge::DANGER;
-        }
-
-        $acceptance = $this->driverAcceptanceState();
-        if ($acceptance === 'none') {
-            return \App\Support\StatusBadge::PENDING;
-        }
-
-        if ($acceptance === 'pending') {
-            return \App\Support\StatusBadge::ACCENT;
-        }
-
-        $this->loadMissing('schedule');
-
-        return $this->schedule?->driver_id
-            ? $this->schedule->bookingStatusColor()
-            : \App\Support\StatusBadge::INFO;
-    }
-
-    private function statusColorForLabel(string $label): string
-    {
-        if ($label === 'Hết hạn') {
-            return \App\Support\StatusBadge::NEUTRAL;
-        }
-
-        return match ($label) {
-            'Đã hủy', 'Từ chối'     => \App\Support\StatusBadge::DANGER,
-            'Hoàn thành'            => \App\Support\StatusBadge::SUCCESS,
-            'Đang phục vụ', 'Đang chạy', 'Đã đón khách', 'Tài xế đã đến điểm đón', 'Tài xế đang đi đón', 'Đã có tài xế' => \App\Support\StatusBadge::GOLD,
-            'Chờ QL xác nhận', 'Chờ tài xế nhận', 'Đang tìm tài xế', 'Đang tìm tài xế khác', 'TX hủy — cần gán lại', 'TX hủy cuốc — cần gán lại' => \App\Support\StatusBadge::PENDING,
-            'Cần QL hỗ trợ'        => \App\Support\StatusBadge::DANGER,
-            default                 => \App\Support\StatusBadge::NEUTRAL,
-        };
+        return $this->presenter()->operatorMonitorColor();
     }
 
     public function tripDisplayLabel(): ?string
     {
-        if ($this->isExpired()) {
-            return null;
-        }
-
-        return match ($this->trip_status) {
-            'completed'           => 'Hoàn tất',
-            'awaiting_completion' => 'Chờ xác nhận hoàn',
-            'cancelled'           => 'Đã hủy',
-            'confirmed'           => $this->scheduleTripPhaseLabel(),
-            default               => null,
-        };
+        return $this->presenter()->tripDisplayLabel();
     }
 
     public function tripDisplayColor(): string
     {
-        if ($this->isExpired()) {
-            return \App\Support\StatusBadge::NEUTRAL;
-        }
-
-        $label = $this->tripDisplayLabel();
-
-        return match ($label) {
-            'Hoàn tất', 'Chạy xong' => \App\Support\StatusBadge::SUCCESS,
-            'Chờ xác nhận hoàn'     => \App\Support\StatusBadge::INFO,
-            'Đã hủy'                => \App\Support\StatusBadge::DANGER,
-            'Đang chạy'             => \App\Support\StatusBadge::GOLD,
-            'Sắp chạy'             => \App\Support\StatusBadge::PENDING,
-            default                 => \App\Support\StatusBadge::NEUTRAL,
-        };
-    }
-
-    private function scheduleTripPhaseLabel(): ?string
-    {
-        $this->loadMissing('schedule');
-
-        if (! $this->schedule) {
-            return 'Sắp chạy';
-        }
-
-        if ($this->schedule->driver_id) {
-            return $this->schedule->bookingStatusLabel();
-        }
-
-        return match ($this->schedule->displayStatus()) {
-            'completed' => 'Chạy xong',
-            'running'   => 'Đang chạy',
-            default     => 'Sắp chạy',
-        };
+        return $this->presenter()->tripDisplayColor();
     }
 
     /** Đơn hiển thị trên dashboard quản lý — ẩn đơn đã dismiss, giữ đơn hủy lần 4+. */
@@ -1563,11 +1162,6 @@ class Booking extends Model
         return 'active';
     }
 
-    public function isOperatorCancelled(): bool
-    {
-        return $this->operatorListBucket() === 'cancelled';
-    }
-
     public function scopeOperatorListBucket(Builder $query, string $bucket): Builder
     {
         return match ($bucket) {
@@ -1589,8 +1183,4 @@ class Booking extends Model
         };
     }
 
-    public function scopeForOperatorVehicle(Builder $query, int $operatorId): Builder
-    {
-        return $query->whereHas('schedule.vehicle', fn ($q) => $q->where('operator_id', $operatorId));
-    }
 }

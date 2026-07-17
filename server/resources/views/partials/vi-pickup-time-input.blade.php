@@ -10,12 +10,14 @@ $id = $id ?? 'modal-pickup-time';
 $value = $value ?? '';
 $required = $required ?? true;
 $label = $label ?? 'Giờ đón';
+$formAttr = $formAttr ?? null;
 $displayValue = $value !== '' && $value !== null
     ? DepartureTimeDisplay::normalizeForClock($value)
     : '';
 @endphp
 <label class="form-label" for="{{ $id }}">{{ $label }}@if($required) <span class="text-danger">*</span>@endif</label>
 <input type="time" name="{{ $name }}" id="{{ $id }}"
+       @if($formAttr) form="{{ $formAttr }}" @endif
        class="form-control @error($name) is-invalid @enderror"
        @if($required) required @endif
        data-validate-label="{{ $label }}"

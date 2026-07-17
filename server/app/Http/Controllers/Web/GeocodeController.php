@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Geocode\ResolvePlaceRequest;
+use App\Http\Requests\Geocode\ReverseGeocodeRequest;
+use App\Http\Requests\Geocode\SearchGeocodeRequest;
 use App\Services\GoongGeocodeService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 
 class GeocodeController extends Controller
@@ -24,16 +26,13 @@ class GeocodeController extends Controller
         return response()->json(['message' => 'Chưa cấu hình GOONG_API_KEY.'], 503);
     }
 
-    public function reverse(Request $request): JsonResponse
+    public function reverse(ReverseGeocodeRequest $request): JsonResponse
     {
         if ($error = $this->ensureConfigured()) {
             return $error;
         }
 
-        $validated = $request->validate([
-            'lat' => ['required', 'numeric', 'between:-90,90'],
-            'lon' => ['required', 'numeric', 'between:-180,180'],
-        ]);
+        $validated = $request->validated();
 
         $result = $this->goongGeocode->reverse(
             (float) $validated['lat'],
@@ -47,16 +46,13 @@ class GeocodeController extends Controller
         return response()->json($result);
     }
 
-    public function search(Request $request): JsonResponse
+    public function search(SearchGeocodeRequest $request): JsonResponse
     {
         if ($error = $this->ensureConfigured()) {
             return $error;
         }
 
-        $validated = $request->validate([
-            'q' => ['required', 'string', 'min:2', 'max:200'],
-            'province' => ['nullable', 'string', 'max:100'],
-        ]);
+        $validated = $request->validated();
 
         $province = trim((string) ($validated['province'] ?? ''));
         $query = $validated['q'];
@@ -69,15 +65,13 @@ class GeocodeController extends Controller
         return response()->json(['results' => $results]);
     }
 
-    public function resolve(Request $request): JsonResponse
+    public function resolve(ResolvePlaceRequest $request): JsonResponse
     {
         if ($error = $this->ensureConfigured()) {
             return $error;
         }
 
-        $validated = $request->validate([
-            'place_id' => ['required', 'string', 'max:255'],
-        ]);
+        $validated = $request->validated();
 
         $result = $this->goongGeocode->resolvePlaceId($validated['place_id']);
         if ($result === null) {

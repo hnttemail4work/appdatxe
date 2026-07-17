@@ -18,8 +18,20 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'role' => RoleMiddleware::class,
+            'guest' => \App\Http\Middleware\RedirectIfAuthenticated::class,
+            'auth' => \App\Http\Middleware\Authenticate::class,
             'customer.biometric' => \App\Http\Middleware\EnsureCustomerBiometricVerified::class,
+            'driver.password' => \App\Http\Middleware\EnsureDriverPasswordChanged::class,
         ]);
+
+        $middleware->redirectGuestsTo(fn () => route('login'));
+        $middleware->redirectUsersTo(function () {
+            $user = auth()->user();
+
+            return $user
+                ? \App\Support\RoleDashboard::forUser($user)
+                : route('login');
+        });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->render(function (TokenMismatchException $e, Request $request) {

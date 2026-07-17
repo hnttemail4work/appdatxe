@@ -67,15 +67,6 @@ class DriverWalletTransaction extends Model
         return Storage::disk('public')->url($path);
     }
 
-    public function statusBadgeClass(): string
-    {
-        return match ($this->status) {
-            'approved' => \App\Support\StatusBadge::SUCCESS,
-            'rejected' => \App\Support\StatusBadge::DANGER,
-            default    => \App\Support\StatusBadge::PENDING,
-        };
-    }
-
     public function depositReference(): string
     {
         return 'NV' . str_pad((string) $this->id, 6, '0', STR_PAD_LEFT);

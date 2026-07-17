@@ -65,7 +65,9 @@ if (! $viewOnly && $driver->isOperational()) {
                 <div class="d-flex flex-wrap gap-2 mt-4 pt-3 border-top">
                     <button class="btn btn-primary px-4 fw-semibold">Lưu thông tin</button>
                     @if($driver->status !== 'inactive')
-                    <button type="submit" form="driver-deactivate-form" class="btn btn-outline-danger ms-auto">Vô hiệu hoá</button>
+                        <button type="submit" form="driver-deactivate-form" class="btn btn-outline-danger ms-auto">Vô hiệu hoá</button>
+                    @elseif($driver->isApproved())
+                        <button type="submit" form="driver-activate-form" class="btn btn-outline-primary ms-auto">Kích hoạt lại</button>
                     @endif
                 </div>
             </form>
@@ -77,6 +79,24 @@ if (! $viewOnly && $driver->isOperational()) {
                   data-confirm-ok="Vô hiệu hoá">
                 @csrf @method('DELETE')
             </form>
+            @elseif($driver->isApproved())
+            <form method="POST" action="{{ route('admin.drivers.activate', $driver) }}" id="driver-activate-form"
+                  data-confirm="Kích hoạt lại tài xế này?"
+                  data-confirm-title="Kích hoạt tài xế"
+                  data-confirm-ok="Kích hoạt">
+                @csrf
+            </form>
+            @endif
+
+            @if($driver->user)
+            <div class="mt-4 pt-3 border-top">
+                <h6 class="text-muted mb-2">Hỗ trợ tài khoản</h6>
+                <p class="small text-muted mb-2">Tài xế quên mật khẩu gọi tổng đài — đặt lại tại đây rồi đọc mật khẩu tạm cho tài xế. Tài xế sẽ phải đổi mật khẩu khi đăng nhập.</p>
+                @include('partials.driver-password-reset-admin', [
+                    'driver' => $driver,
+                    'canReset' => true,
+                ])
+            </div>
             @endif
         @endif
         @include('partials.screen-tab-pane-end')
@@ -109,8 +129,8 @@ if (! $viewOnly && $driver->isOperational()) {
 @endsection
 
 @push('styles')
-<link rel="stylesheet" href="{{ asset('css/customer.css') }}">
-<link rel="stylesheet" href="{{ asset('css/driver-mgmt.css') }}">
+<link rel="stylesheet" href="{{ asset('css/customer.css') }}?v={{ filemtime(public_path('css/customer.css')) }}">
+<link rel="stylesheet" href="{{ asset('css/driver-mgmt.css') }}?v={{ filemtime(public_path('css/driver-mgmt.css')) }}">
 @endpush
 
 @push('scripts')

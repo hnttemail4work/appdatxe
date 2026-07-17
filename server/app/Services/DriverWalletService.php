@@ -9,6 +9,7 @@ use App\Models\DriverWallet;
 use App\Models\DriverWalletTransaction;
 use App\Models\Schedule;
 use App\Support\DriverWalletConfig;
+use App\Support\Money;
 use App\Support\PlatformFees;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
@@ -332,7 +333,7 @@ class DriverWalletService
             }
 
             if (! $wallet->hasMinBalance()) {
-                $balanceLabel = number_format(abs($wallet->balance), 0, ',', '.') . ' đ';
+                $balanceLabel = Money::vnd(abs($wallet->balance));
                 $message = $wallet->balance < 0
                     ? 'Số dư ví âm ' . $balanceLabel . ' — cần nạp ví để nhận cuốc mới.'
                     : 'Doanh thu đã đạt ' . $threshold

@@ -27,9 +27,4 @@ class BookingAudit extends Model
     {
         return $this->belongsTo(Booking::class);
     }
-
-    public function actor()
-    {
-        return $this->belongsTo(User::class, 'actor_id');
-    }
 }

@@ -41,9 +41,10 @@ class VehicleCapacityPricing
     {
         $data = self::load();
         $key = (string) $capacity;
+        $percents = $data['percents'] ?? null;
 
-        if (isset($data['percents'][$key])) {
-            return (float) $data['percents'][$key];
+        if (is_array($percents) && array_key_exists($key, $percents)) {
+            return (float) $percents[$key];
         }
 
         return self::defaultPercentForCapacity($capacity);

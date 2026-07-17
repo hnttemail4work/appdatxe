@@ -2,14 +2,10 @@
 
 namespace App\Models;
 
-use App\Support\DriverWalletConfig;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Collection;
 
 class DriverTripSettlement extends Model
 {
-    public const DRIVER_TRANSFER_CONFIRMED = 'driver_confirmed';
-
     protected $fillable = [
         'driver_wallet_id',
         'schedule_id',
@@ -58,21 +54,6 @@ class DriverTripSettlement extends Model
         return $this->belongsTo(Booking::class);
     }
 
-    public function isBlocking(): bool
-    {
-        return $this->status !== 'completed';
-    }
-
-    public function isUnderThreshold(): bool
-    {
-        return $this->category === 'under_threshold';
-    }
-
-    public function driverConfirmedTransfer(): bool
-    {
-        return $this->transfer_ref === self::DRIVER_TRANSFER_CONFIRMED;
-    }
-
     public function statusLabel(): string
     {
         return match ($this->status) {
@@ -83,63 +64,5 @@ class DriverTripSettlement extends Model
         };
     }
 
-    public function settlementCodeIsValid(?string $code): bool
-    {
-        $code = strtoupper(trim((string) $code));
-
-        return $this->settlement_code !== null
-            && strtoupper($this->settlement_code) === $code
-            && ($this->settlement_code_expires_at === null || $this->settlement_code_expires_at->isFuture());
-    }
-
-    public function settlementCodeExpired(): bool
-    {
-        return $this->settlement_code_expires_at !== null
-            && $this->settlement_code_expires_at->isPast();
-    }
-
-    public function categoryLabel(): string
-    {
-        $threshold = DriverWalletConfig::revenueThresholdShortLabel();
-
-        return match ($this->category) {
-            'under_threshold'      => 'Tổng doanh thu chưa đạt ' . $threshold,
-            'first_over_threshold' => 'Lần đầu đạt ' . $threshold,
-            'over_threshold'       => 'Duy trì ví — trừ phí nền tảng',
-            default                => $this->category,
-        };
-    }
-
     /** Ánh xạ trạng thái kết chuyến → bước trên app tài xế. */
-    public static function workflowPhaseFromStatus(?string $status): string
-    {
-        return match ($status) {
-            'pending_settle'      => 'needs_settle',
-            'pending_driver_code' => 'enter_settle_code',
-            'completed'           => 'settled',
-            default               => 'needs_settle',
-        };
-    }
-
-    /** @return Collection<int, Booking> */
-    public function scheduleBookings(): Collection
-    {
-        if ($this->relationLoaded('schedule') && $this->schedule?->relationLoaded('bookings')) {
-            return $this->schedule->bookings
-                ->filter(fn (Booking $b): bool => ! in_array($b->booking_status, ['cancelled', 'rejected'], true))
-                ->values();
-        }
-
-        if (! $this->schedule_id) {
-            $this->loadMissing('booking');
-
-            return $this->booking ? collect([$this->booking]) : collect();
-        }
-
-        return Booking::query()
-            ->where('schedule_id', $this->schedule_id)
-            ->whereNotIn('booking_status', ['cancelled', 'rejected'])
-            ->orderBy('id')
-            ->get();
-    }
 }

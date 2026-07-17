@@ -10,6 +10,7 @@
     var baseUrl = root.dataset.driverTabsBase || window.location.pathname;
     var validTabs = ['trips', 'history', 'deposit', 'account'];
     var activeTab = root.dataset.driverTabsActive || 'trips';
+    var mustChangePassword = root.dataset.mustChangePassword === '1';
 
     function isValidTab(tab) {
         if (tab === 'requests') {
@@ -17,6 +18,15 @@
         }
 
         return validTabs.indexOf(tab) !== -1;
+    }
+
+    function canOpenTab(tab) {
+        tab = normalizeTab(tab);
+        if (!mustChangePassword) {
+            return true;
+        }
+
+        return tab === 'account';
     }
 
     function normalizeTab(tab) {
@@ -60,6 +70,15 @@
         }
 
         tab = normalizeTab(tab);
+        if (!canOpenTab(tab)) {
+            if (window.AppFlash && window.AppFlash.show) {
+                window.AppFlash.show('Vui lòng đổi mật khẩu trước khi tiếp tục.', {
+                    variant: 'warning',
+                    title: 'Cần đổi mật khẩu',
+                });
+            }
+            return;
+        }
         activeTab = tab;
         root.dataset.driverTabsActive = tab;
 

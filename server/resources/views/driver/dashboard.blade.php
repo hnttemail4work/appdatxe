@@ -3,6 +3,7 @@
 @push('styles')
 <link rel="stylesheet" href="{{ asset('css/driver.css') }}?v={{ filemtime(public_path('css/driver.css')) }}">
 <link rel="stylesheet" href="{{ asset('css/address-map-picker.css') }}?v={{ filemtime(public_path('css/address-map-picker.css')) }}">
+<link rel="stylesheet" href="{{ asset('css/trip-chat.css') }}?v={{ filemtime(public_path('css/trip-chat.css')) }}">
 @endpush
 
 @section('content')
@@ -35,7 +36,7 @@
         : ['key' => 'offline', 'label' => ''];
 @endphp
 
-<div class="driver-page" data-driver-tabs data-driver-tabs-active="{{ $driverDefaultTab }}" data-driver-tabs-base="{{ route('driver.dashboard') }}" data-wait-progress-root>
+<div class="driver-page" data-driver-tabs data-driver-tabs-active="{{ $driverDefaultTab }}" data-driver-tabs-base="{{ route('driver.dashboard') }}" data-must-change-password="{{ $mustChangePassword ? '1' : '0' }}" data-wait-progress-root>
     @if($profile)
     @php
         $walletBalanceLabel = $driverWallet
@@ -51,67 +52,85 @@
         ];
     @endphp
 
-    <header class="driver-hero mb-3">
-        <div class="driver-hero-profile">
-            <div class="driver-avatar">
-                @if($driverPhotoUrl)
-                    <img src="{{ $driverPhotoUrl }}" alt="" class="driver-avatar-img" loading="lazy" decoding="async">
-                @else
-                    <span class="driver-avatar-fallback" aria-hidden="true">{{ $driverInitial }}</span>
-                @endif
-            </div>
-            <div class="driver-hero-copy">
-                <div class="driver-hero-topbar">
-                    <div class="driver-hero-intro">
-                        <p class="driver-hero-eyebrow">Xin chào tài xế</p>
-                        <div class="driver-hero-title-row">
-                            <h1 class="driver-hero-name">{{ $user->name }}</h1>
-                            @if($profile->driver_code)
-                                <span class="driver-hero-code-wrap">
-                                    <span class="driver-hero-code-label">Mã tx:</span>
-                                    <span class="driver-meta-code driver-hero-code">{{ $profile->driver_code }}</span>
-                                </span>
-                            @endif
-                        </div>
-                    </div>
-                    <div class="driver-activity-control">
-                        <label class="driver-activity-toggle"
-                               for="driver-availability-input"
-                               id="driver-activity-toggle-label">
-                            <input type="checkbox"
-                                   class="driver-activity-toggle-input"
-                                   id="driver-availability-input"
-                                   @checked(! $driverPaused)>
-                            <span class="driver-activity-switch" aria-hidden="true">
-                                <span class="driver-activity-switch-off">Tắt</span>
-                                <span class="driver-activity-switch-knob"></span>
-                                <span class="driver-activity-switch-on">Bật</span>
-                            </span>
-                        </label>
-                    </div>
+    @php
+        $driverMapTripPins = $driverMapTripPins ?? [];
+        $driverActiveMapNav = $driverActiveMapNav ?? null;
+        $driverMapLat = $driverLocationReady ? ($profile->last_lat ?? null) : null;
+        $driverMapLng = $driverLocationReady ? ($profile->last_lng ?? null) : null;
+    @endphp
+    <section class="driver-map-hero mb-3" id="driver-map-hero"
+              data-driver-map-lat="{{ $driverMapLat }}"
+              data-driver-map-lng="{{ $driverMapLng }}">
+        <div class="driver-map-hero__canvas" id="driver-map-canvas" aria-label="Vị trí của bạn trên bản đồ"></div>
+        <div class="driver-map-hero__scrim" aria-hidden="true"></div>
+
+        <div class="driver-map-hero__topbar">
+            <div class="driver-map-chip">
+                <div class="driver-avatar driver-map-chip__avatar">
+                    @if($driverPhotoUrl)
+                        <img src="{{ $driverPhotoUrl }}" alt="" class="driver-avatar-img" loading="lazy" decoding="async">
+                    @else
+                        <span class="driver-avatar-fallback" aria-hidden="true">{{ $driverInitial }}</span>
+                    @endif
                 </div>
-                <div class="driver-hero-meta-row">
+                <div class="driver-map-chip__copy">
+                    <div class="driver-map-chip__name-row">
+                        <strong class="driver-map-chip__name">{{ $user->name }}</strong>
+                        @if($profile->driver_code)
+                            <span class="driver-meta-code driver-map-chip__code">{{ $profile->driver_code }}</span>
+                        @endif
+                    </div>
                     <div class="driver-status-pill driver-status-pill--{{ $heroStatus['key'] }}" id="driver-hero-status-pill" role="status">
                         <span id="driver-hero-status-label">{{ $heroStatus['label'] }}</span>
                     </div>
                 </div>
             </div>
+
+            <div class="driver-activity-control driver-map-hero__toggle">
+                <label class="driver-activity-toggle"
+                       for="driver-availability-input"
+                       id="driver-activity-toggle-label">
+                    <input type="checkbox"
+                           class="driver-activity-toggle-input"
+                           id="driver-availability-input"
+                           @checked(! $driverPaused)>
+                    <span class="driver-activity-switch" aria-hidden="true">
+                        <span class="driver-activity-switch-off">Tắt</span>
+                        <span class="driver-activity-switch-knob"></span>
+                        <span class="driver-activity-switch-on">Bật</span>
+                    </span>
+                </label>
+            </div>
         </div>
-        <div class="driver-earnings-strip">
-            <div class="driver-earnings-item">
-                <span class="driver-earnings-label">Hôm nay</span>
-                <span class="driver-earnings-value">{{ number_format($revenueStats['day'] ?? 0, 0, ',', '.') }} đ</span>
+
+        <button type="button" class="driver-map-hero__locate-btn" id="driver-map-locate-btn" aria-label="Về vị trí của tôi">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+            </svg>
+        </button>
+
+        @if($driverActiveMapNav)
+            <div class="driver-map-hero__nav">
+                @include('partials.driver-map-nav-button', ['mapNav' => $driverActiveMapNav])
             </div>
-            <div class="driver-earnings-item">
-                <span class="driver-earnings-label">Tuần này</span>
-                <span class="driver-earnings-value">{{ number_format($revenueStats['week'] ?? 0, 0, ',', '.') }} đ</span>
-            </div>
+        @endif
+    </section>
+
+    <div class="driver-earnings-strip mb-3">
+        <div class="driver-earnings-item">
+            <span class="driver-earnings-label">Hôm nay</span>
+            <span class="driver-earnings-value">{{ number_format($revenueStats['day'] ?? 0, 0, ',', '.') }} đ</span>
+        </div>
+        <div class="driver-earnings-item">
+            <span class="driver-earnings-label">Tuần này</span>
+            <span class="driver-earnings-value">{{ number_format($revenueStats['week'] ?? 0, 0, ',', '.') }} đ</span>
+        </div>
         <a href="{{ route('driver.dashboard', ['tab' => 'deposit']) }}" class="driver-earnings-item driver-earnings-item--wallet" data-driver-tab="deposit">
-                <span class="driver-earnings-label">Số dư ví</span>
-                <span class="driver-earnings-value">{{ $walletBalanceLabel }}</span>
-            </a>
-        </div>
-    </header>
+            <span class="driver-earnings-label">Số dư ví</span>
+            <span class="driver-earnings-value">{{ $walletBalanceLabel }}</span>
+        </a>
+    </div>
 
     @if($profile->isMissedTripLocked() || ($walletBlockReason ?? null))
     <div class="driver-notice-stack mb-3">
@@ -313,6 +332,7 @@ window.__driverAvailabilityUrl = @json(route('driver.availability.update'));
 @include('partials.geocode-client-config')
 window.__driverDashboardUrl = @json(route('driver.dashboard', ['tab' => 'trips']));
 window.__driverDashboardPollUrl = @json(route('driver.dashboard.poll'));
+window.__driverMapTripPins = @json($driverMapTripPins ?? []);
 </script>
 <script src="{{ asset('js/geocode-search-ui.js') }}?v={{ filemtime(public_path('js/geocode-search-ui.js')) }}"></script>
 <script src="{{ asset('js/geocode-resolve.js') }}?v={{ filemtime(public_path('js/geocode-resolve.js')) }}"></script>
@@ -321,7 +341,9 @@ window.__driverDashboardPollUrl = @json(route('driver.dashboard.poll'));
 <script src="{{ asset('js/driver-location-save.js') }}?v={{ filemtime(public_path('js/driver-location-save.js')) }}"></script>
 <script src="{{ asset('js/driver-location-gps.js') }}?v={{ filemtime(public_path('js/driver-location-gps.js')) }}"></script>
 <script src="{{ asset('js/driver-map-nav.js') }}?v={{ filemtime(public_path('js/driver-map-nav.js')) }}"></script>
+<script src="{{ asset('js/driver-live-map.js') }}?v={{ filemtime(public_path('js/driver-live-map.js')) }}"></script>
 <script src="{{ asset('js/driver-availability-toggle.js') }}?v={{ filemtime(public_path('js/driver-availability-toggle.js')) }}"></script>
+<script src="{{ asset('js/trip-chat.js') }}?v={{ filemtime(public_path('js/trip-chat.js')) }}"></script>
 <script>
 (function () {
     if (window.GeocodeAddressAutocomplete) {

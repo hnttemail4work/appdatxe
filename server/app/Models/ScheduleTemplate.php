@@ -3,8 +3,6 @@
 namespace App\Models;
 
 use App\Services\DriverAvailabilityService;
-use App\Support\DepartureTimeDisplay;
-use App\Support\ServiceDate;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 
@@ -98,45 +96,6 @@ class ScheduleTemplate extends Model
     }
 
     /** Thông tin lịch chuyến theo ngày khách chọn. */
-    public function scheduleInfoForDate(Carbon|string $serviceDate): array
-    {
-        $date = $serviceDate instanceof Carbon
-            ? $serviceDate->copy()->startOfDay()
-            : ServiceDate::parse($serviceDate);
-
-        $departure = $this->departureAt($date);
-        $arrival = $this->expectedArrivalAt($date);
-        $hasFixedDeparture = $this->hasFixedDepartureTime();
-
-        $weekdays = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
-        $weekdaysShort = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
-
-        return [
-            'service_date'       => $date->toDateString(),
-            'weekday'            => $weekdays[(int) $date->dayOfWeek],
-            'weekday_short'      => $weekdaysShort[(int) $date->dayOfWeek],
-            'date_day'           => $date->format('d'),
-            'date_month'         => $date->format('m/Y'),
-            'date_short'         => $date->format('d/m/Y'),
-            'date_label'         => $weekdays[(int) $date->dayOfWeek] . ', ' . $date->format('d/m/Y'),
-            'departure_time'     => $hasFixedDeparture
-                ? DepartureTimeDisplay::label($this->departure_time)
-                : 'Tự chọn',
-            'departure_clock'    => $hasFixedDeparture
-                ? DepartureTimeDisplay::normalizeForClock($this->departure_time)
-                : null,
-            'arrival_time'       => $arrival->format('H:i'),
-            'arrival_date_short' => $arrival->format('d/m/Y'),
-            'same_day'           => $arrival->isSameDay($departure),
-            'time_range'         => $hasFixedDeparture
-                ? ($arrival->isSameDay($departure)
-                    ? $departure->format('H:i') . ' → ' . $arrival->format('H:i')
-                    : $departure->format('H:i') . ', ' . $departure->format('d/m')
-                    . ' → ' . $arrival->format('H:i') . ', ' . $arrival->format('d/m/Y'))
-                : 'Khách chọn giờ đón',
-        ];
-    }
-
     private function clockOnDate(Carbon $serviceDate, mixed $time): Carbon
     {
         $timeStr = \App\Support\DepartureTimeDisplay::normalizeForClock($time) . ':00';

@@ -5,13 +5,14 @@ namespace App\Services;
 use App\Models\DriverCuocOfferHide;
 use App\Models\DriverTripRequest;
 use App\Models\Schedule;
+use App\Support\AuthIdentifier;
 use Illuminate\Support\Collection;
 
 class DriverCuocOfferHideService
 {
     public function normalizePhone(string $phone): string
     {
-        return preg_replace('/\D+/', '', trim($phone)) ?: trim($phone);
+        return AuthIdentifier::normalizePhone($phone);
     }
 
     public function recordMissedOffer(DriverTripRequest $request): void

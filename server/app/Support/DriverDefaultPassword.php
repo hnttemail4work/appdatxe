@@ -35,18 +35,6 @@ class DriverDefaultPassword
         return $plain;
     }
 
-    public static function assignToUser(User $user, bool $mustChange = true): string
-    {
-        $plain = self::plainFromPhone((string) $user->phone);
-
-        $user->update([
-            'password'             => Hash::make($plain),
-            'must_change_password' => $mustChange,
-        ]);
-
-        return $plain;
-    }
-
     public static function resetToRandom(User $user, bool $mustChange = true): string
     {
         $plain = self::randomPlain(8);

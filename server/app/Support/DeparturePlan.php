@@ -22,9 +22,6 @@ final class DeparturePlan
 
     public const DEFAULT_LATER_RETURN_DAYS = 3;
 
-    /** @deprecated Dùng {@see MIN_LATER_RETURN_DAYS} */
-    public const LATER_PLACEHOLDER_DAYS = self::DEFAULT_LATER_RETURN_DAYS;
-
     /** @deprecated Nhắc đón theo ngày về (service_date). */
     public const LATER_PICKUP_REMINDER_DAYS = 2;
 

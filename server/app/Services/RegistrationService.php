@@ -75,11 +75,14 @@ class RegistrationService
                 ? trim((string) $validated['email'])
                 : null;
 
+            $phone = AuthIdentifier::normalizePhone((string) $validated['phone']);
+            $name = trim((string) ($validated['name'] ?? ''));
+
             $user = User::query()->create([
-                'name'          => $validated['name'],
+                'name'          => $name !== '' ? $name : $phone,
                 'email'         => $email,
                 'password'      => Hash::make($validated['password']),
-                'phone'         => AuthIdentifier::normalizePhone((string) $validated['phone']),
+                'phone'         => $phone,
                 'id_number'     => $validated['id_number'] ?? null,
                 'date_of_birth' => $validated['date_of_birth'] ?? null,
                 'address'       => $validated['address'] ?? null,
@@ -109,7 +112,7 @@ class RegistrationService
                 'vehicle_brand'         => null,
                 'vehicle_model'         => null,
                 'vehicle_color'         => null,
-                'vehicle_seats'         => $validated['vehicle_seats'],
+                'vehicle_seats'         => \App\Support\DriverVehicleOptions::seatsFor($validated['vehicle_type']),
             ]);
 
             $this->photos->storeRegistrationPhotos($profile, $request);

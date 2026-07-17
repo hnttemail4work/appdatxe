@@ -82,9 +82,15 @@
 }
 
 .driver-edit-avatar {
-    width: 56px;
-    height: 56px;
+    width: 48px;
+    height: 48px;
     flex-shrink: 0;
+    object-fit: cover;
+}
+
+.driver-edit-identity a[data-photo-zoom] {
+    cursor: zoom-in;
+    line-height: 0;
 }
 
 .driver-edit-avatar-fallback {
@@ -308,98 +314,6 @@
 .driver-reject-form textarea {
     resize: vertical;
     min-height: 4.5rem;
-}
-
-/* Tài xế trên bảng đơn — avatar + ảnh xe */
-.booking-driver-brief {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.65rem;
-    min-width: 0;
-}
-
-.booking-driver-brief--compact {
-    flex-wrap: wrap;
-}
-
-.booking-driver-brief-identity {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    min-width: 0;
-    flex: 1 1 auto;
-}
-
-.booking-driver-brief-avatar {
-    width: 36px;
-    height: 36px;
-    flex-shrink: 0;
-}
-
-.booking-driver-brief-avatar-fallback {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--tl-primary);
-    color: #0a0a0a;
-    font-size: 0.8rem;
-    font-weight: 700;
-}
-
-.booking-driver-brief-name {
-    font-weight: 600;
-    line-height: 1.25;
-}
-
-.booking-driver-brief-meta {
-    min-width: 0;
-}
-
-.booking-driver-brief-vehicle {
-    position: relative;
-    flex-shrink: 0;
-    display: block;
-    width: 52px;
-    border-radius: 6px;
-    overflow: hidden;
-    border: 1px solid var(--tl-border);
-    text-decoration: none;
-}
-
-.booking-driver-brief-vehicle--text {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 36px;
-    padding: 0.25rem;
-    background: rgba(212, 175, 55, 0.08);
-}
-
-.booking-driver-brief-vehicle-photo {
-    display: block;
-    width: 100%;
-    height: 40px;
-    object-fit: cover;
-}
-
-.booking-driver-brief-vehicle-plate {
-    display: block;
-    font-size: 0.625rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    padding: 0.15rem 0.25rem;
-    background: rgba(0, 0, 0, 0.72);
-    color: #fff;
-    text-align: center;
-    line-height: 1.2;
-}
-
-.booking-driver-brief-vehicle:not(.booking-driver-brief-vehicle--text) .booking-driver-brief-vehicle-plate {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
 }
 
 .admin-booking-actions-col {

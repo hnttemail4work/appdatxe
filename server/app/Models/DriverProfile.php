@@ -50,15 +50,6 @@ class DriverProfile extends Model
         return $code;
     }
 
-    public function availabilityLabel(): string
-    {
-        return match ($this->effectiveAvailabilityStatus()) {
-            'available' => 'Sẵn sàng',
-            'on_trip'   => 'Đang chạy chuyến',
-            default     => 'Tạm nghỉ',
-        };
-    }
-
     /** Trạng thái làm việc thực tế — đồng bộ với chuyến đang phục vụ, không chỉ cột DB. */
     public function effectiveAvailabilityStatus(): string
     {
@@ -145,23 +136,6 @@ class DriverProfile extends Model
     }
 
     /** Giá trị form quản lý — map 1 select → status + availability. */
-    public function unifiedStatusValue(): string
-    {
-        if ($this->isMissedTripLocked()) {
-            return 'locked';
-        }
-
-        if ($this->status === 'suspended') {
-            return 'suspended';
-        }
-
-        if ($this->status !== 'active') {
-            return 'inactive';
-        }
-
-        return $this->effectiveAvailabilityStatus();
-    }
-
     protected function casts(): array
     {
         return [
@@ -209,7 +183,7 @@ class DriverProfile extends Model
             return 'Chờ nạp ví';
         }
 
-        return number_format((int) ($this->wallet?->balance ?? 0), 0, ',', '.') . ' đ';
+        return \App\Support\Money::vnd((int) ($this->wallet?->balance ?? 0));
     }
 
     public function walletListColor(): string
@@ -453,19 +427,9 @@ class DriverProfile extends Model
             ['key' => 'phone', 'label' => 'Số điện thoại', 'ok' => filled($user?->phone), 'group' => 'contact', 'required' => true],
             ['key' => 'vehicle_license_plate', 'label' => 'Biển số xe', 'ok' => filled($this->vehicle_license_plate), 'group' => 'vehicle', 'required' => true],
             ['key' => 'vehicle_type', 'label' => 'Loại xe', 'ok' => filled($this->vehicle_type), 'group' => 'vehicle', 'required' => true],
-            ['key' => 'vehicle_seats', 'label' => 'Số ghế', 'ok' => $this->vehicle_seats !== null && $this->vehicle_seats > 0, 'group' => 'vehicle', 'required' => true],
             ['key' => 'bank_name', 'label' => 'Tên ngân hàng', 'ok' => filled($this->bank_name), 'group' => 'bank', 'required' => true],
             ['key' => 'bank_account', 'label' => 'Số tài khoản', 'ok' => filled($this->bank_account), 'group' => 'bank', 'required' => true],
         ];
-    }
-
-    public function hasValidLicenseNumber(): bool
-    {
-        if (! filled($this->license_number)) {
-            return false;
-        }
-
-        return ! in_array($this->license_number, ['Chưa cập nhật', 'N/A', '-'], true);
     }
 
     /**
@@ -578,56 +542,6 @@ class DriverProfile extends Model
         return $missing;
     }
 
-    /** @return list<string> */
-    public function missingOptionalFieldLabels(): array
-    {
-        $missing = array_values(array_map(
-            fn (array $item) => $item['label'],
-            array_filter(
-                $this->profileFieldChecklist(),
-                fn (array $item) => ! $item['ok'] && ! ($item['required'] ?? true)
-            )
-        ));
-
-        return array_values(array_unique($missing));
-    }
-
-    public function profileDataComplete(): bool
-    {
-        return $this->missingFieldLabels() === [];
-    }
-
-    public function completenessPercent(): int
-    {
-        $sections = $this->sectionProgress();
-        $weights = [
-            'documents' => 45,
-            'contact'   => 25,
-            'vehicle'   => 20,
-            'bank'      => 10,
-        ];
-
-        $score = 0;
-        foreach ($weights as $key => $weight) {
-            $sec = $sections[$key] ?? ['state' => 'empty'];
-            $score += match ($sec['state']) {
-                'complete' => $weight,
-                'partial'  => (int) round($weight * 0.5),
-                default    => 0,
-            };
-        }
-
-        return min(100, $score);
-    }
-
-    /** @return array<string, bool> */
-    public function sectionComplete(): array
-    {
-        $progress = $this->sectionProgress();
-
-        return array_map(fn (array $s) => $s['state'] === 'complete', $progress);
-    }
-
     public function vehicleLabel(): string
     {
         if (! $this->vehicle_license_plate) {
@@ -636,37 +550,12 @@ class DriverProfile extends Model
 
         $parts = array_filter([
             $this->vehicle_license_plate,
-            $this->vehicle_type ? ucfirst($this->vehicle_type) : null,
+            $this->vehicle_type ? \App\Support\DriverVehicleOptions::label((string) $this->vehicle_type) : null,
             $this->vehicle_brand,
             $this->vehicle_model,
         ]);
 
         return implode(', ', $parts);
-    }
-
-    public function accountStatusLabel(): string
-    {
-        $this->loadMissing('user');
-
-        if ($this->isMissedTripLocked()) {
-            return 'Tạm khóa (bỏ lỡ chuyến)';
-        }
-
-        if ($this->isRejected()) {
-            return 'Từ chối';
-        }
-
-        if ($this->isPendingApproval()) {
-            return 'Chờ duyệt';
-        }
-
-        $status = $this->user?->status ?? $this->status;
-
-        return match ($status) {
-            'active'    => 'Hoạt động',
-            'suspended' => 'Tạm ngưng',
-            default     => 'Không hoạt động',
-        };
     }
 
     public function schedules()

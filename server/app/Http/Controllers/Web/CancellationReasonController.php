@@ -3,9 +3,9 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\CancellationReasonIndexRequest;
 use App\Services\BookingPhoneGuardService;
 use App\Services\CancellationReasonService;
-use Illuminate\Http\Request;
 
 class CancellationReasonController extends Controller
 {
@@ -15,12 +15,9 @@ class CancellationReasonController extends Controller
     ) {
     }
 
-    public function index(Request $request)
+    public function index(CancellationReasonIndexRequest $request)
     {
-        $validated = $request->validate([
-            'audience' => ['required', 'in:customer,driver'],
-            'contact_phone' => ['nullable', 'string', 'max:30'],
-        ]);
+        $validated = $request->validated();
 
         $payload = [
             'reasons' => $this->reasons->serializeForAudience($validated['audience']),

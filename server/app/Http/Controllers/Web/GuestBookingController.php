@@ -3,6 +3,12 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Booking\CancelTripRequest;
+use App\Http\Requests\Booking\CheckDuplicateBookingRequest;
+use App\Http\Requests\Booking\QuotePriceRequest;
+use App\Http\Requests\Booking\StoreBookingRequest;
+use App\Http\Requests\Booking\StoreTripReviewRequest;
+use App\Http\Requests\Booking\TripStatusRequest;
 use App\Models\Booking;
 use App\Models\ReferralCode;
 use App\Services\BookingBrowserGuardService;
@@ -21,8 +27,8 @@ use App\Support\DepartureTimeDisplay;
 use App\Support\ProvinceResolver;
 use App\Support\ServiceDate;
 use App\Support\VehicleCapacityOptions;
+use App\Support\VehicleDisplay;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 use InvalidArgumentException;
 
 class GuestBookingController extends Controller
@@ -50,13 +56,12 @@ class GuestBookingController extends Controller
     {
         $this->scheduleLifecycle->sync();
 
-        $offers = $this->tripListing->listBookableOffers()
-            ->map(fn ($profile) => $this->tripListing->serializeOffer($profile))
-            ->values();
+        $offers = $this->tripListing->vehicleTypeCatalog();
 
         return response()->json([
             'offers' => $offers,
-            'count'  => $offers->count(),
+            // Tổng số xe khả dụng (khớp với $driverCount tính lúc render trang) — không phải số nhóm loại xe.
+            'count'  => (int) $offers->sum('available_count'),
         ]);
     }
 
@@ -68,16 +73,12 @@ class GuestBookingController extends Controller
         ]);
     }
 
-    public function tripStatus(Request $request)
+    public function tripStatus(TripStatusRequest $request)
     {
         $this->workflow->expirePastPickupWithoutDriver();
         $this->scheduleLifecycle->sync();
 
-        $validated = $request->validate([
-            'contact_phone'      => ['nullable', 'string', 'max:30'],
-            'booking_browser_id' => ['nullable', 'string', 'max:128'],
-            'booking_reference'  => ['nullable', 'string', 'max:64'],
-        ]);
+        $validated = $request->validated();
 
         $browserId = trim((string) ($validated['booking_browser_id'] ?? $request->header('X-Booking-Browser-Id', '')));
         $phone = trim((string) ($validated['contact_phone'] ?? ''));
@@ -106,15 +107,9 @@ class GuestBookingController extends Controller
         ]);
     }
 
-    public function storeTripReview(Request $request)
+    public function storeTripReview(StoreTripReviewRequest $request)
     {
-        $validated = $request->validate([
-            'booking_reference'  => ['required', 'string', 'max:64'],
-            'sentiment'          => ['required', 'in:like,dislike'],
-            'comment'            => ['nullable', 'string', 'max:500'],
-            'contact_phone'      => ['nullable', 'string', 'max:30'],
-            'booking_browser_id' => ['nullable', 'string', 'max:128'],
-        ]);
+        $validated = $request->validated();
 
         $browserId = trim((string) ($validated['booking_browser_id'] ?? $request->header('X-Booking-Browser-Id', '')));
         $phone = trim((string) ($validated['contact_phone'] ?? ''));
@@ -157,14 +152,9 @@ class GuestBookingController extends Controller
         ]);
     }
 
-    public function cancelTrip(Request $request)
+    public function cancelTrip(CancelTripRequest $request)
     {
-        $validated = $request->validate([
-            'booking_reference'       => ['required', 'string', 'max:64'],
-            'contact_phone'           => ['nullable', 'string', 'max:30'],
-            'booking_browser_id'      => ['nullable', 'string', 'max:128'],
-            'cancellation_reason_id'  => ['nullable', 'integer'],
-        ]);
+        $validated = $request->validated();
 
         $browserId = trim((string) ($validated['booking_browser_id'] ?? $request->header('X-Booking-Browser-Id', '')));
         $phone = trim((string) ($validated['contact_phone'] ?? ''));
@@ -220,9 +210,7 @@ class GuestBookingController extends Controller
         $this->scheduleLifecycle->sync();
 
         $driverOffers = $withDriverOffers
-            ? $this->tripListing->listBookableOffers()
-                ->map(fn ($profile) => $this->tripListing->serializeOffer($profile))
-                ->values()
+            ? $this->tripListing->vehicleTypeCatalog()
             : collect();
 
         $defaultServiceDate = ServiceDate::today();
@@ -288,14 +276,11 @@ class GuestBookingController extends Controller
         ]);
     }
 
-    public function checkDuplicateBooking(Request $request)
+    public function checkDuplicateBooking(CheckDuplicateBookingRequest $request)
     {
         $this->workflow->expirePastPickupWithoutDriver();
 
-        $validated = $request->validate([
-            'contact_phone'      => ['nullable', 'string', 'max:30'],
-            'booking_browser_id' => ['nullable', 'string', 'max:128'],
-        ]);
+        $validated = $request->validated();
 
         $browserId = trim((string) ($validated['booking_browser_id'] ?? $request->header('X-Booking-Browser-Id', '')));
         $phone = trim((string) ($validated['contact_phone'] ?? ''));
@@ -347,37 +332,17 @@ class GuestBookingController extends Controller
         ]);
     }
 
-    public function quotePrice(Request $request)
+    public function quotePrice(QuotePriceRequest $request)
     {
-        $validated = $request->validate([
-            'template_id'        => ['nullable', 'exists:schedule_templates,id'],
-            'vehicle_id'         => ['nullable', 'exists:vehicles,id'],
-            'driver_profile_id'  => ['nullable', 'exists:driver_profiles,id'],
-            'pickup_address'     => ['nullable', 'string', 'max:255'],
-            'dropoff_address'    => ['nullable', 'string', 'max:255'],
-            'pickup_detail'      => ['required', 'string', 'max:500'],
-            'dropoff_detail'     => ['required', 'string', 'max:500'],
-            'pickup_lat'         => ['required', 'numeric', 'between:-90,90'],
-            'pickup_lng'         => ['required', 'numeric', 'between:-180,180'],
-            'dropoff_lat'        => ['required', 'numeric', 'between:-90,90'],
-            'dropoff_lng'        => ['required', 'numeric', 'between:-180,180'],
-            'departure_plan'     => ['nullable', 'string', 'in:oneway,today,tomorrow,later'],
-            'later_return_days'  => ['nullable', 'integer', 'min:' . DeparturePlan::MIN_LATER_RETURN_DAYS, 'max:' . DeparturePlan::MAX_LATER_RETURN_DAYS],
-            'contact_phone'      => ['nullable', 'string', 'max:30'],
-        ]);
+        $validated = $request->validated();
 
-        if (empty($validated['template_id']) && empty($validated['vehicle_id']) && empty($validated['driver_profile_id'])) {
-            return response()->json(['message' => 'Thiếu thông tin tài xế.'], 422);
-        }
-
-        $template = $this->tripListing->resolveTemplate(
-            isset($validated['driver_profile_id']) ? (int) $validated['driver_profile_id'] : null,
-            isset($validated['vehicle_id']) ? (int) $validated['vehicle_id'] : null,
-            isset($validated['template_id']) ? (int) $validated['template_id'] : null,
+        $template = $this->tripListing->resolveTemplateForCapacity(
+            (int) $validated['capacity'],
+            $validated['vehicle_type'] ?? null,
         );
 
         if (! $template || ! $template->vehicle) {
-            return response()->json(['message' => 'Xe không khả dụng.'], 422);
+            return response()->json(['message' => 'Loại xe không khả dụng.'], 422);
         }
 
         $pickupLat = (float) $validated['pickup_lat'];
@@ -422,60 +387,16 @@ class GuestBookingController extends Controller
             'referral_attribution_only' => $discountMeta['attribution_only'] ?? false,
             'referral_ineligible_reason'=> $discountMeta['reason'],
             'total_after_discount'      => (int) $total,
-            'template_id'               => $template->id,
-            'vehicle_id'                => $template->vehicle_id,
-            'vehicle_label'             => \App\Support\VehicleDisplay::labelFromVehicle($template->vehicle),
-            'license_plate'             => $template->vehicle->license_plate,
             'capacity_label'            => VehicleCapacityOptions::label((int) $template->vehicle->capacity),
+            'type_label'                => \App\Support\VehicleDisplay::typeLabel($template->vehicle->type),
         ]));
     }
 
-    public function store(Request $request)
+    public function store(StoreBookingRequest $request)
     {
         $this->workflow->expirePastPickupWithoutDriver();
 
-        $validator = Validator::make($request->all(), [
-            'template_id'       => ['nullable', 'exists:schedule_templates,id'],
-            'vehicle_id'        => ['nullable', 'exists:vehicles,id'],
-            'driver_profile_id' => ['nullable', 'exists:driver_profiles,id'],
-            'service_date'     => ['nullable', 'date', 'after_or_equal:today'],
-            'departure_plan'   => ['required', 'string', 'in:oneway,today,tomorrow,later'],
-            'later_return_days'=> ['nullable', 'integer', 'min:' . DeparturePlan::MIN_LATER_RETURN_DAYS, 'max:' . DeparturePlan::MAX_LATER_RETURN_DAYS],
-            'pickup_time'      => ['required', 'string', 'max:8', 'regex:/^\d{1,2}:\d{2}$/'],
-            'passenger_name'   => ['required', 'string', 'max:255'],
-            'passenger_gender' => ['nullable', 'in:male,female'],
-            'passenger_age'    => ['nullable', 'integer', 'min:1', 'max:120'],
-            'contact_phone'    => ['required', 'string', 'max:30'],
-            'pickup_address'   => ['nullable', 'string', 'max:255'],
-            'dropoff_address'  => ['nullable', 'string', 'max:255'],
-            'pickup_detail'    => ['required', 'string', 'max:500'],
-            'dropoff_detail'   => ['required', 'string', 'max:500'],
-            'pickup_lat'       => ['required', 'numeric', 'between:-90,90'],
-            'pickup_lng'       => ['required', 'numeric', 'between:-180,180'],
-            'dropoff_lat'      => ['required', 'numeric', 'between:-90,90'],
-            'dropoff_lng'      => ['required', 'numeric', 'between:-180,180'],
-            'notes'            => ['nullable', 'string', 'max:500'],
-            'referral_code'    => ['nullable', 'string', 'max:32'],
-            'booking_browser_id' => ['nullable', 'string', 'max:128'],
-        ], [
-            'service_date.after_or_equal' => 'Ngày đi phải từ hôm nay trở đi.',
-            'pickup_time.regex'           => 'Giờ đón không hợp lệ.',
-            'pickup_time.required'        => 'Vui lòng chọn giờ đón.',
-            'pickup_lat.required'         => 'Vui lòng ghim điểm đón trên bản đồ.',
-            'pickup_lng.required'         => 'Vui lòng ghim điểm đón trên bản đồ.',
-            'dropoff_lat.required'        => 'Vui lòng ghim điểm trả trên bản đồ.',
-            'dropoff_lng.required'        => 'Vui lòng ghim điểm trả trên bản đồ.',
-            'pickup_detail.required'      => 'Vui lòng chọn điểm đón trên bản đồ.',
-            'dropoff_detail.required'     => 'Vui lòng chọn điểm trả trên bản đồ.',
-        ]);
-
-        if ($validator->fails()) {
-            return $this->bookingFormRedirect()
-                ->withErrors($validator)
-                ->withInput();
-        }
-
-        $validated = $validator->validated();
+        $validated = $request->validated();
 
         $pickupLat = (float) $validated['pickup_lat'];
         $pickupLng = (float) $validated['pickup_lng'];
@@ -495,12 +416,6 @@ class GuestBookingController extends Controller
             $laterReturnDays,
         );
 
-        if (empty($validated['template_id']) && empty($validated['vehicle_id']) && empty($validated['driver_profile_id'])) {
-            return $this->bookingFormRedirect()
-                ->withErrors(['booking' => 'Vui lòng chọn tài xế.'])
-                ->withInput();
-        }
-
         $referralInput = strtoupper(trim((string) ($validated['referral_code'] ?? '')));
         if ($referralInput !== '') {
             $code = $this->referralCodes->resolveUsableCode($referralInput);
@@ -509,15 +424,14 @@ class GuestBookingController extends Controller
             }
         }
 
-        $template = $this->tripListing->resolveTemplate(
-            isset($validated['driver_profile_id']) ? (int) $validated['driver_profile_id'] : null,
-            isset($validated['vehicle_id']) ? (int) $validated['vehicle_id'] : null,
-            isset($validated['template_id']) ? (int) $validated['template_id'] : null,
+        $template = $this->tripListing->resolveTemplateForCapacity(
+            (int) $validated['capacity'],
+            $validated['vehicle_type'] ?? null,
         );
 
         if (! $template) {
             return $this->bookingFormRedirect()
-                ->withErrors(['booking' => 'Tài xế không khả dụng.'])
+                ->withErrors(['booking' => 'Loại xe không khả dụng, vui lòng chọn loại khác.'])
                 ->withInput();
         }
 
@@ -574,6 +488,7 @@ class GuestBookingController extends Controller
                 $dropoffLng,
                 $departurePlan,
                 $laterReturnDays,
+                autoMatchDriver: true,
             );
         } catch (InvalidArgumentException $e) {
             return $this->bookingFormError($e);

@@ -67,18 +67,13 @@ class DriverWalletConfig
         return number_format((int) (self::REVENUE_THRESHOLD / 1000), 0, ',', '.') . 'k';
     }
 
-    public static function revenueThresholdFormatted(): string
-    {
-        return number_format(self::REVENUE_THRESHOLD, 0, ',', '.') . ' đ';
-    }
-
     public static function minBalanceFormatted(): string
     {
-        return number_format(self::MIN_BALANCE, 0, ',', '.') . ' đ';
+        return Money::vnd(self::MIN_BALANCE);
     }
 
     public static function minDepositFormatted(): string
     {
-        return number_format(self::MIN_DEPOSIT, 0, ',', '.') . ' đ';
+        return Money::vnd(self::MIN_DEPOSIT);
     }
 }

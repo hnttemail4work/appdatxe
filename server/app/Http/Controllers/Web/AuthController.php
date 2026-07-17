@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Auth\LoginRequest;
+use App\Http\Requests\Auth\RegisterDriverRequest;
 use App\Models\DriverProfile;
 use App\Services\DriverAvailabilityService;
 use App\Services\RegistrationService;
@@ -10,7 +12,6 @@ use App\Support\RoleDashboard;
 use App\Support\WebAuth;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Validation\Rule;
 use InvalidArgumentException;
 
 class AuthController extends Controller
@@ -26,12 +27,9 @@ class AuthController extends Controller
         return view('auth.login');
     }
 
-    public function login(Request $request)
+    public function login(LoginRequest $request)
     {
-        $validated = $request->validate([
-            'phone'    => ['required', 'string', 'max:30'],
-            'password' => ['required', 'string'],
-        ]);
+        $validated = $request->validated();
 
         $user = WebAuth::attempt($validated['phone'], $validated['password']);
 
@@ -41,13 +39,9 @@ class AuthController extends Controller
                 ->withInput();
         }
 
-        if ($user->status !== 'active') {
-            $message = $user->status === 'suspended'
-                ? 'Tài khoản của bạn bị tạm ngưng.'
-                : 'Tài khoản của bạn chưa được kích hoạt.';
-
+        if ($blockMessage = $user->loginBlockMessage()) {
             return back()
-                ->withErrors(['login' => $message])
+                ->withErrors(['login' => $blockMessage])
                 ->withInput();
         }
 
@@ -74,23 +68,18 @@ class AuthController extends Controller
                     // Không chặn đăng nhập nếu đồng bộ trạng thái tài xế lỗi.
                 }
             }
+
+            if ($user->must_change_password) {
+                return redirect(RoleDashboard::forUser($user, $request));
+            }
         }
 
-        $role = $user->role;
-        $redirect = match ($role) {
-            'admin'  => '/admin/dashboard',
-            'driver' => $user->must_change_password
-                ? route('driver.dashboard', ['tab' => 'account'], false)
-                : '/driver/dashboard',
-            default  => '/',
-        };
-
         $intended = $request->session()->pull('url.intended');
-        if ($intended && RoleDashboard::urlAllowedForRole($intended, $role)) {
+        if ($intended && RoleDashboard::urlAllowedForRole($intended, $user->role)) {
             return redirect($intended);
         }
 
-        return redirect($redirect);
+        return redirect(RoleDashboard::forUser($user, $request));
     }
 
     public function showRegister(Request $request)
@@ -98,12 +87,9 @@ class AuthController extends Controller
         return view('auth.register');
     }
 
-    public function register(Request $request)
+    public function register(RegisterDriverRequest $request)
     {
-        $validated = $request->validate(array_merge(
-            $this->registration->driverRules(),
-            ['register_mode' => ['required', Rule::in(['driver'])]],
-        ));
+        $validated = $request->validated();
 
         try {
             $user = $this->registration->registerDriver($validated, $request);

@@ -81,10 +81,10 @@ body.app-shell {
     body.app-shell--mobile-app .app-footer {
         display: none;
     }
+}
 
-    body.app-shell--auth .app-footer {
-        display: none;
-    }
+body.app-shell--auth .app-footer {
+    display: none !important;
 }
 
 /* Validation chung — FormFieldValidation */

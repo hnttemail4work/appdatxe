@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Http\Resources\CancellationReasonResource;
 use App\Models\CancellationReason;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
@@ -22,13 +23,8 @@ class CancellationReasonService
     /** @return list<array{id: int, label: string}> */
     public function serializeForAudience(string $audience): array
     {
-        return $this->forAudience($audience)
-            ->map(fn (CancellationReason $r): array => [
-                'id'    => $r->id,
-                'label' => $r->label,
-            ])
-            ->values()
-            ->all();
+        return CancellationReasonResource::collection($this->forAudience($audience))
+            ->toArray(request());
     }
 
     public function resolveForCancel(int $reasonId, string $audience): CancellationReason

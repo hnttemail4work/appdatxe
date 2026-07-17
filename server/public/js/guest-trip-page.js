@@ -849,6 +849,9 @@
         if (!booking) {
             empty.classList.remove('d-none');
             card.classList.add('d-none');
+            if (window.TripChat && window.TripChat.setCustomerBooking) {
+                window.TripChat.setCustomerBooking(null);
+            }
             return;
         }
 
@@ -905,6 +908,9 @@
         );
 
         renderDriverPanel(booking);
+        if (window.TripChat && window.TripChat.setCustomerBooking) {
+            window.TripChat.setCustomerBooking(booking);
+        }
         syncVehicleSection(card);
         syncTripSummarySection(card);
         renderReview(booking);

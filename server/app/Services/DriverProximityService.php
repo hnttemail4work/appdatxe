@@ -65,6 +65,10 @@ class DriverProximityService
                     return false;
                 }
 
+                if (! $this->matchesScheduleVehicle($profile, $schedule)) {
+                    return false;
+                }
+
                 if (! $this->wallets->canAcceptTrips($profile)) {
                     return false;
                 }
@@ -95,6 +99,32 @@ class DriverProximityService
         return $candidates
             ->sortBy(fn (DriverProfile $p): array => $this->sortKey($p, $pickup, $schedule, $booking))
             ->first();
+    }
+
+    /**
+     * Tài xế phải có xe đúng số chỗ (và đúng loại, nếu chuyến có chỉ định loại) với
+     * xe của cuốc — tránh ghép nhầm khách đặt 7 chỗ cho tài xế xe 4 chỗ gần nhất.
+     */
+    private function matchesScheduleVehicle(DriverProfile $profile, Schedule $schedule): bool
+    {
+        $vehicle = $schedule->vehicle;
+        if (! $vehicle) {
+            return true;
+        }
+
+        if ($vehicle->capacity && (int) $profile->vehicle_seats !== (int) $vehicle->capacity) {
+            return false;
+        }
+
+        if ($vehicle->type && $profile->vehicle_type
+            && ! \App\Support\DriverVehicleOptions::compatibleWithVehicleType(
+                (string) $profile->vehicle_type,
+                (string) $vehicle->type,
+            )) {
+            return false;
+        }
+
+        return true;
     }
 
     /** @return array{lat: float, lng: float}|null */

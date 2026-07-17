@@ -78,19 +78,6 @@ class VehicleCapacityOptions
         return $text;
     }
 
-    public static function sortKey(int $capacity): int
-    {
-        $enabled = self::enabled();
-        $index = array_search($capacity, $enabled, true);
-
-        return $index !== false ? $index : $capacity;
-    }
-
-    public static function isStandard(int $capacity): bool
-    {
-        return self::isAllowed($capacity);
-    }
-
     public static function isAllowed(int $capacity): bool
     {
         return in_array($capacity, self::enabled(), true);

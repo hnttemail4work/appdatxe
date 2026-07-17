@@ -11,6 +11,7 @@
     var modal = typeof bootstrap !== 'undefined' ? new bootstrap.Modal(modalEl) : null;
     var ctx = {};
     var quoteTimer = null;
+    var quoteRequestSeq = 0;
 
     function $(id) { return document.getElementById(id); }
 
@@ -497,7 +498,7 @@
         });
     }
 
-    function quoteParams() {
+    function quoteParams(overrideCapacity, overrideVehicleType) {
         var route = modalRoute();
         var params = new URLSearchParams({
             pickup_address: route.pickup,
@@ -516,20 +517,57 @@
                 params.set(id.replace('modal-', '').replace(/-/g, '_'), value);
             }
         });
-        if (ctx.driverProfileId) {
-            params.set('driver_profile_id', ctx.driverProfileId);
+        var capacity = overrideCapacity != null ? overrideCapacity : ctx.capacity;
+        var vehicleType = overrideVehicleType != null ? overrideVehicleType : ctx.vehicleType;
+        if (capacity) {
+            params.set('capacity', capacity);
         }
-        if (ctx.vehicleId) {
-            params.set('vehicle_id', ctx.vehicleId);
-        }
-        if (ctx.templateId) {
-            params.set('template_id', ctx.templateId);
+        if (vehicleType) {
+            params.set('vehicle_type', vehicleType);
         }
         return params;
     }
 
+    function refreshVehicleCardPrices() {
+        if (!window.__quotePriceUrl || !routeReady()) {
+            return;
+        }
+        document.querySelectorAll('#trips-list [data-capacity]').forEach(function (card) {
+            var capacity = card.getAttribute('data-capacity');
+            var vehicleType = card.getAttribute('data-vehicle-type') || '';
+            var priceEl = card.querySelector('[data-price-slot]');
+            if (!capacity || !priceEl) {
+                return;
+            }
+            var requestId = (Number(card.getAttribute('data-price-req')) || 0) + 1;
+            card.setAttribute('data-price-req', String(requestId));
+            priceEl.textContent = 'Đang tính giá…';
+            fetch(window.__quotePriceUrl + '?' + quoteParams(capacity, vehicleType).toString(), {
+                headers: { Accept: 'application/json' },
+            })
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (data) {
+                    // Bỏ qua nếu thẻ này đã có yêu cầu mới hơn — tránh giá cũ đè giá mới.
+                    if (String(requestId) !== card.getAttribute('data-price-req')) {
+                        return;
+                    }
+                    if (!data) {
+                        priceEl.textContent = '';
+                        return;
+                    }
+                    var total = data.total_after_discount != null ? data.total_after_discount : data.whole_car_price;
+                    priceEl.textContent = total > 0 ? formatMoney(total) : '';
+                })
+                .catch(function () {
+                    if (String(requestId) === card.getAttribute('data-price-req')) {
+                        priceEl.textContent = '';
+                    }
+                });
+        });
+    }
+
     function refreshQuote() {
-        if (!window.__quotePriceUrl || (!ctx.driverProfileId && !ctx.vehicleId && !ctx.templateId)) {
+        if (!window.__quotePriceUrl || !ctx.capacity) {
             updatePriceDisplay(0);
             if (!coordsReady()) {
                 syncDistanceLabel(0);
@@ -547,6 +585,7 @@
         syncDistanceLabel(0);
         setPriceLoading(true);
         clearTimeout(quoteTimer);
+        var requestId = ++quoteRequestSeq;
         quoteTimer = setTimeout(function () {
             fetch(window.__quotePriceUrl + '?' + quoteParams().toString(), {
                 headers: { Accept: 'application/json' },
@@ -558,17 +597,26 @@
                     return r.json();
                 })
                 .then(function (data) {
+                    // Bỏ qua nếu đã có yêu cầu mới hơn xuất phát sau — tránh giá cũ đè giá mới do phản hồi tới không theo thứ tự.
+                    if (requestId !== quoteRequestSeq) {
+                        return;
+                    }
                     var total = data.total_after_discount != null ? data.total_after_discount : data.whole_car_price;
                     updatePriceDisplay(total, data);
                 })
                 .catch(function () {
+                    if (requestId !== quoteRequestSeq) {
+                        return;
+                    }
                     updatePriceDisplay(0);
                     if (coordsReady()) {
                         syncDistanceLabel(0);
                     }
                 })
                 .finally(function () {
-                    setPriceLoading(false);
+                    if (requestId === quoteRequestSeq) {
+                        setPriceLoading(false);
+                    }
                 });
         }, 150);
     }
@@ -751,31 +799,25 @@
 
     function openBookingModal(btn) {
         ctx = {
-            driverProfileId: btn.dataset.driverProfileId || '',
-            vehicleId: btn.dataset.vehicleId || '',
-            templateId: btn.dataset.templateId || '',
-            licensePlate: btn.dataset.licensePlate || '',
+            capacity: btn.dataset.capacity || '',
+            vehicleType: btn.dataset.vehicleType || '',
             capacityLabel: btn.dataset.capacityLabel || '',
             typeLabel: btn.dataset.typeLabel || '',
             vehiclePhoto: btn.dataset.vehiclePhoto || '',
-            driverName: btn.dataset.driverName || '',
             offerLabel: btn.dataset.offerLabel || '',
         };
 
-        if ($('modal-template-id')) {
-            $('modal-template-id').value = ctx.templateId;
+        if ($('modal-capacity')) {
+            $('modal-capacity').value = ctx.capacity;
         }
-        if ($('modal-vehicle-id')) {
-            $('modal-vehicle-id').value = ctx.vehicleId;
-        }
-        if ($('modal-driver-profile-id')) {
-            $('modal-driver-profile-id').value = ctx.driverProfileId;
+        if ($('modal-vehicle-type')) {
+            $('modal-vehicle-type').value = ctx.vehicleType;
         }
 
         syncRouteLabels();
         syncDeparturePlanUI();
 
-        var vehicleMeta = ctx.offerLabel || [ctx.driverName, ctx.licensePlate, ctx.typeLabel, ctx.capacityLabel]
+        var vehicleMeta = ctx.offerLabel || [ctx.typeLabel, ctx.capacityLabel]
             .filter(Boolean)
             .join(' - ');
         setBannerText('modal-vehicle-step2', vehicleMeta);
@@ -806,22 +848,24 @@
         }
 
         var pickupTimeEl = $('modal-pickup-time');
-        if (pickupTimeEl) {
-            var keepRestore = window.__bookingRestoreModal
-                && (window.__bookingRestoreModal.driver_profile_id
-                    || window.__bookingRestoreModal.vehicle_id
-                    || window.__bookingRestoreModal.template_id);
-            if (!keepRestore || !pickupTimeEl.value) {
-                pickupTimeEl.value = suggestedPickupTime();
-            }
+        if (pickupTimeEl && !pickupTimeEl.value) {
+            pickupTimeEl.value = suggestedPickupTime();
         }
 
         updatePriceDisplay(0);
-        setStep(1);
+        setStep(2);
         applyCustomerPrefill();
         ensureBrowserIdOnForm();
         refreshQuote();
         if (modal) modal.show();
+    }
+
+    function openVehicleSelectModal() {
+        syncRouteLabels();
+        syncDeparturePlanUI();
+        setStep(1);
+        if (modal) modal.show();
+        refreshVehicleCardPrices();
     }
 
     function validateStep1() {
@@ -970,17 +1014,28 @@
     }
     syncDeparturePlanUI();
     syncRouteLabels();
+    autoFillPickupFromGps();
 
     document.querySelectorAll('[data-open-booking]').forEach(function (btn) {
         btn.addEventListener('click', function () { openFromButton(btn); });
     });
 
-    var nextBtn = $('modal-next-btn');
-    if (nextBtn) {
-        nextBtn.addEventListener('click', function () {
-            if (!validateStep1()) return;
-            setStep(2);
-            refreshQuote();
+    var routeContinueBtn = $('route-continue-btn');
+    if (routeContinueBtn) {
+        routeContinueBtn.addEventListener('click', function () {
+            if (guardBookingAction()) {
+                return;
+            }
+            if (!validateStep1()) {
+                return;
+            }
+            checkBookingConstraints('').then(function (data) {
+                if (data && data.duplicate) {
+                    showDuplicateNotice(data.booking);
+                    return;
+                }
+                openVehicleSelectModal();
+            });
         });
     }
 
@@ -1026,7 +1081,13 @@
         event.preventDefault();
 
         if (!validateStep1()) {
-            setStep(1);
+            if (modal) {
+                modal.hide();
+            }
+            var routeCard = document.getElementById('booking-route-card');
+            if (routeCard) {
+                routeCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
             return;
         }
 
@@ -1052,16 +1113,15 @@
         });
     });
 
-    if (window.__bookingRestoreModal && (window.__bookingRestoreModal.driver_profile_id || window.__bookingRestoreModal.vehicle_id || window.__bookingRestoreModal.template_id)) {
-        var restoreId = window.__bookingRestoreModal.driver_profile_id
-            || window.__bookingRestoreModal.vehicle_id
-            || window.__bookingRestoreModal.template_id;
-        var restoreBtn = document.querySelector('[data-open-booking][data-driver-profile-id="' + restoreId + '"]')
-            || document.querySelector('[data-open-booking][data-vehicle-id="' + restoreId + '"]')
-            || document.querySelector('[data-open-booking][data-template-id="' + restoreId + '"]');
+    if (window.__bookingRestoreModal && window.__bookingRestoreModal.capacity) {
+        var restoreCapacity = window.__bookingRestoreModal.capacity;
+        var restoreType = window.__bookingRestoreModal.vehicle_type;
+        var restoreSelector = '[data-open-booking][data-capacity="' + restoreCapacity + '"]'
+            + (restoreType ? '[data-vehicle-type="' + restoreType + '"]' : '');
+        var restoreBtn = document.querySelector(restoreSelector)
+            || document.querySelector('[data-open-booking][data-capacity="' + restoreCapacity + '"]');
         if (restoreBtn) {
             openFromButton(restoreBtn);
-            if (window.__bookingRestoreModal.step === 2) setStep(2);
         }
     }
 

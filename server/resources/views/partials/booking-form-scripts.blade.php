@@ -3,7 +3,6 @@ window.__bookingCheckDuplicateUrl = @json(route('booking.checkDuplicate'));
 window.__bookingDriverOffersUrl = @json(route('booking.driverOffers'));
 window.__quotePriceUrl = @json(route('booking.quotePrice'));
 @include('partials.geocode-client-config')
-window.__bookingTemplates = @json($bookingTemplates ?? collect());
 window.__bookingRestoreModal = @json($bookingRestoreModal ?? null);
 window.__defaultServiceDate = @json($defaultServiceDate ?? now()->toDateString());
 window.__todayDate = @json(now()->toDateString());

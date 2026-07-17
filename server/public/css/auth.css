@@ -8,20 +8,15 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    padding-top: 1.25rem;
+    justify-content: flex-start;
+    padding-top: .5rem;
     padding-bottom: 1.25rem;
 }
 
 @media (max-width: 767.98px) {
     .app-shell--auth .app-main > .container {
-        justify-content: flex-start;
-        padding-top: .75rem;
+        padding-top: .35rem;
         padding-bottom: 1rem;
-    }
-
-    .app-shell--auth .auth-page {
-        align-items: flex-start;
     }
 
     .app-shell--auth .register-shell {
@@ -29,13 +24,21 @@
     }
 }
 
+/* Đăng nhập: mép trên form ~1/4 viewport (đã trừ navbar) */
 .auth-page {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
     width: 100%;
-    margin: auto 0;
+    margin: 0;
     padding: 0;
+    padding-top: 14vh;
+}
+
+@media (max-width: 767.98px) {
+    .auth-page {
+        padding-top: 10vh;
+    }
 }
 
 .auth-card {

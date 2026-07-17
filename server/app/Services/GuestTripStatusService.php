@@ -8,6 +8,7 @@ use App\Models\TripReview;
 use App\Support\AuthIdentifier;
 use App\Support\DeparturePlan;
 use App\Support\GuestWaitProgress;
+use App\Support\Money;
 use App\Support\PlatformFees;
 use Illuminate\Support\Facades\Cache;
 
@@ -117,7 +118,7 @@ class GuestTripStatusService
             'trip_status'       => $booking->trip_status,
             'booking_status'    => $booking->booking_status,
             'total_price'       => (float) $booking->total_price,
-            'total_price_label' => number_format((float) $booking->total_price, 0, ',', '.') . ' đ',
+            'total_price_label' => Money::vnd((float) $booking->total_price),
             'distance_km'       => $booking->tripDistanceKm(),
             'departure_plan'    => $booking->departure_plan ?? DeparturePlan::ONE_WAY,
             'later_return_days' => $booking->laterReturnDays(),
@@ -133,6 +134,10 @@ class GuestTripStatusService
             'is_active'         => $booking->blocksGuestRebooking(),
             'can_cancel'        => $this->guestCanCancel($booking),
             'can_review'        => $booking->trip_status === 'completed' && ! $booking->tripReview,
+            'chat'              => [
+                'open'    => app(TripChatService::class)->isOpen($booking),
+                'message' => app(TripChatService::class)->statusMessage($booking),
+            ],
             'review'            => $this->serializeReview($booking),
             'wait_progress'     => GuestWaitProgress::forBooking($booking),
             'referral'          => $this->serializeReferral($booking),

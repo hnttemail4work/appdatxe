@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Auth\RegisterCustomerRequest;
+use App\Http\Requests\Auth\WebAuthnCredentialRequest;
 use App\Models\User;
 use App\Services\CustomerAccountService;
 use App\Services\RegistrationService;
@@ -26,14 +28,18 @@ class CustomerAuthController extends Controller
         return view('auth.register-customer');
     }
 
-    public function register(Request $request)
+    public function register(RegisterCustomerRequest $request)
     {
-        $validated = $request->validate($this->registration->customerRules());
+        $validated = $request->validated();
 
         $user = $this->registration->registerCustomer($validated);
 
         $request->session()->put('pending_auth.user_id', $user->id);
-        $request->session()->put('pending_auth.intended', route('customer.account', [], false));
+        $intended = $request->session()->pull('url.intended');
+        $request->session()->put(
+            'pending_auth.intended',
+            $intended ?: route('customer.account', [], false),
+        );
 
         return redirect()
             ->route('auth.biometric')
@@ -65,11 +71,9 @@ class CustomerAuthController extends Controller
         return response()->json($this->webauthn->registrationOptions($user));
     }
 
-    public function verifyRegistration(Request $request): JsonResponse
+    public function verifyRegistration(WebAuthnCredentialRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'credential' => ['required', 'string'],
-        ]);
+        $validated = $request->validated();
 
         $user = $this->resolveBiometricUser($request);
         if (! $user) {
@@ -103,11 +107,9 @@ class CustomerAuthController extends Controller
         return response()->json($this->webauthn->assertionOptions($user));
     }
 
-    public function verifyAssertion(Request $request): JsonResponse
+    public function verifyAssertion(WebAuthnCredentialRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'credential' => ['required', 'string'],
-        ]);
+        $validated = $request->validated();
 
         $user = $this->resolveBiometricUser($request);
         if (! $user) {

@@ -207,6 +207,13 @@ class DriverAutoAssignTest extends TestCase
             'availability_status' => 'available',
         ];
 
+        // Xe của tài xế phải khớp số chỗ/loại xe của cuốc (DriverProximityService::matchesScheduleVehicle),
+        // mặc định khớp với xe 4 chỗ sedan dùng trong seedOpenScheduleWithDrivers().
+        if (Schema::hasColumn('driver_profiles', 'vehicle_seats')) {
+            $base['vehicle_seats'] = $extra['vehicle_seats'] ?? 4;
+            $base['vehicle_type'] = $extra['vehicle_type'] ?? 'sedan';
+        }
+
         if (Schema::hasColumn('driver_profiles', 'last_lat')) {
             $base = array_merge($base, array_intersect_key($extra, array_flip([
                 'last_lat', 'last_lng', 'last_location_at', 'last_province', 'last_address',

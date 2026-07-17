@@ -6,6 +6,7 @@ use App\Models\DriverProfile;
 use App\Models\ScheduleTemplate;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Support\DriverVehicleOptions;
 
 /** Đồng bộ xe + template đặt khách từ hồ sơ tài xế (admin). Mỗi tài xế một xe. */
 class DriverCatalogService
@@ -27,13 +28,19 @@ class DriverCatalogService
             return;
         }
 
+        $type = (string) $profile->vehicle_type;
+        $capacity = (int) ($profile->vehicle_seats ?: 0);
+        if ($capacity < 1) {
+            $capacity = (int) (DriverVehicleOptions::seatsFor($type) ?: 0);
+        }
+
         $plate = trim((string) $profile->vehicle_license_plate);
         $vehicle = Vehicle::query()->updateOrCreate(
             ['license_plate' => $plate],
             [
                 'operator_id' => $operatorId,
-                'type'        => (string) $profile->vehicle_type,
-                'capacity'    => (int) $profile->vehicle_seats,
+                'type'        => $type,
+                'capacity'    => max(1, $capacity),
                 'status'      => 'active',
             ],
         );
@@ -109,6 +116,11 @@ class DriverCatalogService
             return false;
         }
 
-        return (int) ($profile->vehicle_seats ?? 0) > 0;
+        $seats = (int) ($profile->vehicle_seats ?? 0);
+        if ($seats < 1) {
+            $seats = (int) (DriverVehicleOptions::seatsFor((string) $profile->vehicle_type) ?: 0);
+        }
+
+        return $seats > 0;
     }
 }

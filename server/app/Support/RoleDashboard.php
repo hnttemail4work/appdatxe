@@ -2,6 +2,9 @@
 
 namespace App\Support;
 
+use App\Models\User;
+use Illuminate\Http\Request;
+
 class RoleDashboard
 {
     public static function route(string $role): string
@@ -12,6 +15,24 @@ class RoleDashboard
             'customer' => route('customer.account'),
             default    => route('home'),
         };
+    }
+
+    /**
+     * Trang đích khi đã đăng nhập (guest middleware, sau login, …).
+     */
+    public static function forUser(User $user, ?Request $request = null): string
+    {
+        $request ??= request();
+
+        if ($user->role === 'customer' && ! $request->session()->get('customer_biometric_verified')) {
+            return route('auth.biometric');
+        }
+
+        if ($user->role === 'driver' && $user->must_change_password) {
+            return route('driver.dashboard', ['tab' => 'account']);
+        }
+
+        return self::route($user->role);
     }
 
     public static function urlAllowedForRole(string $url, string $role): bool

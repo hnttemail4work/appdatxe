@@ -27,6 +27,10 @@ $phase = $phase ?? $schedule->driverWorkflowPhase();
             @if($showCancelDetail ?? false)
                 @include('partials.booking-cancel-detail', ['booking' => $booking])
             @endif
+            @include('partials.trip-chat-panel', [
+                'mode' => 'driver',
+                'booking' => $booking,
+            ])
         </div>
         @endforeach
     </div>

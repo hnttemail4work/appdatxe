@@ -54,13 +54,4 @@ class DriverWallet extends Model
         return $this->balance >= DriverWalletConfig::MIN_BALANCE;
     }
 
-    public function pendingSettlements()
-    {
-        return $this->settlements()->whereNot('status', 'completed');
-    }
-
-    public function isAcceptTripsBlocked(): bool
-    {
-        return $this->accept_trips_blocked_at !== null;
-    }
 }

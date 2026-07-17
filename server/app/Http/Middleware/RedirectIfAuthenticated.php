@@ -17,14 +17,17 @@ class RedirectIfAuthenticated
         foreach ($guards as $guard) {
             if (Auth::guard($guard)->check()) {
                 $user = Auth::guard($guard)->user();
-                if ($user->role === 'customer' && ! $request->session()->get('customer_biometric_verified')) {
-                    return redirect()->route('auth.biometric');
-                }
 
-                return redirect(RoleDashboard::route($user->role));
+                return redirect(RoleDashboard::forUser($user, $request));
             }
         }
 
-        return $next($request);
+        $response = $next($request);
+
+        // Tránh bfcache khi Back về /login|/register khi đã đăng nhập.
+        $response->headers->set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+        $response->headers->set('Pragma', 'no-cache');
+
+        return $response;
     }
 }

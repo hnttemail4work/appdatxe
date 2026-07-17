@@ -33,7 +33,7 @@
     }
 
     function updateHeroCount(count) {
-        var stat = document.querySelector('.booking-page-hero__stat strong');
+        var stat = document.querySelector('.grab-home-topbar__stat strong');
         if (stat) {
             stat.textContent = String(count);
         }
@@ -45,12 +45,14 @@
         }
 
         offers.forEach(function (offer) {
-            var profileId = offer.driver_profile_id;
-            if (!profileId) {
+            var capacity = offer.capacity;
+            if (!capacity) {
                 return;
             }
 
-            var card = list.querySelector('[data-driver-profile-id="' + profileId + '"]');
+            var selector = '[data-capacity="' + capacity + '"]'
+                + (offer.vehicle_type ? '[data-vehicle-type="' + offer.vehicle_type + '"]' : '');
+            var card = list.querySelector(selector);
             if (!card) {
                 return;
             }
@@ -69,8 +71,8 @@
                 span.textContent = label;
             }
 
-            btn.classList.remove('vehicle-offer-card__cta--now', 'vehicle-offer-card__cta--later');
-            btn.classList.add('vehicle-offer-card__cta--' + tone);
+            btn.classList.remove('vehicle-select-row__cta--now', 'vehicle-select-row__cta--later');
+            btn.classList.add('vehicle-select-row__cta--' + tone);
         });
     }
 

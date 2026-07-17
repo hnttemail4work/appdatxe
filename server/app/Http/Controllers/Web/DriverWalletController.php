@@ -3,12 +3,10 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Driver\DriverWalletDepositRequest;
 use App\Models\DriverProfile;
 use App\Services\DriverWalletService;
-use App\Support\DriverWalletConfig;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Validator;
 use InvalidArgumentException;
 
 class DriverWalletController extends Controller
@@ -17,35 +15,13 @@ class DriverWalletController extends Controller
     {
     }
 
-    public function deposit(Request $request)
+    public function deposit(DriverWalletDepositRequest $request)
     {
         $profile = DriverProfile::query()->where('user_id', Auth::id())->firstOrFail();
         $depositRedirect = fn () => redirect()->route('driver.dashboard', ['tab' => 'deposit']);
         $wantsJson = $request->expectsJson() || $request->ajax();
 
-        $validator = Validator::make($request->all(), [
-            'amount'      => ['required', 'numeric', 'min:' . DriverWalletConfig::MIN_DEPOSIT],
-            'proof_image' => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp,gif', 'max:5120'],
-        ], [
-            'amount.required'      => 'Vui lòng nhập số tiền nạp.',
-            'amount.min'           => 'Số tiền nạp tối thiểu ' . DriverWalletConfig::minDepositFormatted() . '.',
-            'proof_image.image'    => 'Ảnh chụp chuyển khoản phải là file ảnh.',
-            'proof_image.mimes'    => 'Ảnh chụp chuyển khoản phải là JPG, PNG, WebP hoặc GIF.',
-            'proof_image.max'      => 'Ảnh chụp chuyển khoản tối đa 5MB.',
-        ]);
-
-        if ($validator->fails()) {
-            if ($wantsJson) {
-                return response()->json([
-                    'message' => $validator->errors()->first(),
-                    'errors'  => $validator->errors(),
-                ], 422);
-            }
-
-            return $depositRedirect()->withErrors($validator)->withInput();
-        }
-
-        $validated = $validator->validated();
+        $validated = $request->validated();
 
         try {
             $transaction = $this->wallets->requestDeposit(

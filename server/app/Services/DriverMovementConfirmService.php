@@ -3,10 +3,8 @@
 namespace App\Services;
 
 use App\Models\Booking;
-use App\Models\DriverTripRequest;
 use App\Models\Schedule;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 /**
@@ -21,18 +19,6 @@ class DriverMovementConfirmService
     public const MOVEMENT_CONFIRM_LEAD_MINUTES = 15;
 
     public const MIN_DEADLINE_BUFFER_MINUTES = 2;
-
-    /** @deprecated Giữ tương thích test cũ — logic mới dùng {@see MOVEMENT_CONFIRM_LEAD_MINUTES}. */
-    public const URGENT_PICKUP_WITHIN_MINUTES = 60;
-
-    /** @deprecated */
-    public const URGENT_CONFIRM_MINUTES = 5;
-
-    /** @deprecated */
-    public const LONG_BOOKING_CONFIRM_MAX_MINUTES = 30;
-
-    /** @deprecated */
-    public const LONG_BOOKING_CONFIRM_MIN_MINUTES = 10;
 
     public function stampAssignmentDeadline(Schedule $schedule, ?Booking $booking = null): void
     {
@@ -148,13 +134,6 @@ class DriverMovementConfirmService
         return 'Còn ' . $minutes . ' phút để bấm «Xác nhận»';
     }
 
-    // TODO (Auto Reassign Late Trip): Đã chuyển sang DriverLatePickupService::processLateAlertAutoReassign().
-    /** @deprecated */
-    public function processMovementAlerts(): int
-    {
-        return app(DriverLatePickupService::class)->processLateAlertAutoReassign();
-    }
-
     // TODO (Auto Reassign Late Trip): Điều kiện movement (Đặt Ngay 3 phút / Đặt Lịch T-25) — dùng chung với cron auto-reassign.
     public function isLateMovementReassignDue(Schedule $schedule, Booking $booking): bool
     {
@@ -191,29 +170,4 @@ class DriverMovementConfirmService
         );
     }
 
-    /** @deprecated Không còn tự gỡ TX — dùng {@see DriverLatePickupService::processLateAlertAutoReassign()}. */
-    public function expireOverdue(): int
-    {
-        return 0;
-    }
-
-    /** @deprecated Giữ tương thích — dùng {@see DriverLatePickupService::processLateAlertAutoReassign()}. */
-    public function releaseDriverAndReassign(Schedule $schedule): bool
-    {
-        $schedule->loadMissing(['route', 'vehicle', 'bookings']);
-        $booking = $schedule->driverRelevantBookings()->first();
-
-        if (! $booking || $booking->needs_operator_help_at) {
-            return false;
-        }
-
-        if ($schedule->resolvedDriverStage() !== Schedule::DRIVER_STAGE_ASSIGNED) {
-            return false;
-        }
-
-        return app(DriverLatePickupService::class)->attemptLateTripAutoReassign(
-            $booking,
-            'driver_movement_timeout',
-        );
-    }
 }

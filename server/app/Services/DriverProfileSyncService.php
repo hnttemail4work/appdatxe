@@ -123,8 +123,19 @@ class DriverProfileSyncService
         $status = $data['status'] ?? null;
         unset($data['status']);
 
+        $syncSeatsFromType = array_key_exists('vehicle_type', $validated) && filled($validated['vehicle_type']);
+        if ($syncSeatsFromType) {
+            unset($data['vehicle_seats']);
+        }
+
         if ($data !== []) {
             $profile->update($data);
+        }
+
+        if ($syncSeatsFromType) {
+            $profile->update([
+                'vehicle_seats' => \App\Support\DriverVehicleOptions::seatsFor((string) $validated['vehicle_type']),
+            ]);
         }
 
         if ($status !== null) {

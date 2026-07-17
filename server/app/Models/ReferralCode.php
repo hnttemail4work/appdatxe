@@ -68,16 +68,6 @@ class ReferralCode extends Model
         return $this->belongsTo(Booking::class);
     }
 
-    public function attributedBookings()
-    {
-        return $this->hasMany(Booking::class, 'applied_referral_code_id');
-    }
-
-    public function creator(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'created_by');
-    }
-
     public function typeLabel(): string
     {
         return match ($this->type) {
@@ -119,14 +109,6 @@ class ReferralCode extends Model
         return match ($this->type) {
             self::TYPE_REFERRER => PlatformFees::referralCommissionFirstPercent(),
             default => 0,
-        };
-    }
-
-    public function commissionTierLabel(): string
-    {
-        return match ($this->type) {
-            self::TYPE_REFERRER => 'Doanh thu GT',
-            default => '—',
         };
     }
 

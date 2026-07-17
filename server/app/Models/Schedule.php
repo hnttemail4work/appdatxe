@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Services\DriverMovementConfirmService;
 use Illuminate\Database\Eloquent\Model;
 
 class Schedule extends Model
@@ -200,27 +199,6 @@ class Schedule extends Model
         return $this->activeReservationCount();
     }
 
-    public function seatsLabel(): string
-    {
-        $capacity = $this->capacity();
-
-        return $this->bookedSeatsCount() . '/' . $capacity;
-    }
-
-    public function isBookable(): bool
-    {
-        if ($this->displayStatus() !== 'scheduled') {
-            return false;
-        }
-
-        $hasActive = $this->bookings()
-            ->whereNotIn('booking_status', ['cancelled', 'rejected'])
-            ->whereNotIn('trip_status', ['completed', 'cancelled'])
-            ->exists();
-
-        return $this->departure_time > now() && ! $hasActive;
-    }
-
     public function expectedArrivalAt(): \Carbon\Carbon
     {
         if ($this->expected_arrival_at) {
@@ -239,19 +217,6 @@ class Schedule extends Model
     public function completesAt(): \Carbon\Carbon
     {
         return $this->expectedArrivalAt();
-    }
-
-    public function tripTimeLabel(): string
-    {
-        $departure = $this->departure_time->format('H:i');
-        $arrival = $this->expectedArrivalAt();
-
-        if ($arrival->isSameDay($this->departure_time)) {
-            return $departure . ' → ' . $arrival->format('H:i') . ', ' . $this->departure_time->format('d/m/Y');
-        }
-
-        return $departure . ', ' . $this->departure_time->format('d/m')
-            . ' → ' . $arrival->format('H:i') . ', ' . $arrival->format('d/m/Y');
     }
 
     /** Chỉ chuyến đã duyệt mới coi là đang / đã chạy theo giờ. */
@@ -329,22 +294,6 @@ class Schedule extends Model
         };
     }
 
-    public function activeGuestBookingsCount(): int
-    {
-        if ($this->relationLoaded('bookings')) {
-            return $this->bookings
-                ->filter(fn (Booking $b): bool => ! in_array($b->booking_status, ['cancelled', 'rejected'], true)
-                    && ! $b->isExpired())
-                ->count();
-        }
-
-        return $this->bookings()
-            ->whereNotIn('booking_status', ['cancelled', 'rejected'])
-            ->get()
-            ->filter(fn (Booking $b): bool => ! $b->isExpired())
-            ->count();
-    }
-
     public function driverRelevantBookings(): \Illuminate\Support\Collection
     {
         $bookings = $this->relationLoaded('bookings')
@@ -366,11 +315,6 @@ class Schedule extends Model
 
             return false;
         })->values();
-    }
-
-    public function tripRevenueTotal(): float
-    {
-        return (float) $this->driverRelevantBookings()->sum(fn (Booking $b) => (float) $b->total_price);
     }
 
     public const DRIVER_STAGE_ASSIGNED = 'assigned';
@@ -445,11 +389,6 @@ class Schedule extends Model
     }
 
     /** Khách đang trên xe, tài xế đã bắt đầu chạy. */
-    public function isPassengerTransit(): bool
-    {
-        return $this->resolvedDriverStage() === self::DRIVER_STAGE_RUNNING;
-    }
-
     /** Tài xế đã đón khách — không cho admin gán lại / hủy. */
     public function passengerPickedUp(): bool
     {
@@ -494,11 +433,6 @@ class Schedule extends Model
             self::DRIVER_STAGE_COMPLETED => 'Hoàn thành chuyến',
             default                      => null,
         };
-    }
-
-    public function driverMovementDeadlineLabel(): ?string
-    {
-        return app(DriverMovementConfirmService::class)->movementDeadlineLabel($this);
     }
 
     /** Chưa bấm «Xác nhận» đi đón — bắt buộc trước khi chuyển sang «Đến điểm đón». */
@@ -623,25 +557,6 @@ class Schedule extends Model
             : $this->departure_time->timestamp;
 
         return sprintf('%02d-%010d', $priority, $timeKey);
-    }
-
-    public function driverIncompleteBookings(): \Illuminate\Support\Collection
-    {
-        return $this->driverRelevantBookings()
-            ->filter(fn (Booking $b): bool => $b->trip_status !== 'completed')
-            ->values();
-    }
-
-    /** Vé đã kết xong — hiển thị mục gần đây. */
-    public function driverSettledBookings(): \Illuminate\Support\Collection
-    {
-        $bookings = $this->relationLoaded('bookings')
-            ? $this->bookings
-            : $this->bookings()->get();
-
-        return $bookings
-            ->filter(fn (Booking $b): bool => ! in_array($b->booking_status, ['cancelled', 'rejected'], true))
-            ->values();
     }
 
     /** Tất cả vé trên chuyến (kể cả đã hủy) — dùng tab lịch sử. */

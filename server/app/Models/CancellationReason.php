@@ -21,15 +21,6 @@ class CancellationReason extends Model
         ];
     }
 
-    public function audienceLabel(): string
-    {
-        return match ($this->audience) {
-            'customer' => 'Khách hàng',
-            'driver'   => 'Tài xế',
-            default    => 'Cả hai',
-        };
-    }
-
     public function scopeActive($query)
     {
         return $query->where('is_active', true);

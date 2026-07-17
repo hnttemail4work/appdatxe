@@ -4,7 +4,6 @@ namespace App\Support;
 
 use App\Models\TripRoute;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Validation\Rule;
 
 /** Điểm đi/đến — danh sách từ admin (bảng routes từ TP.HCM). */
 class LocationCatalog
@@ -62,12 +61,6 @@ class LocationCatalog
         $value = trim((string) $value);
 
         return $value !== '' && in_array($value, self::all(), true);
-    }
-
-  /** @return \Illuminate\Validation\Rules\In */
-    public static function inRule()
-    {
-        return Rule::in(self::all());
     }
 
     public static function distanceFromHub(string $city): int

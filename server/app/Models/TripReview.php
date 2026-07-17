@@ -41,11 +41,6 @@ class TripReview extends Model
         return $this->belongsTo(DriverProfile::class);
     }
 
-    public function sentimentLabel(): string
-    {
-        return $this->sentiment === self::SENTIMENT_LIKE ? 'Hài lòng' : 'Không hài lòng';
-    }
-
     public function sentimentIcon(): string
     {
         return $this->sentiment === self::SENTIMENT_LIKE ? '👍' : '👎';

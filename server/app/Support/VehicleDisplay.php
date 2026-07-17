@@ -4,7 +4,6 @@ namespace App\Support;
 
 use App\Models\DriverProfile;
 use App\Models\Vehicle;
-use App\Services\DriverTripRequestService;
 
 /** Nhãn & ảnh xe thống nhất — quản lý (Vehicle), tài xế (DriverProfile), đặt xe. */
 class VehicleDisplay
@@ -22,20 +21,12 @@ class VehicleDisplay
             return '';
         }
 
+        $driverLabel = DriverVehicleOptions::label($type);
+        if ($driverLabel !== '' && $driverLabel !== $type) {
+            return $driverLabel;
+        }
+
         return self::TYPE_LABELS[$type] ?? ucfirst($type);
-    }
-
-    public static function typeForCapacity(int $capacity): string
-    {
-        if ($capacity <= 5) {
-            return 'sedan';
-        }
-
-        if ($capacity <= 9) {
-            return 'suv';
-        }
-
-        return 'limousine';
     }
 
     public static function labelFromVehicle(?Vehicle $vehicle): string
@@ -49,16 +40,6 @@ class VehicleDisplay
             $vehicle->license_plate,
             $vehicle->capacity ? (int) $vehicle->capacity : null,
         );
-    }
-
-    /** Nhãn xe trên trang đặt — chỉ số chỗ, không hiện loại xe (SUV/Sedan). */
-    public static function labelForOffer(?Vehicle $vehicle): string
-    {
-        if (! $vehicle || ! $vehicle->capacity) {
-            return '—';
-        }
-
-        return VehicleCapacityOptions::label((int) $vehicle->capacity);
     }
 
     public static function compactLabel(?string $type, ?string $plate, ?int $capacity): string
@@ -78,19 +59,9 @@ class VehicleDisplay
         return $capLabel ?? '—';
     }
 
-    public static function labelFromDriverProfile(DriverProfile $profile): string
-    {
-        return DriverTripRequestService::vehicleLabel($profile);
-    }
-
     public static function photoFromVehicle(?Vehicle $vehicle): ?string
     {
         return $vehicle?->photoUrl();
-    }
-
-    public static function photoFromDriverProfile(DriverProfile $profile): ?string
-    {
-        return $profile->firstVehiclePhotoUrl();
     }
 
     public static function capacityFromDriverProfile(DriverProfile $profile): int

@@ -8,6 +8,7 @@ use App\Models\PushSubscription;
 use App\Models\Schedule;
 use App\Models\User;
 use App\Support\AppBrandingSettings;
+use App\Support\AuthIdentifier;
 use App\Support\PushAudience;
 use App\Support\PushNotificationSettings;
 use Illuminate\Http\Request;
@@ -548,6 +549,6 @@ class PushNotificationService
 
     protected function normalizePhone(string $phone): string
     {
-        return preg_replace('/\D+/', '', $phone) ?? '';
+        return AuthIdentifier::normalizePhone($phone);
     }
 }

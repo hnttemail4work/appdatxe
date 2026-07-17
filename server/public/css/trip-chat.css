@@ -1,0 +1,116 @@
+.trip-chat-panel {
+    margin-top: 0.85rem;
+    overflow: hidden;
+    border: 1px solid rgba(212, 175, 55, 0.24);
+    border-radius: 0.9rem;
+    background: rgba(20, 20, 20, 0.92);
+}
+
+.trip-chat-toggle {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.8rem 0.9rem;
+    border: 0;
+    background: transparent;
+    color: #f9fafb;
+    text-align: left;
+}
+
+.trip-chat-toggle__icon {
+    font-size: 1.2rem;
+}
+
+.trip-chat-toggle strong,
+.trip-chat-toggle small {
+    display: block;
+}
+
+.trip-chat-toggle small {
+    margin-top: 0.1rem;
+    color: #9ca3af;
+    font-size: 0.75rem;
+}
+
+.trip-chat-toggle__chevron {
+    margin-left: auto;
+    color: #d4af37;
+    font-size: 1.35rem;
+    transition: transform 0.2s ease;
+}
+
+.trip-chat-toggle[aria-expanded="true"] .trip-chat-toggle__chevron {
+    transform: rotate(90deg);
+}
+
+.trip-chat-body {
+    padding: 0.75rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.trip-chat-messages {
+    display: flex;
+    max-height: 16rem;
+    min-height: 3rem;
+    flex-direction: column;
+    gap: 0.45rem;
+    overflow-y: auto;
+}
+
+.trip-chat-message {
+    display: flex;
+    max-width: 84%;
+    flex-direction: column;
+}
+
+.trip-chat-message.is-mine {
+    align-self: flex-end;
+    align-items: flex-end;
+}
+
+.trip-chat-message.is-theirs {
+    align-self: flex-start;
+    align-items: flex-start;
+}
+
+.trip-chat-message__body {
+    padding: 0.5rem 0.7rem;
+    border-radius: 0.75rem;
+    background: rgba(255, 255, 255, 0.1);
+    color: #f3f4f6;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.trip-chat-message.is-mine .trip-chat-message__body {
+    background: #d4af37;
+    color: #171717;
+}
+
+.trip-chat-message__time {
+    margin-top: 0.15rem;
+    color: #9ca3af;
+    font-size: 0.68rem;
+}
+
+.trip-chat-empty {
+    margin: 0.35rem 0;
+    text-align: center;
+}
+
+.trip-chat-form {
+    display: flex;
+    gap: 0.45rem;
+    margin-top: 0.65rem;
+}
+
+.trip-chat-form .form-control {
+    min-width: 0;
+}
+
+.trip-chat-error {
+    margin: 0.45rem 0 0;
+    color: #fca5a5;
+    font-size: 0.78rem;
+}

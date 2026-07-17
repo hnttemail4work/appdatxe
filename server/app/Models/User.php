@@ -47,16 +47,6 @@ class User extends Authenticatable
         return $this->hasOne(DriverProfile::class, 'user_id');
     }
 
-    public function managedDrivers()
-    {
-        return $this->hasMany(DriverProfile::class, 'operator_id');
-    }
-
-    public function vehicles()
-    {
-        return $this->hasMany(Vehicle::class, 'operator_id');
-    }
-
     public function merchantProfile()
     {
         return $this->hasOne(MerchantProfile::class, 'user_id');
@@ -84,24 +74,42 @@ class User extends Authenticatable
         return $this->hasMany(Payout::class, 'operator_id');
     }
 
-    public function bookingAudits()
-    {
-        return $this->hasMany(BookingAudit::class, 'actor_id');
-    }
-
-    public function webauthnCredentials()
-    {
-        return $this->hasMany(WebauthnCredential::class);
-    }
-
-    public function customerBookings()
-    {
-        return $this->hasMany(Booking::class, 'customer_id');
-    }
-
     public function isCustomer(): bool
     {
         return $this->role === 'customer';
+    }
+
+    public function isActive(): bool
+    {
+        return $this->status === 'active';
+    }
+
+    /** null nếu được phép đăng nhập; ngược lại trả về thông báo chặn. */
+    public function loginBlockMessage(): ?string
+    {
+        if ($this->isActive()) {
+            return null;
+        }
+
+        if ($this->status === 'suspended') {
+            return 'Tài khoản của bạn bị tạm ngưng.';
+        }
+
+        if ($this->role === 'driver') {
+            $profile = $this->relationLoaded('driverProfile')
+                ? $this->driverProfile
+                : $this->driverProfile()->first();
+
+            if ($profile && $profile->approval_status === 'pending') {
+                return 'Hồ sơ tài xế đang chờ duyệt. Vui lòng đợi admin kích hoạt.';
+            }
+
+            if ($profile && $profile->approval_status === 'rejected') {
+                return 'Hồ sơ tài xế đã bị từ chối.';
+            }
+        }
+
+        return 'Tài khoản của bạn đã bị vô hiệu hóa.';
     }
 
     public function age(): ?int

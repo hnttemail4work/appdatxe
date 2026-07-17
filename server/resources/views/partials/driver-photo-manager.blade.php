@@ -31,7 +31,7 @@
             <div class="photo-vehicle-grid">
                 @foreach($vehicleUrls as $idx => $url)
                     <div class="photo-vehicle-item {{ $idx === $catalogPhotoIndex ? 'is-catalog-photo' : '' }}">
-                        <a href="{{ $url }}" target="_blank" rel="noopener" title="Bấm để xem ảnh gốc">
+                        <a href="{{ $url }}" data-photo-zoom title="Bấm để phóng to">
                             <img src="{{ $url }}" alt="Xe {{ $idx + 1 }}">
                         </a>
                         @if($idx === $catalogPhotoIndex)
@@ -47,18 +47,18 @@
     </div>
 
     <h6 class="text-muted mb-3">Giấy tờ</h6>
-    <div class="row g-3">
+    <div class="row g-2 row-cols-2 row-cols-md-3 row-cols-xl-5">
         @foreach($singleSlots as $field => $meta)
             @php $photoUrl = $driver->photoUrl($field); @endphp
-            <div class="col-sm-6 col-lg-4">
+            <div class="col">
                 <div class="photo-slot {{ $photoUrl ? 'has-photo' : 'is-empty' }}">
                     <div class="photo-slot-header">
                         <span class="photo-slot-title">{{ $meta['label'] }}</span>
                     </div>
                     <div class="photo-slot-preview photo-ratio-{{ $meta['ratio'] }}">
                         @if($photoUrl)
-                            <a href="{{ $photoUrl }}" target="_blank" rel="noopener"
-                               class="photo-thumb photo-current-link" title="Bấm để xem ảnh gốc">
+                            <a href="{{ $photoUrl }}" data-photo-zoom
+                               class="photo-thumb photo-current-link" title="Bấm để phóng to">
                                 <img src="{{ $photoUrl }}" alt="{{ $meta['label'] }}" class="photo-current-img">
                                 <span class="photo-zoom-hint">Phóng to</span>
                             </a>
@@ -80,7 +80,7 @@
     <div class="photo-vehicle-grid mb-0">
         @foreach($vehicleUrls as $idx => $url)
             <div class="photo-vehicle-item {{ $idx === $catalogPhotoIndex ? 'is-catalog-photo' : '' }}">
-                <a href="{{ $url }}" target="_blank" rel="noopener" title="Bấm để xem ảnh gốc">
+                <a href="{{ $url }}" data-photo-zoom title="Bấm để phóng to">
                     <img src="{{ $url }}" alt="Xe {{ $idx + 1 }}">
                 </a>
                 @if($allowVehicleDelete)
@@ -145,23 +145,23 @@
 
     <h6 class="text-muted mb-3">Giấy tờ</h6>
 
-    <div class="row g-3">
+    <div class="row g-2 row-cols-2 row-cols-md-3 row-cols-xl-5">
         @foreach($singleSlots as $field => $meta)
             @php
                 $photoUrl = $driver->photoUrl($field);
                 $hasStoredPath = filled($driver->{$field});
                 $isLocked = $lockIdentityPhotos && ($meta['identity'] ?? false);
             @endphp
-            <div class="col-sm-6 col-lg-4">
+            <div class="col">
                 <div class="photo-slot {{ $photoUrl ? 'has-photo' : 'is-empty' }} {{ $isLocked ? 'is-locked' : '' }}" data-photo-slot="{{ $field }}">
                     <div class="photo-slot-header">
                         <span class="photo-slot-title">{{ $meta['label'] }}</span>
                     </div>
                     <div class="photo-slot-preview photo-ratio-{{ $meta['ratio'] }}">
                         @if($photoUrl)
-                            <a href="{{ $photoUrl }}" target="_blank" rel="noopener"
+                            <a href="{{ $photoUrl }}" data-photo-zoom
                                class="photo-thumb photo-current-link" data-current-wrap
-                               title="Bấm để xem ảnh gốc">
+                               title="Bấm để phóng to">
                                 <img src="{{ $photoUrl }}" alt="{{ $meta['label'] }}" class="photo-current-img" data-current-img>
                                 <span class="photo-zoom-hint">Phóng to</span>
                             </a>
@@ -195,6 +195,6 @@
 
 @once
     @push('scripts')
-    <script src="{{ asset('js/driver-photo-manager.js') }}"></script>
+    <script src="{{ asset('js/driver-photo-manager.js') }}?v={{ filemtime(public_path('js/driver-photo-manager.js')) }}"></script>
     @endpush
 @endonce
