@@ -9,6 +9,7 @@ $name = $name ?? 'pickup_time';
 $id = $id ?? 'modal-pickup-time';
 $value = $value ?? '';
 $required = $required ?? true;
+$disabled = $disabled ?? false;
 $label = $label ?? 'Giờ đón';
 $formAttr = $formAttr ?? null;
 $displayValue = $value !== '' && $value !== null
@@ -20,6 +21,7 @@ $displayValue = $value !== '' && $value !== null
        @if($formAttr) form="{{ $formAttr }}" @endif
        class="form-control @error($name) is-invalid @enderror"
        @if($required) required @endif
+       @if($disabled) disabled @endif
        data-validate-label="{{ $label }}"
        value="{{ old($name, $displayValue) }}">
 @error($name)<div class="invalid-feedback d-block">{{ $message }}</div>@enderror

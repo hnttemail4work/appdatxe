@@ -84,9 +84,11 @@
                placeholder="51A-12345" {{ $ro }}>
         @error('vehicle_license_plate')<div class="invalid-feedback">{{ $message }}</div>@enderror
     </div>
-    <div class="col-md-6">
+    <div class="col-12 col-md-auto" style="min-width:0;max-width:100%">
         <label class="form-label">Loại xe</label>
-        <select name="vehicle_type" class="form-select @error('vehicle_type') is-invalid @enderror" {{ $readonly ? 'disabled' : '' }}>
+        <select name="vehicle_type"
+                class="form-select vehicle-type-select field-auto-size @error('vehicle_type') is-invalid @enderror"
+                {{ $readonly ? 'disabled' : '' }}>
             <option value="">-- Chọn --</option>
             @foreach(DriverVehicleOptions::labels() as $val => $lbl)
                 <option value="{{ $val }}" {{ $vehicleType === $val ? 'selected' : '' }}>{{ $lbl }}</option>

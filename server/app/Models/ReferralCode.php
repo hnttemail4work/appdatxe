@@ -27,6 +27,8 @@ class ReferralCode extends Model
         'name',
         'phone',
         'booking_id',
+        'driver_profile_id',
+        'assigned_driver_profile_id',
         'status',
         'commission_percent',
         'customer_discount_percent',
@@ -68,13 +70,71 @@ class ReferralCode extends Model
         return $this->belongsTo(Booking::class);
     }
 
+    public function driverProfile(): BelongsTo
+    {
+        return $this->belongsTo(DriverProfile::class);
+    }
+
+    public function assignedDriverProfile(): BelongsTo
+    {
+        return $this->belongsTo(DriverProfile::class, 'assigned_driver_profile_id');
+    }
+
     public function typeLabel(): string
     {
-        return match ($this->type) {
-            self::TYPE_REFERRER => 'Người giới thiệu',
-            self::TYPE_BOOKING_TEMP => 'Từ đặt vé',
-            default => $this->type,
-        };
+        if ($this->isDriverInvite()) {
+            return 'Tài xế';
+        }
+
+        if ($this->type === self::TYPE_BOOKING_TEMP) {
+            return 'Khách';
+        }
+
+        // Mã hoa hồng admin tạo tay — phân biệt bằng cột Giới thiệu, không gán nhãn Khách/Tài xế.
+        return '—';
+    }
+
+    /** % hiển thị một cột: QR TX / mã vé = giảm giá KH; mã GT admin = % hoa hồng. */
+    public function listPercentLabel(): string
+    {
+        if ($this->isDriverInvite() || $this->type === self::TYPE_BOOKING_TEMP) {
+            return self::formatPercentLabel($this->customerDiscountPercent());
+        }
+
+        if ($this->type === self::TYPE_REFERRER) {
+            return self::formatPercentLabel($this->commissionPercent());
+        }
+
+        return '—';
+    }
+
+    public static function formatPercentLabel(float $percent): string
+    {
+        if (abs($percent - round($percent)) < 0.05) {
+            return (string) (int) round($percent).'%';
+        }
+
+        return rtrim(rtrim(number_format($percent, 1, '.', ''), '0'), '.').'%';
+    }
+
+    public function isDriverInvite(): bool
+    {
+        return $this->driver_profile_id !== null;
+    }
+
+    /** Mã hoa hồng admin tạo và đã gán cho tài xế (không phải QR giảm giá mời bạn). */
+    public function isAssignedCommissionCode(): bool
+    {
+        return $this->type === self::TYPE_REFERRER
+            && $this->driver_profile_id === null
+            && $this->assigned_driver_profile_id !== null;
+    }
+
+    public function canAssignToDriver(): bool
+    {
+        return $this->type === self::TYPE_REFERRER
+            && $this->driver_profile_id === null
+            && ! $this->isSuspended();
     }
 
     public function statusLabel(): string
@@ -99,9 +159,13 @@ class ReferralCode extends Model
         };
     }
 
-    /** % hoa hồng trả người giới thiệu — ưu tiên % admin cấu hình trên từng mã. */
+    /** % hoa hồng trả người giới thiệu — ưu tiên % admin cấu hình trên từng mã. QR tài xế = 0. */
     public function commissionPercent(): float
     {
+        if ($this->isDriverInvite()) {
+            return max(0.0, (float) ($this->commission_percent ?? 0));
+        }
+
         if ($this->commission_percent !== null) {
             return (float) $this->commission_percent;
         }
@@ -119,6 +183,14 @@ class ReferralCode extends Model
             return PlatformFees::bookingQrDiscountPercent();
         }
 
+        if ($this->isDriverInvite()) {
+            if ($this->customer_discount_percent !== null) {
+                return max(0.0, (float) $this->customer_discount_percent);
+            }
+
+            return PlatformFees::driverInviteQrDiscountPercent();
+        }
+
         if ($this->customer_discount_percent !== null) {
             return max(0.0, (float) $this->customer_discount_percent);
         }
@@ -129,10 +201,11 @@ class ReferralCode extends Model
     /** Nhãn nguồn giảm giá hiển thị cho khách. */
     public function customerDiscountSourceLabel(): string
     {
-        return match ($this->type) {
-            self::TYPE_BOOKING_TEMP => 'giới thiệu',
-            self::TYPE_REFERRER     => 'mã GT',
-            default                 => 'giới thiệu',
+        return match (true) {
+            $this->isDriverInvite() => 'QR tài xế',
+            $this->type === self::TYPE_BOOKING_TEMP => 'giới thiệu',
+            $this->type === self::TYPE_REFERRER => 'mã GT',
+            default => 'giới thiệu',
         };
     }
 

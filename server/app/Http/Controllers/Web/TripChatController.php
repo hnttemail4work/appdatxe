@@ -7,6 +7,7 @@ use App\Http\Requests\Chat\CustomerChatMessagesRequest;
 use App\Http\Requests\Chat\CustomerChatSendRequest;
 use App\Http\Requests\Chat\DriverSendMessageRequest;
 use App\Models\Booking;
+use App\Services\DriverInboxService;
 use App\Services\TripChatService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\JsonResponse;
@@ -17,6 +18,7 @@ class TripChatController extends Controller
 {
     public function __construct(
         private readonly TripChatService $chat,
+        private readonly DriverInboxService $driverInbox,
     ) {
     }
 
@@ -45,6 +47,7 @@ class TripChatController extends Controller
     public function driverMessages(Request $request, Booking $booking): JsonResponse
     {
         $this->authorizeDriver($booking);
+        $this->chat->markDriverRead($booking);
 
         return $this->messagesResponse($booking, max(0, (int) $request->query('after_id', 0)));
     }
@@ -104,12 +107,20 @@ class TripChatController extends Controller
 
     private function messagesResponse(Booking $booking, int $afterId): JsonResponse
     {
+        $user = auth()->user();
+
         return response()->json([
             'open'           => $this->chat->isOpen($booking),
             'status_message' => $this->chat->statusMessage($booking),
             'messages'       => $this->chat->messages($booking, $afterId)
                 ->map(fn ($message) => $this->chat->serialize($message))
                 ->values(),
+            'unread'         => $user && $user->role === 'driver'
+                ? $this->chat->mergeInboxUnread(
+                    $this->driverInbox->unreadCounts((int) $user->id),
+                    (int) $user->id,
+                )
+                : null,
         ]);
     }
 }

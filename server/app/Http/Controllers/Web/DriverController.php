@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Concerns\ApiResponds;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\UpdateDriverInviteRequest;
 use App\Http\Requests\Driver\CancelScheduleRequest;
 use App\Http\Requests\Driver\RejectDriverProfileRequest;
 use App\Http\Requests\Driver\RejectTripRequestRequest;
@@ -28,8 +29,11 @@ use App\Services\DriverProfileSyncService;
 use App\Services\DriverProximityService;
 use App\Services\GuestBookingDriverStatusService;
 use App\Services\DriverTripRequestService;
+use App\Services\DriverInboxService;
 use App\Services\DriverWalletService;
+use App\Services\ReferralCodeService;
 use App\Services\ScheduleLifecycleService;
+use App\Services\TripChatService;
 use App\Support\PageList;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -54,6 +58,9 @@ class DriverController extends Controller
         private readonly DriverMovementConfirmService $movementConfirm,
         private readonly DriverProximityService $proximity,
         private readonly GuestBookingDriverStatusService $guestDriverStatus,
+        private readonly ReferralCodeService $referralCodes,
+        private readonly DriverInboxService $driverInbox,
+        private readonly TripChatService $tripChat,
     ) {
     }
 
@@ -145,6 +152,8 @@ class DriverController extends Controller
             fn (Schedule $schedule): bool => in_array($schedule->driverWorkflowPhase(), ['upcoming', 'active'], true),
         );
 
+        $pendingTripRequestGroups = $this->driverRequests->visiblePendingGroupsForDriver($user->id);
+
         $driverMapTripPins = [];
         $driverActiveMapNav = null;
         if ($driverActiveSchedule) {
@@ -175,7 +184,26 @@ class DriverController extends Controller
             }
         }
 
-        $pendingTripRequestGroups = $this->driverRequests->visiblePendingGroupsForDriver($user->id);
+        // Cuốc chờ nhận — hiện nút điều hướng (thiếu lat/lng → fallback trung tâm tỉnh trên tuyến).
+        if ($driverActiveMapNav === null && $pendingTripRequestGroups->isNotEmpty()) {
+            $pendingGroup = $pendingTripRequestGroups->first();
+            $pendingBooking = $pendingGroup['passengers']->first() ?? null;
+            $pendingSchedule = $pendingGroup['schedule'] ?? null;
+            if ($pendingBooking instanceof \App\Models\Booking) {
+                $driverActiveMapNav = \App\Support\MapNavigation::driverPickupTarget($pendingBooking, $pendingSchedule);
+                if ($driverActiveMapNav
+                    && $driverActiveMapNav['dest_lat'] !== null
+                    && $driverActiveMapNav['dest_lng'] !== null
+                    && $driverMapTripPins === []) {
+                    $driverMapTripPins[] = [
+                        'type'  => 'pickup',
+                        'lat'   => (float) $driverActiveMapNav['dest_lat'],
+                        'lng'   => (float) $driverActiveMapNav['dest_lng'],
+                        'label' => $pendingBooking->pickupLabel(),
+                    ];
+                }
+            }
+        }
 
         $showTopUpBanner = $walletNotice !== null;
         $revenueStats = $profile
@@ -186,6 +214,37 @@ class DriverController extends Controller
             : collect();
         $walletHistory = PageList::paginateCollection($walletHistoryAll, $request, 'history_page');
         $mustChangePassword = (bool) $user->must_change_password;
+
+        $driverInviteReferral = null;
+        $driverInviteUrl = null;
+        $driverInviteDiscountPercent = null;
+        $driverCommissionReferral = null;
+        $referredCustomers = collect();
+        if ($profile) {
+            $driverInviteReferral = $this->referralCodes->forDriver($profile);
+            if ($driverInviteReferral?->isUsable()) {
+                $driverInviteUrl = $driverInviteReferral->landingUrl();
+                $driverInviteDiscountPercent = $driverInviteReferral->customerDiscountPercent();
+            } else {
+                $driverInviteReferral = null;
+            }
+            $driverCommissionReferral = $this->referralCodes->assignedCommissionForDriver($profile);
+            if ($driverCommissionReferral && ! $driverCommissionReferral->isUsable()) {
+                $driverCommissionReferral = null;
+            }
+            $referredCustomers = $this->referralCodes->referredCustomersForCodes([
+                $this->referralCodes->forDriver($profile),
+                $this->referralCodes->assignedCommissionForDriver($profile),
+            ]);
+        }
+
+        $inboxUnread = $this->tripChat->mergeInboxUnread(
+            $this->driverInbox->unreadCounts((int) $user->id),
+            (int) $user->id,
+        );
+        $inboxInfoMessages = $this->driverInbox->listFor((int) $user->id, 'info');
+        $inboxNoticeMessages = $this->driverInbox->listFor((int) $user->id, 'notice');
+        $inboxChatThreads = $this->tripChat->recentThreadsForDriver((int) $user->id);
 
         return view('driver.dashboard', compact(
             'user',
@@ -207,6 +266,15 @@ class DriverController extends Controller
             'mustChangePassword',
             'driverMapTripPins',
             'driverActiveMapNav',
+            'driverInviteReferral',
+            'driverInviteUrl',
+            'driverInviteDiscountPercent',
+            'driverCommissionReferral',
+            'referredCustomers',
+            'inboxUnread',
+            'inboxInfoMessages',
+            'inboxNoticeMessages',
+            'inboxChatThreads',
         ));
     }
 
@@ -259,6 +327,11 @@ class DriverController extends Controller
             fn (Schedule $schedule): bool => $schedule->driverWorkflowPhase() === 'upcoming',
         );
 
+        $inboxUnread = $this->tripChat->mergeInboxUnread(
+            $this->driverInbox->unreadCounts((int) $user->id),
+            (int) $user->id,
+        );
+
         $fingerprint = sha1(implode('|', [
             $tripActionCount,
             $pendingTripRequestCount,
@@ -266,6 +339,8 @@ class DriverController extends Controller
             $driverTripUpcoming ? '1' : '0',
             $profile?->availability_status ?? 'off_duty',
             (string) ($driverPickupProximityLine ?? ''),
+            (string) ($inboxUnread['total'] ?? 0),
+            (string) ($inboxUnread['chat'] ?? 0),
         ]));
 
         return response()->json([
@@ -275,6 +350,7 @@ class DriverController extends Controller
             'driver_trip_upcoming'    => $driverTripUpcoming,
             'availability_status'     => $profile?->availability_status ?? 'off_duty',
             'pickup_proximity_line'   => $driverPickupProximityLine,
+            'inbox_unread'            => $inboxUnread,
             'fingerprint'             => $fingerprint,
         ]);
     }
@@ -469,7 +545,7 @@ class DriverController extends Controller
         ]);
 
         return redirect()
-            ->route('driver.dashboard', ['tab' => 'account'])
+            ->route('driver.dashboard', ['tab' => 'account-password'])
             ->with('success', 'Đã đổi mật khẩu thành công.');
     }
 
@@ -598,7 +674,7 @@ class DriverController extends Controller
             : 'all';
 
         $query = DriverProfile::query()
-            ->with(['user', 'operator', 'wallet']);
+            ->with(['user', 'operator', 'wallet', 'pendingChangeRequest']);
 
         if (Auth::user()->role === 'admin') {
             if ($filter === 'pending') {
@@ -619,7 +695,16 @@ class DriverController extends Controller
 
         $drivers = PageList::paginateCollection(
             $query->latest()->get()
-                ->when($filter === 'all', fn ($c) => $c->sortBy(fn ($d) => $d->isPendingApproval() ? 0 : 1)->values())
+                ->when($filter === 'all', fn ($c) => $c->sortBy(function ($d) {
+                    if ($d->isPendingApproval()) {
+                        return 0;
+                    }
+                    if ($d->pendingChangeRequest) {
+                        return 1;
+                    }
+
+                    return 2;
+                })->values())
                 ->when($filter !== 'all', fn ($c) => $c->values()),
             $request,
         );
@@ -627,11 +712,19 @@ class DriverController extends Controller
         $this->driverAvailability->reconcileMany($drivers->items());
         foreach ($drivers->items() as $driver) {
             $driver->refresh();
+            $driver->load(['user', 'wallet', 'pendingChangeRequest']);
         }
 
         $pendingCount = Auth::user()->role === 'admin'
             ? (int) DriverProfile::query()->pendingApproval()->count()
             : DriverProfile::pendingCountForOperator(Auth::id());
+
+        $docUpdateCount = Auth::user()->role === 'admin'
+            ? (int) DriverProfile::query()->pendingDocumentUpdate()->count()
+            : (int) DriverProfile::query()
+                ->forOperatorManagement(Auth::id())
+                ->pendingDocumentUpdate()
+                ->count();
 
         $statsMonth = now()->startOfMonth();
         $driverMonthlyStats = [];
@@ -662,6 +755,7 @@ class DriverController extends Controller
             'drivers',
             'filter',
             'pendingCount',
+            'docUpdateCount',
             'statsMonth',
             'driverMonthlyStats',
         ));
@@ -676,7 +770,13 @@ class DriverController extends Controller
         $this->driverAvailability->syncAfterTripCompleted((int) $driverProfile->user_id);
         $driverProfile->refresh();
 
-        $driverProfile->load(['user', 'operator']);
+        $driverProfile->load([
+            'user',
+            'operator',
+            'pendingChangeRequest',
+            'referralCode',
+            'assignedCommissionCode',
+        ]);
         $driverWallet = $this->driverWallet->walletFor($driverProfile);
         $driverWallet->load([
             'transactions',
@@ -686,13 +786,142 @@ class DriverController extends Controller
         $pendingDeposits = PageList::paginateCollection($pendingDepositsAll, $request, 'deposit_page');
         $walletHistoryAll = $this->driverWallet->walletActivityHistory($driverWallet);
         $walletHistory = PageList::paginateCollection($walletHistoryAll, $request, 'history_page');
+        $inviteReferral = $this->referralCodes->forDriver($driverProfile)
+            ?? $driverProfile->referralCode;
+        $commissionReferral = $this->referralCodes->assignedCommissionForDriver($driverProfile)
+            ?? $driverProfile->assignedCommissionCode;
 
         return view('admin.drivers.edit', [
-            'driver'          => $driverProfile,
-            'driverWallet'    => $driverWallet,
-            'pendingDeposits' => $pendingDeposits,
-            'walletHistory'   => $walletHistory,
+            'driver'              => $driverProfile,
+            'driverWallet'        => $driverWallet,
+            'pendingDeposits'     => $pendingDeposits,
+            'walletHistory'       => $walletHistory,
+            'inviteReferral'      => $inviteReferral,
+            'commissionReferral'  => $commissionReferral,
         ]);
+    }
+
+    public function storeInvite(UpdateDriverInviteRequest $request, DriverProfile $driverProfile)
+    {
+        if (! $this->canManageDriver($driverProfile)) {
+            abort(403);
+        }
+
+        if ($driverProfile->isPendingApproval() || $driverProfile->isRejected()) {
+            return back()->withErrors(['driver' => 'Hồ sơ đang chờ duyệt hoặc đã bị từ chối — chưa thể tạo QR.']);
+        }
+
+        $discount = (float) $request->validated()['customer_discount_percent'];
+
+        try {
+            $this->referralCodes->createForDriver($driverProfile, $discount);
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['customer_discount_percent' => $e->getMessage()]);
+        }
+
+        $this->driverInbox->notifyPromoGranted($driverProfile, $discount);
+
+        return redirect()
+            ->route('admin.drivers.edit', $this->driverInviteEditParams($request, $driverProfile))
+            ->with('success', 'Đã tạo QR giới thiệu: giảm ' . number_format($discount, 1) . '%.');
+    }
+
+    public function updateInvite(UpdateDriverInviteRequest $request, DriverProfile $driverProfile)
+    {
+        if (! $this->canManageDriver($driverProfile)) {
+            abort(403);
+        }
+
+        if ($driverProfile->isPendingApproval() || $driverProfile->isRejected()) {
+            return back()->withErrors(['driver' => 'Hồ sơ đang chờ duyệt hoặc đã bị từ chối — chưa thể chỉnh khuyến mãi.']);
+        }
+
+        $discount = (float) $request->validated()['customer_discount_percent'];
+        $existing = $this->referralCodes->forDriver($driverProfile);
+        if (! $existing) {
+            return back()->withErrors(['customer_discount_percent' => 'Chưa có mã QR — hãy tạo QR trước.']);
+        }
+
+        $previous = $existing->customerDiscountPercent();
+
+        try {
+            $this->referralCodes->updateDriverInviteDiscount($driverProfile, $discount);
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['customer_discount_percent' => $e->getMessage()]);
+        }
+
+        if (abs($previous - $discount) >= 0.05) {
+            $this->driverInbox->notifyPromoUpdated($driverProfile, $discount);
+        }
+
+        return redirect()
+            ->route('admin.drivers.edit', $this->driverInviteEditParams($request, $driverProfile))
+            ->with('success', 'Đã cập nhật khuyến mãi QR giới thiệu: giảm '
+                . number_format($discount, 1) . '%.');
+    }
+
+    public function destroyInvite(Request $request, DriverProfile $driverProfile)
+    {
+        if (! $this->canManageDriver($driverProfile)) {
+            abort(403);
+        }
+
+        if ($driverProfile->isPendingApproval() || $driverProfile->isRejected()) {
+            return back()->withErrors(['driver' => 'Hồ sơ đang chờ duyệt hoặc đã bị từ chối — chưa thể ngưng QR.']);
+        }
+
+        $previous = $this->referralCodes->suspendForDriver($driverProfile);
+        if ($previous === null) {
+            return redirect()
+                ->route('admin.drivers.edit', $this->driverInviteEditParams($request, $driverProfile))
+                ->with('success', 'Không có mã QR đang dùng để tạm ngưng.');
+        }
+
+        $this->driverInbox->notifyPromoRemoved($driverProfile, $previous);
+
+        return redirect()
+            ->route('admin.drivers.edit', $this->driverInviteEditParams($request, $driverProfile))
+            ->with('success', 'Đã tạm ngưng QR giảm ' . number_format($previous, 1) . '% — không hiện ở Mời bạn bè.');
+    }
+
+    public function restoreInvite(Request $request, DriverProfile $driverProfile)
+    {
+        if (! $this->canManageDriver($driverProfile)) {
+            abort(403);
+        }
+
+        if ($driverProfile->isPendingApproval() || $driverProfile->isRejected()) {
+            return back()->withErrors(['driver' => 'Hồ sơ đang chờ duyệt hoặc đã bị từ chối — chưa thể bật lại QR.']);
+        }
+
+        $restored = $this->referralCodes->restoreForDriver($driverProfile);
+        if (! $restored) {
+            return redirect()
+                ->route('admin.drivers.edit', $this->driverInviteEditParams($request, $driverProfile))
+                ->with('success', 'Không có mã QR đang tạm ngưng để bật lại.');
+        }
+
+        $discount = $restored->customerDiscountPercent();
+        $this->driverInbox->notifyPromoGranted($driverProfile, $discount);
+
+        return redirect()
+            ->route('admin.drivers.edit', $this->driverInviteEditParams($request, $driverProfile))
+            ->with('success', 'Đã bật lại QR giảm ' . number_format($discount, 1) . '%.');
+    }
+
+    /** @return array{driverProfile: DriverProfile, tab: string, from?: string} */
+    private function driverInviteEditParams(Request $request, DriverProfile $driverProfile): array
+    {
+        $params = [
+            'driverProfile' => $driverProfile,
+            'tab'           => 'invite',
+        ];
+
+        if ($request->input('from') === 'referrals' || $request->query('from') === 'referrals') {
+            $params['from'] = 'referrals';
+        }
+
+        return $params;
     }
 
     public function update(UpdateDriverProfileRequest $request, DriverProfile $driverProfile)
@@ -868,7 +1097,7 @@ class DriverController extends Controller
         $plain = DriverDefaultPassword::resetToRandom($user);
 
         return back()
-            ->with('success', 'Đã đặt lại mật khẩu cho tài xế.')
+            ->with('success', 'Đã đặt lại PIN 6 số cho tài xế.')
             ->with('driver_password_reset', [
                 'password'    => $plain,
                 'driver_name' => $user->name,

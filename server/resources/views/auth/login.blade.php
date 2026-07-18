@@ -1,42 +1,54 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="auth-page row justify-content-center">
-    <div class="col-md-5 col-lg-4">
-        <div class="card shadow-lg p-4 auth-card border-0">
-            <h2 class="mb-1">Đăng nhập</h2>
-            <p class="text-muted mb-4">
-                Khách hàng chưa có tài khoản?
-                <a href="{{ route('customer.register') }}">Đăng ký</a>
-                · Tài xế?
-                <a href="{{ route('register') }}">Đăng ký tài xế</a>
-            </p>
+<div class="auth-screen" data-auth-screen data-login-pin>
+    @include('partials.auth-screen-header', [
+        'authTitle' => ($errors->has('login') || old('password')) ? 'Nhập PIN' : 'Đăng nhập',
+        'authBackUrl' => route('home'),
+    ])
 
-            @error('login')
-                <div class="alert alert-danger py-2 small mb-3" role="alert">{{ $message }}</div>
-            @enderror
+    <div class="auth-screen-body">
+        <form method="POST" action="/login" autocomplete="on" id="login-pin-form">
+            @csrf
 
-            <form method="POST" action="/login" autocomplete="on">
-                @csrf
-                <div class="mb-3">
-                    <label class="form-label">Số điện thoại</label>
-                    <input type="tel" name="phone" value="{{ old('phone') }}"
-                        class="form-control @error('phone') is-invalid @enderror"
-                        required autofocus autocomplete="username" inputmode="tel">
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Mật khẩu</label>
-                    <input type="password" name="password"
-                        class="form-control @error('password') is-invalid @enderror"
-                        required autocomplete="current-password">
-                </div>
-                <button class="btn btn-outline-primary w-100">Đăng nhập</button>
-            </form>
-        </div>
+            <div class="auth-step-panel" data-login-step="phone" @if($errors->has('login') || old('password')) hidden @endif>
+                @include('partials.auth-field-row', [
+                    'fieldLabel' => 'Số điện thoại',
+                    'fieldName' => 'phone',
+                    'fieldId' => 'login-phone',
+                    'fieldType' => 'tel',
+                    'fieldValue' => old('phone'),
+                    'fieldPlaceholder' => '0901234567',
+                    'fieldAutocomplete' => 'username',
+                    'fieldInputmode' => 'tel',
+                    'nextType' => 'button',
+                    'nextAttr' => 'data-login-continue',
+                    'footerHtml' => '<a href="'.e(route('password.reset.request')).'">Quên mật khẩu?</a>',
+                ])
+            </div>
+
+            <div class="auth-step-panel" data-login-step="pin" @if(! $errors->has('login') && ! old('password')) hidden @endif>
+                @include('partials.auth-pin-row', [
+                    'pinName' => 'password',
+                    'pinId' => 'login-pin',
+                    'pinLabel' => 'PIN',
+                    'pinErrorBag' => 'login',
+                    'nextType' => 'submit',
+                    'nextAttr' => '',
+                    'nextAria' => 'Đăng nhập',
+                ])
+            </div>
+        </form>
     </div>
 </div>
 @endsection
 
 @push('styles')
 <link rel="stylesheet" href="{{ asset('css/auth.css') }}?v={{ filemtime(public_path('css/auth.css')) }}">
+@endpush
+
+@push('scripts')
+<script src="{{ asset('js/pin-input.js') }}?v={{ filemtime(public_path('js/pin-input.js')) }}"></script>
+<script src="{{ asset('js/auth-field-validation.js') }}?v={{ filemtime(public_path('js/auth-field-validation.js')) }}"></script>
+<script src="{{ asset('js/login-pin.js') }}?v={{ filemtime(public_path('js/login-pin.js')) }}"></script>
 @endpush

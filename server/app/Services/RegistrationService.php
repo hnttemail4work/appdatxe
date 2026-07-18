@@ -2,22 +2,24 @@
 
 namespace App\Services;
 
+use App\Models\AuthVerificationCode;
 use App\Models\DriverProfile;
 use App\Models\User;
-use App\Rules\UniqueNormalizedPhone;
-use App\Services\CustomerAccountService;
 use App\Support\AuthIdentifier;
+use App\Support\AuthPhone;
 use App\Support\DriverFieldRules;
+use App\Support\PinPassword;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rules\Password;
 
 class RegistrationService
 {
-    public function __construct(private readonly DriverPhotoService $photos)
-    {
+    public function __construct(
+        private readonly DriverPhotoService $photos,
+        private readonly CustomerDocumentService $customerDocuments,
+        private readonly AuthVerificationService $verification,
+    ) {
     }
 
     /** @return array<string, mixed> */
@@ -29,65 +31,82 @@ class RegistrationService
     /** @return array<string, mixed> */
     public function customerRules(): array
     {
-        return [
-            'name'                  => ['required', 'string', 'max:255'],
-            'phone'                 => ['required', 'string', 'max:30', new UniqueNormalizedPhone()],
-            'gender'                => ['required', 'in:male,female'],
-            'age'                   => ['required', 'integer', 'min:1', 'max:120'],
-            'email'                 => ['nullable', 'email', 'max:255'],
-            'password'              => ['required', 'confirmed', Password::min(8)],
-            'password_confirmation' => ['required', 'string'],
-        ];
+        return array_merge(
+            [
+                'phone'                 => AuthPhone::rules(unique: true),
+                'password'              => PinPassword::rules(confirmed: true),
+                'password_confirmation' => ['required', 'string', 'digits:'.PinPassword::LENGTH],
+                'terms'                 => ['accepted'],
+            ],
+            DriverFieldRules::idCardPhotoRules(true),
+        );
     }
 
-    public function registerCustomer(array $validated): User
+    /**
+     * @return array{user: User, otp_plain: string}
+     */
+    public function registerCustomer(array $validated, Request $request): array
     {
-        return DB::transaction(function () use ($validated): User {
+        return DB::transaction(function () use ($validated, $request): array {
             $phone = AuthIdentifier::normalizePhone((string) $validated['phone']);
-            $email = filled($validated['email'] ?? null)
-                ? trim((string) $validated['email'])
-                : null;
-            $gender = ($validated['gender'] ?? 'male') === 'female' ? 'female' : 'male';
-            $age = (int) $validated['age'];
-            $birthYear = now()->year - $age;
+            $pin = PinPassword::assertValid($validated['password'] ?? null);
 
             $user = User::query()->create([
-                'name'          => trim((string) $validated['name']),
-                'email'         => $email,
-                'password'      => Hash::make($validated['password']),
-                'phone'         => $phone,
-                'gender'        => $gender,
-                'date_of_birth' => sprintf('%04d-01-01', $birthYear),
-                'role'          => 'customer',
-                'status'        => 'active',
+                'name'                 => $phone,
+                'email'                => null,
+                'password'             => $pin,
+                'must_change_password' => false,
+                'phone'                => $phone,
+                'gender'               => null,
+                'date_of_birth'        => null,
+                'id_number'            => null,
+                'address'              => null,
+                'role'                 => 'customer',
+                'status'               => 'inactive',
+                'approval_status'      => User::APPROVAL_PENDING,
             ]);
+
+            $this->customerDocuments->storeRegistrationPhotos($user, $request);
 
             app(CustomerAccountService::class)->linkExistingBookings($user);
 
-            return $user;
+            $issued = $this->verification->issue(
+                $phone,
+                AuthVerificationCode::PURPOSE_REGISTER_OTP,
+                AuthVerificationService::REGISTER_TTL_MINUTES,
+                $user,
+                ['role' => 'customer'],
+            );
+
+            return ['user' => $user, 'otp_plain' => $issued['plain']];
         });
     }
 
-    public function registerDriver(array $validated, Request $request): User
+    /**
+     * @return array{user: User, otp_plain: string}
+     */
+    public function registerDriver(array $validated, Request $request): array
     {
-        return DB::transaction(function () use ($validated, $request): User {
+        return DB::transaction(function () use ($validated, $request): array {
             $email = filled($validated['email'] ?? null)
                 ? trim((string) $validated['email'])
                 : null;
 
             $phone = AuthIdentifier::normalizePhone((string) $validated['phone']);
             $name = trim((string) ($validated['name'] ?? ''));
+            $pin = PinPassword::assertValid($validated['password'] ?? null);
 
             $user = User::query()->create([
-                'name'          => $name !== '' ? $name : $phone,
-                'email'         => $email,
-                'password'      => Hash::make($validated['password']),
-                'phone'         => $phone,
-                'id_number'     => $validated['id_number'] ?? null,
-                'date_of_birth' => $validated['date_of_birth'] ?? null,
-                'address'       => $validated['address'] ?? null,
-                'role'          => 'driver',
-                'status'        => 'inactive',
+                'name'                 => $name !== '' ? $name : $phone,
+                'email'                => $email,
+                'password'             => $pin,
+                'must_change_password' => false,
+                'phone'                => $phone,
+                'id_number'            => $validated['id_number'] ?? null,
+                'date_of_birth'        => $validated['date_of_birth'] ?? null,
+                'address'              => $validated['address'] ?? null,
+                'role'                 => 'driver',
+                'status'               => 'inactive',
             ]);
 
             $licenseNumber = $this->resolveLicenseNumber(preg_replace('/\D/', '', $validated['phone']));
@@ -117,7 +136,15 @@ class RegistrationService
 
             $this->photos->storeRegistrationPhotos($profile, $request);
 
-            return $user;
+            $issued = $this->verification->issue(
+                $phone,
+                AuthVerificationCode::PURPOSE_REGISTER_OTP,
+                AuthVerificationService::REGISTER_TTL_MINUTES,
+                $user,
+                ['role' => 'driver'],
+            );
+
+            return ['user' => $user, 'otp_plain' => $issued['plain']];
         });
     }
 

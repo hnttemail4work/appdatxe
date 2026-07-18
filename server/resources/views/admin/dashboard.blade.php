@@ -2,18 +2,18 @@
 
 @section('console')
 @php
-$allowedAdminTabs = ['fees', 'settings', 'account', 'appearance'];
+$allowedAdminTabs = ['settings', 'account', 'appearance'];
 $tabFromRequest = request('tab');
-if ($tabFromRequest === 'bank') {
+if ($tabFromRequest === 'bank' || $tabFromRequest === 'fees') {
     $tabFromRequest = 'settings';
 }
 $tabFromCookie = request()->cookie('admin-main_tab');
-if ($tabFromCookie === 'bank') {
+if ($tabFromCookie === 'bank' || $tabFromCookie === 'fees') {
     $tabFromCookie = 'settings';
 }
 $adminDefaultTab = in_array($tabFromRequest, $allowedAdminTabs, true)
     ? $tabFromRequest
-    : (in_array($tabFromCookie, $allowedAdminTabs, true) ? $tabFromCookie : 'fees');
+    : (in_array($tabFromCookie, $allowedAdminTabs, true) ? $tabFromCookie : 'settings');
 if ($errors->hasAny(['current_password', 'password', 'password_confirmation'])) {
     $adminDefaultTab = 'account';
 }
@@ -32,7 +32,6 @@ if ($errors->hasAny(['current_password', 'password', 'password_confirmation'])) 
                     'prefix' => 'admin-main',
                     'activeKey' => $adminDefaultTab,
                     'tabs' => [
-                        ['key' => 'fees', 'label' => 'Tính tiền'],
                         ['key' => 'settings', 'label' => 'Ngân hàng'],
                         ['key' => 'account', 'label' => 'Tài khoản'],
                         ['key' => 'appearance', 'label' => 'Hiển thị'],
@@ -212,12 +211,6 @@ if ($errors->hasAny(['current_password', 'password', 'password_confirmation'])) 
                     @csrf
                     <div class="row g-3">
                         <div class="col-md-6">
-                            <label class="form-label" for="booking-hero-title">Tiêu đề hiển thị</label>
-                            <input type="text" name="hero_title" id="booking-hero-title" class="form-control @error('hero_title') is-invalid @enderror"
-                                   value="{{ old('hero_title', $bookingPageSettings['hero_title']) }}" maxlength="120">
-                            @error('hero_title')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                        </div>
-                        <div class="col-md-6">
                             <label class="form-label" for="booking-hero-banner">Ảnh banner</label>
                             <input type="file" name="banner" id="booking-hero-banner" class="form-control @error('banner') is-invalid @enderror"
                                    accept="image/jpeg,image/png,image/webp,image/gif">
@@ -235,139 +228,6 @@ if ($errors->hasAny(['current_password', 'password', 'password_confirmation'])) 
                             <img src="{{ $bookingPageSettings['banner_url'] }}" alt="Banner trang đặt xe" class="admin-booking-banner-preview rounded border">
                         </div>
                     @endif
-                    <button class="btn btn-primary px-4 fw-semibold mt-3">Lưu cài đặt</button>
-                </form>
-                @include('partials.screen-tab-pane-end')
-
-                @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'fees', 'active' => $adminDefaultTab === 'fees'])
-                <form method="POST" action="{{ route('admin.feeSettings.update') }}" class="console-form">
-                    @csrf
-                    <p class="text-muted small">Giá tính theo km: ≤100 km dùng đơn giá thấp hơn, &gt;100 km dùng đơn giá cao hơn. Khứ hồi / về trong ngày / về ngày mai tính thêm phụ thu ở mục bên dưới.</p>
-                    <div class="row g-3">
-                        <div class="col-md-6 col-lg-3">
-                            <label class="form-label">Giá / km (≤ 100 km)</label>
-                            <div class="input-group">
-                                <input type="number" name="km_rate_under_100" class="form-control" min="0" step="500"
-                                       value="{{ old('km_rate_under_100', $feeSettings['km_rate_under_100']) }}" required>
-                                <span class="input-group-text">đ</span>
-                            </div>
-                        </div>
-                        <div class="col-md-6 col-lg-3">
-                            <label class="form-label">Giá / km (&gt; 100 km)</label>
-                            <div class="input-group">
-                                <input type="number" name="km_rate_over_100" class="form-control" min="0" step="500"
-                                       value="{{ old('km_rate_over_100', $feeSettings['km_rate_over_100']) }}" required>
-                                <span class="input-group-text">đ</span>
-                            </div>
-                        </div>
-                        <div class="col-md-6 col-lg-3">
-                            <label class="form-label">Hoa hồng app (%)</label>
-                            <div class="input-group">
-                                <input type="number" name="app_commission" class="form-control" min="0" max="100" step="0.1"
-                                       value="{{ old('app_commission', $feeSettings['app_commission']) }}" required>
-                                <span class="input-group-text">%</span>
-                            </div>
-                        </div>
-                        <div class="col-md-6 col-lg-3">
-                            <label class="form-label">Hoa hồng người giới thiệu (%)</label>
-                            <div class="input-group">
-                                <input type="number" name="referral_commission_first" class="form-control" min="0" max="100" step="0.1"
-                                       value="{{ old('referral_commission_first', $feeSettings['referral_commission_first']) }}" required>
-                                <span class="input-group-text">%</span>
-                            </div>
-                        </div>
-                        <div class="col-md-6 col-lg-3">
-                            <label class="form-label">Giảm giá mã QR vé (%)</label>
-                            <div class="input-group">
-                                <input type="number" name="referral_commission_repeat" class="form-control" min="0" max="100" step="0.1"
-                                       value="{{ old('referral_commission_repeat', $feeSettings['referral_commission_repeat']) }}" required>
-                                <span class="input-group-text">%</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <hr class="my-4">
-                    <h3 class="h6 fw-semibold mb-3">Phụ thu thời điểm về</h3>
-                    <div class="row g-3 mb-2">
-                        <div class="col-md-6 col-lg-3">
-                            <label class="form-label">Về trong ngày (%)</label>
-                            <div class="input-group">
-                                <span class="input-group-text">+</span>
-                                <input type="number" name="departure_plan_surcharge_today" class="form-control" min="0" max="500" step="1"
-                                       value="{{ old('departure_plan_surcharge_today', $feeSettings['departure_plan_surcharge_today']) }}" required>
-                                <span class="input-group-text">%</span>
-                            </div>
-                        </div>
-                        <div class="col-md-6 col-lg-3">
-                            <label class="form-label">Về ngày mai (%)</label>
-                            <div class="input-group">
-                                <span class="input-group-text">+</span>
-                                <input type="number" name="departure_plan_surcharge_tomorrow" class="form-control" min="0" max="500" step="1"
-                                       value="{{ old('departure_plan_surcharge_tomorrow', $feeSettings['departure_plan_surcharge_tomorrow']) }}" required>
-                                <span class="input-group-text">%</span>
-                            </div>
-                        </div>
-                        <div class="col-md-6 col-lg-3">
-                            <label class="form-label">Trên 2 ngày (% / ngày)</label>
-                            <div class="input-group">
-                                <span class="input-group-text">+</span>
-                                <input type="number" name="departure_plan_surcharge_later_per_day" class="form-control" min="0" max="500" step="1"
-                                       value="{{ old('departure_plan_surcharge_later_per_day', $feeSettings['departure_plan_surcharge_later_per_day']) }}" required>
-                                <span class="input-group-text">%</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <hr class="my-4">
-                    <h3 class="h6 fw-semibold mb-3">Hệ số giá cả xe theo loại xe</h3>
-                    <p class="text-muted small mb-3">
-                        Chuẩn giá: <strong>{{ $feeSettings['vehicleTypeLabels'][$feeSettings['vehicle_types']['baseline']] ?? '4 chỗ - Phổ thông (Sedan)' }}</strong> = 100%.
-                        Form đặt xe lấy hệ số theo loại xe khách chọn (đồng bộ quote).
-                    </p>
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-4 col-lg-3">
-                            <label class="form-label">Bước tăng mặc định (%)</label>
-                            <div class="input-group">
-                                <input type="number" name="vehicle_type_step_percent" class="form-control" min="0" max="50" step="0.1"
-                                       value="{{ old('vehicle_type_step_percent', $feeSettings['vehicle_types']['step_percent']) }}" required>
-                                <span class="input-group-text">%</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="console-table-wrap mb-3">
-                        <table class="console-table">
-                            <thead>
-                                <tr>
-                                    <th>Loại xe</th>
-                                    <th>% so với chuẩn</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach($feeSettings['vehicleTypeLabels'] ?? \App\Support\VehicleTypePricing::labels() as $typeKey => $typeLabel)
-                                <tr>
-                                    <td>
-                                        {{ $typeLabel }}
-                                        @if($typeKey === ($feeSettings['vehicle_types']['baseline'] ?? \App\Support\VehicleTypePricing::BASELINE_TYPE))
-                                            <span class="status-pill status-pill--accent ms-1">Chuẩn</span>
-                                        @endif
-                                    </td>
-                                    <td style="max-width: 12rem;">
-                                        <div class="input-group input-group-sm">
-                                            <input type="number"
-                                                   name="vehicle_type_percents[{{ $typeKey }}]"
-                                                   class="form-control"
-                                                   min="50" max="500" step="0.1"
-                                                   value="{{ old('vehicle_type_percents.'.$typeKey, $feeSettings['vehicle_types']['percents'][$typeKey] ?? \App\Support\VehicleTypePricing::defaultPercentForType($typeKey)) }}"
-                                                   required>
-                                            <span class="input-group-text">%</span>
-                                        </div>
-                                    </td>
-                                </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-
                     <button class="btn btn-primary px-4 fw-semibold mt-3">Lưu cài đặt</button>
                 </form>
                 @include('partials.screen-tab-pane-end')

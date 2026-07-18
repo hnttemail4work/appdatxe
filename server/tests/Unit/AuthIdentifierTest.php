@@ -16,10 +16,4 @@ class AuthIdentifierTest extends TestCase
     {
         $this->assertSame('0900000003', AuthIdentifier::normalizePhone('0900-000-003'));
     }
-
-    public function test_detects_email_login(): void
-    {
-        $this->assertTrue(AuthIdentifier::looksLikeEmail('driver@appdatxe.test'));
-        $this->assertFalse(AuthIdentifier::looksLikeEmail('0900000003'));
-    }
 }

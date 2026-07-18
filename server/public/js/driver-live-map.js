@@ -106,8 +106,41 @@
         var el = document.createElement('div');
         el.className = 'driver-map-marker driver-map-marker--self';
         el.innerHTML = '<span class="driver-map-marker__pulse" aria-hidden="true"></span>'
-            + '<span class="driver-map-marker__dot" aria-hidden="true"></span>';
+            + '<span class="driver-map-marker__arrow" aria-hidden="true">'
+            + '<svg viewBox="0 0 24 24" width="44" height="44" focusable="false">'
+            + '<path fill="currentColor" d="M12 2.2L20.5 20.2 12 16.4 3.5 20.2 12 2.2z"/>'
+            + '</svg>'
+            + '</span>';
         return el;
+    }
+
+    function setDriverHeading(heading) {
+        if (!driverMarker || heading == null || Number.isNaN(heading)) {
+            return;
+        }
+        var el = driverMarker.getElement();
+        if (!el) {
+            return;
+        }
+        var arrow = el.querySelector('.driver-map-marker__arrow');
+        if (arrow) {
+            arrow.style.transform = 'rotate(' + heading + 'deg)';
+        }
+    }
+
+    function placeDriverMarker(lat, lng, heading) {
+        if (!mapInstance || !window.goongjs) {
+            return;
+        }
+        if (driverMarker) {
+            driverMarker.setLngLat([lng, lat]);
+            setDriverHeading(heading);
+            return;
+        }
+        driverMarker = new window.goongjs.Marker({ element: driverDivIcon(), anchor: 'center' })
+            .setLngLat([lng, lat])
+            .addTo(mapInstance);
+        setDriverHeading(heading);
     }
 
     function pinDivIcon(type) {
@@ -115,19 +148,6 @@
         el.className = 'driver-map-marker driver-map-marker--' + (type === 'dropoff' ? 'dropoff' : 'pickup');
         el.innerHTML = '<span class="driver-map-marker__pin" aria-hidden="true"></span>';
         return el;
-    }
-
-    function placeDriverMarker(lat, lng) {
-        if (!mapInstance || !window.goongjs) {
-            return;
-        }
-        if (driverMarker) {
-            driverMarker.setLngLat([lng, lat]);
-            return;
-        }
-        driverMarker = new window.goongjs.Marker({ element: driverDivIcon(), anchor: 'center' })
-            .setLngLat([lng, lat])
-            .addTo(mapInstance);
     }
 
     function placeTripPins() {
@@ -209,7 +229,10 @@
 
         mapInstance.on('load', function () {
             if (hasRealDriverCoords) {
-                placeDriverMarker(start.lat, start.lng);
+                var heading = window.DriverLocationGps && window.DriverLocationGps.getLastKnownHeading
+                    ? window.DriverLocationGps.getLastKnownHeading()
+                    : null;
+                placeDriverMarker(start.lat, start.lng, heading);
             }
             placeTripPins();
             fitToMarkers(hasRealDriverCoords ? start : null);
@@ -221,7 +244,7 @@
         if (typeof detail.lat !== 'number' || typeof detail.lng !== 'number') {
             return;
         }
-        placeDriverMarker(detail.lat, detail.lng);
+        placeDriverMarker(detail.lat, detail.lng, detail.heading);
 
         // GPS thật đầu tiên — luôn đưa camera về đúng vị trí (không còn ở điểm mặc định).
         if (!hasRealDriverCoords && mapInstance) {
@@ -255,6 +278,20 @@
         if (mapInstance && typeof mapInstance.resize === 'function') {
             mapInstance.resize();
         }
+    });
+
+    document.addEventListener('drivertab:changed', function (event) {
+        var tab = event.detail && event.detail.tab;
+        if (tab !== 'trips' || !mapInstance || typeof mapInstance.resize !== 'function') {
+            return;
+        }
+        // Overlay che map lúc init → canvas trắng; resize khi về Trang chủ.
+        window.requestAnimationFrame(function () {
+            mapInstance.resize();
+            if (hasRealDriverCoords) {
+                recenterOnDriver();
+            }
+        });
     });
 
     loadAssets().then(initMap).catch(function () {

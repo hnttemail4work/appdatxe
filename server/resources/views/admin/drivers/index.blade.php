@@ -88,8 +88,9 @@ $driverTabs = [
                         <th>Không thích</th>
                         <th>% Hủy cuốc</th>
                         <th>Ví</th>
+                        <th>Yêu cầu</th>
                         <th>Trạng thái</th>
-                        <th class="text-end" style="width:11rem"></th>
+                        <th class="text-end" style="width:11rem">Hành động</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -97,6 +98,7 @@ $driverTabs = [
                     @php
                         $monthStats = $driverMonthlyStats[(int) $d->user_id] ?? ['trips' => 0, 'revenue' => 0, 'cancel_rate' => 0.0];
                         $monthCancelRate = (float) ($monthStats['cancel_rate'] ?? 0.0);
+                        $requestCount = $d->pendingChangeRequest ? 1 : 0;
                     @endphp
                     <tr class="{{ $d->isPendingApproval() ? 'driver-row-pending' : '' }}">
                         <td>
@@ -175,19 +177,19 @@ $driverTabs = [
                                 <span class="status-pill status-pill--{{ $d->walletListColor() }}">{{ $d->walletListLabel() }}</span>
                             @endif
                         </td>
+                        <td class="fw-semibold {{ $requestCount > 0 ? 'text-warning' : 'text-muted' }}">
+                            {{ $requestCount }}
+                        </td>
                         <td>
-                            <span class="status-pill status-pill--{{ $d->displayStatusColor() }}">{{ $d->displayStatusLabel() }}</span>
-                            @if($d->missedTripStrikeLabel() && ! $d->isMissedTripLocked() && ! $d->isPendingApproval() && ! $d->isRejected())
-                                <div class="mt-1"><span class="status-pill status-pill--pending">{{ $d->missedTripStrikeLabel() }}</span></div>
-                            @endif
-                            @if($d->hasRejectionNote())
-                                <div class="cell-muted small mt-1 text-danger">{{ \Illuminate\Support\Str::limit($d->rejection_reason, 80) }}</div>
-                            @endif
+                            <span class="status-pill status-pill--{{ $d->listStatusColor() }}">{{ $d->listStatusLabel() }}</span>
                         </td>
                         <td class="text-end">
                             <div class="d-flex flex-wrap gap-1 justify-content-end">
-                                <a href="{{ route('admin.drivers.edit', $d) }}" class="btn btn-sm {{ $d->isPendingApproval() ? 'btn-primary' : 'btn-outline-primary' }}">
-                                    Xem hồ sơ
+                                <a href="{{ route('admin.drivers.edit', $requestCount > 0
+                                        ? ['driverProfile' => $d, 'tab' => 'requests']
+                                        : $d) }}"
+                                   class="btn btn-sm {{ ($d->isPendingApproval() || $requestCount > 0) ? 'btn-primary' : 'btn-outline-primary' }}">
+                                    Xem
                                 </a>
                             </div>
                         </td>

@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Auth;
 
 use App\Services\RegistrationService;
+use App\Support\AuthMessages;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -25,27 +26,39 @@ class RegisterDriverRequest extends FormRequest
     /** @return array<string, string> */
     public function messages(): array
     {
-        $pwdHint = 'Mật khẩu tối thiểu 8 ký tự, gồm chữ hoa, chữ thường và số.';
-
-        return [
-            'phone.required'     => 'Vui lòng nhập số điện thoại.',
-            'password.required'  => 'Vui lòng nhập mật khẩu.',
-            'password.confirmed' => 'Nhập lại mật khẩu không khớp.',
-            'password.min'       => $pwdHint,
-            'password.mixed'     => $pwdHint,
-            'password.numbers'   => $pwdHint,
-            'password.letters'   => $pwdHint,
-            'password_confirmation.required' => 'Vui lòng nhập lại mật khẩu.',
-            'terms.accepted'     => 'Vui lòng đồng ý với điều khoản.',
-        ];
+        return array_merge(AuthMessages::authCommon(), [
+            'vehicle_license_plate.required' => 'Vui lòng nhập biển số xe.',
+            'vehicle_type.required'          => 'Vui lòng chọn loại xe.',
+            'bank_name.required'             => 'Vui lòng chọn ngân hàng.',
+            'bank_account.required'          => 'Vui lòng nhập số tài khoản.',
+            'photo_portrait.required'        => 'Vui lòng chọn ảnh chân dung.',
+            'photo_id_card.required'         => 'Vui lòng chọn ảnh CCCD mặt trước.',
+            'photo_id_card_back.required'    => 'Vui lòng chọn ảnh CCCD mặt sau.',
+            'photo_license_front.required'   => 'Vui lòng chọn ảnh GPLX mặt trước.',
+            'photo_vehicles.required'        => 'Vui lòng chọn ít nhất 1 ảnh xe.',
+            'photo_vehicles.min'             => 'Vui lòng chọn ít nhất 1 ảnh xe.',
+            'photo_portrait.mimes'           => 'Ảnh phải là JPG, PNG hoặc WebP.',
+            'photo_id_card.mimes'            => 'Ảnh phải là JPG, PNG hoặc WebP.',
+            'photo_id_card_back.mimes'       => 'Ảnh phải là JPG, PNG hoặc WebP.',
+            'photo_license_front.mimes'      => 'Ảnh phải là JPG, PNG hoặc WebP.',
+            'photo_vehicles.*.mimes'         => 'Ảnh xe phải là JPG, PNG hoặc WebP.',
+        ]);
     }
 
     /** @return array<string, string> */
     public function attributes(): array
     {
         return [
-            'phone'    => 'số điện thoại',
-            'password' => 'mật khẩu',
+            'phone'                 => 'số điện thoại',
+            'password'              => 'PIN',
+            'password_confirmation' => 'nhập lại PIN',
+            'email'                 => 'email',
+            'name'                  => 'họ tên',
+            'vehicle_license_plate' => 'biển số',
+            'vehicle_type'          => 'loại xe',
+            'bank_name'             => 'ngân hàng',
+            'bank_account'          => 'số tài khoản',
+            'terms'                 => 'điều khoản',
         ];
     }
 }

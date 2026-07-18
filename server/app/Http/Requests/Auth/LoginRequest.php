@@ -2,6 +2,9 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Support\AuthMessages;
+use App\Support\AuthPhone;
+use App\Support\PinPassword;
 use Illuminate\Foundation\Http\FormRequest;
 
 class LoginRequest extends FormRequest
@@ -15,8 +18,23 @@ class LoginRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'phone'    => ['required', 'string', 'max:30'],
-            'password' => ['required', 'string'],
+            'phone'    => AuthPhone::rules(),
+            'password' => PinPassword::rules(),
+        ];
+    }
+
+    /** @return array<string, string> */
+    public function messages(): array
+    {
+        return array_merge(AuthMessages::phone(), AuthMessages::pin());
+    }
+
+    /** @return array<string, string> */
+    public function attributes(): array
+    {
+        return [
+            'phone'    => 'số điện thoại',
+            'password' => 'PIN',
         ];
     }
 }

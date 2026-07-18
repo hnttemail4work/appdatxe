@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests\Booking;
 
-use App\Support\DeparturePlan;
 use App\Support\DriverVehicleOptions;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -16,16 +15,29 @@ class StoreBookingRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        $merge = [];
+        foreach (['service_date', 'pickup_time'] as $field) {
+            if (! $this->exists($field)) {
+                continue;
+            }
+            $value = trim((string) $this->input($field));
+            $merge[$field] = $value === '' ? null : $value;
+        }
+        if ($merge !== []) {
+            $this->merge($merge);
+        }
+    }
+
     /** @return array<string, mixed> */
     public function rules(): array
     {
         return [
             'capacity'         => ['required', 'integer', 'min:1', 'max:60'],
             'vehicle_type'     => ['nullable', 'string', Rule::in(DriverVehicleOptions::allowedKeys())],
-            'service_date'     => ['nullable', 'date', 'after_or_equal:today'],
-            'departure_plan'   => ['required', 'string', 'in:oneway,today,tomorrow,later'],
-            'later_return_days'=> ['nullable', 'integer', 'min:' . DeparturePlan::MIN_LATER_RETURN_DAYS, 'max:' . DeparturePlan::MAX_LATER_RETURN_DAYS],
-            'pickup_time'      => ['required', 'string', 'max:8', 'regex:/^\d{1,2}:\d{2}$/'],
+            'service_date'     => ['nullable', 'date', 'after_or_equal:today', 'required_with:pickup_time'],
+            'pickup_time'      => ['nullable', 'string', 'max:8', 'regex:/^\d{1,2}:\d{2}$/', 'required_with:service_date'],
             'passenger_name'   => ['required', 'string', 'max:255'],
             'passenger_gender' => ['nullable', 'in:male,female'],
             'passenger_age'    => ['nullable', 'integer', 'min:1', 'max:120'],
@@ -49,8 +61,9 @@ class StoreBookingRequest extends FormRequest
     {
         return [
             'service_date.after_or_equal' => 'Ngày đi phải từ hôm nay trở đi.',
+            'service_date.required_with'  => 'Vui lòng chọn ngày đón khi đặt sau.',
             'pickup_time.regex'           => 'Giờ đón không hợp lệ.',
-            'pickup_time.required'        => 'Vui lòng chọn giờ đón.',
+            'pickup_time.required_with'   => 'Vui lòng chọn giờ đón khi đặt sau.',
             'pickup_lat.required'         => 'Vui lòng ghim điểm đón trên bản đồ.',
             'pickup_lng.required'         => 'Vui lòng ghim điểm đón trên bản đồ.',
             'dropoff_lat.required'        => 'Vui lòng ghim điểm trả trên bản đồ.',

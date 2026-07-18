@@ -3,6 +3,8 @@
 namespace App\Rules;
 
 use App\Support\AuthIdentifier;
+use App\Support\AuthMessages;
+use App\Support\AuthPhone;
 use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
 
@@ -18,24 +20,17 @@ class UniqueNormalizedPhone implements ValidationRule
             return;
         }
 
-        $normalized = AuthIdentifier::normalizePhone((string) $value);
-
-        if ($normalized === '') {
-            $fail('Vui lòng nhập số điện thoại hợp lệ.');
+        if (! AuthPhone::isValid((string) $value)) {
+            $fail(AuthMessages::PHONE_INVALID);
 
             return;
         }
 
-        if (! preg_match('/^0\d{8,10}$/', $normalized)) {
-            $fail('Số điện thoại không đúng định dạng Việt Nam.');
-
-            return;
-        }
-
+        $normalized = AuthPhone::normalize((string) $value);
         $existing = AuthIdentifier::findUserByPhone($normalized);
 
         if ($existing && ($this->ignoreUserId === null || $existing->id !== $this->ignoreUserId)) {
-            $fail('Số điện thoại này đã được đăng ký. Vui lòng dùng số khác hoặc đăng nhập bằng số đó.');
+            $fail(AuthMessages::PHONE_TAKEN);
         }
     }
 }

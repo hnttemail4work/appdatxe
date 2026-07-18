@@ -74,9 +74,12 @@ class DuplicateBookingService
             'route'             => $booking->schedule?->route
                 ? $booking->schedule->route->departure . ' → ' . $booking->schedule->route->destination
                 : '—',
-            'service_date'      => $booking->guestPickupAt()?->format('d/m/Y H:i')
-                ?? $booking->schedule?->departure_time?->format('d/m/Y H:i'),
+            'service_date'      => $booking->isScheduledPickup()
+                ? ($booking->guestPickupAt()?->format('d/m/Y H:i') ?? $booking->pickupModeLabel())
+                : $booking->pickupModeLabel(),
             'pickup_time_label' => $booking->pickupTimeLabel(),
+            'pickup_mode_label' => $booking->pickupModeLabel(),
+            'is_scheduled_pickup' => $booking->isScheduledPickup(),
             'vehicle_label'     => $booking->vehicleBookingLabel(),
             'progress_label'    => $booking->primaryStatusLabel(),
             'has_driver'        => $driver !== null,

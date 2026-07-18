@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Driver;
 
+use App\Support\PinPassword;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateDriverPasswordRequest extends FormRequest
@@ -16,8 +17,17 @@ class UpdateDriverPasswordRequest extends FormRequest
     {
         return [
             'current_password'      => ['required', 'string'],
-            'password'              => ['required', 'string', 'min:6', 'confirmed'],
-            'password_confirmation' => ['required', 'string', 'min:6'],
+            'password'              => PinPassword::rules(confirmed: true),
+            'password_confirmation' => ['required', 'string', 'digits:'.PinPassword::LENGTH],
+        ];
+    }
+
+    /** @return array<string, string> */
+    public function messages(): array
+    {
+        return [
+            'password.digits'    => 'PIN phải gồm đúng 6 chữ số.',
+            'password.confirmed' => 'Nhập lại PIN không khớp.',
         ];
     }
 }

@@ -97,13 +97,15 @@ $showDriverColumn = $bookingList !== 'active';
                         @if($booking->schedule->shortTripCode())
                             <div class="cell-muted small">Mã chuyến: {{ $booking->schedule->shortTripCode() }}</div>
                         @endif
-                        <div class="cell-muted small">
-                            Ngày đi: {{ $booking->schedule->departure_time->format('d/m/Y') }}
-                        </div>
-                        @if($pickupLabel = $booking->pickupTimeLabel())
-                            <div class="cell-muted small">Giờ đón: {{ $pickupLabel }}</div>
+                        @if($booking->isScheduledPickup())
+                            <div class="cell-muted small">
+                                Ngày đi: {{ $booking->driverPickupDateLabel() ?? $booking->schedule->departure_time->format('d/m/Y') }}
+                            </div>
+                            @if($pickupLabel = $booking->pickupTimeLabel())
+                                <div class="cell-muted small">Giờ đón: {{ $pickupLabel }}</div>
+                            @endif
                         @else
-                            <div class="cell-muted small">Giờ chạy: {{ $booking->schedule->departure_time->format('H:i') }}</div>
+                            <div class="cell-muted small">{{ $booking->pickupModeLabel() }}</div>
                         @endif
                         @if($catalogDriver = $booking->catalogChosenDriverProfile())
                             <div class="cell-muted small">

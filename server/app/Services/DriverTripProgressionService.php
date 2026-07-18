@@ -20,7 +20,6 @@ class DriverTripProgressionService
     public function __construct(
         private readonly DriverWalletService $driverWallet,
         private readonly TripLedgerService $tripLedger,
-        private readonly ReferralCodeService $referralCodes,
         private readonly BookingBrowserGuardService $browserGuard,
         private readonly DriverAvailabilityService $driverAvailability,
     ) {
@@ -177,7 +176,6 @@ class DriverTripProgressionService
         ]);
 
         $this->audit($booking, $driverUserId, 'driver_trip_completed', $before, $booking->fresh()->toArray());
-        $this->referralCodes->activateForCompletedBooking($booking);
         if ($booking->tripReview) {
             $this->browserGuard->clearActiveBookingForBooking($booking->fresh());
         }

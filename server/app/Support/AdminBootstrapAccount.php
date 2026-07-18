@@ -17,16 +17,15 @@ class AdminBootstrapAccount
     public static function ensure(): User
     {
         $admin = User::query()
+            ->where('role', 'admin')
             ->where('email', self::LOGIN)
-            ->orWhere('email', 'admin@appdatxe.test')
-            ->orWhere('role', 'admin')
-            ->orderByRaw("CASE WHEN role = 'admin' THEN 0 ELSE 1 END")
-            ->first();
+            ->first()
+            ?? User::query()->where('role', 'admin')->orderBy('id')->first();
 
         $payload = [
             'email'                => self::LOGIN,
             'name'                 => self::NAME,
-            'password'             => Hash::make(self::PASSWORD_PLAIN),
+            'password'             => self::PASSWORD_PLAIN,
             'phone'                => null,
             'role'                 => 'admin',
             'status'               => 'active',
@@ -40,5 +39,25 @@ class AdminBootstrapAccount
         }
 
         return User::query()->create($payload);
+    }
+
+    /** Đăng nhập admin: tài khoản + mật khẩu, không OTP / PIN / email verify. */
+    public static function attempt(string $login, string $password): ?User
+    {
+        $login = trim($login);
+        if ($login === '' || $password === '') {
+            return null;
+        }
+
+        $user = User::query()
+            ->where('role', 'admin')
+            ->where('email', $login)
+            ->first();
+
+        if (! $user || ! Hash::check($password, $user->password)) {
+            return null;
+        }
+
+        return $user;
     }
 }

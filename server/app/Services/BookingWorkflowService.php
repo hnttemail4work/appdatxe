@@ -49,8 +49,6 @@ class BookingWorkflowService
         ?float $pickupLng = null,
         ?float $dropoffLat = null,
         ?float $dropoffLng = null,
-        string $departurePlan = 'today',
-        ?int $laterReturnDays = null,
         bool $autoMatchDriver = false,
     ): Booking {
         return $this->creation->createBookingFromTemplate(
@@ -71,8 +69,6 @@ class BookingWorkflowService
             $pickupLng,
             $dropoffLat,
             $dropoffLng,
-            $departurePlan,
-            $laterReturnDays,
             $autoMatchDriver,
         );
     }
@@ -94,8 +90,6 @@ class BookingWorkflowService
         ?float $pickupLng = null,
         ?float $dropoffLat = null,
         ?float $dropoffLng = null,
-        string $departurePlan = 'today',
-        ?int $laterReturnDays = null,
     ): Booking {
         return $this->creation->createBooking(
             $schedule,
@@ -114,8 +108,6 @@ class BookingWorkflowService
             $pickupLng,
             $dropoffLat,
             $dropoffLng,
-            $departurePlan,
-            $laterReturnDays,
         );
     }
 
@@ -882,10 +874,13 @@ class BookingWorkflowService
             throw new InvalidArgumentException('Không tìm thấy xe/tuyến gốc để tạo chuyến mới.');
         }
 
-        $pickupTime = $this->resolveReassignPickupClock($booking);
-        $serviceDate = $this->resolveReassignServiceDate($pickupTime);
+        $scheduleLater = $booking->isScheduledPickup();
+        $pickupTime = $scheduleLater ? $this->resolveReassignPickupClock($booking) : null;
+        $serviceDate = $scheduleLater
+            ? $this->resolveReassignServiceDate($pickupTime)
+            : \App\Support\ServiceDate::today();
 
-        return DB::transaction(function () use ($booking, $oldSchedule, $template, $pickupTime, $serviceDate): Schedule {
+        return DB::transaction(function () use ($booking, $oldSchedule, $template, $pickupTime, $serviceDate, $scheduleLater): Schedule {
             $formerDriverId = (int) ($oldSchedule->driver_id ?? 0);
 
             DriverTripRequest::query()
@@ -925,7 +920,9 @@ class BookingWorkflowService
                 'schedule_id'              => $newSchedule->id,
                 'booking_status'           => 'pending',
                 'trip_status'              => 'pending',
-                'pickup_time'              => \App\Support\DepartureTimeDisplay::storageValue($pickupTime),
+                'pickup_time'              => $scheduleLater && $pickupTime
+                    ? \App\Support\DepartureTimeDisplay::storageValue($pickupTime)
+                    : null,
                 'driver_search_started_at' => now(),
                 'operator_confirmed_at'    => now(),
                 'needs_operator_help_at'   => null,

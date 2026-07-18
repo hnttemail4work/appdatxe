@@ -1,4 +1,3 @@
-/* Sticky footer — tránh khoảng trắng body lộ dưới footer trên mobile */
 :root {
     --app-vh: 1vh;
 }
@@ -27,36 +26,6 @@ body.app-shell {
     width: 100%;
 }
 
-.app-footer {
-    flex-shrink: 0;
-    margin-top: auto;
-    padding-top: 1.25rem;
-    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
-}
-
-.app-footer-grid {
-    --bs-gutter-x: 1rem;
-    --bs-gutter-y: 0.5rem;
-}
-
-.app-footer h6 {
-    margin-bottom: .25rem;
-}
-
-.app-footer-text + .app-footer-text {
-    margin-top: .15rem;
-}
-
-.app-footer-divider {
-    margin-top: 0.85rem !important;
-    margin-bottom: 0.65rem !important;
-    opacity: 0.35;
-}
-
-.app-footer-copy {
-    line-height: 1.35;
-}
-
 @media (max-width: 767.98px) {
     .app-main .container {
         padding-bottom: 1rem;
@@ -77,14 +46,6 @@ body.app-shell {
         padding-top: .75rem;
         padding-bottom: 0;
     }
-
-    body.app-shell--mobile-app .app-footer {
-        display: none;
-    }
-}
-
-body.app-shell--auth .app-footer {
-    display: none !important;
 }
 
 /* Validation chung — FormFieldValidation */

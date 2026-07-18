@@ -19,11 +19,13 @@ class ReferralDiscountRulesTest extends TestCase
         $this->assertFalse($referral->grantsCustomerDiscount());
     }
 
-    public function test_booking_temp_code_grants_customer_discount(): void
+    public function test_driver_invite_code_grants_customer_discount(): void
     {
         $referral = new ReferralCode([
-            'type'   => ReferralCode::TYPE_BOOKING_TEMP,
-            'status' => ReferralCode::STATUS_ACTIVE,
+            'type'                      => ReferralCode::TYPE_REFERRER,
+            'status'                    => ReferralCode::STATUS_ACTIVE,
+            'driver_profile_id'         => 1,
+            'customer_discount_percent' => 2,
         ]);
 
         $this->assertTrue($referral->grantsCustomerDiscount());
@@ -93,9 +95,10 @@ class ReferralDiscountRulesTest extends TestCase
         $service = app(ReferralCodeService::class);
         $referral = new ReferralCode([
             'code'                      => 'GTSELF01',
-            'type'                      => ReferralCode::TYPE_BOOKING_TEMP,
+            'type'                      => ReferralCode::TYPE_REFERRER,
             'status'                    => ReferralCode::STATUS_ACTIVE,
             'phone'                     => '0901234567',
+            'driver_profile_id'         => 1,
             'customer_discount_percent' => 2,
         ]);
 
@@ -113,9 +116,10 @@ class ReferralDiscountRulesTest extends TestCase
         $service = app(ReferralCodeService::class);
         $referral = new ReferralCode([
             'code'                      => 'GTSELF02',
-            'type'                      => ReferralCode::TYPE_BOOKING_TEMP,
+            'type'                      => ReferralCode::TYPE_REFERRER,
             'status'                    => ReferralCode::STATUS_ACTIVE,
             'phone'                     => '+84901234567',
+            'driver_profile_id'         => 1,
             'customer_discount_percent' => 2,
         ]);
 
@@ -130,9 +134,10 @@ class ReferralDiscountRulesTest extends TestCase
         $service = app(ReferralCodeService::class);
         $referral = new ReferralCode([
             'code'                      => 'GTFRIEND',
-            'type'                      => ReferralCode::TYPE_BOOKING_TEMP,
+            'type'                      => ReferralCode::TYPE_REFERRER,
             'status'                    => ReferralCode::STATUS_ACTIVE,
             'phone'                     => '0901111111',
+            'driver_profile_id'         => 1,
             'customer_discount_percent' => 2,
         ]);
 

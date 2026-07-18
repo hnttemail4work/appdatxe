@@ -3,13 +3,10 @@
 namespace App\Services;
 
 use App\Models\Booking;
-use App\Models\ReferralCode;
 use App\Models\TripReview;
 use App\Support\AuthIdentifier;
-use App\Support\DeparturePlan;
 use App\Support\GuestWaitProgress;
 use App\Support\Money;
-use App\Support\PlatformFees;
 use Illuminate\Support\Facades\Cache;
 
 class GuestTripStatusService
@@ -111,25 +108,17 @@ class GuestTripStatusService
             'pickup_detail'     => $booking->pickup_detail,
             'dropoff_address'   => $booking->dropoff_address,
             'dropoff_detail'    => $booking->dropoff_detail,
-            'pickup_time_label' => $booking->pickupTimeLabel()
-                ?? $booking->guestPickupAt()?->format('H:i'),
-            'service_date_label' => $booking->guestPickupAt()?->format('d/m/Y')
-                ?? $booking->schedule?->departure_time?->format('d/m/Y'),
+            'pickup_time_label' => $booking->isScheduledPickup() ? $booking->pickupTimeLabel() : null,
+            'service_date_label' => $booking->isScheduledPickup()
+                ? $booking->guestPickupAt()?->format('d/m/Y')
+                : null,
+            'pickup_mode_label' => $booking->pickupModeLabel(),
+            'is_scheduled_pickup' => $booking->isScheduledPickup(),
             'trip_status'       => $booking->trip_status,
             'booking_status'    => $booking->booking_status,
             'total_price'       => (float) $booking->total_price,
             'total_price_label' => Money::vnd((float) $booking->total_price),
             'distance_km'       => $booking->tripDistanceKm(),
-            'departure_plan'    => $booking->departure_plan ?? DeparturePlan::ONE_WAY,
-            'later_return_days' => $booking->laterReturnDays(),
-            'departure_plan_label' => DeparturePlan::displayLabel(
-                $booking->departure_plan ?? DeparturePlan::ONE_WAY,
-                $booking->laterReturnDays(),
-            ),
-            'departure_plan_guest_label' => DeparturePlan::guestStayLabel(
-                $booking->departure_plan ?? DeparturePlan::ONE_WAY,
-                $booking->laterReturnDays(),
-            ),
             'guest_status_label' => $booking->primaryStatusLabel(),
             'is_active'         => $booking->blocksGuestRebooking(),
             'can_cancel'        => $this->guestCanCancel($booking),
@@ -140,31 +129,7 @@ class GuestTripStatusService
             ],
             'review'            => $this->serializeReview($booking),
             'wait_progress'     => GuestWaitProgress::forBooking($booking),
-            'referral'          => $this->serializeReferral($booking),
         ]);
-    }
-
-    /** @return array<string, mixed>|null */
-    private function serializeReferral(Booking $booking): ?array
-    {
-        $referral = $booking->referralCode;
-        if (! $referral || $referral->type !== ReferralCode::TYPE_BOOKING_TEMP) {
-            return null;
-        }
-
-        $payload = [
-            'code'    => $referral->code,
-            'url'     => $referral->landingUrl(),
-            'pending' => $referral->status === ReferralCode::STATUS_PENDING,
-        ];
-
-        if ($referral->isUsable()) {
-            $payload['discount_percent'] = PlatformFees::bookingQrDiscountPercent();
-        } else {
-            $payload['discount_percent'] = 0.0;
-        }
-
-        return $payload;
     }
 
     /** @return array<string, mixed>|null */

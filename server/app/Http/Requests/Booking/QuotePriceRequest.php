@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests\Booking;
 
-use App\Support\DeparturePlan;
 use App\Support\DriverVehicleOptions;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -28,8 +27,6 @@ class QuotePriceRequest extends FormRequest
             'pickup_lng'         => ['required', 'numeric', 'between:-180,180'],
             'dropoff_lat'        => ['required', 'numeric', 'between:-90,90'],
             'dropoff_lng'        => ['required', 'numeric', 'between:-180,180'],
-            'departure_plan'     => ['nullable', 'string', 'in:oneway,today,tomorrow,later'],
-            'later_return_days'  => ['nullable', 'integer', 'min:' . DeparturePlan::MIN_LATER_RETURN_DAYS, 'max:' . DeparturePlan::MAX_LATER_RETURN_DAYS],
             'contact_phone'      => ['nullable', 'string', 'max:30'],
         ];
     }

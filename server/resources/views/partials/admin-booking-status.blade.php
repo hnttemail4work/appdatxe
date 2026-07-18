@@ -23,7 +23,6 @@ $dispatch = $booking->adminDriverDispatchDetail();
 @endif
 
 @if(($bookingList ?? '') === 'completed')
-    @include('partials.admin-booking-later-pickup', ['booking' => $booking])
 @endif
 
 @if($walletAlert)

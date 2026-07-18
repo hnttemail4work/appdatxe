@@ -2,7 +2,7 @@
     <div class="modal-dialog modal-dialog-centered modal-sm">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="referral-qr-modal-title">Mã giới thiệu</h5>
+                <h5 class="modal-title" id="referral-qr-modal-title">Giới thiệu</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
             </div>
             <div class="modal-body text-center">

@@ -2,38 +2,45 @@
 
 namespace App\Support;
 
-use App\Models\PlatformSetting;
-
-/** Tỷ lệ phí / hoa hồng — admin cấu hình qua platform_settings. */
+/**
+ * Tỷ lệ phí / hoa hồng / đơn giá tạm (hardcoded).
+ * Admin cấu hình tính tiền đã gỡ — sẽ làm lại sau.
+ */
 class PlatformFees
 {
+    public const APP_COMMISSION_PERCENT = 2.0;
+
+    public const REFERRAL_COMMISSION_FIRST_PERCENT = 8.0;
+
+    public const BOOKING_QR_DISCOUNT_PERCENT = 2.0;
+
+    public const DRIVER_INVITE_QR_DISCOUNT_PERCENT = 2.0;
+
+    public const KM_RATE_UNDER_100 = 13000;
+
+    public const KM_RATE_OVER_100 = 10000;
+
     public static function appCommissionPercent(): float
     {
-        $setting = PlatformSetting::getValue('app_commission_percentage', null);
-
-        if ($setting !== null) {
-            return (float) ($setting['value'] ?? 2);
-        }
-
-        $legacy = PlatformSetting::getValue('commission_percentage', ['value' => 2]);
-
-        return (float) ($legacy['value'] ?? 2);
+        return self::APP_COMMISSION_PERCENT;
     }
 
     /** % hoa hồng người giới thiệu — mã admin tạo từ hệ thống. */
     public static function referralCommissionFirstPercent(): float
     {
-        $setting = PlatformSetting::getValue('referral_commission_first_percentage', ['value' => 8]);
-
-        return (float) ($setting['value'] ?? 8);
+        return self::REFERRAL_COMMISSION_FIRST_PERCENT;
     }
 
     /** % giảm giá khách khi quét mã QR từ chuyến hoàn tất — không tính vào doanh thu admin. */
     public static function bookingQrDiscountPercent(): float
     {
-        $setting = PlatformSetting::getValue('referral_commission_repeat_percentage', ['value' => 2]);
+        return self::BOOKING_QR_DISCOUNT_PERCENT;
+    }
 
-        return (float) ($setting['value'] ?? 2);
+    /** % giảm giá khách khi quét QR «Mời bạn bè» của tài xế. */
+    public static function driverInviteQrDiscountPercent(): float
+    {
+        return self::DRIVER_INVITE_QR_DISCOUNT_PERCENT;
     }
 
     /** @deprecated Dùng {@see bookingQrDiscountPercent()} hoặc {@see referralCommissionFirstPercent()}. */
@@ -44,61 +51,12 @@ class PlatformFees
 
     public static function kmRateUnder100(): int
     {
-        $setting = PlatformSetting::getValue('pricing_km_rate_under_100', ['value' => 13000]);
-
-        return max((int) ($setting['value'] ?? 13000), 0);
+        return self::KM_RATE_UNDER_100;
     }
 
     public static function kmRateOver100(): int
     {
-        $setting = PlatformSetting::getValue('pricing_km_rate_over_100', ['value' => 10000]);
-
-        return max((int) ($setting['value'] ?? 10000), 0);
-    }
-
-    /** % phụ thu trên giá một chiều — thời điểm về trong ngày. */
-    public static function departurePlanTodaySurchargePercent(): float
-    {
-        $setting = self::readFinanceSetting('departure_plan_surcharge_today_percentage', ['value' => 50]);
-
-        return max((float) ($setting['value'] ?? 50), 0);
-    }
-
-    /** % phụ thu trên giá một chiều — về ngày mai. */
-    public static function departurePlanTomorrowSurchargePercent(): float
-    {
-        $setting = self::readFinanceSetting('departure_plan_surcharge_tomorrow_percentage', ['value' => 100]);
-
-        return max((float) ($setting['value'] ?? 100), 0);
-    }
-
-    /** % phụ thu mỗi ngày chờ về — chọn trên 2 ngày (VD: 30 → 3 ngày = +90% giá một chiều). */
-    public static function departurePlanLaterPercentPerDay(): float
-    {
-        $setting = self::readFinanceSetting('departure_plan_surcharge_later_per_day_percentage', ['value' => 30]);
-
-        return max((float) ($setting['value'] ?? 30), 0);
-    }
-
-    public static function departurePlanLaterPriceMultiplier(int $days): float
-    {
-        $days = \App\Support\DeparturePlan::normalizeLaterReturnDays($days);
-
-        return round(1 + ($days * self::departurePlanLaterPercentPerDay() / 100), 4);
-    }
-
-    public static function departurePlanSurchargePercent(string $plan): float
-    {
-        return match (\App\Support\DeparturePlan::normalize($plan)) {
-            \App\Support\DeparturePlan::TODAY    => self::departurePlanTodaySurchargePercent(),
-            \App\Support\DeparturePlan::TOMORROW => self::departurePlanTomorrowSurchargePercent(),
-            default                              => 0.0,
-        };
-    }
-
-    public static function departurePlanPriceMultiplier(string $plan): float
-    {
-        return round(1 + self::departurePlanSurchargePercent($plan) / 100, 4);
+        return self::KM_RATE_OVER_100;
     }
 
     /** Giá khách — làm tròn đến chục nghìn gần nhất (1.096.200 → 1.100.000; 1.254.567 → 1.250.000). */
@@ -111,7 +69,7 @@ class PlatformFees
         return (int) (round((float) $amount / 10_000) * 10_000);
     }
 
-    /** Tiền cả xe theo km — cấu hình admin (≤100 km / phần vượt). */
+    /** Tiền cả xe theo km — đơn giá tạm ≤100 km / phần vượt. */
     public static function wholeCarBaseFromDistanceKm(float $distanceKm): int
     {
         $km = max(0.0, $distanceKm);
@@ -133,17 +91,5 @@ class PlatformFees
     public static function roundDownPrice(float|int $amount): int
     {
         return self::roundDisplayPrice($amount);
-    }
-
-    /** @return array<string, mixed> */
-    private static function readFinanceSetting(string $key, array $default): array
-    {
-        try {
-            $value = PlatformSetting::getValue($key, $default);
-
-            return is_array($value) ? $value : $default;
-        } catch (\Throwable) {
-            return $default;
-        }
     }
 }

@@ -1,26 +1,14 @@
 /**
- * Lưu phiên đặt chuyến (sessionStorage): mã chuyến + QR giới thiệu.
+ * Lưu phiên đặt chuyến (sessionStorage): mã chuyến đang active.
  * Còn section này = chưa đặt được cuốc mới; mất section = có thể đặt lại.
  */
 (function () {
     var STORAGE_KEY = 'guest_booking_session';
-    var QR_SMALL = 72;
-    var QR_LARGE = 220;
-    var qrLibLoading = false;
     var rootEl = null;
-    var currentReferralUrl = '';
-    var overlayBound = false;
 
     function normalizePayload(raw) {
         if (!raw || !raw.trip_code) {
             return null;
-        }
-
-        var referralCode = raw.referral_code || raw.code || '';
-        var referralUrl = raw.referral_url || raw.url || '';
-
-        if (!referralUrl && referralCode) {
-            referralUrl = window.location.origin + '/?ref=' + encodeURIComponent(referralCode);
         }
 
         return {
@@ -28,9 +16,6 @@
             booking_reference: raw.booking_reference ? String(raw.booking_reference) : '',
             contact_phone: raw.contact_phone ? String(raw.contact_phone) : '',
             hotline_phone: raw.hotline_phone ? String(raw.hotline_phone) : '',
-            referral_code: referralCode ? String(referralCode) : '',
-            referral_url: referralUrl,
-            referral_discount_percent: Number(raw.referral_discount_percent || raw.discount_percent) || 0,
             booking: raw.booking && typeof raw.booking === 'object' ? raw.booking : null,
         };
     }
@@ -66,7 +51,6 @@
         try {
             sessionStorage.removeItem(STORAGE_KEY);
         } catch (e) {}
-        closeQrOverlay();
         hide();
     }
 
@@ -77,119 +61,6 @@
         if (rootEl) {
             rootEl.classList.add('d-none');
         }
-    }
-
-    function loadQrLib(cb) {
-        if (typeof QRCode !== 'undefined') {
-            cb();
-            return;
-        }
-        if (qrLibLoading) {
-            var timer = setInterval(function () {
-                if (typeof QRCode !== 'undefined') {
-                    clearInterval(timer);
-                    cb();
-                }
-            }, 50);
-            return;
-        }
-        qrLibLoading = true;
-        var script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js';
-        script.onload = cb;
-        document.head.appendChild(script);
-    }
-
-    function drawQr(container, url, size) {
-        if (!container || !url) {
-            return;
-        }
-        container.innerHTML = '';
-        new QRCode(container, {
-            text: url,
-            width: size,
-            height: size,
-            colorDark: '#0f172a',
-            colorLight: '#ffffff',
-            correctLevel: QRCode.CorrectLevel.M,
-        });
-    }
-
-    function renderQr(url) {
-        var wrap = document.getElementById('booking-active-referral-qr');
-        if (!wrap || !url) {
-            return;
-        }
-
-        currentReferralUrl = url;
-        loadQrLib(function () {
-            drawQr(wrap, url, QR_SMALL);
-        });
-    }
-
-    function renderLargeQr(url) {
-        var wrap = document.getElementById('booking-active-referral-qr-large');
-        if (!wrap || !url) {
-            return;
-        }
-
-        loadQrLib(function () {
-            drawQr(wrap, url, QR_LARGE);
-        });
-    }
-
-    function openQrOverlay() {
-        if (!currentReferralUrl) {
-            return;
-        }
-
-        var overlay = document.getElementById('booking-active-referral-qr-overlay');
-        if (!overlay) {
-            return;
-        }
-
-        renderLargeQr(currentReferralUrl);
-        overlay.classList.remove('d-none');
-        overlay.removeAttribute('hidden');
-        document.body.classList.add('booking-active-referral-qr-open');
-    }
-
-    function closeQrOverlay() {
-        var overlay = document.getElementById('booking-active-referral-qr-overlay');
-        if (!overlay) {
-            return;
-        }
-
-        overlay.classList.add('d-none');
-        overlay.setAttribute('hidden', 'hidden');
-        document.body.classList.remove('booking-active-referral-qr-open');
-
-        var large = document.getElementById('booking-active-referral-qr-large');
-        if (large) {
-            large.innerHTML = '';
-        }
-    }
-
-    function bindOverlay() {
-        if (overlayBound) {
-            return;
-        }
-        overlayBound = true;
-
-        var openBtn = document.getElementById('booking-active-referral-qr-btn');
-        if (openBtn) {
-            openBtn.addEventListener('click', openQrOverlay);
-        }
-
-        document.querySelectorAll('[data-close-referral-qr]').forEach(function (el) {
-            el.addEventListener('click', closeQrOverlay);
-        });
-
-        document.addEventListener('keydown', function (event) {
-            if (event.key === 'Escape') {
-                closeQrOverlay();
-            }
-        });
     }
 
     function resolveHotlinePhone() {
@@ -405,7 +276,6 @@
         }
 
         var tripCodeEl = document.getElementById('booking-active-trip-code');
-        var referralWrap = document.getElementById('booking-active-referral-wrap');
 
         if (tripCodeEl) {
             tripCodeEl.textContent = payload.trip_code;
@@ -413,14 +283,6 @@
 
         updateNotes(payload);
         updateBookingSnapshot(payload.booking || null);
-
-        if (payload.referral_code && payload.referral_url && referralWrap) {
-            referralWrap.classList.remove('d-none');
-            renderQr(payload.referral_url);
-            bindOverlay();
-        } else if (referralWrap) {
-            referralWrap.classList.add('d-none');
-        }
 
         rootEl.classList.remove('d-none');
     }
@@ -435,9 +297,6 @@
             booking_reference: booking.booking_reference || (extra && extra.booking_reference) || '',
             contact_phone: (extra && extra.contact_phone) || booking.contact_phone || '',
             hotline_phone: resolveHotlinePhone() || ((extra && extra.hotline_phone) || ''),
-            referral_code: (extra && extra.referral_code) || '',
-            referral_url: (extra && extra.referral_url) || '',
-            referral_discount_percent: (extra && extra.referral_discount_percent) || 0,
             booking: booking,
         });
     }
@@ -452,9 +311,6 @@
             saveFromBooking(data.booking, {
                 booking_reference: data.booking.booking_reference || existing.booking_reference,
                 contact_phone: existing.contact_phone,
-                referral_code: existing.referral_code,
-                referral_url: existing.referral_url,
-                referral_discount_percent: existing.referral_discount_percent,
             });
             updateBookingSnapshot(data.booking);
             return;
@@ -549,7 +405,6 @@
     }
 
     function init() {
-        bindOverlay();
         syncHeroHotline();
         var flashPayload = window.__bookingSuccess;
         if (flashPayload) {

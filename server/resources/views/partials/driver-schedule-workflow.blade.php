@@ -100,93 +100,53 @@ $currentOrder = $order[$highlightStage] ?? 0;
     @elseif(in_array($phase, ['upcoming', 'active'], true))
 
         @php
-
             $showCancel = ! $pendingClosure && $schedule->driverCanCancelTrip();
-
             $showComplete = $pendingClosure || $nextStage === \App\Models\Schedule::DRIVER_STAGE_COMPLETED;
-
-            $showMovementConfirm = ! $pendingClosure && $needsMovementConfirm;
-
-            $showAdvance = ! $pendingClosure && $nextAction && ! $showComplete && ! $showMovementConfirm;
-
+            // Nút Xác nhận chỉ trong cửa sổ trước giờ đón; vẫn chặn advance nếu chưa xác nhận.
+            $showMovementConfirm = ! $pendingClosure && $schedule->driverMovementConfirmAvailable();
+            $showAdvance = ! $pendingClosure
+                && $nextAction
+                && ! $showComplete
+                && ! $needsMovementConfirm;
         @endphp
 
-
-
         @if($showCancel || $showMovementConfirm || $showAdvance || $showComplete)
-
         <div class="driver-workflow-compact-actions">
-
             @if($showCancel)
-
                 <form method="POST" action="{{ route('driver.schedules.cancel', $schedule) }}"
-
                       class="driver-workflow-compact-action cancel-reason-form"
-
                       data-audience="driver"
-
                       data-reason-title="Lý do hủy cuốc"
-
                       data-reason-hint="Chọn lý do để quản lý nắm thông tin và hỗ trợ khách.">
-
                     @csrf
-
                     <button type="submit" class="btn btn-outline-danger btn-sm">Hủy cuốc</button>
-
                 </form>
-
             @endif
-
-
 
             @if($showMovementConfirm)
-
                 <form method="POST" action="{{ route('driver.schedules.confirmMovement', $schedule) }}"
-
                       class="driver-workflow-compact-action">
-
                     @csrf
-
                     <button type="submit" class="btn btn-success btn-sm">Xác nhận</button>
-
                 </form>
-
             @elseif($showComplete)
-
                 <form method="POST" action="{{ route('driver.schedules.complete', $schedule) }}"
-
                       class="driver-workflow-compact-action"
-
                       data-confirm="Xác nhận đã chạy xong chuyến này ({{ $bookings->count() }} khách)?"
-
                       data-confirm-title="Hoàn thành chuyến"
-
                       data-confirm-ok="Hoàn thành"
-
                       data-confirm-variant="success">
-
                     @csrf
-
                     <button type="submit" class="btn btn-success btn-sm">{{ $pendingClosure ? 'Xác nhận hoàn thành' : ($nextAction ?: 'Hoàn thành chuyến') }}</button>
-
                 </form>
-
             @elseif($showAdvance)
-
                 <form method="POST" action="{{ route('driver.schedules.advance', $schedule) }}"
-
                       class="driver-workflow-compact-action">
-
                     @csrf
-
                     <button type="submit" class="btn btn-primary btn-sm">{{ $nextAction }}</button>
-
                 </form>
-
             @endif
-
         </div>
-
         @endif
 
     @endif

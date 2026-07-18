@@ -8,10 +8,13 @@ use App\Models\Schedule;
 use App\Models\TripMessage;
 use App\Models\User;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 class TripChatService
 {
+    public const DRIVER_THREAD_LIMIT = 10;
+
     public function isOpen(Booking $booking): bool
     {
         $booking->loadMissing('schedule');
@@ -107,5 +110,108 @@ class TripChatService
     public function serialize(TripMessage $message): array
     {
         return (new TripMessageResource($message))->resolve();
+    }
+
+    public function unreadCountForBooking(Booking $booking): int
+    {
+        $lastRead = (int) ($booking->driver_chat_last_read_id ?? 0);
+
+        return (int) TripMessage::query()
+            ->where('booking_id', $booking->id)
+            ->where('sender_role', 'customer')
+            ->when($lastRead > 0, fn ($query) => $query->where('id', '>', $lastRead))
+            ->count();
+    }
+
+    public function unreadCountForDriver(int $driverUserId): int
+    {
+        return (int) DB::table('trip_messages as m')
+            ->join('bookings as b', 'b.id', '=', 'm.booking_id')
+            ->leftJoin('schedules as s', 's.id', '=', 'b.schedule_id')
+            ->where('m.sender_role', 'customer')
+            ->where(function ($query) use ($driverUserId): void {
+                $query->where('b.assigned_driver_id', $driverUserId)
+                    ->orWhere('s.driver_id', $driverUserId);
+            })
+            ->where(function ($query): void {
+                $query->whereNull('b.driver_chat_last_read_id')
+                    ->orWhereColumn('m.id', '>', 'b.driver_chat_last_read_id');
+            })
+            ->count();
+    }
+
+    /**
+     * Gộp unread hệ thống + chat (badge dock / chuông).
+     *
+     * @param  array{info?: int, notice?: int, total?: int}  $inboxUnread
+     * @return array{info: int, notice: int, chat: int, total: int}
+     */
+    public function mergeInboxUnread(array $inboxUnread, int $driverUserId): array
+    {
+        $info = (int) ($inboxUnread['info'] ?? 0);
+        $notice = (int) ($inboxUnread['notice'] ?? 0);
+        $chat = $this->unreadCountForDriver($driverUserId);
+
+        return [
+            'info'   => $info,
+            'notice' => $notice,
+            'chat'   => $chat,
+            'total'  => $info + $notice + $chat,
+        ];
+    }
+
+    public function markDriverRead(Booking $booking): void
+    {
+        $maxId = (int) TripMessage::query()
+            ->where('booking_id', $booking->id)
+            ->max('id');
+
+        if ($maxId < 1) {
+            return;
+        }
+
+        if ((int) ($booking->driver_chat_last_read_id ?? 0) >= $maxId) {
+            return;
+        }
+
+        $booking->forceFill(['driver_chat_last_read_id' => $maxId])->save();
+    }
+
+    /**
+     * Tối đa 10 cuộc gần nhất có tin nhắn (kể cả chuyến đã xong).
+     *
+     * @return Collection<int, array{booking: Booking, unread: int, preview: string, open: bool, last_at: ?string}>
+     */
+    public function recentThreadsForDriver(int $driverUserId, ?int $limit = null): Collection
+    {
+        $limit ??= self::DRIVER_THREAD_LIMIT;
+
+        $bookings = Booking::query()
+            ->whereHas('tripMessages')
+            ->where(function ($query) use ($driverUserId): void {
+                $query->where('assigned_driver_id', $driverUserId)
+                    ->orWhereHas('schedule', fn ($schedule) => $schedule->where('driver_id', $driverUserId));
+            })
+            ->with(['latestTripMessage', 'schedule'])
+            ->withMax('tripMessages', 'created_at')
+            ->orderByDesc('trip_messages_max_created_at')
+            ->limit($limit)
+            ->get();
+
+        return $bookings->map(function (Booking $booking): array {
+            $last = $booking->latestTripMessage;
+            $preview = $last?->body ?? '';
+            if (mb_strlen($preview) > 80) {
+                $preview = mb_substr($preview, 0, 80).'…';
+            }
+
+            return [
+                'booking' => $booking,
+                'unread'  => $this->unreadCountForBooking($booking),
+                'preview' => $preview,
+                'open'    => $this->isOpen($booking),
+                'last_at' => $last?->created_at?->format('d/m H:i'),
+            ];
+        });
     }
 }

@@ -18,7 +18,36 @@ class DriverMovementConfirmService
 
     public const MOVEMENT_CONFIRM_LEAD_MINUTES = 15;
 
+    /** Hiện nút «Xác nhận» đi đón từ trước giờ đón bao nhiêu phút. */
+    public const MOVEMENT_CONFIRM_VISIBLE_BEFORE_MINUTES = 60;
+
     public const MIN_DEADLINE_BUFFER_MINUTES = 2;
+
+    /** Đã tới cửa sổ bấm «Xác nhận» (Đặt ngay / trong 1 giờ trước giờ đón / quá giờ đón). */
+    public function isConfirmActionAvailable(Schedule $schedule, ?Booking $booking = null): bool
+    {
+        if (! $schedule->needsDriverMovementConfirm()) {
+            return false;
+        }
+
+        $booking ??= $schedule->driverRelevantBookings()->first();
+        if (! $booking) {
+            return true;
+        }
+
+        if ($booking->isOnDemandPickup()) {
+            return true;
+        }
+
+        $pickupAt = $booking->operationalPickupAt() ?? $booking->tripStartAt();
+        if (! $pickupAt instanceof Carbon) {
+            return true;
+        }
+
+        $opensAt = $pickupAt->copy()->subMinutes(self::MOVEMENT_CONFIRM_VISIBLE_BEFORE_MINUTES);
+
+        return now()->gte($opensAt);
+    }
 
     public function stampAssignmentDeadline(Schedule $schedule, ?Booking $booking = null): void
     {

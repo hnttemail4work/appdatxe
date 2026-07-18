@@ -27,7 +27,7 @@ $mapNav = ($primaryBooking && $isRunning)
                 $pickupTimeLabel = $primaryBooking?->pickupTimeLabel();
                 $pickupDateLabel = $primaryBooking?->driverPickupDateLabel();
             @endphp
-            @if($pickupTimeLabel || $pickupDateLabel)
+            @if($primaryBooking?->isScheduledPickup() && ($pickupTimeLabel || $pickupDateLabel))
                 <div class="meta driver-schedule-pickup-meta">
                     @if($pickupTimeLabel)
                         <span>Giờ đón: <strong>{{ $pickupTimeLabel }}</strong></span>
@@ -35,6 +35,10 @@ $mapNav = ($primaryBooking && $isRunning)
                     @if($pickupDateLabel)
                         <span>Ngày đi: <strong>{{ $pickupDateLabel }}</strong></span>
                     @endif
+                </div>
+            @elseif($primaryBooking)
+                <div class="meta driver-schedule-pickup-meta">
+                    <span><strong>{{ $primaryBooking->pickupModeLabel() }}</strong></span>
                 </div>
             @endif
         </div>
@@ -51,7 +55,12 @@ $mapNav = ($primaryBooking && $isRunning)
         ])
     </div>
 
-    @if($mapNav)
+    @if($isRunning)
+        @include('partials.driver-trip-quick-actions', [
+            'booking' => $primaryBooking,
+            'mapNav' => $mapNav,
+        ])
+    @elseif($mapNav)
         <div class="driver-card-map-nav">
             @include('partials.driver-map-nav-button', ['mapNav' => $mapNav])
         </div>

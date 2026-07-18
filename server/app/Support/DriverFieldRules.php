@@ -4,7 +4,7 @@ namespace App\Support;
 
 use App\Rules\UniqueNormalizedPhone;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\Rules\Password;
+use Closure;
 
 /** Quy tắc validation thống nhất cho hồ sơ tài xế trên toàn hệ thống. */
 class DriverFieldRules
@@ -12,7 +12,7 @@ class DriverFieldRules
     /** @return list<string> */
     public static function requiredFieldsFor(string $context): array
     {
-        // Đăng ký: họ tên tùy chọn; SĐT + mật khẩu bắt buộc.
+        // Đăng ký: họ tên tùy chọn; SĐT + PIN 6 số bắt buộc.
         $contact = $context === 'register' ? ['phone'] : ['name', 'phone'];
         $account = $context === 'register' ? ['password', 'password_confirmation'] : [];
         $vehicle = ['vehicle_license_plate', 'vehicle_type'];
@@ -59,17 +59,37 @@ class DriverFieldRules
             $emailRules[0] = 'required';
         }
 
-        $phoneRules = [$req('phone'), 'string', 'max:30'];
-        if ($context === 'register' || $userId !== null) {
-            $phoneRules[] = $phoneUnique;
+        if ($context === 'register') {
+            $phoneRules = AuthPhone::rules(unique: true, ignoreUserId: $userId);
+        } elseif ($userId !== null && self::isRequired($context, 'phone')) {
+            $phoneRules = AuthPhone::rules(unique: true, ignoreUserId: $userId);
+        } elseif ($userId !== null) {
+            $phoneRules = [
+                'nullable',
+                'string',
+                'max:30',
+                function (string $attribute, mixed $value, Closure $fail) use ($phoneUnique): void {
+                    if ($value === null || trim((string) $value) === '') {
+                        return;
+                    }
+                    if (! AuthPhone::isValid((string) $value)) {
+                        $fail(AuthMessages::PHONE_INVALID);
+
+                        return;
+                    }
+                    $phoneUnique->validate($attribute, $value, $fail);
+                },
+            ];
+        } else {
+            $phoneRules = [$req('phone'), 'string', 'max:30'];
         }
 
         $passwordRules = $context === 'register'
-            ? ['required', 'string', 'confirmed', Password::min(8)->mixedCase()->numbers()]
-            : ['nullable', 'string', 'min:8'];
+            ? PinPassword::rules(confirmed: true)
+            : ['nullable', 'string', 'digits:'.PinPassword::LENGTH];
 
         $passwordConfirmRules = $context === 'register'
-            ? ['required', 'string']
+            ? ['required', 'string', 'digits:'.PinPassword::LENGTH]
             : ['nullable'];
 
         return [
@@ -112,20 +132,35 @@ class DriverFieldRules
         ];
     }
 
+    /** @return list<string> */
+    public static function imageMimes(): array
+    {
+        return ['jpeg', 'jpg', 'png', 'webp'];
+    }
+
+    /** @return array<string, mixed> — CCCD trước/sau (dùng chung đăng ký TX / khách) */
+    public static function idCardPhotoRules(bool $required = true): array
+    {
+        $rule = [$required ? 'required' : 'nullable', 'file', 'mimes:' . implode(',', self::imageMimes())];
+
+        return [
+            'photo_id_card'      => $rule,
+            'photo_id_card_back' => $rule,
+        ];
+    }
+
     /** @return array<string, mixed> */
     public static function registrationPhotoRules(): array
     {
-        $imageRule = ['required', 'file', 'mimes:jpeg,jpg,png,webp'];
+        $imageRule = ['required', 'file', 'mimes:' . implode(',', self::imageMimes())];
 
-        return [
+        return array_merge(self::idCardPhotoRules(true), [
             'photo_portrait'      => $imageRule,
-            'photo_id_card'       => $imageRule,
-            'photo_id_card_back'  => $imageRule,
             'photo_license_front' => $imageRule,
-            'photo_license_back'  => ['nullable', 'file', 'mimes:jpeg,jpg,png,webp'],
+            'photo_license_back'  => ['nullable', 'file', 'mimes:' . implode(',', self::imageMimes())],
             'photo_vehicles'      => ['required', 'array', 'min:1'],
-            'photo_vehicles.*'    => ['required', 'file', 'mimes:jpeg,jpg,png,webp'],
-        ];
+            'photo_vehicles.*'    => ['required', 'file', 'mimes:' . implode(',', self::imageMimes())],
+        ]);
     }
 
     /** @return array<string, mixed> */
@@ -149,7 +184,22 @@ class DriverFieldRules
 
         if ($contactLocked) {
             $rules['name'] = ['nullable', 'string', 'max:255'];
-            $rules['phone'] = ['nullable', 'string', 'max:30', new UniqueNormalizedPhone($userId)];
+            $rules['phone'] = [
+                'nullable',
+                'string',
+                'max:30',
+                function (string $attribute, mixed $value, Closure $fail) use ($userId): void {
+                    if ($value === null || trim((string) $value) === '') {
+                        return;
+                    }
+                    if (! AuthPhone::isValid((string) $value)) {
+                        $fail(AuthMessages::PHONE_INVALID);
+
+                        return;
+                    }
+                    (new UniqueNormalizedPhone($userId))->validate($attribute, $value, $fail);
+                },
+            ];
         }
 
         return $rules;

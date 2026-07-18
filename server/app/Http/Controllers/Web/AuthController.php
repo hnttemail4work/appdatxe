@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterDriverRequest;
 use App\Models\DriverProfile;
+use App\Services\AuthLoginGuard;
 use App\Services\DriverAvailabilityService;
 use App\Services\RegistrationService;
+use App\Support\AuthIdentifier;
 use App\Support\RoleDashboard;
 use App\Support\WebAuth;
 use Illuminate\Http\Request;
@@ -19,6 +21,7 @@ class AuthController extends Controller
     public function __construct(
         private readonly RegistrationService $registration,
         private readonly DriverAvailabilityService $driverAvailability,
+        private readonly AuthLoginGuard $loginGuard,
     ) {
     }
 
@@ -30,20 +33,65 @@ class AuthController extends Controller
     public function login(LoginRequest $request)
     {
         $validated = $request->validated();
+        $phone = AuthIdentifier::normalizePhone($validated['phone']);
+        $user = AuthIdentifier::findUserByPhone($phone);
 
-        $user = WebAuth::attempt($validated['phone'], $validated['password']);
-
-        if (! $user) {
+        if ($user && $user->role === 'admin') {
             return back()
-                ->withErrors(['login' => 'Tài khoản hoặc mật khẩu không đúng'])
-                ->withInput();
+                ->withErrors(['login' => 'Tài khoản quản trị vui lòng đăng nhập tại /admin/login.'])
+                ->withInput($request->only('phone'));
+        }
+
+        if ($user && $this->loginGuard->isLocked($user)) {
+            return back()
+                ->withErrors(['login' => $this->loginGuard->lockMessage($user)])
+                ->withInput($request->only('phone'));
+        }
+
+        $authenticated = WebAuth::attemptPhone($phone, $validated['password']);
+
+        if (! $authenticated) {
+            if ($user) {
+                $this->loginGuard->recordFailure($user);
+                $user->refresh();
+
+                if ($this->loginGuard->isLocked($user)) {
+                    return back()
+                        ->withErrors(['login' => $this->loginGuard->lockMessage($user)])
+                        ->withInput($request->only('phone'));
+                }
+
+                $left = $this->loginGuard->remainingAttempts($user);
+
+                return back()
+                    ->withErrors([
+                        'login' => 'PIN không đúng. Còn '.$left.' lần thử trước khi tạm khóa.',
+                    ])
+                    ->withInput($request->only('phone'));
+            }
+
+            return back()
+                ->withErrors(['login' => 'Số điện thoại hoặc PIN không đúng'])
+                ->withInput($request->only('phone'));
+        }
+
+        $user = $authenticated;
+
+        if ($user->role === 'admin') {
+            Auth::logout();
+
+            return redirect()
+                ->route('admin.login')
+                ->withErrors(['login' => 'Tài khoản quản trị vui lòng đăng nhập tại đây.']);
         }
 
         if ($blockMessage = $user->loginBlockMessage()) {
             return back()
                 ->withErrors(['login' => $blockMessage])
-                ->withInput();
+                ->withInput($request->only('phone'));
         }
+
+        $this->loginGuard->clearFailures($user);
 
         if ($user->role === 'customer') {
             $request->session()->regenerate();
@@ -84,7 +132,13 @@ class AuthController extends Controller
 
     public function showRegister(Request $request)
     {
-        return view('auth.register');
+        $fromDriver = $request->query('from') === 'driver';
+        $returnUrl = $fromDriver ? route('driver.dashboard') : null;
+
+        return view('auth.register', [
+            'returnUrl' => $returnUrl,
+            'fromDriver' => $fromDriver,
+        ]);
     }
 
     public function register(RegisterDriverRequest $request)
@@ -92,33 +146,24 @@ class AuthController extends Controller
         $validated = $request->validated();
 
         try {
-            $user = $this->registration->registerDriver($validated, $request);
+            $result = $this->registration->registerDriver($validated, $request);
         } catch (InvalidArgumentException $e) {
             return back()->withErrors(['photos' => $e->getMessage()])->withInput();
         }
 
-        if ($user->status === 'active') {
-            Auth::login($user);
-            $request->session()->regenerate();
+        $user = $result['user'];
+        $request->session()->put('pending_register_otp.user_id', $user->id);
 
-            if ($user->role === 'driver') {
-                $profile = DriverProfile::query()->where('user_id', $user->id)->first();
-                if ($profile) {
-                    $this->driverAvailability->resetForWebLogin($profile);
-                }
-            }
-
-            return redirect(RoleDashboard::route($user->role))
-                ->with('success', 'Đăng ký thành công. Chào mừng bạn đến với ' . config('app.name') . '!');
-        }
-
-        return redirect()->route('login')
-            ->with('success', 'Đăng ký thành công. Hồ sơ cần duyệt trước khi đăng nhập trong vòng từ 3 đến 5 ngày làm việc.');
+        return redirect()
+            ->route('auth.register.otp')
+            ->with('success', 'Đã tạo tài khoản. Nhập mã OTP 6 số (admin sẽ cung cấp, hiệu lực 5 phút).');
     }
 
     public function logout(Request $request)
     {
         $user = Auth::user();
+        $wasAdmin = $user && $user->role === 'admin';
+
         if ($user && $user->role === 'driver') {
             $profile = DriverProfile::query()->where('user_id', $user->id)->first();
             if ($profile) {
@@ -131,6 +176,8 @@ class AuthController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect()->route('login')->with('success', 'Bạn đã đăng xuất.');
+        return redirect()
+            ->route($wasAdmin ? 'admin.login' : 'login')
+            ->with('success', 'Bạn đã đăng xuất.');
     }
 }

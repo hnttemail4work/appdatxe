@@ -327,7 +327,7 @@ class DriverWalletService
                 return [
                     'message'   => 'Doanh thu đã đạt chỉ tiêu cần nạp ví để tiếp tục nhận cuốc.',
                     'cta_label' => 'Nạp ví ngay',
-                    'cta_tab'   => 'deposit',
+                    'cta_tab'   => 'wallet',
                     'variant'   => 'warning',
                 ];
             }
@@ -343,7 +343,7 @@ class DriverWalletService
                 return [
                     'message'   => $message,
                     'cta_label' => 'Nạp ví ngay',
-                    'cta_tab'   => 'deposit',
+                    'cta_tab'   => 'wallet',
                     'variant'   => 'warning',
                 ];
             }
@@ -357,7 +357,7 @@ class DriverWalletService
                     . ' — cần nạp ví tối thiểu ' . DriverWalletConfig::minDepositFormatted()
                     . ' để tiếp tục nhận cuốc.',
                 'cta_label' => 'Nạp ví ngay',
-                'cta_tab'   => 'deposit',
+                'cta_tab'   => 'wallet',
                 'variant'   => 'warning',
             ];
         }

@@ -54,6 +54,13 @@
 
                 if (typeof data.trip_action_count === 'number') {
                     updateDockBadge(data.trip_action_count);
+                    if (window.DriverSounds && window.DriverSounds.onTripCount) {
+                        window.DriverSounds.onTripCount(data.trip_action_count);
+                    }
+                }
+
+                if (data.inbox_unread && window.DriverInbox && window.DriverInbox.updateBadges) {
+                    window.DriverInbox.updateBadges(data.inbox_unread);
                 }
 
                 // TODO (Fix Driver Toggle): Đồng bộ switch Hoạt động từ server — tránh UI lệch sau poll/reload.

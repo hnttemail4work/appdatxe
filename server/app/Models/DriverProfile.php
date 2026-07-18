@@ -20,6 +20,7 @@ class DriverProfile extends Model
         'photo_portrait', 'photo_id_card', 'photo_id_card_back',
         'photo_license_front', 'photo_license_back',
         'photo_vehicle', 'photo_vehicles', 'catalog_vehicle_photo_index',
+        'locale', 'sound_enabled', 'sound_preset',
     ];
 
     protected static function booted(): void
@@ -69,6 +70,37 @@ class DriverProfile extends Model
         return $activeTrips > 0 ? 'on_trip' : 'available';
     }
 
+    /** Điểm sao 0–5 từ đánh giá thích/không thích (chưa có review → 0). */
+    public function starRating(): float
+    {
+        $stats = TripReview::query()
+            ->where('driver_id', $this->user_id)
+            ->selectRaw("COUNT(*) as total_count")
+            ->selectRaw("SUM(CASE WHEN sentiment = ? THEN 1 ELSE 0 END) as like_count", [TripReview::SENTIMENT_LIKE])
+            ->first();
+
+        $total = (int) ($stats->total_count ?? 0);
+        if ($total < 1) {
+            return 0.0;
+        }
+
+        $likes = (int) ($stats->like_count ?? 0);
+
+        return round(($likes / $total) * 5, 1);
+    }
+
+    public function starRatingLabel(): string
+    {
+        $rating = $this->starRating();
+        if ($rating <= 0) {
+            return '0';
+        }
+
+        return fmod($rating, 1.0) === 0.0
+            ? (string) (int) $rating
+            : number_format($rating, 1, '.', '');
+    }
+
     /** Trạng thái pill trên hero tài xế — đồng bộ với availability + vị trí + chuyến đang phục vụ. */
     public function heroStatusMeta(bool $onActiveTrip = false, bool $hasUpcomingTrip = false): array
     {
@@ -91,7 +123,7 @@ class DriverProfile extends Model
         return ['key' => 'offline', 'label' => 'Đang lấy vị trí GPS…'];
     }
 
-    /** Một nhãn trạng thái duy nhất (gộp tài khoản + làm việc). */
+    /** Một nhãn trạng thái duy nhất (gộp tài khoản + làm việc) — header hồ sơ, v.v. */
     public function displayStatusLabel(): string
     {
         if ($this->isMissedTripLocked()) {
@@ -135,6 +167,32 @@ class DriverProfile extends Model
         };
     }
 
+    /**
+     * Cột Trạng thái bảng danh sách tài xế (admin).
+     * Chỉ 3 giá trị: Sẵn sàng | Tạm nghỉ | Bị khóa.
+     */
+    public function listStatusLabel(): string
+    {
+        if ($this->isMissedTripLocked() || $this->status === 'suspended') {
+            return 'Bị khóa';
+        }
+
+        if (($this->availability_status ?? 'off_duty') !== 'off_duty') {
+            return 'Sẵn sàng';
+        }
+
+        return 'Tạm nghỉ';
+    }
+
+    public function listStatusColor(): string
+    {
+        return match ($this->listStatusLabel()) {
+            'Sẵn sàng' => \App\Support\StatusBadge::SUCCESS,
+            'Bị khóa'  => \App\Support\StatusBadge::DANGER,
+            default    => \App\Support\StatusBadge::NEUTRAL,
+        };
+    }
+
     /** Giá trị form quản lý — map 1 select → status + availability. */
     protected function casts(): array
     {
@@ -153,6 +211,7 @@ class DriverProfile extends Model
             'cuoc_offer_count' => 'integer',
             'cuoc_reject_count' => 'integer',
             'cancel_rate_percent' => 'float',
+            'sound_enabled' => 'boolean',
         ];
     }
 
@@ -266,6 +325,34 @@ class DriverProfile extends Model
         return $this->hasOne(DriverWallet::class);
     }
 
+    public function changeRequests()
+    {
+        return $this->hasMany(DriverProfileChangeRequest::class);
+    }
+
+    public function pendingChangeRequest()
+    {
+        return $this->hasOne(DriverProfileChangeRequest::class)->ofMany(
+            ['id' => 'max'],
+            fn ($query) => $query->where('status', DriverProfileChangeRequest::STATUS_PENDING)
+        );
+    }
+
+    /** QR giảm giá mời bạn bè (driver_profile_id). */
+    public function referralCode()
+    {
+        return $this->hasOne(ReferralCode::class, 'driver_profile_id')
+            ->where('type', ReferralCode::TYPE_REFERRER);
+    }
+
+    /** Mã hoa hồng admin gán cho tài xế. */
+    public function assignedCommissionCode()
+    {
+        return $this->hasOne(ReferralCode::class, 'assigned_driver_profile_id')
+            ->where('type', ReferralCode::TYPE_REFERRER)
+            ->whereNull('driver_profile_id');
+    }
+
     public function isRejected(): bool
     {
         return $this->approval_status === 'rejected';
@@ -303,6 +390,12 @@ class DriverProfile extends Model
     {
         return $query->where('approval_status', 'pending')
             ->whereHas('user', fn ($q) => $q->where('role', 'driver'));
+    }
+
+    /** Tài xế có yêu cầu cập nhật giấy tờ đang chờ duyệt. */
+    public function scopePendingDocumentUpdate($query)
+    {
+        return $query->whereHas('pendingChangeRequest');
     }
 
     /** Hồ sơ chờ duyệt mà quản lý được xem/duyệt (của mình hoặc chưa gán đơn vị). */

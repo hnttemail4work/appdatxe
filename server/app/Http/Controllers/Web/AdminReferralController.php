@@ -5,10 +5,13 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreReferrerRequest;
 use App\Http\Requests\Admin\UpdateReferrerRequest;
+use App\Models\DriverProfile;
 use App\Models\ReferralCode;
 use App\Services\ReferralCodeService;
 use App\Support\PageList;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use InvalidArgumentException;
 
 /**
  * Nhóm "mã giới thiệu" — tách ra từ AdminController (Fat Controller).
@@ -27,26 +30,66 @@ class AdminReferralController extends Controller
         return view('admin.referrals', $data);
     }
 
-    /** @return array{referralCodes: \Illuminate\Contracts\Pagination\LengthAwarePaginator, referralCommissionStats: array<int, array{trips: int, revenue: int, commission: int}>} */
+    /**
+     * @return array{
+     *     referralCodes: \Illuminate\Contracts\Pagination\LengthAwarePaginator,
+     *     assignableDrivers: \Illuminate\Support\Collection<int, DriverProfile>
+     * }
+     */
     private function referralsListData(): array
     {
+        // QR mời bạn của tài xế quản lý ở hồ sơ TX — không hiện trên trang Giới thiệu.
         $referralCodes = ReferralCode::query()
-            ->with('booking')
+            ->whereNull('driver_profile_id')
+            ->with(['booking', 'assignedDriverProfile'])
             ->orderByRaw("CASE WHEN type = 'referrer' AND status = 'suspended' THEN 1 WHEN type = 'referrer' THEN 0 WHEN type = 'booking_temp' AND status = 'active' THEN 2 WHEN type = 'booking_temp' THEN 3 ELSE 4 END")
             ->orderByDesc('activated_at')
             ->orderByDesc('created_at')
             ->paginate(PageList::PER_PAGE, ['*'], 'referrals_page')
             ->withQueryString();
 
-        $referralCommissionStats = $this->referralCodes->commissionStatsForReferralIds(
-            $referralCodes->getCollection()
-                ->where('type', ReferralCode::TYPE_REFERRER)
-                ->pluck('id')
-                ->map(fn ($id) => (int) $id)
-                ->all(),
-        );
+        $assignableDrivers = DriverProfile::query()
+            ->with('user')
+            ->where('approval_status', 'approved')
+            ->whereHas('user', fn ($q) => $q->where('role', 'driver'))
+            ->orderByDesc('id')
+            ->get()
+            ->filter(fn (DriverProfile $p) => $p->user)
+            ->values();
 
-        return compact('referralCodes', 'referralCommissionStats');
+        return compact('referralCodes', 'assignableDrivers');
+    }
+
+    public function assignReferrer(Request $request, ReferralCode $referralCode)
+    {
+        $validated = $request->validate([
+            'driver_profile_id' => ['required', 'integer', 'exists:driver_profiles,id'],
+        ]);
+
+        $profile = DriverProfile::query()->findOrFail((int) $validated['driver_profile_id']);
+
+        try {
+            $this->referralCodes->assignCommissionToDriver($referralCode, $profile);
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['driver_profile_id' => $e->getMessage()]);
+        }
+
+        $driverName = $profile->user?->preferredDisplayName() ?: $profile->driver_code;
+
+        return redirect()->route('admin.referrals')
+            ->with('success', 'Đã gán mã ' . $referralCode->code . ' cho tài xế ' . $driverName . '.');
+    }
+
+    public function revokeReferrer(ReferralCode $referralCode)
+    {
+        try {
+            $this->referralCodes->revokeCommissionFromDriver($referralCode);
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['referral' => $e->getMessage()]);
+        }
+
+        return redirect()->route('admin.referrals')
+            ->with('success', 'Đã thu hồi mã ' . $referralCode->code . ' khỏi tài xế.');
     }
 
     public function storeReferrer(StoreReferrerRequest $request)

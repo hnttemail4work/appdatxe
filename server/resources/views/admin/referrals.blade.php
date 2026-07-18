@@ -2,7 +2,7 @@
 
 @section('console')
 @include('partials.console-hero', [
-    'title' => 'Mã giới thiệu',
+    'title' => 'Giới thiệu',
 ])
 
 @include('partials.admin-nav-tabs', ['active' => 'referrals'])

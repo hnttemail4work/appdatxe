@@ -27,7 +27,8 @@ class PrepareLiveDatabaseCommand extends Command
 
         $this->newLine();
         $this->info('Đã chuẩn bị DB cho live.');
-        $this->line('Đăng nhập admin: ' . AdminBootstrapAccount::LOGIN);
+        $this->line('Admin login: /admin/login');
+        $this->line('Tài khoản: ' . AdminBootstrapAccount::LOGIN);
         $this->line('Mật khẩu: ' . AdminBootstrapAccount::PASSWORD_PLAIN);
 
         return self::SUCCESS;

@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\PlatformSetting;
 use App\Support\AdminBootstrapAccount;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -89,11 +88,5 @@ class PrepareLiveSeeder extends Seeder
             ['label' => 'Xe hỏng / sự cố', 'audience' => 'driver', 'sort_order' => 4, 'is_active' => true, 'created_at' => now(), 'updated_at' => now()],
             ['label' => 'Lý do khác', 'audience' => 'both', 'sort_order' => 99, 'is_active' => true, 'created_at' => now(), 'updated_at' => now()],
         ]);
-
-        PlatformSetting::setValue('commission_percentage', ['value' => 2], 'finance');
-        PlatformSetting::setValue('app_commission_percentage', ['value' => 2], 'finance');
-        PlatformSetting::setValue('referral_commission_first_percentage', ['value' => 8], 'finance');
-        PlatformSetting::setValue('referral_commission_repeat_percentage', ['value' => 2], 'finance');
-        PlatformSetting::setValue('round_trip_discount_percentage', ['value' => 15], 'finance');
     }
 }

@@ -5,7 +5,7 @@ $referrerRows = $referrerRows ?? collect();
 
 <div class="console-panel-head px-0 pt-2">
     <div class="console-panel-head-accent">
-        <h2>Theo mã giới thiệu</h2>
+        <h2>Theo giới thiệu</h2>
     </div>
 </div>
 

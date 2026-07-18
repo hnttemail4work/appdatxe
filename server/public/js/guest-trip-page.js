@@ -2,16 +2,8 @@
  * Trang Chuyến — theo dõi chuyến đã đặt và đánh giá sau khi hoàn tất.
  */
 (function () {
-    var QR_SMALL = 72;
-    var QR_LARGE = 220;
     var selectedSentiment = '';
-    var modalSelectedSentiment = '';
     var currentBooking = null;
-    var currentReferralUrl = '';
-    var qrLibLoading = false;
-    var referralOverlayBound = false;
-    var completionModalBound = false;
-    var completionModal = null;
     var COMPLETION_SHOWN_PREFIX = 'guest_trip_completion_shown:';
 
     function qs(sel, root) {
@@ -108,11 +100,24 @@
         return String(booking.driver.stage || 'assigned') === 'assigned';
     }
 
+    function isScheduledPickup(booking) {
+        if (!booking) {
+            return false;
+        }
+        if (typeof booking.is_scheduled_pickup === 'boolean') {
+            return booking.is_scheduled_pickup;
+        }
+        return !!(booking.pickup_time_label);
+    }
+
     function serviceDateLabel(booking) {
+        if (!isScheduledPickup(booking)) {
+            return '';
+        }
         if (booking.service_date_label) {
             return booking.service_date_label;
         }
-        if (booking.service_date) {
+        if (booking.service_date && booking.service_date !== 'Đón ngay') {
             return String(booking.service_date).split(' ')[0];
         }
         return '';
@@ -266,9 +271,6 @@
         window.BookingActiveSession.saveFromBooking(booking, {
             booking_reference: booking.booking_reference || stored.booking_reference || '',
             contact_phone: booking.contact_phone || stored.contact_phone || getContactPhone(),
-            referral_code: (booking.referral && booking.referral.code) || stored.referral_code || '',
-            referral_url: (booking.referral && booking.referral.url) || stored.referral_url || '',
-            referral_discount_percent: (booking.referral && booking.referral.discount_percent) || stored.referral_discount_percent || 0,
         });
     }
 
@@ -276,7 +278,7 @@
         return COMPLETION_SHOWN_PREFIX + String(bookingReference || '');
     }
 
-    function hasCompletionModalBeenShown(bookingReference) {
+    function hasCompletionPromptBeenShown(bookingReference) {
         if (!bookingReference) {
             return true;
         }
@@ -287,7 +289,7 @@
         }
     }
 
-    function markCompletionModalShown(bookingReference) {
+    function markCompletionPromptShown(bookingReference) {
         if (!bookingReference) {
             return;
         }
@@ -296,355 +298,48 @@
         } catch (e) {}
     }
 
-    function shouldShowCompletionModal(booking, previousBooking) {
+    function shouldFocusInlineReview(booking, previousBooking) {
         if (!booking || booking.trip_status !== 'completed') {
             return false;
         }
-        if (hasCompletionModalBeenShown(booking.booking_reference)) {
+        if (hasCompletionPromptBeenShown(booking.booking_reference)) {
             return false;
         }
-
-        var hasReferral = !!(booking.referral && booking.referral.url);
-        var canReview = !!booking.can_review;
-        if (!hasReferral && !canReview) {
+        if (!booking.can_review) {
             return false;
         }
-
         if (!previousBooking) {
             return true;
         }
-
         return previousBooking.trip_status !== 'completed';
     }
 
-    function hideCompletionReviewError() {
-        var err = document.getElementById('guest-trip-completion-review-error');
-        if (err) {
-            err.textContent = '';
-            err.classList.add('d-none');
-        }
-    }
-
-    function showCompletionReviewError(message) {
-        var err = document.getElementById('guest-trip-completion-review-error');
-        if (!err) {
+    function focusInlineReview(booking) {
+        if (!booking) {
             return;
         }
-        err.textContent = message;
-        err.classList.remove('d-none');
-    }
-
-    function renderCompletionModalContent(booking) {
-        var referralSection = document.getElementById('guest-trip-completion-referral');
-        var reviewSection = document.getElementById('guest-trip-completion-review');
-        var reviewDone = document.getElementById('guest-trip-completion-review-done');
-        var referral = booking && booking.referral ? booking.referral : null;
-        var hasReferral = !!(referral && referral.url);
-
-        if (referralSection) {
-            referralSection.classList.toggle('d-none', !hasReferral);
-            if (hasReferral) {
-                var note = document.getElementById('guest-trip-completion-referral-note');
-                if (note) {
-                    note.textContent = referralDiscountNote(
-                        referral.discount_percent,
-                        !!referral.pending,
-                    );
-                }
-                loadQrLib(function () {
-                    drawQr(
-                        document.getElementById('guest-trip-completion-referral-qr'),
-                        referral.url,
-                        QR_LARGE,
-                    );
-                });
-            }
-        }
-
-        if (reviewSection) {
-            reviewSection.classList.toggle('d-none', !booking.can_review);
-        }
-        if (reviewDone) {
-            reviewDone.classList.add('d-none');
-        }
-
-        if (booking.can_review) {
-            modalSelectedSentiment = '';
-            document.querySelectorAll('[data-completion-review-sentiment]').forEach(function (btn) {
-                btn.classList.remove('active');
-            });
-            var form = document.getElementById('guest-trip-completion-review-form');
-            if (form) {
-                form.classList.add('d-none');
-            }
-            var comment = document.getElementById('guest-trip-completion-review-comment');
-            if (comment) {
-                comment.value = '';
-            }
-            hideCompletionReviewError();
-        }
-    }
-
-    function openCompletionModal(booking) {
-        var modalEl = document.getElementById('guestTripCompletionModal');
-        if (!modalEl || typeof bootstrap === 'undefined' || !booking) {
+        markCompletionPromptShown(booking.booking_reference);
+        var reviewSection = document.getElementById('guest-trip-review-section');
+        if (!reviewSection) {
             return;
         }
-
-        markCompletionModalShown(booking.booking_reference);
-        renderCompletionModalContent(booking);
-
-        if (!completionModal) {
-            completionModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        reviewSection.classList.remove('d-none');
+        reviewSection.classList.add('guest-trip-review--focus');
+        try {
+            reviewSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } catch (e) {
+            /* ignore */
         }
-        completionModal.show();
-    }
-
-    function closeCompletionModal() {
-        if (completionModal) {
-            completionModal.hide();
+        if (window.CustomerScrollDock && window.CustomerScrollDock.focusTripsContent) {
+            window.CustomerScrollDock.focusTripsContent();
         }
     }
 
-    function maybeOpenCompletionModal(booking, previousBooking) {
-        if (!shouldShowCompletionModal(booking, previousBooking)) {
+    function maybeFocusInlineReview(booking, previousBooking) {
+        if (!shouldFocusInlineReview(booking, previousBooking)) {
             return;
         }
-        openCompletionModal(booking);
-    }
-
-    function bindCompletionModalReview() {
-        if (completionModalBound) {
-            return;
-        }
-        completionModalBound = true;
-
-        document.querySelectorAll('[data-completion-review-sentiment]').forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                modalSelectedSentiment = btn.getAttribute('data-completion-review-sentiment') || '';
-                document.querySelectorAll('[data-completion-review-sentiment]').forEach(function (other) {
-                    other.classList.toggle('active', other === btn);
-                });
-                var form = document.getElementById('guest-trip-completion-review-form');
-                if (form) {
-                    form.classList.remove('d-none');
-                }
-                hideCompletionReviewError();
-            });
-        });
-
-        var submitBtn = document.getElementById('guest-trip-completion-review-submit');
-        if (submitBtn) {
-            submitBtn.addEventListener('click', submitCompletionReview);
-        }
-    }
-
-    function submitCompletionReview() {
-        if (!currentBooking || !modalSelectedSentiment || !window.__bookingTripReviewUrl) {
-            return;
-        }
-
-        var submitBtn = document.getElementById('guest-trip-completion-review-submit');
-        if (submitBtn) {
-            submitBtn.disabled = true;
-        }
-        hideCompletionReviewError();
-
-        var token = document.querySelector('meta[name="csrf-token"]');
-        var commentEl = document.getElementById('guest-trip-completion-review-comment');
-
-        fetch(window.__bookingTripReviewUrl, {
-            method: 'POST',
-            headers: {
-                Accept: 'application/json',
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': token ? token.getAttribute('content') : '',
-            },
-            credentials: 'same-origin',
-            body: JSON.stringify({
-                booking_reference: currentBooking.booking_reference,
-                sentiment: modalSelectedSentiment,
-                comment: commentEl ? commentEl.value.trim() : '',
-                contact_phone: getContactPhone(),
-                booking_browser_id: getBrowserId(),
-            }),
-        })
-            .then(function (r) {
-                return r.json().then(function (data) {
-                    if (!r.ok) {
-                        throw new Error(data.message || 'Không gửi được đánh giá.');
-                    }
-                    return data;
-                });
-            })
-            .then(function (data) {
-                if (data.booking) {
-                    renderBooking(data.booking);
-                } else {
-                    fetchStatus();
-                }
-                closeCompletionModal();
-                if (window.CustomerScrollDock && window.CustomerScrollDock.focusTripsContent) {
-                    window.CustomerScrollDock.focusTripsContent();
-                }
-            })
-            .catch(function (err) {
-                showCompletionReviewError(err.message || 'Không gửi được đánh giá.');
-            })
-            .finally(function () {
-                if (submitBtn) {
-                    submitBtn.disabled = false;
-                }
-            });
-    }
-
-    function loadQrLib(cb) {
-        if (typeof QRCode !== 'undefined') {
-            cb();
-            return;
-        }
-        if (qrLibLoading) {
-            var timer = setInterval(function () {
-                if (typeof QRCode !== 'undefined') {
-                    clearInterval(timer);
-                    cb();
-                }
-            }, 50);
-            return;
-        }
-        qrLibLoading = true;
-        var script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js';
-        script.onload = cb;
-        document.head.appendChild(script);
-    }
-
-    function drawQr(container, url, size) {
-        if (!container || !url) {
-            return;
-        }
-        container.innerHTML = '';
-        new QRCode(container, {
-            text: url,
-            width: size,
-            height: size,
-            colorDark: '#0f172a',
-            colorLight: '#ffffff',
-            correctLevel: QRCode.CorrectLevel.M,
-        });
-    }
-
-    function bookingQrDiscountPercent() {
-        return Number(window.__bookingQrDiscountPercent) || 2;
-    }
-
-    function referralDiscountNote(percent, pending) {
-        var qrPercent = bookingQrDiscountPercent();
-        var qrLabel = qrPercent % 1 === 0 ? String(qrPercent) : String(qrPercent).replace(/\.0$/, '');
-        if (pending) {
-            return 'Mã QR kích hoạt sau khi hoàn tất chuyến — bạn bè được giảm ' + qrLabel + '%.';
-        }
-        var value = Number(percent) || 0;
-        if (value <= 0) {
-            return 'Chia sẻ mã để bạn bè đặt xe qua link của bạn.';
-        }
-        var label = value % 1 === 0 ? String(value) : String(value).replace(/\.0$/, '');
-        return 'Giảm ngay ' + label + '% khi hoàn tất chuyến.';
-    }
-
-    function renderReferralQr(url) {
-        var wrap = document.getElementById('guest-trip-referral-qr');
-        if (!wrap || !url) {
-            return;
-        }
-        currentReferralUrl = url;
-        loadQrLib(function () {
-            drawQr(wrap, url, QR_SMALL);
-        });
-    }
-
-    function renderLargeReferralQr(url) {
-        var wrap = document.getElementById('guest-trip-referral-qr-large');
-        if (!wrap || !url) {
-            return;
-        }
-        loadQrLib(function () {
-            drawQr(wrap, url, QR_LARGE);
-        });
-    }
-
-    function openReferralQrOverlay(discountPercent, pending) {
-        if (!currentReferralUrl) {
-            return;
-        }
-        var overlay = document.getElementById('guest-trip-referral-qr-overlay');
-        if (!overlay) {
-            return;
-        }
-        var note = document.getElementById('guest-trip-referral-qr-overlay-note');
-        if (note) {
-            note.textContent = referralDiscountNote(discountPercent, !!pending);
-        }
-        renderLargeReferralQr(currentReferralUrl);
-        overlay.classList.remove('d-none');
-        overlay.removeAttribute('hidden');
-        document.body.classList.add('booking-active-referral-qr-open');
-    }
-
-    function closeReferralQrOverlay() {
-        var overlay = document.getElementById('guest-trip-referral-qr-overlay');
-        if (!overlay) {
-            return;
-        }
-        overlay.classList.add('d-none');
-        overlay.setAttribute('hidden', 'hidden');
-        document.body.classList.remove('booking-active-referral-qr-open');
-        var large = document.getElementById('guest-trip-referral-qr-large');
-        if (large) {
-            large.innerHTML = '';
-        }
-    }
-
-    function bindReferralOverlay() {
-        if (referralOverlayBound) {
-            return;
-        }
-        referralOverlayBound = true;
-        var openBtn = document.getElementById('guest-trip-referral-qr-btn');
-        if (openBtn) {
-            openBtn.addEventListener('click', function () {
-                var referral = currentBooking && currentBooking.referral ? currentBooking.referral : null;
-                var percent = referral ? referral.discount_percent : 0;
-                openReferralQrOverlay(percent, referral && referral.pending);
-            });
-        }
-        document.querySelectorAll('[data-close-guest-referral-qr]').forEach(function (el) {
-            el.addEventListener('click', closeReferralQrOverlay);
-        });
-        document.addEventListener('keydown', function (event) {
-            if (event.key === 'Escape') {
-                closeReferralQrOverlay();
-            }
-        });
-    }
-
-    function renderReferral(booking) {
-        var wrap = document.getElementById('guest-trip-referral-wrap');
-        if (!wrap) {
-            return;
-        }
-        var referral = booking && booking.referral ? booking.referral : null;
-        if (!referral || !referral.url) {
-            wrap.classList.add('d-none');
-            currentReferralUrl = '';
-            var qr = document.getElementById('guest-trip-referral-qr');
-            if (qr) {
-                qr.innerHTML = '';
-            }
-            return;
-        }
-        wrap.classList.remove('d-none');
-        renderReferralQr(referral.url);
+        focusInlineReview(booking);
     }
 
     function clearActiveSessionIfDone(booking) {
@@ -864,21 +559,15 @@
         setText(qs('[data-field="route_from"]', card), routeParts.from, true);
         setText(qs('[data-field="route_to"]', card), routeParts.to, true);
 
-        setDetailRow(card, 'pickup_time_wrap', 'pickup_time_label', booking.pickup_time_label || '');
-        setDetailRow(card, 'service_date_wrap', 'service_date_label', serviceDateLabel(booking));
+        var scheduledPickup = isScheduledPickup(booking);
         setDetailRow(
             card,
-            'departure_plan_wrap',
-            'departure_plan_label',
-            booking.departure_plan_guest_label || booking.departure_plan_label || '',
+            'pickup_mode_wrap',
+            'pickup_mode_label',
+            scheduledPickup ? '' : (booking.pickup_mode_label || 'Đón ngay'),
         );
-        var planWrap = qs('[data-field="departure_plan_wrap"]', card);
-        var planLabelEl = planWrap ? planWrap.querySelector('.guest-trip-detail__label') : null;
-        if (planLabelEl) {
-            planLabelEl.textContent = booking.departure_plan === 'later'
-                ? 'Số ngày đặt chuyến'
-                : 'Loại chuyến';
-        }
+        setDetailRow(card, 'pickup_time_wrap', 'pickup_time_label', scheduledPickup ? (booking.pickup_time_label || '') : '');
+        setDetailRow(card, 'service_date_wrap', 'service_date_label', scheduledPickup ? serviceDateLabel(booking) : '');
 
         var distanceKm = Number(booking.distance_km || 0);
         setDetailRow(
@@ -914,11 +603,10 @@
         syncVehicleSection(card);
         syncTripSummarySection(card);
         renderReview(booking);
-        renderReferral(booking);
         renderCancelAction(booking);
         syncActiveSession(booking);
         clearActiveSessionIfDone(booking);
-        maybeOpenCompletionModal(booking, previousBooking);
+        maybeFocusInlineReview(booking, previousBooking);
 
         var tripJustEnded = !!(
             previousBooking
@@ -1284,8 +972,6 @@
 
     function init() {
         bindReview();
-        bindReferralOverlay();
-        bindCompletionModalReview();
         bindVehiclePhotoOverlay();
         var cancelBtn = document.getElementById('guest-trip-cancel-btn');
         if (cancelBtn) {

@@ -18,11 +18,11 @@ class DriverDefaultPasswordTest extends TestCase
         $this->assertSame('001234', DriverDefaultPassword::plainFromPhone('1234'));
     }
 
-    public function test_random_plain_is_eight_chars_from_safe_alphabet(): void
+    public function test_random_plain_is_six_digits(): void
     {
         $plain = DriverDefaultPassword::randomPlain();
 
-        $this->assertSame(8, strlen($plain));
-        $this->assertMatchesRegularExpression('/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/', $plain);
+        $this->assertSame(6, strlen($plain));
+        $this->assertMatchesRegularExpression('/^\d{6}$/', $plain);
     }
 }

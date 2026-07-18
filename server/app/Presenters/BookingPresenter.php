@@ -83,35 +83,43 @@ class BookingPresenter
 
     public function pickupTimeLabel(): ?string
     {
-        if (! $this->booking->pickup_time) {
+        if (! $this->booking->isScheduledPickup()) {
             return null;
         }
 
         return \App\Support\DepartureTimeDisplay::label($this->booking->pickup_time);
     }
 
-    /** Ngày đón thực tế — đồng bộ với trang chuyến khách. */
+    /** Ngày đón khách chọn — chỉ khi Đặt sau. */
     public function driverPickupDateLabel(): ?string
     {
-        return $this->booking->guestPickupAt()?->format('d/m/Y');
-    }
-
-    /** Giờ đón · ngày đón cho màn tài xế. */
-    public function driverPickupScheduleLabel(): ?string
-    {
-        $at = $this->booking->guestPickupAt();
-        if (! $at instanceof \Carbon\Carbon) {
+        if (! $this->booking->isScheduledPickup()) {
             return null;
         }
 
-        $time = $this->pickupTimeLabel();
-        $date = $at->format('d/m/Y');
+        return $this->booking->guestPickupAt()?->format('d/m/Y');
+    }
 
-        if ($time) {
+    /** Giờ đón · ngày đón — hoặc «Đón ngay» khi không đặt sau. */
+    public function driverPickupScheduleLabel(): ?string
+    {
+        if (! $this->booking->isScheduledPickup()) {
+            return 'Đón ngay';
+        }
+
+        $time = $this->pickupTimeLabel();
+        $date = $this->driverPickupDateLabel();
+
+        if ($time && $date) {
             return $time . ' · ' . $date;
         }
 
-        return $at->format('H:i') . ' · ' . $date;
+        return $time ?? $date;
+    }
+
+    public function pickupModeLabel(): string
+    {
+        return $this->driverPickupScheduleLabel() ?? 'Đón ngay';
     }
 
     /** Chỉ chi tiết trả — nếu trống thì báo liên hệ khách. */
@@ -141,7 +149,7 @@ class BookingPresenter
     {
         $this->booking->loadMissing('appliedReferralCode');
         $applied = $this->booking->appliedReferralCode;
-        if (! $applied || $applied->type !== ReferralCode::TYPE_BOOKING_TEMP) {
+        if (! $applied || ! $applied->grantsCustomerDiscount()) {
             return null;
         }
 
@@ -213,10 +221,6 @@ class BookingPresenter
         }
 
         if ($booking->trip_status === 'completed') {
-            if ($booking->showsLaterPickupReminder()) {
-                return 'Nhắc đón khách';
-            }
-
             return 'Hoàn thành';
         }
 
@@ -271,10 +275,6 @@ class BookingPresenter
         }
 
         if ($booking->trip_status === 'completed') {
-            if ($booking->showsLaterPickupReminder()) {
-                return \App\Support\StatusBadge::ACCENT;
-            }
-
             return \App\Support\StatusBadge::SUCCESS;
         }
 

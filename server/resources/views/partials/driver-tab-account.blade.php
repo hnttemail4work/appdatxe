@@ -1,59 +1,45 @@
 @php
     $mustChangePassword = (bool) ($mustChangePassword ?? false);
+    $pendingDocs = $pendingChangeRequest ?? null;
 @endphp
+<section class="driver-account-panel" aria-label="Thông tin cá nhân">
+    <h2 class="driver-panel-title mb-3" data-i18n="account_title">Thông tin cá nhân</h2>
 
-<section class="driver-account-panel" aria-label="Tài khoản">
     @if($mustChangePassword)
         <div class="driver-notice driver-notice-warning mb-3" role="alert">
-            <strong>Đổi mật khẩu</strong>
-            <p class="mb-0 small">Bạn đang dùng mật khẩu mặc định. Vui lòng đặt mật khẩu mới để bảo mật tài khoản.</p>
+            <strong data-i18n="account_password_required_title">Đổi mật khẩu</strong>
+            <p class="mb-0 small" data-i18n="account_password_required_hint">Bạn đang dùng mật khẩu mặc định. Vui lòng đặt mật khẩu mới để bảo mật tài khoản.</p>
         </div>
     @endif
 
-    <div class="driver-account-card">
-        <h2 class="driver-panel-title mb-1">Đổi mật khẩu</h2>
-        <p class="driver-account-hint mb-3">Mật khẩu tối thiểu 6 ký tự. Dùng mật khẩu riêng, không chia sẻ cho người khác.</p>
+    <nav class="driver-account-menu" aria-label="Mục thông tin cá nhân">
+        <button type="button" class="driver-account-menu__item" data-driver-tab="account-profile">
+            <span class="driver-account-menu__copy">
+                <strong data-i18n="account_profile">Hồ sơ</strong>
+                <span class="driver-account-menu__hint" data-i18n="account_profile_menu_hint">Xem họ tên, SĐT, mã tài xế, xe</span>
+            </span>
+            <span class="driver-account-menu__chevron" aria-hidden="true">›</span>
+        </button>
 
-        <form method="POST" action="{{ route('driver.password.update') }}" class="driver-account-form">
-            @csrf
-            @method('PATCH')
+        <button type="button" class="driver-account-menu__item" data-driver-tab="account-update">
+            <span class="driver-account-menu__copy">
+                <strong data-i18n="account_update">Cập nhật thông tin</strong>
+                <span class="driver-account-menu__hint">
+                    <span data-i18n="account_update_menu_hint">Biển số, loại xe, ngân hàng, ảnh giấy tờ</span>
+                    @if($pendingDocs)
+                        · Đang chờ duyệt
+                    @endif
+                </span>
+            </span>
+            <span class="driver-account-menu__chevron" aria-hidden="true">›</span>
+        </button>
 
-            <div class="mb-3">
-                <label class="form-label" for="driver-current-password">Mật khẩu hiện tại</label>
-                <input type="password"
-                       name="current_password"
-                       id="driver-current-password"
-                       class="form-control @error('current_password') is-invalid @enderror"
-                       required
-                       autocomplete="current-password">
-                @error('current_password')<div class="invalid-feedback">{{ $message }}</div>@enderror
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label" for="driver-new-password">Mật khẩu mới</label>
-                <input type="password"
-                       name="password"
-                       id="driver-new-password"
-                       class="form-control @error('password') is-invalid @enderror"
-                       required
-                       minlength="6"
-                       autocomplete="new-password">
-                @error('password')<div class="invalid-feedback">{{ $message }}</div>@enderror
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label" for="driver-new-password-confirm">Nhập lại mật khẩu mới</label>
-                <input type="password"
-                       name="password_confirmation"
-                       id="driver-new-password-confirm"
-                       class="form-control @error('password_confirmation') is-invalid @enderror"
-                       required
-                       minlength="6"
-                       autocomplete="new-password">
-                @error('password_confirmation')<div class="invalid-feedback">{{ $message }}</div>@enderror
-            </div>
-
-            <button type="submit" class="btn btn-warning fw-semibold">Lưu mật khẩu mới</button>
-        </form>
-    </div>
+        <button type="button" class="driver-account-menu__item {{ $mustChangePassword ? 'is-alert' : '' }}" data-driver-tab="account-password">
+            <span class="driver-account-menu__copy">
+                <strong data-i18n="account_password">Đổi mật khẩu</strong>
+                <span class="driver-account-menu__hint" data-i18n="account_password_menu_hint">Bảo mật tài khoản đăng nhập</span>
+            </span>
+            <span class="driver-account-menu__chevron" aria-hidden="true">›</span>
+        </button>
+    </nav>
 </section>

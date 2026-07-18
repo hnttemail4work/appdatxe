@@ -8,6 +8,9 @@ use Symfony\Component\HttpFoundation\Response;
 
 class EnsureDriverPasswordChanged
 {
+    /** @var list<string> */
+    private const ALLOWED_TABS = ['account', 'account-password'];
+
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
@@ -17,9 +20,12 @@ class EnsureDriverPasswordChanged
         }
 
         if ($request->routeIs('driver.password.update', 'logout', 'driver.dashboard')) {
-            if ($request->routeIs('driver.dashboard') && $request->query('tab', 'account') !== 'account') {
-                return redirect()->route('driver.dashboard', ['tab' => 'account'])
-                    ->with('error', 'Vui lòng đổi mật khẩu trước khi tiếp tục.');
+            if ($request->routeIs('driver.dashboard')) {
+                $tab = (string) $request->query('tab', 'account-password');
+                if (! in_array($tab, self::ALLOWED_TABS, true)) {
+                    return redirect()->route('driver.dashboard', ['tab' => 'account-password'])
+                        ->with('error', 'Vui lòng đổi mật khẩu trước khi tiếp tục.');
+                }
             }
 
             return $next($request);
@@ -28,11 +34,11 @@ class EnsureDriverPasswordChanged
         if ($request->expectsJson()) {
             return response()->json([
                 'message'  => 'Vui lòng đổi mật khẩu trước khi tiếp tục.',
-                'redirect' => route('driver.dashboard', ['tab' => 'account'], false),
+                'redirect' => route('driver.dashboard', ['tab' => 'account-password'], false),
             ], 403);
         }
 
-        return redirect()->route('driver.dashboard', ['tab' => 'account'])
+        return redirect()->route('driver.dashboard', ['tab' => 'account-password'])
             ->with('error', 'Vui lòng đổi mật khẩu trước khi tiếp tục.');
     }
 }

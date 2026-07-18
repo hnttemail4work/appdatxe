@@ -27,6 +27,8 @@ class PushNotificationSettings
             'driver.pickup_urgent'      => true,
             'driver.late_pickup'        => true,
             'driver.movement_deadline'  => true,
+            'driver.inbox_info'         => true,
+            'driver.inbox_notice'       => true,
         ];
     }
 
@@ -142,6 +144,8 @@ class PushNotificationSettings
             'driver.pickup_urgent'      => 'Tài xế — Sát giờ đón, mở app',
             'driver.late_pickup'        => 'Tài xế — Đã đến giờ đón',
             'driver.movement_deadline'  => 'Tài xế — Hạn bấm Đến điểm đón',
+            'driver.inbox_info'         => 'Tài xế — Thông tin (hộp thư)',
+            'driver.inbox_notice'       => 'Tài xế — Thông báo (hộp thư)',
         ];
     }
 }

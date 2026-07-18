@@ -19,17 +19,23 @@ class CustomerAccountService
         $phone = AuthIdentifier::normalizePhone((string) ($user->phone ?? ''));
 
         return [
-            'id'              => $user->id,
-            'name'            => $user->name,
-            'phone'           => $phone,
-            'email'           => $user->emailForForm(),
-            'gender'          => $user->gender,
-            'gender_label'    => $user->genderLabel(),
-            'age'             => $user->age(),
-            'avatar_initial'  => $user->avatarInitial(),
-            'has_biometric'   => app(WebAuthnService::class)->userHasCredentials($user),
-            'trip_count'      => $this->bookingsQuery($user)->count(),
-            'review_count'    => $this->reviewsQuery($user)->count(),
+            'id'                   => $user->id,
+            'name'                 => $user->preferredDisplayName(),
+            'phone'                => $phone,
+            'email'                => $user->emailForForm(),
+            'gender'               => $user->gender,
+            'gender_label'         => $user->genderLabel(),
+            'age'                  => $user->age(),
+            'date_of_birth'        => $user->date_of_birth?->format('Y-m-d'),
+            'address'              => $user->address,
+            'id_number'            => $user->id_number,
+            'photo_id_card_url'    => $user->idCardPhotoUrl('photo_id_card'),
+            'photo_id_card_back_url' => $user->idCardPhotoUrl('photo_id_card_back'),
+            'approval_status'      => $user->approval_status,
+            'avatar_initial'       => $user->avatarInitial(),
+            'has_biometric'        => app(WebAuthnService::class)->userHasCredentials($user),
+            'trip_count'           => $this->bookingsQuery($user)->count(),
+            'review_count'         => $this->reviewsQuery($user)->count(),
         ];
     }
 
@@ -46,10 +52,15 @@ class CustomerAccountService
             return null;
         }
 
+        $name = trim((string) $user->name);
+        if ($name === '' || $name === $phone) {
+            $name = $phone;
+        }
+
         return [
-            'passenger_name'   => trim((string) $user->name),
+            'passenger_name'   => $name,
             'contact_phone'    => $phone,
-            'passenger_gender' => ($user->gender ?? 'male') === 'female' ? 'female' : 'male',
+            'passenger_gender' => in_array($user->gender, ['male', 'female'], true) ? $user->gender : 'male',
             'passenger_age'    => $user->age(),
         ];
     }
@@ -117,7 +128,9 @@ class CustomerAccountService
             'booking_status'      => $booking->booking_status,
             'guest_status_label'  => $booking->primaryStatusLabel(),
             'total_price_label'   => Money::vnd((float) $booking->total_price),
-            'service_date_label'  => $booking->guestPickupAt()?->format('d/m/Y H:i'),
+            'service_date_label'  => $booking->isScheduledPickup()
+                ? $booking->guestPickupAt()?->format('d/m/Y H:i')
+                : $booking->pickupModeLabel(),
             'created_at_label'    => $booking->created_at?->format('d/m/Y H:i'),
             'can_review'          => $booking->trip_status === 'completed' && ! $booking->tripReview,
             'review'              => $booking->tripReview ? [

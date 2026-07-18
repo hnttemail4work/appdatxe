@@ -5,18 +5,32 @@
 $pending = $driver->isPendingApproval();
 $rejected = $driver->isRejected();
 $viewOnly = $pending || $rejected;
+$hasRequest = (bool) $driver->pendingChangeRequest;
 
 $tab = request('tab');
+$fromReferrals = request('from') === 'referrals';
 $driverEditDefault = match (true) {
     $tab === 'photos' => 'photos',
     $tab === 'wallet' => 'wallet',
+    $tab === 'invite' => 'invite',
+    $tab === 'requests' && $hasRequest => 'requests',
+    $hasRequest && ($tab === null || $tab === '') => 'requests',
     default => 'info',
 };
+$driverEditBackHref = $fromReferrals ? route('admin.referrals') : route('admin.drivers');
+$driverEditBackLabel = $fromReferrals ? '← Giới thiệu' : '← Danh sách';
+$driverEditNavActive = 'drivers';
+$driverEditNavDriversSubpage = true;
 
-$driverEditTabs = [
-    ['key' => 'info', 'label' => 'Thông tin'],
-    ['key' => 'photos', 'label' => 'Giấy tờ'],
-];
+$driverEditTabs = [];
+if ($hasRequest) {
+    $driverEditTabs[] = ['key' => 'requests', 'label' => 'Yêu cầu', 'badge' => 1, 'hot' => true];
+}
+$driverEditTabs[] = ['key' => 'info', 'label' => 'Thông tin'];
+$driverEditTabs[] = ['key' => 'photos', 'label' => 'Giấy tờ'];
+if (! $viewOnly) {
+    $driverEditTabs[] = ['key' => 'invite', 'label' => 'QR tài xế'];
+}
 if (! $viewOnly && $driver->isOperational()) {
     $driverEditTabs[] = ['key' => 'wallet', 'label' => 'Ví tài xế'];
 }
@@ -26,9 +40,12 @@ if (! $viewOnly && $driver->isOperational()) {
 
 <div class="console-panel driver-edit-panel">
     <div class="console-panel-body">
-        @include('partials.admin-nav-tabs', ['active' => 'drivers', 'driversSubpage' => true])
+        @include('partials.admin-nav-tabs', [
+            'active' => $driverEditNavActive,
+            'driversSubpage' => $driverEditNavDriversSubpage,
+        ])
 
-        <a href="{{ route('admin.drivers') }}" class="driver-edit-back">← Danh sách</a>
+        <a href="{{ $driverEditBackHref }}" class="driver-edit-back">{{ $driverEditBackLabel }}</a>
 
         @include('partials.driver-profile-edit-header', ['driver' => $driver])
 
@@ -45,6 +62,12 @@ if (! $viewOnly && $driver->isOperational()) {
             'activeKey' => $driverEditDefault,
             'tabs' => $driverEditTabs,
         ])
+
+        @if($hasRequest)
+        @include('partials.screen-tab-pane', ['prefix' => 'driver-edit', 'key' => 'requests', 'active' => $driverEditDefault === 'requests'])
+        @include('partials.admin-driver-pending-change', ['driver' => $driver])
+        @include('partials.screen-tab-pane-end')
+        @endif
 
         @include('partials.screen-tab-pane', ['prefix' => 'driver-edit', 'key' => 'info', 'active' => $driverEditDefault === 'info'])
         @if($viewOnly)
@@ -112,6 +135,17 @@ if (! $viewOnly && $driver->isOperational()) {
         ])
         @include('partials.screen-tab-pane-end')
 
+        @if(! $viewOnly)
+        @include('partials.screen-tab-pane', ['prefix' => 'driver-edit', 'key' => 'invite', 'active' => $driverEditDefault === 'invite'])
+        @include('partials.admin-driver-invite-panel', [
+            'driver' => $driver,
+            'inviteReferral' => $inviteReferral ?? null,
+            'commissionReferral' => $commissionReferral ?? null,
+            'inviteFrom' => $fromReferrals ? 'referrals' : null,
+        ])
+        @include('partials.screen-tab-pane-end')
+        @endif
+
         @if(! $viewOnly && $driver->isOperational())
         @include('partials.screen-tab-pane', ['prefix' => 'driver-edit', 'key' => 'wallet', 'active' => $driverEditDefault === 'wallet'])
         @include('partials.driver-wallet-admin-panel', [
@@ -131,8 +165,57 @@ if (! $viewOnly && $driver->isOperational()) {
 @push('styles')
 <link rel="stylesheet" href="{{ asset('css/customer.css') }}?v={{ filemtime(public_path('css/customer.css')) }}">
 <link rel="stylesheet" href="{{ asset('css/driver-mgmt.css') }}?v={{ filemtime(public_path('css/driver-mgmt.css')) }}">
-@endpush
-
-@push('scripts')
-<script src="{{ asset('js/driver-approval-actions.js') }}"></script>
+<style>
+.driver-invite-admin__qr {
+    padding: .55rem;
+    border-radius: .65rem;
+    background: #fff;
+    display: inline-block;
+    line-height: 0;
+}
+.driver-invite-admin__qr img {
+    display: block;
+    border-radius: .3rem;
+}
+.driver-qr-admin__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16.5rem, 1fr));
+    gap: 1rem;
+}
+.driver-qr-card {
+    border: 1px solid rgba(255, 255, 255, .1);
+    border-radius: .85rem;
+    background: rgba(255, 255, 255, .03);
+    padding: 1rem 1.05rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: .85rem;
+    min-height: 100%;
+}
+.driver-qr-card--muted {
+    opacity: .92;
+}
+.driver-qr-card__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: .75rem;
+}
+.driver-qr-card__title {
+    margin: 0;
+    font-size: .95rem;
+    font-weight: 700;
+    color: #fff;
+}
+.driver-qr-card__body {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: flex-start;
+}
+.driver-qr-card__form .form-label {
+    font-size: .78rem;
+    margin-bottom: .35rem;
+}
+</style>
 @endpush

@@ -48,8 +48,6 @@ class BookingCreationService
         ?float $pickupLng = null,
         ?float $dropoffLat = null,
         ?float $dropoffLng = null,
-        string $departurePlan = 'today',
-        ?int $laterReturnDays = null,
         bool $autoMatchDriver = false,
     ): Booking {
         $template->loadMissing(['route', 'vehicle']);
@@ -84,11 +82,6 @@ class BookingCreationService
         $pickup = $pickupAddress ?: $pickup;
         $dropoff = $dropoffAddress ?: $dropoff;
 
-        $departurePlan = \App\Support\DeparturePlan::normalize($departurePlan);
-        $storedLaterDays = $departurePlan === \App\Support\DeparturePlan::LATER
-            ? \App\Support\DeparturePlan::normalizeLaterReturnDays($laterReturnDays)
-            : null;
-
         $existing = $this->findReusablePendingBooking($schedule, $contactPhone);
         if ($existing) {
             $booking = $this->refreshPendingBooking(
@@ -107,8 +100,6 @@ class BookingCreationService
                 $pickupLng,
                 $dropoffLat,
                 $dropoffLng,
-                $departurePlan,
-                $storedLaterDays,
             );
             if ($autoMatchDriver) {
                 $this->driverRequests->autoAssignForBooking($booking->fresh(['schedule.route', 'schedule.vehicle']));
@@ -139,8 +130,6 @@ class BookingCreationService
             $pickupLng,
             $dropoffLat,
             $dropoffLng,
-            $departurePlan,
-            $storedLaterDays,
         ): Booking {
             return $this->createBooking(
                 $schedule,
@@ -159,8 +148,6 @@ class BookingCreationService
                 $pickupLng,
                 $dropoffLat,
                 $dropoffLng,
-                $departurePlan,
-                $storedLaterDays,
             );
         });
 
@@ -194,15 +181,8 @@ class BookingCreationService
         ?float $pickupLng = null,
         ?float $dropoffLat = null,
         ?float $dropoffLng = null,
-        string $departurePlan = 'today',
-        ?int $laterReturnDays = null,
     ): Booking {
-        $departurePlan = \App\Support\DeparturePlan::normalize($departurePlan);
-        $storedLaterDays = $departurePlan === \App\Support\DeparturePlan::LATER
-            ? \App\Support\DeparturePlan::normalizeLaterReturnDays($laterReturnDays)
-            : null;
-
-        $booking = DB::transaction(function () use ($schedule, $contactPhone, $passengerName, $pickupAddress, $pickupDetail, $dropoffAddress, $dropoffDetail, $notes, $pickupTime, $appliedReferralCodeId, $passengerGender, $passengerAge, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng, $departurePlan, $storedLaterDays): Booking {
+        $booking = DB::transaction(function () use ($schedule, $contactPhone, $passengerName, $pickupAddress, $pickupDetail, $dropoffAddress, $dropoffDetail, $notes, $pickupTime, $appliedReferralCodeId, $passengerGender, $passengerAge, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng): Booking {
             $this->duplicateBookings->assertCanBook($contactPhone);
 
             $this->scheduleLifecycle->sync();
@@ -216,7 +196,7 @@ class BookingCreationService
                 throw new InvalidArgumentException('Chuyến không còn mở đặt vé (đang chạy hoặc đã kết thúc).');
             }
 
-            $totalPrice = $this->pricing->bookingTotal($schedule, $pickupAddress, $dropoffAddress, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng, $departurePlan, $storedLaterDays);
+            $totalPrice = $this->pricing->bookingTotal($schedule, $pickupAddress, $dropoffAddress, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
             $totalPrice = $this->applyReferralToTotal($totalPrice, $contactPhone, $appliedReferralCodeId);
 
             $booking = Booking::query()->create([
@@ -236,8 +216,6 @@ class BookingCreationService
                 'pickup_lat'               => $pickupLat,
                 'pickup_lng'               => $pickupLng,
                 'pickup_time'              => $pickupTime ? \App\Support\DepartureTimeDisplay::storageValue($pickupTime) : null,
-                'departure_plan'           => $departurePlan,
-                'later_return_days'        => $storedLaterDays,
                 'dropoff_address'          => $dropoffAddress,
                 'dropoff_detail'           => $dropoffDetail ? trim($dropoffDetail) : null,
                 'dropoff_lat'              => $dropoffLat,
@@ -248,7 +226,6 @@ class BookingCreationService
 
             $this->syncScheduleAvailability($schedule);
             $this->audit($booking, null, 'booking_created', null, $booking->toArray());
-            $this->referralCodes->issueForBooking($booking);
 
             return $booking;
         });
@@ -284,15 +261,9 @@ class BookingCreationService
         ?float $pickupLng = null,
         ?float $dropoffLat = null,
         ?float $dropoffLng = null,
-        string $departurePlan = 'today',
-        ?int $laterReturnDays = null,
     ): Booking {
-        $departurePlan = \App\Support\DeparturePlan::normalize($departurePlan);
-        $storedLaterDays = $departurePlan === \App\Support\DeparturePlan::LATER
-            ? \App\Support\DeparturePlan::normalizeLaterReturnDays($laterReturnDays)
-            : null;
         $booking->loadMissing('schedule.route');
-        $totalPrice = $this->pricing->bookingTotal($booking->schedule, $pickupAddress, $dropoffAddress, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng, $departurePlan, $storedLaterDays);
+        $totalPrice = $this->pricing->bookingTotal($booking->schedule, $pickupAddress, $dropoffAddress, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
         $totalPrice = $this->applyReferralToTotal($totalPrice, $booking->contact_phone, $appliedReferralCodeId);
 
         $refreshFields = [
@@ -304,8 +275,6 @@ class BookingCreationService
             'pickup_lat'       => $pickupLat,
             'pickup_lng'       => $pickupLng,
             'pickup_time'      => $pickupTime ? \App\Support\DepartureTimeDisplay::storageValue($pickupTime) : null,
-            'departure_plan'   => $departurePlan,
-            'later_return_days'=> $storedLaterDays,
             'dropoff_address'  => $dropoffAddress,
             'dropoff_detail'   => $dropoffDetail ? trim($dropoffDetail) : null,
             'dropoff_lat'      => $dropoffLat,
@@ -343,16 +312,6 @@ class BookingCreationService
             $appliedReferralCodeId = null;
 
             return (float) PlatformFees::roundDisplayPrice($subtotal);
-        }
-
-        if ($referral->type === ReferralCode::TYPE_BOOKING_TEMP) {
-            if (! $this->referralCodes->qualifiesForCustomerDiscount($referral, $contactPhone)) {
-                $appliedReferralCodeId = null;
-
-                return (float) PlatformFees::roundDisplayPrice($subtotal);
-            }
-
-            return $this->referralCodes->applyDiscount($subtotal, $referral->customerDiscountPercent());
         }
 
         if ($referral->type === ReferralCode::TYPE_REFERRER) {

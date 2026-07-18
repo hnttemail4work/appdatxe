@@ -3,9 +3,11 @@
 namespace App\Services;
 
 use App\Models\Booking;
+use App\Models\DriverProfile;
 use App\Models\ReferralCode;
 use App\Support\AuthIdentifier;
 use App\Support\PlatformFees;
+use Illuminate\Support\Collection;
 
 class ReferralCodeService
 {
@@ -23,29 +25,244 @@ class ReferralCodeService
         ]);
     }
 
-    public function issueForBooking(Booking $booking): ReferralCode
+    /** Mã QR giảm giá mời bạn bè của tài xế (nếu đã tạo). */
+    public function forDriver(DriverProfile $profile): ?ReferralCode
     {
-        $existing = ReferralCode::query()
-            ->where('booking_id', $booking->id)
-            ->where('type', ReferralCode::TYPE_BOOKING_TEMP)
+        return ReferralCode::query()
+            ->where('driver_profile_id', $profile->id)
+            ->where('type', ReferralCode::TYPE_REFERRER)
             ->first();
+    }
 
-        if ($existing) {
-            return $existing;
+    /**
+     * Tạo mã QR mời bạn bè — chỉ khi chưa có.
+     *
+     * @throws \InvalidArgumentException
+     */
+    public function createForDriver(DriverProfile $profile, ?float $discountPercent = null): ReferralCode
+    {
+        if ($this->forDriver($profile)) {
+            throw new \InvalidArgumentException('Tài xế đã có mã QR giới thiệu.');
         }
 
+        $profile->loadMissing('user');
+        $user = $profile->user;
+        $name = trim((string) ($user?->preferredDisplayName() ?: $profile->driver_code ?: 'Tài xế'));
+        $phone = trim((string) ($user?->phone ?: ''));
+        $discount = $discountPercent !== null
+            ? max(0.0, min(100.0, $discountPercent))
+            : PlatformFees::driverInviteQrDiscountPercent();
+
         return ReferralCode::query()->create([
-            'type'        => ReferralCode::TYPE_BOOKING_TEMP,
-            'name'        => trim((string) $booking->passenger_name),
-            'phone'       => trim((string) $booking->contact_phone),
-            'booking_id'  => $booking->id,
-            'status'      => ReferralCode::STATUS_PENDING,
+            'type'                      => ReferralCode::TYPE_REFERRER,
+            'name'                      => $name !== '' ? $name : 'Tài xế',
+            'phone'                     => $phone !== '' ? $phone : ('TX' . $profile->id),
+            'driver_profile_id'         => $profile->id,
+            'status'                    => ReferralCode::STATUS_ACTIVE,
+            'commission_percent'        => 0,
+            'customer_discount_percent' => $discount,
+            'created_by'                => $user?->id,
+            'activated_at'              => now(),
         ]);
     }
 
-    public function ensureForBooking(Booking $booking): ReferralCode
+    /**
+     * Cập nhật % giảm giá QR hiện có (không tự tạo mới).
+     *
+     * @throws \InvalidArgumentException
+     */
+    public function updateDriverInviteDiscount(DriverProfile $profile, float $discountPercent): ReferralCode
     {
-        return $this->issueForBooking($booking);
+        $existing = $this->forDriver($profile);
+        if (! $existing) {
+            throw new \InvalidArgumentException('Chưa có mã QR — hãy tạo QR trước.');
+        }
+
+        $discount = max(0.0, min(100.0, $discountPercent));
+        $profile->loadMissing('user');
+        $user = $profile->user;
+        $name = trim((string) ($user?->preferredDisplayName() ?: $profile->driver_code ?: 'Tài xế'));
+        $phone = trim((string) ($user?->phone ?: ''));
+
+        $patch = [
+            'customer_discount_percent' => $discount,
+            'commission_percent'        => 0,
+        ];
+        if ($name !== '' && $existing->name !== $name) {
+            $patch['name'] = $name;
+        }
+        if ($phone !== '' && $existing->phone !== $phone) {
+            $patch['phone'] = $phone;
+        }
+
+        $existing->update($patch);
+
+        return $existing->fresh();
+    }
+
+    /**
+     * Tạm ngưng QR mời bạn — không xóa; ẩn khỏi Mời bạn bè / không áp dụng mã.
+     *
+     * @return float|null % giảm giá trước khi ngưng (để thông báo)
+     */
+    public function suspendForDriver(DriverProfile $profile): ?float
+    {
+        $existing = $this->forDriver($profile);
+        if (! $existing || $existing->isSuspended()) {
+            return null;
+        }
+
+        $previousPercent = $existing->customerDiscountPercent();
+        $this->suspendReferrer($existing);
+
+        return $previousPercent;
+    }
+
+    /** Bật lại QR mời bạn đã tạm ngưng. */
+    public function restoreForDriver(DriverProfile $profile): ?ReferralCode
+    {
+        $existing = $this->forDriver($profile);
+        if (! $existing || ! $existing->isSuspended()) {
+            return null;
+        }
+
+        $this->restoreReferrer($existing);
+
+        return $existing->fresh();
+    }
+
+    /**
+     * @deprecated Giữ tương thích — ưu tiên suspendForDriver.
+     *
+     * @return float|null % giảm giá trước khi xóa
+     */
+    public function deleteForDriver(DriverProfile $profile): ?float
+    {
+        return $this->suspendForDriver($profile);
+    }
+
+    /** @deprecated Dùng createForDriver / forDriver — giữ tương thích chỗ còn gọi cũ. */
+    public function ensureForDriver(DriverProfile $profile): ReferralCode
+    {
+        return $this->forDriver($profile) ?? $this->createForDriver($profile);
+    }
+
+    public function assignedCommissionForDriver(DriverProfile $profile): ?ReferralCode
+    {
+        return ReferralCode::query()
+            ->where('assigned_driver_profile_id', $profile->id)
+            ->where('type', ReferralCode::TYPE_REFERRER)
+            ->whereNull('driver_profile_id')
+            ->where('status', ReferralCode::STATUS_ACTIVE)
+            ->latest('id')
+            ->first();
+    }
+
+    /**
+     * Gán mã hoa hồng (admin tạo) cho tài xế — thu hồi mã cũ trên cùng TX nếu có.
+     */
+    public function assignCommissionToDriver(ReferralCode $referral, DriverProfile $profile): void
+    {
+        if (! $referral->canAssignToDriver()) {
+            throw new \InvalidArgumentException('Chỉ gán được mã người giới thiệu (hoa hồng) đang sử dụng.');
+        }
+
+        if (! $profile->isApproved()) {
+            throw new \InvalidArgumentException('Chỉ gán mã cho tài xế đã được duyệt.');
+        }
+
+        $inbox = app(DriverInboxService::class);
+
+        // Thu hồi mã HH đang gán cho tài xế này (nếu khác mã mới).
+        $existingOnDriver = ReferralCode::query()
+            ->where('assigned_driver_profile_id', $profile->id)
+            ->where('type', ReferralCode::TYPE_REFERRER)
+            ->whereNull('driver_profile_id')
+            ->where('id', '!=', $referral->id)
+            ->get();
+
+        foreach ($existingOnDriver as $old) {
+            $old->update(['assigned_driver_profile_id' => null]);
+            $inbox->notifyCommissionCodeRevoked($profile, $old);
+        }
+
+        $previousProfileId = (int) ($referral->assigned_driver_profile_id ?? 0);
+        if ($previousProfileId > 0 && $previousProfileId !== (int) $profile->id) {
+            $previousProfile = DriverProfile::query()->find($previousProfileId);
+            $referral->update(['assigned_driver_profile_id' => null]);
+            if ($previousProfile) {
+                $inbox->notifyCommissionCodeRevoked($previousProfile, $referral);
+            }
+        }
+
+        $referral->update(['assigned_driver_profile_id' => $profile->id]);
+        $inbox->notifyCommissionCodeAssigned($profile, $referral->fresh());
+    }
+
+    public function revokeCommissionFromDriver(ReferralCode $referral): void
+    {
+        if (! $referral->isAssignedCommissionCode()) {
+            throw new \InvalidArgumentException('Mã này chưa được gán cho tài xế.');
+        }
+
+        $profile = $referral->assignedDriverProfile;
+        $referral->update(['assigned_driver_profile_id' => null]);
+
+        if ($profile) {
+            app(DriverInboxService::class)->notifyCommissionCodeRevoked($profile, $referral);
+        }
+    }
+
+    /**
+     * Khách đã dùng mã QR của tài xế (theo SĐT, mới nhất trước).
+     *
+     * @return Collection<int, object{passenger_name: string, contact_phone: string, bookings_count: int, last_booked_at: mixed}>
+     */
+    public function referredCustomersFor(ReferralCode $referral): Collection
+    {
+        return $this->referredCustomersForCodes([$referral]);
+    }
+
+    /**
+     * @param  iterable<int, ReferralCode|null>  $referrals
+     * @return Collection<int, object{passenger_name: string, contact_phone: string, bookings_count: int, last_booked_at: mixed}>
+     */
+    public function referredCustomersForCodes(iterable $referrals): Collection
+    {
+        $ids = collect($referrals)
+            ->filter()
+            ->map(fn (ReferralCode $referral): int => (int) $referral->id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($ids === []) {
+            return collect();
+        }
+
+        return Booking::query()
+            ->whereIn('applied_referral_code_id', $ids)
+            ->whereNotIn('booking_status', ['cancelled', 'rejected'])
+            ->orderByDesc('id')
+            ->get(['passenger_name', 'contact_phone', 'created_at'])
+            ->groupBy(function (Booking $booking): string {
+                $digits = self::normalizePhone((string) $booking->contact_phone);
+
+                return strlen($digits) >= 9 ? substr($digits, -9) : ($digits !== '' ? $digits : 'id-' . $booking->getKey());
+            })
+            ->map(function (Collection $rows) {
+                /** @var Booking $latest */
+                $latest = $rows->first();
+
+                return (object) [
+                    'passenger_name'  => (string) ($latest->passenger_name ?: '—'),
+                    'contact_phone'   => (string) ($latest->contact_phone ?: '—'),
+                    'bookings_count'  => $rows->count(),
+                    'last_booked_at'  => $latest->created_at,
+                ];
+            })
+            ->values();
     }
 
     public function purgeForBooking(Booking $booking): void
@@ -56,23 +273,10 @@ class ReferralCodeService
             ->delete();
     }
 
-    public function activateForCompletedBooking(Booking $booking): void
-    {
-        ReferralCode::query()
-            ->where('booking_id', $booking->id)
-            ->where('type', ReferralCode::TYPE_BOOKING_TEMP)
-            ->where('status', ReferralCode::STATUS_PENDING)
-            ->update([
-                'status'       => ReferralCode::STATUS_ACTIVE,
-                'activated_at' => now(),
-                'expires_at'   => now()->addDays(ReferralCode::BOOKING_CODE_VALIDITY_DAYS),
-            ]);
-    }
-
     public function deleteBookingReferralCode(ReferralCode $referralCode): void
     {
         if ($referralCode->type !== ReferralCode::TYPE_BOOKING_TEMP) {
-            abort(403, 'Chỉ xóa được mã phát sinh từ đặt vé.');
+            abort(403, 'Chỉ xóa được mã phát sinh từ đặt vé cũ.');
         }
 
         $referralCode->delete();
@@ -81,7 +285,7 @@ class ReferralCodeService
     public function suspendReferrer(ReferralCode $referralCode): void
     {
         if ($referralCode->type !== ReferralCode::TYPE_REFERRER) {
-            abort(403, 'Chỉ ẩn được mã người giới thiệu tạo tay.');
+            abort(403, 'Chỉ tạm ngưng được mã giới thiệu.');
         }
 
         $referralCode->update(['status' => ReferralCode::STATUS_SUSPENDED]);
@@ -165,13 +369,10 @@ class ReferralCodeService
             return true;
         }
 
-        return ReferralCode::query()
-            ->where('type', ReferralCode::TYPE_BOOKING_TEMP)
-            ->where('phone', 'like', '%' . $suffix)
-            ->exists();
+        return false;
     }
 
-    /** Phần trăm giảm giá cho khách — chỉ mã từ đặt vé; 0 với mã người giới thiệu (admin). */
+    /** Phần trăm giảm giá khách khi mã GT (QR tài xế / người giới thiệu) đủ điều kiện. */
     public function customerDiscountPercent(?ReferralCode $referral, string $contactPhone): float
     {
         if (! $this->qualifiesForCustomerDiscount($referral, $contactPhone)) {

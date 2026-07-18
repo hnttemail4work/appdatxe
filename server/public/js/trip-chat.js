@@ -69,7 +69,9 @@
 
     function loadMessages(panel) {
         var url = panel.dataset.chatListUrl;
-        if (!url || panel.classList.contains('d-none')) return Promise.resolve();
+        if (!url || panel.classList.contains('d-none') || panel.closest('[hidden]')) {
+            return Promise.resolve();
+        }
 
         var params = requestParams(panel);
         var afterId = Number(panel.dataset.lastMessageId || 0);
@@ -85,9 +87,21 @@
         }).then(function (data) {
             applyResponse(panel, data);
             setError(panel, '');
+            if (data.unread && window.DriverInbox && window.DriverInbox.updateBadges) {
+                window.DriverInbox.updateBadges(data.unread);
+            }
         }).catch(function (error) {
             setError(panel, error.message || 'Không tải được tin nhắn.');
         });
+    }
+
+    function openDriverPanel(panel) {
+        if (!panel) return;
+        var body = panel.querySelector('[data-chat-body]');
+        if (body) body.classList.remove('d-none');
+        var toggle = panel.querySelector('[data-chat-toggle]');
+        if (toggle) toggle.setAttribute('aria-expanded', 'true');
+        loadMessages(panel);
     }
 
     function sendMessage(panel, body) {
@@ -119,6 +133,7 @@
         if (pollTimer) window.clearInterval(pollTimer);
         pollTimer = window.setInterval(function () {
             document.querySelectorAll('[data-trip-chat]:not(.d-none)').forEach(function (panel) {
+                if (panel.closest('[hidden]')) return;
                 var body = panel.querySelector('[data-chat-body]');
                 if (body && !body.classList.contains('d-none')) loadMessages(panel);
             });
@@ -161,6 +176,7 @@
     });
 
     window.TripChat = {
+        openDriverPanel: openDriverPanel,
         setCustomerBooking: function (booking) {
             var panel = document.querySelector('[data-trip-chat][data-chat-mode="customer"]');
             if (!panel) return;

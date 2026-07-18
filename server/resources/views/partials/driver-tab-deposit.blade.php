@@ -16,13 +16,22 @@ $atPendingCap = $pendingDeposits->count() >= DriverWalletConfig::MAX_PENDING_DEP
 
 @endphp
 
-@if(session('success'))
-<div class="driver-notice driver-notice-success mb-3" role="status">
-    {{ session('success') }}
-</div>
-@endif
-
 @include('partials.driver-wallet-pending-deposits', ['pendingDeposits' => $pendingDeposits])
+
+<div class="driver-wallet-stats mb-3" aria-label="Thu nhập và ví">
+    <div class="driver-wallet-stats__item">
+        <span class="driver-wallet-stats__label">Hôm nay</span>
+        <strong class="driver-wallet-stats__value">{{ number_format($revenueStats['day'] ?? 0, 0, ',', '.') }} đ</strong>
+    </div>
+    <div class="driver-wallet-stats__item">
+        <span class="driver-wallet-stats__label">Tuần này</span>
+        <strong class="driver-wallet-stats__value">{{ number_format($revenueStats['week'] ?? 0, 0, ',', '.') }} đ</strong>
+    </div>
+    <div class="driver-wallet-stats__item driver-wallet-stats__item--balance">
+        <span class="driver-wallet-stats__label">Số dư ví</span>
+        <strong class="driver-wallet-stats__value">{{ number_format($wallet->balance, 0, ',', '.') }} đ</strong>
+    </div>
+</div>
 
 @if($atPendingCap)
 <div class="driver-notice driver-notice-info mb-3" role="status">

@@ -1,60 +1,91 @@
 /**
- * Wizard đăng ký tài xế — điều hướng từng bước, validate client-side, tóm tắt cuối.
+ * Wizard đăng ký tài xế — hybrid: nhóm giấy tờ/xe/NH + PIN/OTP chrome tối giản.
  */
 (function () {
+    var root = document.querySelector('[data-driver-wizard-root]');
     var form = document.getElementById('driver-register-form');
     var wizard = document.getElementById('driver-wizard');
     if (!form || !wizard) return;
 
     var panels = wizard.querySelectorAll('[data-wizard-step]');
-    var stepBtns = wizard.querySelectorAll('[data-goto-step]');
-    var btnPrev = wizard.querySelector('[data-wizard-prev]');
-    var btnNext = wizard.querySelector('[data-wizard-next]');
-    var btnSubmit = wizard.querySelector('[data-wizard-submit]');
-    var progressBar = wizard.querySelector('[data-wizard-progress]');
-    var reviewBox = wizard.querySelector('[data-review-summary]');
-    var stepLabelEl = wizard.querySelector('[data-wizard-step-label]');
-    var stepCountEl = wizard.querySelector('[data-wizard-step-count]');
+    var backLink = (root || document).querySelector('[data-auth-back]');
+    var titleEl = (root || document).querySelector('[data-auth-title]');
+    var homeUrl = (root && root.dataset.homeUrl) || (backLink && backLink.getAttribute('href')) || '/';
+    var stepTitles = {};
+    try {
+        stepTitles = JSON.parse((root && root.dataset.stepTitles) || '{}');
+    } catch (e) {
+        stepTitles = {};
+    }
+
     var current = 1;
     var total = panels.length;
     var vehicleFiles = [];
     var vehicleObjectUrls = [];
+    var draftPin = '';
+    var passwordInput = form.querySelector('[data-register-password]');
+    var passwordConfirmInput = form.querySelector('[data-register-password-confirm]');
+
+    function pinWrap(step) {
+        var panel = wizard.querySelector('[data-wizard-step="' + step + '"]');
+        return panel ? panel.querySelector('[data-pin-boxes]') : null;
+    }
+
+    function pinValue(step) {
+        var wrap = pinWrap(step);
+        if (!wrap || !window.PinInput) return '';
+        return PinInput.value(wrap);
+    }
+
+    function syncChrome() {
+        if (titleEl) {
+            titleEl.textContent = stepTitles[current] || ('Bước ' + current);
+        }
+        if (!backLink) return;
+        if (current <= 1) {
+            backLink.setAttribute('href', homeUrl);
+            backLink.onclick = null;
+        } else {
+            backLink.setAttribute('href', '#');
+            backLink.onclick = function (e) {
+                e.preventDefault();
+                if (current === 7) draftPin = '';
+                showStep(current - 1);
+            };
+        }
+    }
 
     function showStep(n) {
         current = Math.max(1, Math.min(total, n));
         panels.forEach(function (panel) {
             var step = parseInt(panel.dataset.wizardStep, 10);
-            panel.classList.toggle('d-none', step !== current);
+            var active = step === current;
+            panel.hidden = !active;
+            panel.classList.toggle('d-none', !active);
         });
-        var activeLabel = '';
-        stepBtns.forEach(function (btn) {
-            var step = parseInt(btn.dataset.gotoStep, 10);
-            var isActive = step === current;
-            btn.classList.toggle('active', isActive);
-            btn.classList.toggle('done', step < current);
-            if (isActive) activeLabel = btn.getAttribute('data-step-label') || '';
-        });
-        if (stepLabelEl) stepLabelEl.textContent = activeLabel;
-        if (stepCountEl) stepCountEl.textContent = current + '/' + total;
-        if (progressBar) {
-            progressBar.style.width = Math.round((current / total) * 100) + '%';
+        syncChrome();
+        if ((current === 6 || current === 7) && window.PinInput) {
+            var wrap = pinWrap(current);
+            if (wrap) {
+                PinInput.clear(wrap);
+                var first = wrap.querySelector('.pin-box');
+                if (first) setTimeout(function () { first.focus(); }, 50);
+            }
         }
-        if (btnPrev) btnPrev.disabled = current === 1;
-        if (btnNext) btnNext.classList.toggle('d-none', current === total);
-        if (btnSubmit) btnSubmit.classList.toggle('d-none', current !== total);
-        if (current === total) buildReview();
-        window.scrollTo({ top: wizard.offsetTop - 20, behavior: 'smooth' });
     }
 
     function fieldsInStep(step) {
         var panel = wizard.querySelector('[data-wizard-step="' + step + '"]');
         if (!panel) return [];
         return Array.from(panel.querySelectorAll('input, select, textarea')).filter(function (el) {
-            return el.name && !el.disabled && el.type !== 'hidden';
+            return el.name && !el.disabled && el.type !== 'hidden' && !el.classList.contains('pin-box');
         });
     }
 
+    var V = window.AuthFieldValidation;
+
     function fieldLabel(el) {
+        if (V && V.fieldLabel) return V.fieldLabel(el);
         if (window.FormFieldValidation && FormFieldValidation.label) {
             return FormFieldValidation.label(el);
         }
@@ -118,51 +149,31 @@
         if (message) el.setCustomValidity(message);
     }
 
-    function truncateFileName(name, maxLen) {
-        maxLen = maxLen || 22;
-        if (!name || name.length <= maxLen) return name || '';
-        var dot = name.lastIndexOf('.');
-        var ext = dot > 0 ? name.slice(dot) : '';
-        var keep = Math.max(4, maxLen - ext.length - 1);
-        return name.slice(0, keep) + '…' + ext;
-    }
-
     function updateFileNameLabel(input) {
         if (!input) return;
         var wrap = fileFieldWrap(input);
         var label = wrap && wrap.querySelector('[data-file-name]');
         if (!label) return;
+        var file = input.files && input.files[0];
         if (input.name === 'photo_vehicles[]') {
             label.textContent = vehicleFiles.length ? (vehicleFiles.length + ' ảnh') : 'Chưa chọn';
-            return;
+        } else {
+            label.textContent = file ? 'Đã chọn' : 'Chưa chọn';
         }
-        var file = input.files && input.files[0];
-        label.textContent = file ? truncateFileName(file.name) : 'Chưa chọn';
         if (wrap && wrap.classList.contains('register-file-tile')) {
-            wrap.classList.toggle('has-file', !!file);
+            wrap.classList.toggle('has-file', !!(file || (input.name === 'photo_vehicles[]' && vehicleFiles.length)));
         }
-    }
-
-    function passwordRuleMessage(value) {
-        if (!value) return 'Vui lòng nhập mật khẩu.';
-        if (value.length < 8 || !/[a-z]/.test(value) || !/[A-Z]/.test(value) || !/\d/.test(value)) {
-            return 'Mật khẩu tối thiểu 8 ký tự, gồm chữ hoa, chữ thường và số.';
-        }
-        return '';
     }
 
     function emptyRequiredMessage(el) {
         var label = fieldLabel(el);
-        if (el.type === 'checkbox') {
-            return 'Vui lòng đồng ý với điều khoản.';
-        }
-        if (el.tagName === 'SELECT' || el.type === 'file') {
-            return 'Vui lòng chọn ' + label + '.';
-        }
+        if (el.type === 'checkbox') return (V && V.MSG.terms) || 'Vui lòng đồng ý với điều khoản.';
+        if (el.tagName === 'SELECT' || el.type === 'file') return 'Vui lòng chọn ' + label + '.';
         return 'Vui lòng điền ' + label + '.';
     }
 
     function isEmpty(el) {
+        if (V && V.isEmpty) return V.isEmpty(el);
         if (window.FormFieldValidation && FormFieldValidation.isEmpty) {
             return FormFieldValidation.isEmpty(el);
         }
@@ -172,43 +183,67 @@
     }
 
     function validateStep(step) {
+        if (step === 6) {
+            var wrap6 = pinWrap(6);
+            if (V && wrap6) {
+                if (!V.validatePinWrap(wrap6)) return false;
+                draftPin = V.pinValueFrom(wrap6);
+                return true;
+            }
+            var pin = pinValue(6);
+            if (!/^\d{6}$/.test(pin)) {
+                if (wrap6 && window.PinInput) PinInput.clear(wrap6);
+                return false;
+            }
+            draftPin = pin;
+            return true;
+        }
+
+        if (step === 7) {
+            var wrap7 = pinWrap(7);
+            var confirm = V && wrap7 ? V.pinValueFrom(wrap7) : pinValue(7);
+            if (!/^\d{6}$/.test(confirm) || confirm !== draftPin) {
+                if (V && wrap7) V.showPinError(wrap7, (V && V.MSG.pinMismatch) || 'Nhập lại PIN không khớp.');
+                draftPin = '';
+                showStep(6);
+                return false;
+            }
+            if (passwordInput) passwordInput.value = draftPin;
+            if (passwordConfirmInput) passwordConfirmInput.value = confirm;
+            return true;
+        }
+
         var fields = fieldsInStep(step);
         var firstInvalid = null;
+        var termsMsg = (V && V.MSG.terms) || 'Vui lòng đồng ý với điều khoản.';
 
         fields.forEach(function (el) {
             clearFieldInvalid(el);
-
-            if (el.dataset.wizardSkipValidity === '1' || el.name === 'email') {
+            if (el.dataset.wizardSkipValidity === '1') return;
+            if (el.name === 'password' || el.name === 'password_confirmation' || el.name === 'pin_draft' || el.name === 'pin_confirm_draft') {
                 return;
             }
-
-            if (el.name === 'password') {
-                var pwdMsg = passwordRuleMessage(el.value);
-                if (pwdMsg) {
-                    markInvalid(el, pwdMsg);
+            if (el.name === 'phone') {
+                var phoneMsg = V ? V.validatePhone(el.value) : '';
+                if (phoneMsg) {
+                    markInvalid(el, phoneMsg);
                     if (!firstInvalid) firstInvalid = el;
                 }
                 return;
             }
-
-            if (el.name === 'password_confirmation') {
-                var pwd = form.querySelector('[name="password"]');
-                if (isEmpty(el)) {
-                    markInvalid(el, 'Vui lòng nhập lại mật khẩu.');
-                    if (!firstInvalid) firstInvalid = el;
-                } else if (pwd && el.value !== pwd.value) {
-                    markInvalid(el, 'Mật khẩu không khớp.');
+            if (el.name === 'email') {
+                var emailMsg = V ? V.validateEmailOptional(el.value) : '';
+                if (emailMsg) {
+                    markInvalid(el, emailMsg);
                     if (!firstInvalid) firstInvalid = el;
                 }
                 return;
             }
-
             if (el.required && isEmpty(el)) {
                 markInvalid(el, emptyRequiredMessage(el));
                 if (!firstInvalid) firstInvalid = el;
                 return;
             }
-
             if (!isEmpty(el) && el.type !== 'file' && !el.checkValidity()) {
                 markInvalid(el, el.validationMessage || emptyRequiredMessage(el));
                 if (!firstInvalid) firstInvalid = el;
@@ -232,10 +267,10 @@
             });
         }
 
-        if (step === total) {
+        if (step === 5) {
             var terms = form.querySelector('#termsCheck');
             if (terms && !terms.checked) {
-                markInvalid(terms, 'Vui lòng đồng ý với điều khoản.');
+                markInvalid(terms, termsMsg);
                 if (!firstInvalid) firstInvalid = terms;
             }
         }
@@ -248,75 +283,15 @@
         return true;
     }
 
-    function reviewRow(label, value) {
-        return '<div class="driver-review-row">'
-            + '<span class="review-k">' + escapeHtml(label) + '</span>'
-            + '<span class="review-v">' + escapeHtml(value) + '</span>'
-            + '</div>';
+    function goNext() {
+        if (!validateStep(current)) return;
+        if (current < total) showStep(current + 1);
     }
 
-    function buildReview() {
-        if (!reviewBox) return;
-        var labels = {
-            name: 'Họ tên', email: 'Email', phone: 'SĐT',
-            vehicle_license_plate: 'Biển số', vehicle_type: 'Loại xe',
-        };
-        var html = '';
-        Object.keys(labels).forEach(function (name) {
-            var el = form.querySelector('[name="' + name + '"]');
-            if (!el || el.type === 'password') return;
-            var val = el.value.trim();
-            if (!val) return;
-            if (name === 'vehicle_type' && el.selectedOptions && el.selectedOptions[0]) {
-                val = el.selectedOptions[0].textContent.trim();
-            }
-            html += reviewRow(labels[name], val);
-        });
-        var bankEl = form.querySelector('[name="bank_name"]');
-        var stkEl = form.querySelector('[name="bank_account"]');
-        var bankName = bankEl ? bankEl.value.trim() : '';
-        var stk = stkEl ? stkEl.value.trim() : '';
-        if (bankName || stk) {
-            html += reviewRow('Ngân hàng', [bankName, stk].filter(Boolean).join(' - '));
-        }
-        var files = ['photo_portrait', 'photo_id_card', 'photo_id_card_back', 'photo_license_front', 'photo_license_back'];
-        var uploaded = files.filter(function (n) {
-            var f = form.querySelector('[name="' + n + '"]');
-            return f && f.files && f.files.length > 0;
-        });
-        html += reviewRow('Ảnh đã chọn', uploaded.length + ' giấy tờ + ' + vehicleFiles.length + ' ảnh xe');
-        reviewBox.innerHTML = html;
-    }
-
-    function escapeHtml(s) {
-        var d = document.createElement('div');
-        d.textContent = s;
-        return d.innerHTML;
-    }
-
-    if (btnNext) {
-        btnNext.addEventListener('click', function () {
-            if (!validateStep(current)) return;
-            showStep(current + 1);
-        });
-    }
-    if (btnPrev) {
-        btnPrev.addEventListener('click', function () { showStep(current - 1); });
-    }
-    stepBtns.forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            var target = parseInt(btn.dataset.gotoStep, 10);
-            if (target <= current) {
-                showStep(target);
-                return;
-            }
-            for (var s = current; s < target; s++) {
-                if (!validateStep(s)) {
-                    showStep(s);
-                    return;
-                }
-            }
-            showStep(target);
+    wizard.querySelectorAll('[data-wizard-next]').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            goNext();
         });
     });
 
@@ -324,27 +299,19 @@
         for (var s = 1; s <= total; s++) {
             if (!validateStep(s)) {
                 e.preventDefault();
-                showStep(s);
+                if (s !== 7) showStep(s);
                 return;
             }
         }
     });
 
-    // Nhập/chọn xong → bỏ viền đỏ + message
     form.addEventListener('input', function (e) {
         var el = e.target;
         if (!el || !el.name) return;
-        if (el.name === 'password') {
-            if (!passwordRuleMessage(el.value)) clearFieldInvalid(el);
-            return;
-        }
-        if (el.name === 'password_confirmation') {
-            var pwd = form.querySelector('[name="password"]');
-            if (el.value && pwd && el.value === pwd.value) clearFieldInvalid(el);
-            return;
-        }
+        if (el.classList && el.classList.contains('pin-box')) return;
         if (!isEmpty(el)) clearFieldInvalid(el);
     });
+
     form.addEventListener('change', function (e) {
         var el = e.target;
         if (!el || !el.name) return;
@@ -361,7 +328,6 @@
         if (!isEmpty(el)) clearFieldInvalid(el);
     });
 
-    // Format biển số cơ bản
     form.querySelectorAll('[data-plate-format]').forEach(function (input) {
         input.addEventListener('blur', function () {
             var v = input.value.toUpperCase().replace(/\s+/g, '');
@@ -371,7 +337,6 @@
         });
     });
 
-    // Nút chọn ảnh tùy chỉnh — ẩn text native "Không có tệp..."
     form.querySelectorAll('[data-file-trigger]').forEach(function (btn) {
         btn.addEventListener('click', function () {
             var input = btn.closest('.register-file-field') && btn.closest('.register-file-field').querySelector('.register-file-input');
@@ -379,7 +344,6 @@
         });
     });
 
-    // Ảnh xe — gom nhiều lần chọn, xem trước + xóa từng ảnh
     var vehicleInput = form.querySelector('[name="photo_vehicles[]"]');
     var vehiclePreview = form.querySelector('[data-vehicle-preview]');
 
@@ -411,7 +375,7 @@
             var btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'register-vehicle-thumb-remove';
-            btn.setAttribute('aria-label', 'Xóa ảnh ' + file.name);
+            btn.setAttribute('aria-label', 'Xóa ảnh');
             btn.textContent = '×';
             btn.addEventListener('click', function () {
                 vehicleFiles.splice(index, 1);
@@ -440,7 +404,6 @@
         });
     }
 
-    // Xem trước ảnh giấy tờ — chọn file thì bỏ viền đỏ
     form.querySelectorAll('[data-field-section="documents"] input[type="file"]').forEach(function (input) {
         if (input.name === 'photo_vehicles[]') return;
         var wrap = fileFieldWrap(input);
@@ -459,7 +422,6 @@
         });
     });
 
-    // Hiện feedback server + mở đúng bước lỗi (vd. SĐT trùng → bước Tài khoản)
     form.querySelectorAll('.invalid-feedback').forEach(function (fb) {
         if (fb.textContent && fb.textContent.trim()) {
             fb.classList.add('d-block');
@@ -471,9 +433,7 @@
         form.querySelectorAll('.invalid-feedback.d-block').forEach(function (fb) {
             if (errorField) return;
             var key = fb.getAttribute('data-client-feedback');
-            if (key) {
-                errorField = form.querySelector('[name="' + key + '"]');
-            }
+            if (key) errorField = form.querySelector('[name="' + key + '"]');
         });
     }
 

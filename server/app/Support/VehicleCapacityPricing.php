@@ -2,22 +2,16 @@
 
 namespace App\Support;
 
-use App\Models\PlatformSetting;
-
-/** Hệ số % giá cả xe theo loại chỗ — 4 chỗ làm chuẩn 100%. */
+/** Hệ số % giá cả xe theo loại chỗ — 4 chỗ làm chuẩn 100%. Không còn cấu hình admin. */
 class VehicleCapacityPricing
 {
     public const BASELINE_CAPACITY = 4;
 
     public const DEFAULT_STEP_PERCENT = 1.5;
 
-    public const SETTING_KEY = 'vehicle_capacity_whole_car_pricing';
-
     public static function stepPercent(): float
     {
-        $data = self::load();
-
-        return (float) ($data['step_percent'] ?? self::DEFAULT_STEP_PERCENT);
+        return self::DEFAULT_STEP_PERCENT;
     }
 
     public static function tierIndex(int $capacity): int
@@ -39,14 +33,6 @@ class VehicleCapacityPricing
 
     public static function percentForCapacity(int $capacity): float
     {
-        $data = self::load();
-        $key = (string) $capacity;
-        $percents = $data['percents'] ?? null;
-
-        if (is_array($percents) && array_key_exists($key, $percents)) {
-            return (float) $percents[$key];
-        }
-
         return self::defaultPercentForCapacity($capacity);
     }
 
@@ -64,43 +50,5 @@ class VehicleCapacityPricing
         }
 
         return $out;
-    }
-
-    /** @return array{step_percent: float, percents: array<string, float>} */
-    public static function settingsForAdmin(): array
-    {
-        $data = self::load();
-
-        return [
-            'step_percent' => self::stepPercent(),
-            'percents'     => self::allPercents(),
-        ];
-    }
-
-    /** @param  array<int|string, mixed>  $percents */
-    public static function save(float $stepPercent, array $percents): void
-    {
-        $normalized = [];
-        foreach (VehicleCapacityOptions::enabled() as $capacity) {
-            $key = (string) $capacity;
-            if (array_key_exists($capacity, $percents)) {
-                $normalized[$key] = round((float) $percents[$capacity], 2);
-            } elseif (array_key_exists($key, $percents)) {
-                $normalized[$key] = round((float) $percents[$key], 2);
-            }
-        }
-
-        PlatformSetting::setValue(self::SETTING_KEY, [
-            'step_percent' => round($stepPercent, 2),
-            'percents'     => $normalized,
-        ], 'finance');
-    }
-
-    /** @return array{step_percent?: float, percents?: array<string, float>} */
-    private static function load(): array
-    {
-        $raw = PlatformSetting::getValue(self::SETTING_KEY, null);
-
-        return is_array($raw) ? $raw : [];
     }
 }

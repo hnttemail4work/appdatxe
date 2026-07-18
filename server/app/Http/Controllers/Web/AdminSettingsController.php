@@ -8,7 +8,6 @@ use App\Http\Requests\Admin\UpdateAdminPasswordRequest;
 use App\Http\Requests\Admin\UpdateBankSettingsRequest;
 use App\Http\Requests\Admin\UpdateBookingPageSettingsRequest;
 use App\Http\Requests\Admin\UpdateBrandingSettingsRequest;
-use App\Http\Requests\Admin\UpdateFeeSettingsRequest;
 use App\Http\Requests\Admin\UpdatePushSettingsRequest;
 use App\Http\Requests\Admin\UpdateRouteDistancesRequest;
 use App\Models\PlatformSetting;
@@ -17,18 +16,15 @@ use App\Services\ScheduleLifecycleService;
 use App\Support\AppBrandingSettings;
 use App\Support\BookingPageSettings;
 use App\Support\LocationCatalog;
-use App\Support\PlatformFees;
 use App\Support\PlatformPaymentInfo;
 use App\Support\ProvinceCenters;
 use App\Support\PushNotificationSettings;
 use App\Support\RouteDistanceCatalog;
-use App\Support\VehicleTypePricing;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 
 /**
- * Nhóm "cài đặt hệ thống" — tách ra từ AdminController (Fat Controller):
- * dashboard tổng quan, phí/bảng giá, bank, trang đặt xe, thương hiệu, thông báo đẩy,
+ * Nhóm "cài đặt hệ thống" — dashboard, bank, trang đặt xe, thương hiệu, thông báo đẩy,
  * và danh mục điểm đến (destinations). Không đụng tới booking/wallet/referral.
  */
 class AdminSettingsController extends Controller
@@ -41,37 +37,7 @@ class AdminSettingsController extends Controller
     public function dashboard()
     {
         $this->scheduleLifecycle->sync();
-
-        $feeSettings = [
-            'app_commission'           => PlatformFees::appCommissionPercent(),
-            'referral_commission_first'  => PlatformFees::referralCommissionFirstPercent(),
-            'referral_commission_repeat' => PlatformFees::referralCommissionRepeatPercent(),
-            'km_rate_under_100'   => PlatformFees::kmRateUnder100(),
-            'km_rate_over_100'    => PlatformFees::kmRateOver100(),
-            'departure_plan_surcharge_today' => PlatformFees::departurePlanTodaySurchargePercent(),
-            'departure_plan_surcharge_tomorrow' => PlatformFees::departurePlanTomorrowSurchargePercent(),
-            'departure_plan_surcharge_later_per_day' => PlatformFees::departurePlanLaterPercentPerDay(),
-            'vehicle_types' => VehicleTypePricing::settingsForAdmin(),
-            'vehicleTypeLabels' => VehicleTypePricing::labels(),
-        ];
-
-        $hubRoutes = TripRoute::query()
-            ->where('departure', RouteDistanceCatalog::HUB)
-            ->orderByDesc('is_active')
-            ->orderByRaw('CASE WHEN is_active = 1 THEN updated_at ELSE NULL END DESC')
-            ->orderBy('destination')
-            ->get();
-
-        if ($hubRoutes->isEmpty()) {
-            foreach (RouteDistanceCatalog::hubRouteRows() as $row) {
-                $hubRoutes->push(TripRoute::query()->firstOrCreate(
-                    ['departure' => $row['departure'], 'destination' => $row['destination']],
-                    ['base_price' => 0, 'distance_km' => $row['distance_km'], 'is_active' => true],
-                ));
-            }
-            $hubRoutes = $hubRoutes->sortBy('destination')->values();
-            LocationCatalog::forgetCache();
-        }
+        $this->ensureHubRoutesExist();
 
         $bankSettings = PlatformPaymentInfo::bank();
         $bankQrPreview = PlatformPaymentInfo::vietQrImageUrl();
@@ -82,8 +48,6 @@ class AdminSettingsController extends Controller
         $pushVapidReady = PushNotificationSettings::vapidKeys() !== null;
 
         return view('admin.dashboard', compact(
-            'feeSettings',
-            'hubRoutes',
             'bankSettings',
             'bankQrPreview',
             'bookingPageSettings',
@@ -92,6 +56,27 @@ class AdminSettingsController extends Controller
             'pushEventLabels',
             'pushVapidReady',
         ));
+    }
+
+    /** Bootstrap danh mục điểm đến HCM nếu DB trống (dùng cho đặt xe, không phải cấu hình giá). */
+    private function ensureHubRoutesExist(): void
+    {
+        $exists = TripRoute::query()
+            ->where('departure', RouteDistanceCatalog::HUB)
+            ->exists();
+
+        if ($exists) {
+            return;
+        }
+
+        foreach (RouteDistanceCatalog::hubRouteRows() as $row) {
+            TripRoute::query()->firstOrCreate(
+                ['departure' => $row['departure'], 'destination' => $row['destination']],
+                ['base_price' => 0, 'distance_km' => $row['distance_km'], 'is_active' => true],
+            );
+        }
+
+        LocationCatalog::forgetCache();
     }
 
     public function updateBankSettings(UpdateBankSettingsRequest $request)
@@ -131,10 +116,6 @@ class AdminSettingsController extends Controller
 
     public function updateBookingPageSettings(UpdateBookingPageSettingsRequest $request)
     {
-        $validated = $request->validated();
-
-        BookingPageSettings::saveHeroTitle((string) ($validated['hero_title'] ?? ''));
-
         if ($request->boolean('remove_banner')) {
             BookingPageSettings::removeBanner();
         } elseif ($request->hasFile('banner')) {
@@ -176,55 +157,6 @@ class AdminSettingsController extends Controller
 
         return redirect()->route('admin.dashboard', ['tab' => 'appearance'])
             ->with('success', 'Đã lưu cài đặt thông báo đẩy.');
-    }
-
-    public function updateFeeSettings(UpdateFeeSettingsRequest $request)
-    {
-        $validated = $request->validated();
-
-        PlatformSetting::setValue('app_commission_percentage', [
-            'value' => (float) $validated['app_commission'],
-        ], 'finance');
-
-        PlatformSetting::setValue('commission_percentage', [
-            'value' => (float) $validated['app_commission'],
-        ], 'finance');
-
-        PlatformSetting::setValue('referral_commission_first_percentage', [
-            'value' => (float) $validated['referral_commission_first'],
-        ], 'finance');
-
-        PlatformSetting::setValue('referral_commission_repeat_percentage', [
-            'value' => (float) $validated['referral_commission_repeat'],
-        ], 'finance');
-
-        PlatformSetting::setValue('pricing_km_rate_under_100', [
-            'value' => (int) $validated['km_rate_under_100'],
-        ], 'finance');
-
-        PlatformSetting::setValue('pricing_km_rate_over_100', [
-            'value' => (int) $validated['km_rate_over_100'],
-        ], 'finance');
-
-        PlatformSetting::setValue('departure_plan_surcharge_today_percentage', [
-            'value' => (float) $validated['departure_plan_surcharge_today'],
-        ], 'finance');
-
-        PlatformSetting::setValue('departure_plan_surcharge_tomorrow_percentage', [
-            'value' => (float) $validated['departure_plan_surcharge_tomorrow'],
-        ], 'finance');
-
-        PlatformSetting::setValue('departure_plan_surcharge_later_per_day_percentage', [
-            'value' => (float) $validated['departure_plan_surcharge_later_per_day'],
-        ], 'finance');
-
-        VehicleTypePricing::save(
-            (float) $validated['vehicle_type_step_percent'],
-            $validated['vehicle_type_percents'] ?? [],
-        );
-
-        return redirect()->route('admin.dashboard', ['tab' => 'fees'])
-            ->with('success', 'Đã lưu cài đặt phí và bảng giá theo loại xe.');
     }
 
     public function updateRouteDistances(UpdateRouteDistancesRequest $request)

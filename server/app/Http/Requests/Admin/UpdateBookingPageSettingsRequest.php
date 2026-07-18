@@ -15,7 +15,6 @@ class UpdateBookingPageSettingsRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'hero_title'    => ['nullable', 'string', 'max:120'],
             'banner'        => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp,gif', 'max:2048'],
             'remove_banner' => ['nullable', 'boolean'],
         ];

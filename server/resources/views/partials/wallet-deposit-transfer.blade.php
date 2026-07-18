@@ -3,4 +3,5 @@
     'addInfo' => $addInfo ?? null,
     'qrElementId' => $qrElementId ?? 'wallet-deposit-qr',
     'dynamicAmount' => (bool) ($dynamicAmount ?? false),
+    'hideBankDetails' => (bool) ($hideBankDetails ?? false),
 ])

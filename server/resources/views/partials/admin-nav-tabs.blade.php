@@ -2,22 +2,22 @@
     $active = $active ?? 'bookings';
     $driversSubpage = $driversSubpage ?? false;
     $pendingDrivers = (int) \App\Models\DriverProfile::query()->pendingApproval()->count();
+    $pendingDocUpdates = (int) \App\Models\DriverProfile::query()->pendingDocumentUpdate()->count();
+    $driversActionCount = $pendingDrivers + $pendingDocUpdates;
     $pendingDeposits = (int) \App\Models\DriverWalletTransaction::query()
         ->where('type', 'deposit')
         ->where('status', 'pending')
-        ->count();
-    $activeBookingReferralCount = (int) \App\Models\ReferralCode::query()
-        ->where('type', \App\Models\ReferralCode::TYPE_BOOKING_TEMP)
-        ->where('status', \App\Models\ReferralCode::STATUS_ACTIVE)
         ->count();
 
     $tabs = [
         ['key' => 'bookings', 'label' => 'Đặt xe', 'href' => route('admin.bookings'), 'badge' => null, 'hot' => false],
         ['key' => 'revenue', 'label' => 'Doanh thu', 'href' => route('admin.revenue'), 'badge' => null, 'hot' => false],
-        ['key' => 'drivers', 'label' => 'Tài xế', 'href' => route('admin.drivers'), 'badge' => $pendingDrivers ?: null, 'hot' => $pendingDrivers > 0],
+        ['key' => 'drivers', 'label' => 'Tài xế', 'href' => route('admin.drivers'), 'badge' => $driversActionCount ?: null, 'hot' => $driversActionCount > 0],
         ['key' => 'users', 'label' => 'Khách hàng', 'href' => route('admin.users'), 'badge' => null, 'hot' => false],
         ['key' => 'deposits', 'label' => 'Nạp ví', 'href' => route('admin.driverWallet'), 'badge' => $pendingDeposits ?: null, 'hot' => $pendingDeposits > 0],
-        ['key' => 'referrals', 'label' => 'Mã giới thiệu', 'href' => route('admin.referrals'), 'badge' => $activeBookingReferralCount ?: null, 'hot' => $activeBookingReferralCount > 0],
+        ['key' => 'referrals', 'label' => 'Giới thiệu', 'href' => route('admin.referrals'), 'badge' => null, 'hot' => false],
+        ['key' => 'driver-inbox', 'label' => 'Tin tài xế', 'href' => route('admin.driverInbox'), 'badge' => null, 'hot' => false],
+        ['key' => 'auth-codes', 'label' => 'OTP / Reset', 'href' => route('admin.authCodes'), 'badge' => null, 'hot' => false],
         ['key' => 'config', 'label' => 'Cấu hình', 'href' => route('admin.dashboard'), 'badge' => null, 'hot' => false],
     ];
 @endphp

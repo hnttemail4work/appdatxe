@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\User;
 
+/** Định danh đăng nhập khách / tài xế theo số điện thoại. */
 class AuthIdentifier
 {
     public static function normalizePhone(string $phone): string
@@ -21,11 +22,6 @@ class AuthIdentifier
         return $digits;
     }
 
-    public static function looksLikeEmail(string $value): bool
-    {
-        return str_contains(trim($value), '@');
-    }
-
     public static function findUserByPhone(string $phone): ?User
     {
         $normalized = self::normalizePhone(trim($phone));
@@ -39,26 +35,5 @@ class AuthIdentifier
             ->where('phone', '!=', '')
             ->get()
             ->first(fn (User $user): bool => self::normalizePhone((string) $user->phone) === $normalized);
-    }
-
-    public static function findUserByLogin(string $login): ?User
-    {
-        $login = trim($login);
-
-        if ($login === '') {
-            return null;
-        }
-
-        if (self::looksLikeEmail($login)) {
-            return User::query()->where('email', $login)->first();
-        }
-
-        $byEmail = User::query()->where('email', $login)->first();
-
-        if ($byEmail) {
-            return $byEmail;
-        }
-
-        return self::findUserByPhone($login);
     }
 }

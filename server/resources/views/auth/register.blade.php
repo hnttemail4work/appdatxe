@@ -1,30 +1,40 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="customer-page register-shell">
-    <div class="card border-0 overflow-hidden register-card">
-        <div class="register-header">
-            <h2 class="register-title">Đăng ký tài xế</h2>
-            <p class="register-subtitle">Hoàn tất hồ sơ để bắt đầu nhận chuyến</p>
-        </div>
-        <div class="card-body register-body">
-            @if($errors->has('phone'))
-                <div class="alert alert-danger register-alert py-2 px-3 mb-3" role="alert">
-                    {{ $errors->first('phone') }}
-                    <a href="{{ route('login') }}" class="register-alert-link">Đăng nhập</a>
-                </div>
-            @elseif($errors->any())
-                <div class="alert alert-danger register-alert py-2 px-3 mb-3" role="alert">
-                    {{ $errors->first() }}
-                </div>
+@php
+    $fromDriver = (bool) ($fromDriver ?? false);
+    $stepTitles = [
+        1 => 'Giấy tờ',
+        2 => 'Tài khoản',
+        3 => 'Xe',
+        4 => 'Ngân hàng',
+        5 => 'Điều khoản',
+        6 => 'Tạo PIN',
+        7 => 'Nhập lại PIN',
+    ];
+@endphp
+<div class="auth-screen" data-auth-screen data-driver-wizard-root
+     data-home-url="{{ route('home') }}"
+     data-step-titles='@json($stepTitles)'>
+    @include('partials.auth-screen-header', [
+        'authTitle' => $stepTitles[1],
+        'authBackUrl' => route('home'),
+    ])
+
+    <div class="auth-screen-body">
+        @if($errors->any())
+            <div class="auth-field-error" role="alert">{{ $errors->first() }}</div>
+        @endif
+
+        <form method="POST" action="{{ route('register') }}"
+              id="driver-register-form" enctype="multipart/form-data" novalidate autocomplete="off">
+            @csrf
+            <input type="hidden" name="register_mode" value="driver">
+            @if($fromDriver)
+                <input type="hidden" name="from" value="driver">
             @endif
-            <form method="POST" action="/register"
-                  id="driver-register-form" enctype="multipart/form-data" novalidate autocomplete="off">
-                @csrf
-                <input type="hidden" name="register_mode" value="driver">
-                @include('auth.partials.register-driver')
-            </form>
-        </div>
+            @include('auth.partials.register-driver')
+        </form>
     </div>
 </div>
 @endsection
@@ -35,5 +45,7 @@
 @endpush
 
 @push('scripts')
-<script src="{{ asset('js/driver-register-wizard.js') }}"></script>
+<script src="{{ asset('js/pin-input.js') }}?v={{ filemtime(public_path('js/pin-input.js')) }}"></script>
+<script src="{{ asset('js/auth-field-validation.js') }}?v={{ filemtime(public_path('js/auth-field-validation.js')) }}"></script>
+<script src="{{ asset('js/driver-register-wizard.js') }}?v={{ filemtime(public_path('js/driver-register-wizard.js')) }}"></script>
 @endpush

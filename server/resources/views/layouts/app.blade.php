@@ -36,7 +36,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    @if(request()->routeIs('home', 'about', 'booking.trips', 'customer.account', 'driver.dashboard', 'register', 'login', 'customer.register', 'auth.biometric'))
+    @if(request()->routeIs('home', 'about', 'booking.trips', 'customer.account', 'driver.dashboard', 'register', 'login', 'customer.register', 'auth.biometric', 'auth.register.otp', 'password.reset.*'))
     <script src="{{ asset('js/mobile-app-chrome.js') }}?v={{ filemtime(public_path('js/mobile-app-chrome.js')) }}"></script>
     @endif
     <title>{{ $appBrandName }}</title>
@@ -112,7 +112,19 @@
     @endif
     @stack('styles')
 </head>
-<body class="app-shell @if(request()->routeIs('login', 'register', 'customer.register', 'auth.biometric')) app-shell--auth @endif @if(request()->routeIs('home', 'about', 'booking.trips', 'driver.dashboard', 'register', 'login', 'customer.register', 'auth.biometric')) app-shell--mobile-app @endif">
+@php
+    $isAuthChrome = request()->routeIs(
+        'login',
+        'register',
+        'customer.register',
+        'auth.biometric',
+        'auth.register.otp',
+        'password.reset.request',
+        'password.reset.code',
+        'password.reset.pin',
+    );
+@endphp
+<body class="app-shell @if($isAuthChrome) app-shell--auth @endif @if($isAuthChrome || request()->routeIs('home', 'about', 'booking.trips', 'driver.dashboard')) app-shell--mobile-app @endif">
 <nav class="navbar navbar-expand-lg app-navbar navbar-dark">
     <div class="container app-navbar-inner">
         <a class="navbar-brand app-brand-link app-brand-link--stacked" href="{{ $brandHref }}" aria-label="{{ $appBrandName }}">
@@ -207,26 +219,6 @@
     @include('partials.customer-scroll-dock')
 @endif
 
-@unless(request()->routeIs('login', 'register', 'customer.register', 'auth.biometric'))
-<footer class="app-footer bg-dark text-secondary border-top">
-    <div class="container">
-        <div class="row g-2 app-footer-grid">
-            <div class="col-md-6">
-                <h6 class="text-white fw-bold mb-1">{{ $appBrandName }}</h6>
-                <p class="small mb-0 app-footer-text">Nền tảng đặt vé xe khách liên tỉnh cao cấp.</p>
-            </div>
-            <div class="col-md-6">
-                <h6 class="text-white fw-bold mb-1">Liên hệ</h6>
-                <p class="small mb-0 app-footer-text">Tổng đài: {{ config('app.contact_phone') }}</p>
-                <p class="small mb-0 app-footer-text">Email: {{ config('app.contact_email') }}</p>
-            </div>
-        </div>
-        <hr class="border-secondary app-footer-divider">
-        <p class="small text-center mb-0 app-footer-copy">© Bản quyền thuộc về {{ $appBrandName }}.</p>
-    </div>
-</footer>
-@endunless
-
 @stack('modals')
 
 @include('partials.app-dialog')
@@ -234,7 +226,56 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="{{ asset('js/app-flash.js') }}?v={{ filemtime(public_path('js/app-flash.js')) }}"></script>
-<script src="{{ asset('js/app-dialog.js') }}"></script>
+<script src="{{ asset('js/app-dialog.js') }}?v={{ filemtime(public_path('js/app-dialog.js')) }}"></script>
+<script>
+(function () {
+    var flash = window.__appServerFlash;
+    if (!flash) {
+        return;
+    }
+
+    var isHome = @json(request()->routeIs('home'));
+
+    function message() {
+        if (flash.success) {
+            return { text: flash.success, title: 'Thành công', variant: 'success' };
+        }
+        if (flash.error) {
+            return { text: flash.error, title: 'Thông báo', variant: 'danger' };
+        }
+        if (flash.errors && flash.errors.length) {
+            return { text: flash.errors.join(' '), title: 'Thông báo', variant: 'danger' };
+        }
+        return null;
+    }
+
+    function show() {
+        var payload = message();
+        if (!payload) {
+            return;
+        }
+        if (flash.preferDialog && window.AppDialog && window.AppDialog.alert) {
+            window.AppDialog.alert(payload.text, {
+                title: payload.title,
+                variant: payload.variant,
+            });
+            return;
+        }
+        if (isHome && payload.variant === 'success' && window.AppFlash && window.AppFlash.show) {
+            window.AppFlash.show(payload.text, {
+                title: payload.title,
+                variant: payload.variant,
+            });
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', show);
+    } else {
+        show();
+    }
+})();
+</script>
 <script>window.__cancellationReasonsUrl = @json(route('cancellationReasons.index'));</script>
 <script src="{{ asset('js/cancellation-reason-modal.js') }}"></script>
 <script>
@@ -317,7 +358,8 @@
     });
 })();
 </script>
-<script src="{{ asset('js/form-field-validation.js') }}"></script>
+<script src="{{ asset('js/form-field-validation.js') }}?v={{ filemtime(public_path('js/form-field-validation.js')) }}"></script>
+<script src="{{ asset('js/field-auto-size.js') }}?v={{ filemtime(public_path('js/field-auto-size.js')) }}"></script>
 <script src="{{ asset('js/screen-tabs.js') }}"></script>
 <script>
 (function () {

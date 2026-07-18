@@ -40,7 +40,9 @@
     });
 
     function handleVehicleFiles(input) {
-        var wrap = input.closest('.photo-vehicles-upload');
+        var wrap = input.closest('.photo-vehicles-section')
+            || input.closest('.photo-vehicles-block')
+            || input.closest('.driver-photo-manager');
         var grid = wrap ? wrap.querySelector('[data-vehicle-new-grid]') : null;
         if (!grid) return;
 

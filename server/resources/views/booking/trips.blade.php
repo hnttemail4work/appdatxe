@@ -44,7 +44,6 @@ window.__bookingTripStatusUrl = @json(route('booking.tripStatus'));
 window.__bookingTripReviewUrl = @json(route('booking.tripReview'));
 window.__bookingTripCancelUrl = @json(route('booking.tripCancel'));
 window.__bookingSuccess = @json(session('booking_success'));
-window.__bookingQrDiscountPercent = @json(\App\Support\PlatformFees::bookingQrDiscountPercent());
 window.__appContactPhone = @json(config('app.contact_phone'));
 window.__guestBrowserCancelCount = @json((int) ($browserCancelCount ?? 0));
 window.__guestBrowserCancelBlockLimit = @json(\App\Services\BookingBrowserGuardService::CANCEL_BLOCK_LIMIT);

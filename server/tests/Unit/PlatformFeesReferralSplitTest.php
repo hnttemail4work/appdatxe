@@ -2,9 +2,7 @@
 
 namespace Tests\Unit;
 
-use App\Models\Booking;
 use App\Models\ReferralCode;
-use App\Services\GuestTripStatusService;
 use Tests\TestCase;
 
 class PlatformFeesReferralSplitTest extends TestCase
@@ -23,33 +21,18 @@ class PlatformFeesReferralSplitTest extends TestCase
         $this->assertFalse($referral->grantsCustomerDiscount());
     }
 
-    public function test_booking_temp_code_has_no_commission(): void
+    public function test_driver_invite_code_uses_stored_customer_discount(): void
     {
         $referral = new ReferralCode([
-            'type'   => ReferralCode::TYPE_BOOKING_TEMP,
-            'status' => ReferralCode::STATUS_ACTIVE,
+            'type'                      => ReferralCode::TYPE_REFERRER,
+            'status'                    => ReferralCode::STATUS_ACTIVE,
+            'driver_profile_id'         => 1,
+            'customer_discount_percent' => 2,
         ]);
 
+        $this->assertTrue($referral->isDriverInvite());
+        $this->assertSame(2.0, $referral->customerDiscountPercent());
         $this->assertSame(0.0, $referral->commissionPercent());
-    }
-
-    public function test_guest_referral_payload_is_pending_before_trip_complete(): void
-    {
-        $pendingReferral = new ReferralCode([
-            'code'   => 'GTBOOK01',
-            'type'   => ReferralCode::TYPE_BOOKING_TEMP,
-            'status' => ReferralCode::STATUS_PENDING,
-        ]);
-
-        $booking = new Booking(['booking_reference' => 'REF-QR-1']);
-        $booking->setRelation('referralCode', $pendingReferral);
-
-        $service = app(GuestTripStatusService::class);
-        $method = new \ReflectionMethod($service, 'serializeReferral');
-        $method->setAccessible(true);
-
-        $pendingPayload = $method->invoke($service, $booking);
-        $this->assertTrue($pendingPayload['pending']);
-        $this->assertSame(0.0, $pendingPayload['discount_percent']);
+        $this->assertTrue($referral->grantsCustomerDiscount());
     }
 }

@@ -32,18 +32,17 @@ class CustomerAuthController extends Controller
     {
         $validated = $request->validated();
 
-        $user = $this->registration->registerCustomer($validated);
+        try {
+            $result = $this->registration->registerCustomer($validated, $request);
+        } catch (\InvalidArgumentException $e) {
+            return back()->withErrors(['photos' => $e->getMessage()])->withInput();
+        }
 
-        $request->session()->put('pending_auth.user_id', $user->id);
-        $intended = $request->session()->pull('url.intended');
-        $request->session()->put(
-            'pending_auth.intended',
-            $intended ?: route('customer.account', [], false),
-        );
+        $request->session()->put('pending_register_otp.user_id', $result['user']->id);
 
         return redirect()
-            ->route('auth.biometric')
-            ->with('success', 'Đăng ký thành công. Thiết lập xác thực khuôn mặt/vân tay để hoàn tất.');
+            ->route('auth.register.otp')
+            ->with('success', 'Đã tạo tài khoản. Nhập mã OTP 6 số (admin sẽ cung cấp, hiệu lực 5 phút).');
     }
 
     public function showBiometric(Request $request)
@@ -148,7 +147,7 @@ class CustomerAuthController extends Controller
 
         $this->accounts->linkExistingBookings($user);
 
-        $redirect = $request->session()->pull('pending_auth.intended', route('customer.account', [], false));
+        $redirect = $request->session()->pull('pending_auth.intended', route('home', [], false));
 
         return response()->json([
             'redirect' => $redirect,
@@ -166,7 +165,11 @@ class CustomerAuthController extends Controller
 
         $user = User::query()->find($userId);
 
-        return ($user && $user->role === 'customer' && $user->status === 'active') ? $user : null;
+        if (! $user || $user->role !== 'customer' || $user->loginBlockMessage()) {
+            return null;
+        }
+
+        return $user;
     }
 
     private function resolveBiometricUser(Request $request): ?User
@@ -179,7 +182,7 @@ class CustomerAuthController extends Controller
         $authUser = Auth::user();
         if ($authUser
             && $authUser->role === 'customer'
-            && $authUser->status === 'active'
+            && ! $authUser->loginBlockMessage()
             && ! $request->session()->get('customer_biometric_verified')) {
             return $authUser;
         }

@@ -414,8 +414,21 @@ class Schedule extends Model
 
     public function driverStageLabel(?string $stage = null): string
     {
-        return match ($stage ?? $this->resolvedDriverStage()) {
-            self::DRIVER_STAGE_ASSIGNED  => 'Chờ khởi hành',
+        $stage ??= $this->resolvedDriverStage();
+
+        if ($stage === self::DRIVER_STAGE_ASSIGNED) {
+            if ($this->driver_movement_confirmed_at) {
+                return 'Đang đi đón';
+            }
+
+            if ($this->driver_id && $this->driverMovementConfirmAvailable()) {
+                return 'Chờ xác nhận';
+            }
+
+            return $this->driver_id ? 'Đã nhận chuyến' : 'Chờ khởi hành';
+        }
+
+        return match ($stage) {
             self::DRIVER_STAGE_AT_PICKUP => 'Đến điểm đón',
             self::DRIVER_STAGE_PICKED_UP => 'Đón khách',
             self::DRIVER_STAGE_RUNNING   => 'Đang chạy',
@@ -441,6 +454,13 @@ class Schedule extends Model
         return $this->resolvedDriverStage() === self::DRIVER_STAGE_ASSIGNED
             && $this->driver_id
             && $this->driver_movement_confirmed_at === null;
+    }
+
+    /** Hiện nút «Xác nhận» trên UI (cửa sổ trước giờ đón / đặt ngay). */
+    public function driverMovementConfirmAvailable(): bool
+    {
+        return app(\App\Services\DriverMovementConfirmService::class)
+            ->isConfirmActionAvailable($this);
     }
 
     /** TX đã bấm «Xác nhận» — khách bắt đầu thấy ETA đến điểm đón. */

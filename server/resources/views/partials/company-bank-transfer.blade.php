@@ -5,8 +5,10 @@ use App\Support\PlatformPaymentInfo;
 /** @var string|null $addInfo */
 /** @var string|null $qrElementId */
 /** @var bool $dynamicAmount */
+/** @var bool $hideBankDetails */
 $amount = (int) ($amount ?? 0);
 $dynamicAmount = (bool) ($dynamicAmount ?? false);
+$hideBankDetails = (bool) ($hideBankDetails ?? false);
 $addInfo = $addInfo ?? PlatformPaymentInfo::driverTransferContent(auth()->user()?->phone);
 $bank = PlatformPaymentInfo::bank();
 $qrUrl = (! $dynamicAmount && $amount > 0)
@@ -16,9 +18,9 @@ $qrElementId = $qrElementId ?? 'company-transfer-qr-' . uniqid();
 $qrReady = ! $dynamicAmount && $qrUrl;
 @endphp
 
-<div class="company-bank-transfer border rounded-3 p-3 bg-white" data-company-transfer>
+<div class="company-bank-transfer {{ $hideBankDetails ? 'company-bank-transfer--qr-only' : 'border rounded-3 p-3 bg-white' }}" data-company-transfer>
     @if(PlatformPaymentInfo::isConfigured())
-        <div class="d-flex flex-wrap gap-3 align-items-start">
+        <div class="d-flex flex-wrap gap-3 align-items-start {{ $hideBankDetails ? 'justify-content-center' : '' }}">
             <div class="text-center flex-shrink-0 company-transfer-qr-col">
                 <div class="company-transfer-qr-frame">
                     <img id="{{ $qrElementId }}"
@@ -41,6 +43,7 @@ $qrReady = ! $dynamicAmount && $qrUrl;
                     </div>
                 </div>
             </div>
+            @unless($hideBankDetails)
             <div class="small flex-grow-1">
                 <div><span class="text-muted">Ngân hàng:</span> <strong>{{ $bank['bank_name'] }}</strong></div>
                 <div><span class="text-muted">Số TK:</span> <strong><code>{{ $bank['account'] }}</code></strong></div>
@@ -49,6 +52,7 @@ $qrReady = ! $dynamicAmount && $qrUrl;
                     <div class="mt-1"><span class="text-muted">Nội dung CK:</span> <code>{{ $addInfo }}</code></div>
                 @endif
             </div>
+            @endunless
         </div>
     @else
         <div class="small text-muted">Liên hệ quản lý lấy thông tin chuyển khoản.</div>

@@ -65,15 +65,12 @@ class Booking extends Model
         'pickup_lng',
         'driver_pickup_distance_km',
         'pickup_time',
-        'departure_plan',
-        'later_return_days',
-        'later_return_booking_id',
-        'later_pickup_dispatched_at',
         'dropoff_address',
         'dropoff_detail',
         'dropoff_lat',
         'dropoff_lng',
         'notes',
+        'driver_chat_last_read_id',
         'operator_confirmed_at',
         'hold_expires_at',
         'driver_search_started_at',
@@ -107,7 +104,6 @@ class Booking extends Model
             'repeat_cancel_flag' => 'boolean',
             'confirmed_at'   => 'datetime',
             'completed_at'   => 'datetime',
-            'later_pickup_dispatched_at' => 'datetime',
             'cancelled_at'   => 'datetime',
             'expired_at'     => 'datetime',
             'operator_confirmed_at' => 'datetime',
@@ -233,7 +229,7 @@ class Booking extends Model
         return $this->schedule->departure_time?->copy();
     }
 
-    /** Giờ đón khách thấy trên trang chuyến — ngày đón + giờ đón, không dùng ngày về (gói «Trên 2 ngày»). */
+    /** Giờ đón khách thấy trên trang chuyến — ngày đón + giờ đón. */
     public function guestPickupAt(): ?\Carbon\Carbon
     {
         $this->loadMissing('schedule');
@@ -242,19 +238,11 @@ class Booking extends Model
             return null;
         }
 
-        $plan = \App\Support\DeparturePlan::normalize($this->departure_plan ?? \App\Support\DeparturePlan::ONE_WAY);
-
-        $pickupDay = match ($plan) {
-            \App\Support\DeparturePlan::LATER => ($this->created_at ?? now())
-                ->copy()
-                ->timezone(config('app.timezone'))
-                ->startOfDay(),
-            default => $this->schedule->departure_time
-                ? $this->schedule->departure_time->copy()->timezone(config('app.timezone'))->startOfDay()
-                : ($this->schedule->service_date
-                    ? \App\Support\ServiceDate::dayStart($this->schedule->service_date)
-                    : null),
-        };
+        $pickupDay = $this->schedule->departure_time
+            ? $this->schedule->departure_time->copy()->timezone(config('app.timezone'))->startOfDay()
+            : ($this->schedule->service_date
+                ? \App\Support\ServiceDate::dayStart($this->schedule->service_date)
+                : null);
 
         if (! $pickupDay instanceof \Carbon\Carbon) {
             return null;
@@ -278,7 +266,13 @@ class Booking extends Model
         return $this->guestPickupAt() ?? $this->tripStartAt();
     }
 
-    // TODO (Fix Flow): Đặt Ngay = còn ≤ 30 phút tới giờ đón dự kiến.
+    /** Khách chọn Đặt sau (có giờ đón lưu trên vé). */
+    public function isScheduledPickup(): bool
+    {
+        return is_string($this->pickup_time) && trim($this->pickup_time) !== '';
+    }
+
+    // TODO (Fix Flow): Đặt Ngay = không đặt sau, hoặc còn ≤ 30 phút tới giờ đón.
     public function minutesUntilOperationalPickup(): ?int
     {
         $pickupAt = $this->operationalPickupAt();
@@ -291,9 +285,19 @@ class Booking extends Model
 
     public function isOnDemandPickup(): bool
     {
+        if (! $this->isScheduledPickup()) {
+            return true;
+        }
+
         $minutes = $this->minutesUntilOperationalPickup();
 
         return $minutes !== null && $minutes <= 30;
+    }
+
+    /** Nhãn lịch đón dùng chung khách / TX / admin. */
+    public function pickupModeLabel(): string
+    {
+        return $this->presenter()->pickupModeLabel();
     }
 
     public function isPastPickupTime(): bool
@@ -405,56 +409,19 @@ class Booking extends Model
         return $this->belongsTo(Schedule::class);
     }
 
+    public function tripMessages()
+    {
+        return $this->hasMany(TripMessage::class);
+    }
+
+    public function latestTripMessage()
+    {
+        return $this->hasOne(TripMessage::class)->latestOfMany();
+    }
+
     public function customer()
     {
         return $this->belongsTo(User::class, 'customer_id');
-    }
-
-    public function isLaterDeparturePlan(): bool
-    {
-        return \App\Support\DeparturePlan::normalize($this->departure_plan ?? '') === \App\Support\DeparturePlan::LATER;
-    }
-
-    public function laterPickupReminderStartsAt(): \Carbon\Carbon
-    {
-        if ($this->isLaterDeparturePlan()) {
-            $this->loadMissing('schedule');
-
-            if ($this->schedule?->service_date) {
-                return \App\Support\ServiceDate::dayStart($this->schedule->service_date);
-            }
-        }
-
-        return \App\Support\DeparturePlan::laterPickupReminderStartsAt($this->created_at ?? now());
-    }
-
-    public function laterReturnDays(): ?int
-    {
-        if (! $this->isLaterDeparturePlan()) {
-            return null;
-        }
-
-        $days = (int) ($this->later_return_days ?? 0);
-
-        return $days > 0 ? $days : \App\Support\DeparturePlan::DEFAULT_LATER_RETURN_DAYS;
-    }
-
-    /** Đơn trên 2 ngày đã hoàn thành — đến ngày về cần admin nhắc đón khách. */
-    public function showsLaterPickupReminder(): bool
-    {
-        if (! $this->isLaterDeparturePlan()) {
-            return false;
-        }
-
-        if ($this->trip_status !== 'completed') {
-            return false;
-        }
-
-        if ($this->later_pickup_dispatched_at !== null) {
-            return false;
-        }
-
-        return now()->greaterThanOrEqualTo($this->laterPickupReminderStartsAt());
     }
 
     public function assignedDriver()

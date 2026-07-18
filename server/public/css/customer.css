@@ -26,8 +26,8 @@
 }
 
 /* ============================================================
-   Trang chủ khách (Grab-style) — topbar, banner khuyến mãi,
-   thanh tìm điểm đi/đến.
+   Trang chủ khách (Be-style) — topbar, banner khuyến mãi,
+   form điểm đi/đến + flow chọn xe inline.
    ============================================================ */
 .grab-home-topbar {
     display: flex;
@@ -44,39 +44,6 @@
     color: var(--tl-primary-light);
     text-transform: uppercase;
     letter-spacing: .04em;
-}
-
-.grab-home-topbar__title {
-    margin: 0;
-    font-size: 1.35rem;
-    font-weight: 800;
-    color: #fff;
-    line-height: 1.25;
-}
-
-.grab-home-topbar__stat {
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    padding: .5rem .75rem;
-    border-radius: .85rem;
-    background: rgba(212, 175, 55, .1);
-    border: 1px solid rgba(212, 175, 55, .25);
-}
-
-.grab-home-topbar__stat strong {
-    font-size: 1.05rem;
-    font-weight: 800;
-    color: var(--tl-primary-light);
-    line-height: 1.1;
-}
-
-.grab-home-topbar__stat span {
-    font-size: .62rem;
-    color: var(--tl-text-muted);
-    white-space: nowrap;
 }
 
 .grab-home-referral {
@@ -112,6 +79,7 @@
 }
 
 .grab-search-card {
+    position: relative;
     background: linear-gradient(145deg, #121212 0%, #1a1a1a 100%);
     border: 1px solid rgba(212, 175, 55, .2);
     border-radius: 1.1rem;
@@ -120,8 +88,85 @@
     box-shadow: 0 10px 32px rgba(0, 0, 0, .45);
 }
 
+.grab-search-card__toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin: -.15rem 0 .55rem;
+}
+
+.grab-schedule-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    max-width: 100%;
+    min-height: 1.85rem;
+    padding: .28rem .7rem;
+    border: 1px solid rgba(255, 255, 255, .14);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .04);
+    color: var(--tl-text-muted);
+    font-size: .75rem;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease, color .15s ease;
+}
+
+.grab-schedule-chip svg {
+    flex-shrink: 0;
+    opacity: .9;
+}
+
+.grab-schedule-chip [data-schedule-chip-label] {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.grab-schedule-chip:hover,
+.grab-schedule-chip:focus-visible {
+    border-color: rgba(212, 175, 55, .45);
+    color: var(--tl-primary-light);
+    outline: none;
+}
+
+.grab-schedule-chip.is-active {
+    border-color: rgba(212, 175, 55, .55);
+    background: rgba(212, 175, 55, .12);
+    color: var(--tl-primary-light);
+}
+
 .grab-search-card__addresses {
     position: relative;
+    display: flex;
+    align-items: stretch;
+    gap: .75rem;
+}
+
+.grab-search-rail {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+    width: .72rem;
+    padding: .55rem 0 .45rem;
+}
+
+.grab-search-rail__line {
+    flex: 1 1 auto;
+    width: 2px;
+    min-height: 1.1rem;
+    margin: .28rem 0;
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(34, 197, 94, .75) 0%, rgba(239, 68, 68, .75) 100%);
+}
+
+.grab-search-card__fields {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .85rem;
 }
 
 .grab-search-row {
@@ -143,9 +188,8 @@
 }
 
 .grab-search-dot--dropoff {
-    border-radius: .15rem;
-    background: var(--tl-primary);
-    box-shadow: 0 0 0 3px rgba(212, 175, 55, .18);
+    background: #ef4444;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, .18);
 }
 
 .grab-search-divider {
@@ -195,13 +239,6 @@
     border-top: 1px solid rgba(255, 255, 255, .08);
 }
 
-.grab-search-card__schedule-label {
-    margin-bottom: .5rem;
-    font-size: .72rem;
-    font-weight: 600;
-    color: var(--tl-text-muted);
-}
-
 .grab-search-card__footer {
     margin-top: .85rem;
 }
@@ -229,7 +266,7 @@
     color: #0a0a0a;
 }
 
-/* Danh sách loại xe (bước 1 của modal đặt xe) */
+/* Danh sách loại xe (bước 1 flow đặt xe) */
 .vehicle-select-list {
     display: flex;
     flex-direction: column;
@@ -240,16 +277,22 @@
     display: flex;
     align-items: center;
     gap: .75rem;
-    padding: .65rem;
+    padding: .75rem;
     border-radius: 1rem;
     border: 1px solid rgba(255, 255, 255, .08);
     background: linear-gradient(165deg, var(--tl-surface) 0%, #141414 100%);
-    transition: border-color .2s ease, box-shadow .2s ease;
+    transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
 }
 
 .vehicle-select-row:hover {
     border-color: rgba(212, 175, 55, .4);
     box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+}
+
+.vehicle-select-row.is-selected {
+    border-color: var(--tl-primary);
+    background: rgba(212, 175, 55, .12);
+    box-shadow: 0 0 0 1px rgba(212, 175, 55, .25);
 }
 
 .vehicle-select-row__media {
@@ -498,19 +541,6 @@ body.route-sheet-picker-open {
 
 
 
-@media (min-width: 768px) {
-}
-.register-shell .card {
-    background: var(--tl-surface);
-    border: 1px solid var(--tl-border) !important;
-    color: var(--tl-text);
-}
-
-.register-shell .card-body {
-    color: var(--tl-text);
-}
-
-
 /* Trip cards */
 .trip-card-pro {
     background: var(--tl-surface);
@@ -564,107 +594,117 @@ body.route-sheet-picker-open {
 
 
 
-/* Booking modal */
-
-.booking-steps {
-    display: flex;
-    gap: .5rem;
+/* Booking flow inline (Be) — stages + sticky footer */
+.be-booking-flow {
+    margin: 0 0 1rem;
+    border-radius: 1.1rem;
+    border: 1px solid rgba(212, 175, 55, .22);
+    background: linear-gradient(165deg, #161616 0%, #101010 100%);
+    box-shadow: 0 12px 36px rgba(0, 0, 0, .45);
+    overflow: hidden;
 }
-.booking-step {
-    flex: 1;
+
+.be-booking-flow__form {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.be-booking-flow__header {
+    flex-shrink: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, .06);
+    background: linear-gradient(180deg, rgba(212, 175, 55, .14) 0%, transparent 100%);
+}
+
+.be-booking-flow__header-top {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: .4rem;
-    padding: .45rem .5rem;
-    border-radius: .5rem;
-    font-size: .78rem;
-    font-weight: 600;
-    color: var(--tl-text-muted);
-    background: var(--tl-black-soft);
-    border: 1px solid var(--tl-border);
+    gap: .65rem;
+    padding: .85rem 1rem .55rem;
 }
-.booking-step .step-num {
+
+.be-booking-flow__close {
     display: inline-flex;
-    width: 1.25rem;
-    height: 1.25rem;
     align-items: center;
     justify-content: center;
-    border-radius: 50%;
-    background: #333;
-    color: var(--tl-text-muted);
-    font-size: .7rem;
+    width: 2.35rem;
+    height: 2.35rem;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, .12);
+    border-radius: .7rem;
+    background: rgba(255, 255, 255, .04);
+    color: #f5f5f5;
+    flex-shrink: 0;
 }
-.booking-step.active {
+
+.be-booking-flow__close:hover,
+.be-booking-flow__close:focus-visible {
+    border-color: rgba(212, 175, 55, .45);
     color: var(--tl-primary-light);
-    background: rgba(212, 175, 55, .12);
-    border-color: rgba(212, 175, 55, .4);
-}
-.booking-step.active .step-num {
-    background: var(--tl-primary);
-    color: var(--tl-black);
-}
-.booking-step.done {
-    color: var(--tl-success);
-    border-color: rgba(74, 222, 128, .35);
-    background: rgba(74, 222, 128, .08);
-}
-.booking-step.done .step-num {
-    background: var(--tl-success);
-    color: var(--tl-black);
+    outline: none;
 }
 
-/* Booking modal — scroll body, sticky footer */
-#bookingModal .modal-dialog {
-    max-width: 36rem;
-    margin-left: auto;
-    margin-right: auto;
+.be-booking-flow__header-top .booking-steps {
+    flex: 1;
+    min-width: 0;
 }
 
-#bookingModal .modal-dialog.modal-dialog-centered {
-    min-height: unset;
+.be-booking-flow__route-banner {
+    padding: 0 1rem .85rem;
+}
+
+.be-booking-flow__body {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 0;
+}
+
+.be-booking-flow__section {
+    padding: .85rem 1rem;
+    border-bottom: 1px solid var(--tl-border);
+}
+
+.be-booking-flow__section:last-child {
+    border-bottom: none;
+}
+
+.be-booking-flow__footer {
+    position: sticky;
+    bottom: calc(var(--customer-dock-height, 3.5rem) + .25rem);
+    z-index: 20;
+    flex-shrink: 0;
     display: flex;
     align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .85rem 1rem calc(.85rem + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--tl-border) !important;
+    background: rgba(20, 20, 20, .96);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 -6px 18px rgba(0, 0, 0, .35);
 }
 
-#bookingModal.modal.show {
-    display: flex !important;
-    align-items: center;
-    justify-content: center;
-    padding: 1rem .75rem;
-}
-
-#bookingModal.modal.show .modal-dialog.modal-dialog-centered {
-    min-height: unset;
-    margin: auto;
-    flex: 0 1 auto;
+.be-booking-flow__footer-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    gap: .65rem;
     width: 100%;
 }
 
-#bookingModal .modal-content {
-    max-height: calc(100vh - 2rem);
-    max-height: calc(100dvh - 2rem);
-    overflow: hidden;
+.be-booking-flow__footer-actions .btn {
+    min-height: 2.85rem;
+    font-weight: 700;
 }
 
-.booking-modal-dialog {
-    margin: auto;
-    max-width: 32rem;
-    width: calc(100% - 1.5rem);
+.be-booking-flow__submit {
+    background: linear-gradient(135deg, var(--tl-primary) 0%, var(--tl-primary-dark) 100%) !important;
+    border: none !important;
+    color: #0a0a0a !important;
 }
 
-.booking-modal-sheet {
-    border-radius: 1.1rem;
-    overflow: hidden;
-}
-
-.booking-sheet-handle {
-    width: 2.25rem;
-    height: .22rem;
-    margin: .55rem auto .15rem;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, .28);
-    flex-shrink: 0;
+.be-booking-flow .form-control,
+.be-booking-flow .form-select {
+    font-size: 16px;
 }
 
 .booking-steps--compact {
@@ -686,19 +726,16 @@ body.route-sheet-picker-open {
     gap: .75rem;
 }
 
-
-
-
-
-
 .booking-trip-banner-copy {
     min-width: 0;
     flex: 1;
 }
 
-
-
-
+.booking-trip-banner-route {
+    font-size: .95rem;
+    font-weight: 700;
+    color: #fff;
+}
 
 .booking-sheet-section {
     padding: .85rem 1rem;
@@ -708,18 +745,6 @@ body.route-sheet-picker-open {
 .booking-sheet-section:last-child {
     border-bottom: none;
 }
-
-
-
-
-
-
-
-
-
-
-
-
 .booking-address-field {
     flex: 1;
     min-width: 0;
@@ -836,205 +861,65 @@ body.route-sheet-picker-open {
 
 
 
-#bookingModal .form-control,
-#bookingModal .form-select {
+.be-booking-flow .form-control,
+.be-booking-flow .form-select {
     font-size: 16px;
 }
 
 
 @media (max-width: 767.98px) {
-    #bookingModal.modal.show {
-        padding: .5rem .65rem calc(.5rem + env(safe-area-inset-bottom, 0px));
-        align-items: flex-end;
-        justify-content: center;
-    }
-
-    #bookingModal .booking-modal-dialog {
-        margin: 0 auto;
-        max-width: min(100%, 26rem);
-        width: 100%;
-        min-height: unset;
-        display: flex;
-        align-items: stretch;
-    }
-
-    #bookingModal .booking-modal-sheet,
-    #bookingModal .modal-content,
-    #booking-form.booking-modal-form {
-        border-radius: 1rem 1rem .85rem .85rem;
-        max-height: min(88dvh, 720px);
-        width: 100%;
-    }
-
-    #bookingModal .booking-modal-header-top {
+    .be-booking-flow__header-top {
         padding: .65rem .85rem .5rem;
     }
 
-    #bookingModal .booking-trip-banner {
-        padding: 0 .85rem .65rem;
-        gap: .6rem;
+    .be-booking-flow__route-banner {
+        padding: 0 .85rem .75rem;
     }
 
-    #bookingModal .booking-modal-body {
-        padding-left: 0;
-        padding-right: 0;
-    }
-
-    #bookingModal .booking-sheet-section {
+    .be-booking-flow__section {
         padding: .75rem .85rem;
     }
 
-    #bookingModal .booking-panel-label {
+    .be-booking-flow .booking-panel-label {
         font-size: .78rem;
         margin-bottom: .55rem !important;
     }
 
-    #bookingModal #modal-departure-plan.booking-chip-group--inline {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: .5rem;
-    }
-
-    #bookingModal .booking-chip {
-        justify-content: center;
-        min-height: 2.75rem;
-        padding: .5rem .65rem;
-        font-size: .84rem;
-    }
-
-    #bookingModal .booking-address-input-wrap .form-control {
-        min-height: 2.75rem;
-        font-size: .9rem;
-        padding-top: .55rem;
-        padding-bottom: .55rem;
-    }
-
-    #bookingModal .booking-address-map-btn {
-        width: 2.75rem;
-        min-width: 2.75rem;
-        height: 2.75rem;
-    }
-
-    #bookingModal .booking-modal-vehicle-photo {
+    .be-booking-flow .booking-modal-vehicle-photo {
         width: 4.75rem;
         height: 6rem;
     }
 
-    #bookingModal .booking-modal-vehicle-photo .trip-vehicle-photo {
+    .be-booking-flow .booking-modal-vehicle-photo .trip-vehicle-photo {
         border-radius: .55rem;
         object-fit: cover;
     }
 
-    #bookingModal .booking-pickup-schedule-row {
-        --bs-gutter-x: .65rem;
-    }
-
-    #bookingModal .booking-pickup-schedule-row .form-label {
-        font-size: .78rem;
-        margin-bottom: .3rem;
-    }
-
-    #bookingModal .booking-pickup-schedule-row .form-control {
-        min-height: 2.65rem;
-        font-size: .86rem;
-        padding-left: .55rem;
-        padding-right: .55rem;
-    }
-
-    #bookingModal .booking-modal-footer {
-        display: flex;
-        flex-direction: column;
-        gap: .55rem;
+    .be-booking-flow__footer {
         padding: .65rem .85rem calc(.65rem + env(safe-area-inset-bottom, 0px));
-        align-items: stretch;
-        margin-top: auto;
     }
 
-
-    #bookingModal .booking-modal-footer-actions {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: .65rem;
-        width: 100%;
-    }
-
-    #bookingModal .booking-modal-footer-actions .btn {
+    .be-booking-flow__footer-actions .btn {
         width: 100%;
         min-height: 2.75rem;
         margin: 0 !important;
         font-size: .9rem;
-        font-weight: 600;
     }
 
-    #bookingModal #modal-footer-step1 .booking-price-summary,
-    #bookingModal #modal-footer-step2 .booking-price-summary {
-        min-width: 0;
-        width: 100%;
-    }
-
-    #bookingModal #modal-footer-step1 .booking-price-summary-row:not(.booking-price-summary-row--total):not(#modal-price-departure-row-step1),
-    #bookingModal #modal-footer-step2 .booking-price-summary-row:not(.booking-price-summary-row--total) {
-        display: none;
-    }
-
-    #bookingModal #modal-footer-step1 .booking-price-summary-row--total,
-    #bookingModal #modal-footer-step2 .booking-price-summary-row--total {
-        margin-top: 0;
-        padding-top: .25rem;
-        border-top: none;
-    }
-
-    #bookingModal .booking-summary-card > .d-flex {
+    .be-booking-flow .booking-summary-card > .d-flex {
         flex-direction: column;
         gap: .75rem;
     }
 
-    #bookingModal .booking-summary-card .text-end {
+    .be-booking-flow .booking-summary-card .text-end {
         width: 100%;
         text-align: left !important;
     }
 
-    #bookingModal .booking-price-summary--compact {
+    .be-booking-flow .booking-price-summary--compact {
         min-width: 0;
         width: 100%;
         text-align: left;
-    }
-
-    #bookingModal .booking-price-summary--compact .booking-price-summary-row {
-        justify-content: space-between;
-    }
-
-
-
-
-}
-
-@media (min-width: 768px) {
-    .booking-sheet-handle {
-        display: none;
-    }
-
-    #bookingModal .booking-modal-dialog {
-        width: min(32rem, calc(100% - 2rem));
-    }
-
-    #modal-footer-step1 {
-        flex-direction: row;
-        align-items: center;
-        gap: .75rem;
-    }
-
-
-    #modal-footer-step1 .booking-modal-footer-actions {
-        display: flex;
-        width: auto;
-        flex: 0 0 auto;
-        gap: .5rem;
-    }
-
-    #modal-footer-step1 .booking-modal-footer-actions .btn {
-        width: auto;
-        min-height: unset;
     }
 }
 
@@ -1043,60 +928,11 @@ body.modal-open .modal-backdrop.show {
     background: #000;
 }
 
-#booking-form.booking-modal-form {
+#booking-form.be-booking-flow__form {
     display: flex;
     flex-direction: column;
     min-height: 0;
-    max-height: inherit;
 }
-
-#bookingModal .modal-header {
-    flex-shrink: 0;
-}
-
-#bookingModal .booking-modal-header-inner {
-    display: flex;
-    flex-direction: column;
-}
-
-#bookingModal .booking-modal-header-top {
-    display: flex;
-    align-items: flex-start;
-    gap: .75rem;
-    padding: 1rem 1rem .65rem;
-}
-
-#bookingModal .booking-modal-header-top .booking-steps {
-    flex: 1;
-    min-width: 0;
-}
-
-#bookingModal .booking-modal-header-top .btn-close {
-    flex-shrink: 0;
-    margin: 0;
-}
-
-#bookingModal .booking-modal-body {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
-}
-
-#bookingModal .booking-modal-footer {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: .75rem;
-    padding: .85rem 1rem;
-    border-top: 1px solid var(--tl-border) !important;
-    background: var(--tl-surface);
-    box-shadow: 0 -4px 12px rgba(0, 0, 0, .25);
-}
-
-
 
 .booking-modal-footer-actions {
     display: flex;
@@ -1257,153 +1093,12 @@ body.modal-open .modal-backdrop.show {
 
 
 
-@media (max-width: 575px) {
-    #bookingModal.modal.show {
-        padding-left: .5rem;
-        padding-right: .5rem;
-    }
-
-    #bookingModal.modal.show .modal-dialog.modal-dialog-centered {
-        max-width: 100%;
-    }
-}
-
-
-/* Register — mobile-first, tránh iOS zoom (input < 16px) */
-.register-shell {
-    max-width: 28rem;
-    width: 100%;
-    margin: 0 auto;
-}
-
-.register-card {
-    background: linear-gradient(165deg, #1c1c1c 0%, #121212 55%, #0e0e0e 100%);
-    border: 1px solid rgba(212, 175, 55, .28) !important;
-    border-radius: 1.15rem !important;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, .4), inset 0 1px 0 rgba(212, 175, 55, .08);
-    color: #f5f5f5;
-}
-
-.register-header {
-    text-align: center;
-    padding: 1.1rem 1rem .35rem;
-}
-
-.register-title {
-    margin: 0;
-    font-weight: 800;
-    font-size: 1.35rem;
-    letter-spacing: -.02em;
-    color: var(--tl-primary-light, #e8c547);
-}
-
-.register-subtitle {
-    margin: .3rem 0 0;
-    font-size: .8rem;
-    color: var(--app-text-muted, #a3a3a3);
-}
-
-.register-alert {
-    font-size: .85rem;
-    border-radius: .65rem;
-    background: rgba(220, 53, 69, .14);
-    border: 1px solid rgba(248, 113, 113, .45);
-    color: #fecaca;
-}
-
-.register-alert-link {
-    display: inline-block;
-    margin-left: .35rem;
-    font-weight: 700;
-    color: #e8c547;
-    text-decoration: underline;
-}
-
-.register-shell .form-control.is-invalid ~ .invalid-feedback,
-.register-shell .invalid-feedback.d-block {
-    display: block;
-    color: #f87171;
-    font-size: .78rem;
-}
-
-.register-body {
-    padding: .55rem .85rem 1rem !important;
-}
-
+/* Register field groups — dùng trong auth-screen (docs/xe/NH) */
 .register-section {
-    background: rgba(255, 255, 255, .02);
-    border: 1px solid rgba(255, 255, 255, .06);
-    border-radius: .85rem;
-    padding: .75rem;
     margin-bottom: 0;
 }
 
 .register-section-title { display: none !important; }
-
-/* ≥16px để Safari/Chrome mobile không zoom khi focus → tránh header co/vỡ */
-.register-shell .form-control,
-.register-shell .form-select,
-.register-shell .form-control-sm {
-    font-size: 16px !important;
-    line-height: 1.35;
-    min-height: 2.7rem;
-    padding: .55rem .75rem;
-    border-radius: .65rem;
-    background: #0a0a0a;
-    border-color: #333;
-    color: #f5f5f5;
-}
-
-.register-shell .form-control:focus,
-.register-shell .form-select:focus {
-    border-color: rgba(212, 175, 55, .65);
-    box-shadow: 0 0 0 .2rem rgba(212, 175, 55, .18);
-    background: #0a0a0a;
-    color: #fff;
-}
-
-.register-shell .form-control::placeholder {
-    color: #666;
-}
-
-.register-shell .form-label {
-    font-size: .78rem;
-    font-weight: 600;
-    letter-spacing: .01em;
-    color: var(--app-text-secondary, #d4d4d4);
-    margin-bottom: .28rem;
-}
-
-.register-shell .row.g-2 {
-    --bs-gutter-y: .65rem;
-    --bs-gutter-x: .55rem;
-}
-
-.register-shell .form-text,
-.register-shell .text-muted.small {
-    display: none !important;
-}
-
-/* Auth register: lề ngoài = header navbar */
-@media (max-width: 767.98px) {
-    body.app-shell--auth .app-navbar > .container,
-    body.app-shell--auth .app-main > .container {
-        padding-left: .65rem !important;
-        padding-right: .65rem !important;
-    }
-
-    body.app-shell--auth .app-main > .container {
-        padding-top: .45rem !important;
-    }
-
-    .register-shell {
-        max-width: none;
-    }
-
-    .register-body {
-        padding: .4rem .7rem .9rem !important;
-    }
-}
 
 @keyframes pulse-sync {
     0%, 100% { opacity: 1; }
@@ -1455,125 +1150,6 @@ body.modal-open .modal-backdrop.show {
     margin-bottom: .1rem;
 }
 
-@media (max-width: 767.98px) {
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-}
-
-/* Wizard đăng ký tài xế — mobile-first */
-.driver-wizard-progress {
-    margin-bottom: .9rem;
-}
-
-.driver-wizard-steps {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: .35rem;
-    position: relative;
-}
-
-.driver-wizard-steps::before {
-    content: '';
-    position: absolute;
-    left: 1.1rem;
-    right: 1.1rem;
-    top: 50%;
-    height: 2px;
-    background: #2a2a2a;
-    transform: translateY(-50%);
-    z-index: 0;
-}
-
-.driver-wizard-step-btn {
-    position: relative;
-    z-index: 1;
-    flex: 0 0 auto;
-    width: 2.35rem;
-    height: 2.35rem;
-    border: 1.5px solid #3a3a3a;
-    background: #141414;
-    border-radius: 50%;
-    padding: 0;
-    font-size: .85rem;
-    font-weight: 700;
-    color: #9a9a9a;
-    cursor: pointer;
-    transition: all .2s ease;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.driver-wizard-step-btn:hover:not(.active):not(.done) {
-    border-color: rgba(212, 175, 55, .5);
-    color: #e8c547;
-}
-
-.driver-wizard-step-btn .step-num {
-    line-height: 1;
-    color: inherit;
-}
-
-.driver-wizard-step-btn.active {
-    border-color: transparent;
-    background: linear-gradient(135deg, #d4af37 0%, #e8c547 100%);
-    color: #0a0a0a;
-    box-shadow: 0 4px 14px rgba(212, 175, 55, .32);
-    transform: scale(1.06);
-}
-
-.driver-wizard-step-btn.done {
-    border-color: rgba(74, 222, 128, .45);
-    background: rgba(74, 222, 128, .14);
-    color: #6ee7a8;
-}
-
-.driver-wizard-meta {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    margin: .7rem 0 .45rem;
-    gap: .5rem;
-}
-
-.driver-wizard-step-label {
-    font-size: .95rem;
-    font-weight: 700;
-    color: #f0f0f0;
-}
-
-.driver-wizard-step-count {
-    font-size: .75rem;
-    font-weight: 600;
-    color: #888;
-    letter-spacing: .02em;
-}
-
-.driver-wizard-bar {
-    height: 3px;
-    background: #2a2a2a;
-    border-radius: 999px;
-    overflow: hidden;
-}
-
-.driver-wizard-bar .progress-bar {
-    background: linear-gradient(90deg, #d4af37, #e8c547);
-    transition: width .25s ease;
-}
 
 .driver-wizard-panel {
     animation: registerPanelIn .22s ease;
@@ -1582,138 +1158,6 @@ body.modal-open .modal-backdrop.show {
 @keyframes registerPanelIn {
     from { opacity: 0; transform: translateY(6px); }
     to { opacity: 1; transform: translateY(0); }
-}
-
-.driver-wizard-nav {
-    display: flex;
-    justify-content: center;
-    gap: .55rem;
-    padding-top: .85rem;
-    margin-top: .85rem;
-    border-top: 1px solid rgba(255, 255, 255, .07);
-}
-
-.driver-wizard-nav .driver-wizard-nav-btn {
-    flex: 1 1 0;
-    min-width: 0;
-    max-width: 10rem;
-    padding: .6rem .75rem;
-    font-size: .9rem;
-    font-weight: 700;
-    border-radius: .7rem;
-    white-space: nowrap;
-}
-
-.driver-wizard-nav .driver-wizard-nav-btn:disabled {
-    opacity: .4;
-}
-
-@media (max-width: 379.98px) {
-    .driver-wizard-nav .driver-wizard-nav-btn {
-        max-width: none;
-        font-size: .82rem;
-        padding: .55rem .5rem;
-    }
-}
-
-.register-terms-check {
-    margin-top: .85rem;
-    padding: .65rem .7rem;
-    border-radius: .75rem;
-    background: rgba(212, 175, 55, .06);
-    border: 1px solid rgba(212, 175, 55, .18);
-    overflow: hidden;
-}
-
-.register-terms-row {
-    display: flex;
-    align-items: flex-start;
-    gap: .65rem;
-    margin: 0;
-    cursor: pointer;
-    min-width: 0;
-}
-
-.register-terms-input {
-    flex: 0 0 auto;
-    width: 1.15rem;
-    height: 1.15rem;
-    margin: .1rem 0 0;
-    appearance: none;
-    -webkit-appearance: none;
-    cursor: pointer;
-    background-color: #0a0a0a;
-    border: 2px solid var(--app-gold, #d4af37);
-    border-radius: .25rem;
-    background-repeat: no-repeat;
-    background-position: center;
-    background-size: .7rem;
-}
-
-.register-terms-input:checked {
-    background-color: #0a0a0a;
-    border-color: var(--app-gold, #d4af37);
-    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23d4af37' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='m6 10 3 3 6-6'/%3e%3c/svg%3e");
-}
-
-.register-terms-input:focus {
-    outline: none;
-    border-color: var(--app-gold-light, #e8c547);
-    box-shadow: 0 0 0 .15rem rgba(212, 175, 55, .25);
-}
-
-.register-terms-input.is-invalid {
-    border-color: #dc3545;
-}
-
-.register-terms-text {
-    flex: 1 1 auto;
-    min-width: 0;
-    font-size: .85rem;
-    line-height: 1.35;
-    color: #ddd;
-    word-break: break-word;
-}
-
-.register-terms-check .invalid-feedback {
-    margin-top: .4rem;
-    margin-left: 1.8rem;
-}
-
-.section-icon { font-size: 1rem; }
-
-.driver-review-summary {
-    display: grid;
-    gap: .45rem;
-}
-
-.driver-review-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: .75rem;
-    padding: .45rem 0;
-    border-bottom: 1px solid rgba(255, 255, 255, .06);
-}
-
-.driver-review-row:last-child {
-    border-bottom: 0;
-    padding-bottom: 0;
-}
-
-.driver-review-row .review-k {
-    flex: 0 0 auto;
-    font-size: .78rem;
-    color: #888;
-}
-
-.driver-review-row .review-v {
-    flex: 1 1 auto;
-    text-align: right;
-    font-size: .88rem;
-    font-weight: 600;
-    color: #f0f0f0;
-    word-break: break-word;
 }
 
 .register-bank-select {
@@ -2133,7 +1577,8 @@ body.modal-open .modal-backdrop.show {
     overflow: hidden;
     z-index: -1;
 }
-.driver-photo-manager .photo-vehicle-add-btn > span {
+.driver-photo-manager .photo-vehicle-add-btn > span,
+.driver-photo-manager .photo-vehicle-default-btn {
     display: inline-flex;
     align-items: center;
     gap: .35rem;
@@ -2148,12 +1593,23 @@ body.modal-open .modal-backdrop.show {
     transition: background .15s;
     white-space: nowrap;
 }
+.driver-photo-manager .photo-vehicle-default-btn {
+    cursor: pointer;
+    line-height: 1.25;
+}
 .driver-photo-manager .photo-vehicle-add-btn > span small {
     font-size: .68rem;
     font-weight: 400;
 }
-.driver-photo-manager .photo-vehicle-add-btn:hover > span {
+.driver-photo-manager .photo-vehicle-add-btn:hover > span,
+.driver-photo-manager .photo-vehicle-default-btn:hover {
     background: rgba(13, 110, 253, .1);
+}
+.driver-photo-manager .photo-vehicles-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem;
 }
 .driver-photo-manager .photo-file-input {
     position: absolute;
@@ -2323,100 +1779,93 @@ body.modal-open .modal-backdrop.show {
     border-color: var(--tl-border);
 }
 
-/* —— Popup đặt chuyến: vàng–đen (đồng bộ toàn site) —— */
-#bookingModal .modal-content {
-    background: var(--tl-surface);
-    border: 1px solid var(--tl-border);
-    color: var(--tl-text);
-    box-shadow: 0 20px 50px rgba(0, 0, 0, .55);
-}
-#bookingModal .booking-modal-header-top {
-    background: var(--tl-black-soft);
-    border-bottom: 1px solid var(--tl-border);
-}
-#bookingModal .booking-modal-body {
-    background: var(--tl-surface);
-}
-#bookingModal .booking-panel-section,
-#bookingModal .booking-modal-panel {
+/* —— Flow đặt chuyến Be inline: vàng–đen —— */
+.be-booking-flow {
     color: var(--tl-text);
 }
-#bookingModal .booking-panel-label {
+.be-booking-flow__body {
+    background: var(--tl-surface);
+}
+.be-booking-flow .booking-panel-section,
+.be-booking-flow .booking-modal-panel {
+    color: var(--tl-text);
+}
+.be-booking-flow .booking-panel-label {
     color: var(--tl-primary-light);
 }
-#bookingModal .form-label,
-#bookingModal .form-check-label {
+.be-booking-flow .form-label,
+.be-booking-flow .form-check-label {
     color: var(--app-text-secondary, #d4d4d4);
 }
-#bookingModal .form-control,
-#bookingModal .form-select {
+.be-booking-flow .form-control,
+.be-booking-flow .form-select {
     background: #141414;
     border-color: var(--tl-border);
     color: var(--tl-text);
 }
-#bookingModal .form-control::placeholder {
+.be-booking-flow .form-control::placeholder {
     color: #888;
 }
-#bookingModal .form-control:focus,
-#bookingModal .form-select:focus {
+.be-booking-flow .form-control:focus,
+.be-booking-flow .form-select:focus {
     background: #141414;
     border-color: var(--tl-primary);
     color: var(--tl-text);
     box-shadow: 0 0 0 .2rem rgba(212, 175, 55, .18);
 }
-#bookingModal .form-check-input {
+.be-booking-flow .form-check-input {
     background-color: #141414;
     border-color: #555;
 }
-#bookingModal .form-check-input[type="radio"] {
+.be-booking-flow .form-check-input[type="radio"] {
     border-radius: 50%;
 }
-#bookingModal .form-check-input:checked {
+.be-booking-flow .form-check-input:checked {
     background-color: var(--tl-primary);
     border-color: var(--tl-primary);
 }
-#bookingModal .form-check-input[type="radio"]:checked {
+.be-booking-flow .form-check-input[type="radio"]:checked {
     background-color: #141414;
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='2' fill='%23d4af37'/%3e%3c/svg%3e");
     background-size: contain;
 }
-#bookingModal .text-muted,
-#bookingModal .small.text-muted {
+.be-booking-flow .text-muted,
+.be-booking-flow .small.text-muted {
     color: #c4c4c4 !important;
 }
-#bookingModal #modal-booking-summary,
-#bookingModal .booking-summary-meta,
-#bookingModal .fw-bold {
+.be-booking-flow #modal-booking-summary,
+.be-booking-flow .booking-summary-meta,
+.be-booking-flow .fw-bold {
     color: var(--tl-text);
 }
 
-#bookingModal .booking-modal-footer {
+.be-booking-flow__footer {
     background: var(--tl-black-soft);
     border-top: 1px solid var(--tl-border) !important;
 }
-#bookingModal .btn-outline-secondary {
+.be-booking-flow .btn-outline-secondary {
     border-color: #555;
     color: var(--tl-text-muted);
 }
-#bookingModal .btn-outline-secondary:hover {
+.be-booking-flow .btn-outline-secondary:hover {
     background: #333;
     border-color: #666;
     color: var(--tl-text);
 }
-#bookingModal .btn-outline-primary {
+.be-booking-flow .btn-outline-primary {
     border-color: var(--tl-primary);
     color: var(--tl-primary-light);
 }
-#bookingModal .btn-outline-primary:hover {
+.be-booking-flow .btn-outline-primary:hover {
     background: rgba(212, 175, 55, .15);
     border-color: var(--tl-primary-light);
     color: var(--tl-primary-light);
 }
-#bookingModal .booking-footer-price,
-#bookingModal .booking-summary-total {
+.be-booking-flow .booking-footer-price,
+.be-booking-flow .booking-summary-total {
     color: var(--tl-primary-light);
 }
-#bookingModal .booking-price-discounted {
+.be-booking-flow .booking-price-discounted {
     color: #22c55e !important;
 }
 .booking-price-original {
@@ -2702,10 +2151,10 @@ body.modal-open .modal-backdrop.show {
 body.booking-active-referral-qr-open {
     overflow: hidden;
 }
-#bookingModal .guest-field-error {
+.be-booking-flow .guest-field-error {
     color: #fca5a5;
 }
-#bookingModal .invalid-feedback {
+.be-booking-flow .invalid-feedback {
     color: #fca5a5;
 }
 
@@ -3281,115 +2730,12 @@ body.guest-trip-vehicle-photo-open {
     line-height: 1.4;
 }
 
-.guest-trip-completion-modal {
-    border-radius: 1rem;
-    background: linear-gradient(180deg, #1f1f1f 0%, #141414 100%);
-    border: 1px solid rgba(212, 175, 55, 0.22);
-    color: #f5f5f5;
+
+.guest-trip-review--focus {
+    border-color: rgba(212, 175, 55, .55);
+    box-shadow: 0 0 0 1px rgba(212, 175, 55, .35), 0 10px 28px rgba(0, 0, 0, .35);
+    background: rgba(212, 175, 55, .08);
 }
-
-@media (max-width: 767.98px) {
-    #guestTripCompletionModal.modal.show {
-        padding: .65rem .85rem;
-        align-items: center;
-        justify-content: center;
-    }
-
-    #guestTripCompletionModal .guest-trip-completion-dialog {
-        max-width: min(100%, 20rem);
-        width: 100%;
-        margin: auto;
-    }
-
-    #guestTripCompletionModal .guest-trip-completion-modal,
-    #guestTripCompletionModal .modal-content {
-        max-height: min(68dvh, 460px);
-    }
-
-    #guestTripCompletionModal .modal-header,
-    #guestTripCompletionModal .modal-body,
-    #guestTripCompletionModal .modal-footer {
-        padding-left: .85rem;
-        padding-right: .85rem;
-    }
-
-    .booking-active-referral-qr-overlay {
-        padding: .75rem;
-    }
-
-    .booking-active-referral-qr-overlay-panel {
-        width: min(100%, 18rem);
-        padding: .85rem;
-        border-radius: .95rem;
-    }
-}
-
-.guest-trip-completion-modal .modal-title,
-.guest-trip-completion-modal .guest-trip-completion-section-title,
-.guest-trip-completion-modal .guest-trip-review-title {
-    color: #fff;
-}
-
-.guest-trip-completion-modal .btn-close {
-    filter: invert(1) grayscale(1) brightness(1.8);
-    opacity: 0.75;
-}
-
-.guest-trip-completion-eyebrow {
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: #fcd34d;
-}
-
-.guest-trip-completion-section-lead,
-.guest-trip-completion-section-hint {
-    font-size: 0.82rem;
-    color: #d1d5db;
-}
-
-.guest-trip-completion-referral {
-    margin-bottom: 1rem;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.guest-trip-completion-referral:last-child {
-    margin-bottom: 0;
-    padding-bottom: 0;
-    border-bottom: 0;
-}
-
-.guest-trip-completion-qr-wrap {
-    display: flex;
-    justify-content: center;
-    margin: 0.75rem 0;
-}
-
-.guest-trip-completion-qr {
-    display: inline-flex;
-    padding: 0.65rem;
-    border-radius: 0.85rem;
-    background: #fff;
-}
-
-.guest-trip-completion-qr img,
-.guest-trip-completion-qr canvas {
-    display: block;
-}
-
-.guest-trip-completion-review {
-    margin: 0;
-    padding: 0;
-    border: 0;
-    background: transparent;
-}
-
-.guest-trip-completion-review-done {
-    margin-top: 0.25rem;
-}
-
 .guest-trip-cancel {
     margin: 0;
     padding: 1rem 1rem 1.1rem;
@@ -3473,7 +2819,7 @@ body.guest-trip-vehicle-photo-open {
     100% { transform: translateX(320%); }
 }
 
-/* Bottom scroll dock — mobile: cố định đáy; desktop: nằm trên footer */
+/* Bottom scroll dock — mobile: cố định đáy */
 .customer-scroll-dock {
     --customer-dock-height: calc(3.3rem + env(safe-area-inset-bottom, 0px));
     position: fixed;
@@ -3508,64 +2854,6 @@ body.guest-trip-vehicle-photo-open {
 
 .customer-scroll-dock--three-tabs {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.customer-account-banner {
-    border: 1px solid rgba(212, 175, 55, .22);
-    border-radius: 1rem;
-    background: linear-gradient(135deg, rgba(212, 175, 55, .08), rgba(255, 255, 255, .02));
-    overflow: hidden;
-}
-.customer-account-banner__link {
-    display: flex;
-    align-items: center;
-    gap: .85rem;
-    padding: .85rem 1rem;
-    color: inherit;
-    text-decoration: none;
-}
-.customer-account-banner__link:hover {
-    color: inherit;
-    background: rgba(255, 255, 255, .03);
-}
-.customer-account-banner__avatar {
-    width: 2.5rem;
-    height: 2.5rem;
-    border-radius: 50%;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(212, 175, 55, .18);
-    color: var(--tl-primary-light);
-    font-weight: 800;
-}
-.customer-account-banner__copy {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: .15rem;
-}
-.customer-account-banner__hint {
-    font-size: .78rem;
-    color: var(--tl-text-muted);
-}
-.customer-account-banner__chev {
-    color: var(--tl-primary);
-    font-size: 1.35rem;
-    line-height: 1;
-}
-.customer-account-banner--guest .customer-account-banner__guest {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: .75rem;
-    padding: .85rem 1rem;
-}
-.customer-account-banner__actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .45rem;
 }
 
 .customer-account-page {
@@ -3614,11 +2902,15 @@ body.guest-trip-vehicle-photo-open {
 }
 .customer-account-tabs {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: .4rem;
     margin-bottom: 1rem;
 }
 .customer-account-tab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .3rem;
     text-align: center;
     padding: .55rem .35rem;
     border-radius: .75rem;
@@ -3633,6 +2925,89 @@ body.guest-trip-vehicle-photo-open {
     color: #111;
     background: linear-gradient(135deg, var(--tl-primary), var(--tl-primary-dark));
     border-color: transparent;
+}
+.customer-account-tab__badge {
+    min-width: 1.15rem;
+    height: 1.15rem;
+    padding: 0 .3rem;
+    border-radius: 999px;
+    background: #e11d48;
+    color: #fff;
+    font-size: .65rem;
+    font-weight: 800;
+    line-height: 1.15rem;
+}
+.customer-account-tab.is-active .customer-account-tab__badge {
+    background: #111;
+    color: #fff;
+}
+
+.customer-inbox-tabs {
+    display: flex;
+    gap: .4rem;
+}
+.customer-inbox-tabs__btn {
+    flex: 1;
+    border: 1px solid rgba(255, 255, 255, .08);
+    background: rgba(255, 255, 255, .02);
+    color: var(--tl-text-muted);
+    border-radius: .7rem;
+    padding: .5rem .4rem;
+    font-size: .8rem;
+    font-weight: 700;
+}
+.customer-inbox-tabs__btn.is-active {
+    color: #111;
+    background: linear-gradient(135deg, var(--tl-primary), var(--tl-primary-dark));
+    border-color: transparent;
+}
+.customer-inbox-tabs__badge {
+    display: inline-block;
+    margin-left: .25rem;
+    min-width: 1.05rem;
+    padding: 0 .28rem;
+    border-radius: 999px;
+    background: #e11d48;
+    color: #fff;
+    font-size: .65rem;
+    line-height: 1.05rem;
+}
+.customer-inbox-tabs__btn.is-active .customer-inbox-tabs__badge {
+    background: #111;
+}
+.customer-inbox-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: .65rem;
+}
+.customer-inbox-list__item {
+    border: 1px solid rgba(255, 255, 255, .06);
+    border-radius: .8rem;
+    padding: .75rem .85rem;
+    background: rgba(255, 255, 255, .02);
+}
+.customer-inbox-list__item.is-unread {
+    border-color: rgba(212, 175, 55, .35);
+    background: rgba(212, 175, 55, .06);
+}
+.customer-inbox-list__item strong {
+    display: block;
+    margin-bottom: .25rem;
+    font-size: .92rem;
+}
+.customer-inbox-list__item p {
+    margin: 0;
+    color: var(--tl-text-muted);
+    font-size: .84rem;
+    line-height: 1.4;
+}
+.customer-inbox-empty {
+    padding: 1.25rem .5rem;
+    text-align: center;
+    color: var(--tl-text-muted);
+    font-size: .88rem;
 }
 .customer-account-panel {
     display: none;
@@ -3735,29 +3110,6 @@ body.guest-trip-vehicle-photo-open {
     border: 1px dashed rgba(212, 175, 55, .22);
     border-radius: 1rem;
     color: var(--tl-text-muted);
-}
-
-.customer-biometric-card {
-    text-align: center;
-}
-.customer-biometric-icon {
-    display: flex;
-    justify-content: center;
-    margin-bottom: 1rem;
-    color: var(--tl-primary);
-}
-
-@media (max-width: 575.98px) {
-    .customer-account-banner--guest .customer-account-banner__guest {
-        flex-direction: column;
-        align-items: stretch;
-    }
-    .customer-account-banner__actions {
-        width: 100%;
-    }
-    .customer-account-banner__actions .btn {
-        flex: 1;
-    }
 }
 
 .customer-scroll-dock-item {

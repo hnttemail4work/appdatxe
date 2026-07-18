@@ -7,9 +7,10 @@ use Illuminate\Support\Facades\Hash;
 
 class WebAuth
 {
-    public static function attempt(string $phone, string $password): ?User
+    /** Đăng nhập khách / tài xế — SĐT + PIN/mật khẩu. */
+    public static function attemptPhone(string $phone, string $password): ?User
     {
-        $user = AuthIdentifier::findUserByLogin($phone);
+        $user = AuthIdentifier::findUserByPhone($phone);
 
         if (! $user || ! Hash::check($password, $user->password)) {
             return null;

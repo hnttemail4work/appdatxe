@@ -34,22 +34,6 @@
 
                 </div>
 
-                <aside class="guest-trip-card__aside">
-
-                    <div class="guest-trip-referral d-none" id="guest-trip-referral-wrap" data-field="referral_wrap">
-
-                        <p class="guest-trip-referral-label mb-0">Mã giới thiệu</p>
-
-                        <button type="button" class="booking-active-referral-qr-btn guest-trip-referral-qr-btn" id="guest-trip-referral-qr-btn" aria-label="Bấm để xem mã QR giới thiệu">
-
-                            <span id="guest-trip-referral-qr" class="booking-active-referral-qr guest-trip-referral-qr" aria-hidden="true"></span>
-
-                        </button>
-
-                    </div>
-
-                </aside>
-
             </div>
 
         </header>
@@ -180,6 +164,11 @@
 
             <div class="guest-trip-details" data-field="trip_details">
 
+                    <div class="guest-trip-detail d-none" data-field="pickup_mode_wrap">
+                        <span class="guest-trip-detail__label">Lịch đón</span>
+                        <span class="guest-trip-detail__value" data-field="pickup_mode_label"></span>
+                    </div>
+
                     <div class="guest-trip-detail d-none" data-field="pickup_time_wrap">
                         <span class="guest-trip-detail__label">Giờ đón</span>
                         <span class="guest-trip-detail__value" data-field="pickup_time_label"></span>
@@ -188,11 +177,6 @@
                     <div class="guest-trip-detail d-none" data-field="service_date_wrap">
                         <span class="guest-trip-detail__label">Ngày đi</span>
                         <span class="guest-trip-detail__value" data-field="service_date_label"></span>
-                    </div>
-
-                    <div class="guest-trip-detail d-none" data-field="departure_plan_wrap">
-                        <span class="guest-trip-detail__label">Loại chuyến</span>
-                        <span class="guest-trip-detail__value" data-field="departure_plan_label"></span>
                     </div>
 
                     <div class="guest-trip-detail d-none" data-field="trip_distance_wrap">
@@ -280,30 +264,6 @@
         </div>
 
     </article>
-
-    <div id="guest-trip-referral-qr-overlay" class="booking-active-referral-qr-overlay d-none" role="dialog" aria-modal="true" aria-labelledby="guest-trip-referral-qr-overlay-title" hidden>
-
-        <div class="booking-active-referral-qr-overlay-backdrop" data-close-guest-referral-qr></div>
-
-        <div class="booking-active-referral-qr-overlay-panel">
-
-            <div class="booking-active-referral-qr-overlay-head">
-
-                <strong id="guest-trip-referral-qr-overlay-title">Mã giới thiệu</strong>
-
-                <button type="button" class="btn-close" data-close-guest-referral-qr aria-label="Đóng"></button>
-
-            </div>
-
-            <div id="guest-trip-referral-qr-large" class="booking-active-referral-qr-large"></div>
-
-            <p class="booking-active-referral-qr-overlay-note small mb-0" id="guest-trip-referral-qr-overlay-note"></p>
-
-        </div>
-
-    </div>
-
-    @include('partials.guest-trip-completion-modal')
 
     <div id="guest-trip-vehicle-photo-overlay" class="guest-trip-vehicle-photo-overlay d-none" role="dialog" aria-modal="true" aria-label="Ảnh xe" hidden>
         <button type="button" class="guest-trip-vehicle-photo-overlay__backdrop" data-close-guest-vehicle-photo aria-label="Đóng"></button>

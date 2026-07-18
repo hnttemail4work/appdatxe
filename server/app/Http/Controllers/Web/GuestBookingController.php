@@ -22,7 +22,6 @@ use App\Services\ScheduleLifecycleService;
 use App\Services\TripListingService;
 use App\Services\TripPricingService;
 use App\Support\BookingPageSettings;
-use App\Support\DeparturePlan;
 use App\Support\DepartureTimeDisplay;
 use App\Support\ProvinceResolver;
 use App\Support\ServiceDate;
@@ -60,8 +59,6 @@ class GuestBookingController extends Controller
 
         return response()->json([
             'offers' => $offers,
-            // Tổng số xe khả dụng (khớp với $driverCount tính lúc render trang) — không phải số nhóm loại xe.
-            'count'  => (int) $offers->sum('available_count'),
         ]);
     }
 
@@ -244,7 +241,6 @@ class GuestBookingController extends Controller
 
         $referralDiscountMeta = $this->referralCodes->discountMeta($appliedReferral);
         $browserCancelCount = (int) $request->session()->get('guest_browser_cancel_count', 0);
-        $bookingPageHeroTitle = BookingPageSettings::heroTitle();
         $bookingPageBannerUrl = BookingPageSettings::bannerUrl();
         $customerBookingPrefill = null;
         $authUser = auth()->user();
@@ -263,7 +259,6 @@ class GuestBookingController extends Controller
             'pendingReferral',
             'referralDiscountMeta',
             'browserCancelCount',
-            'bookingPageHeroTitle',
             'bookingPageBannerUrl',
             'customerBookingPrefill',
         );
@@ -350,10 +345,6 @@ class GuestBookingController extends Controller
         $dropoffLat = (float) $validated['dropoff_lat'];
         $dropoffLng = (float) $validated['dropoff_lng'];
         $addresses = $this->resolveRouteAddresses($validated, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
-        $departurePlan = DeparturePlan::normalize($validated['departure_plan'] ?? DeparturePlan::ONE_WAY);
-        $laterReturnDays = $departurePlan === DeparturePlan::LATER
-            ? DeparturePlan::normalizeLaterReturnDays($validated['later_return_days'] ?? null)
-            : null;
 
         $quote = $this->pricing->quote(
             $template,
@@ -363,8 +354,6 @@ class GuestBookingController extends Controller
             $pickupLng,
             $dropoffLat,
             $dropoffLng,
-            $departurePlan,
-            $laterReturnDays,
         );
 
         $subtotal = (int) $quote['whole_car_price'];
@@ -396,6 +385,15 @@ class GuestBookingController extends Controller
     {
         $this->workflow->expirePastPickupWithoutDriver();
 
+        $authUser = $request->user();
+        if ($authUser && $authUser->role === 'customer') {
+            if ($block = $authUser->bookingBlockMessage()) {
+                return $this->bookingFormRedirect()
+                    ->withErrors(['booking' => $block])
+                    ->withInput();
+            }
+        }
+
         $validated = $request->validated();
 
         $pickupLat = (float) $validated['pickup_lat'];
@@ -405,16 +403,10 @@ class GuestBookingController extends Controller
         $addresses = $this->resolveRouteAddresses($validated, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
         $validated['pickup_address'] = $addresses['pickup_address'];
         $validated['dropoff_address'] = $addresses['dropoff_address'];
-        $departurePlan = DeparturePlan::normalize($validated['departure_plan']);
-        $laterReturnDays = $departurePlan === DeparturePlan::LATER
-            ? DeparturePlan::normalizeLaterReturnDays($validated['later_return_days'] ?? null)
-            : null;
-        $validated['service_date'] = DeparturePlan::resolveServiceDate(
-            $departurePlan,
-            $validated['service_date'] ?? null,
-            null,
-            $laterReturnDays,
-        );
+        $scheduleLater = ! empty($validated['service_date']) && ! empty($validated['pickup_time']);
+        $validated['service_date'] = $scheduleLater
+            ? ServiceDate::parse($validated['service_date'])->toDateString()
+            : ServiceDate::today();
 
         $referralInput = strtoupper(trim((string) ($validated['referral_code'] ?? '')));
         if ($referralInput !== '') {
@@ -435,7 +427,9 @@ class GuestBookingController extends Controller
                 ->withInput();
         }
 
-        $pickupTime = DepartureTimeDisplay::storageValue($validated['pickup_time']);
+        $pickupTime = $scheduleLater
+            ? DepartureTimeDisplay::storageValue((string) $validated['pickup_time'])
+            : null;
 
         $appliedReferral = $this->referralCodes->resolveUsableCode(session('guest_referral_code'));
         $appliedReferralId = $appliedReferral?->id;
@@ -486,8 +480,6 @@ class GuestBookingController extends Controller
                 $pickupLng,
                 $dropoffLat,
                 $dropoffLng,
-                $departurePlan,
-                $laterReturnDays,
                 autoMatchDriver: true,
             );
         } catch (InvalidArgumentException $e) {
@@ -509,8 +501,7 @@ class GuestBookingController extends Controller
         } catch (\Throwable) {
         }
 
-        $booking->loadMissing(['schedule', 'referralCode', 'appliedReferralCode']);
-        $issuedReferral = $booking->referralCode;
+        $booking->loadMissing(['schedule', 'appliedReferralCode']);
 
         $successPayload = [
             'trip_code'         => $booking->schedule->shortTripCode(),
@@ -518,14 +509,7 @@ class GuestBookingController extends Controller
             'passenger_name'    => $validated['passenger_name'],
             'contact_phone'     => $validated['contact_phone'],
             'hotline_phone'     => config('app.contact_phone'),
-            'referral_code'     => $issuedReferral?->code,
         ];
-
-        if ($issuedReferral) {
-            $successPayload['referral_url'] = $issuedReferral->landingUrl();
-            $successPayload['referral_discount_percent'] = $issuedReferral->customerDiscountPercent();
-            $successPayload['referral_pending'] = $issuedReferral->status === \App\Models\ReferralCode::STATUS_PENDING;
-        }
 
         return redirect()->route('booking.trips')->with('booking_success', $successPayload);
     }

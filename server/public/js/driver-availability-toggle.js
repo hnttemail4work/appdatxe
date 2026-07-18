@@ -100,33 +100,37 @@
         }
     }
 
+    function setHeroStatus(key, label) {
+        if (!heroPill || !heroLabel) {
+            return;
+        }
+        heroPill.className = 'driver-drawer__status driver-drawer__status--' + key;
+        heroLabel.textContent = label;
+    }
+
     function refreshHeroStatus() {
         if (!heroPill || !heroLabel || onTrip || tripUpcoming) {
             return;
         }
 
         if (locationBar.getAttribute('data-driver-paused') === '1') {
-            heroPill.className = 'driver-status-pill driver-status-pill--offline';
-            heroLabel.textContent = 'Tạm nghỉ';
+            setHeroStatus('offline', 'Tạm nghỉ');
             return;
         }
 
         if (hasLocationCoords()) {
-            heroPill.className = 'driver-status-pill driver-status-pill--online';
-            heroLabel.textContent = 'Sẵn sàng';
+            setHeroStatus('online', 'Sẵn sàng');
             clearLocationSharePrompt();
             hideLocationFallback();
             return;
         }
 
         if (isFallbackVisible()) {
-            heroPill.className = 'driver-status-pill driver-status-pill--offline';
-            heroLabel.textContent = 'Chọn vị trí trên bản đồ';
+            setHeroStatus('offline', 'Chọn vị trí trên bản đồ');
             return;
         }
 
-        heroPill.className = 'driver-status-pill driver-status-pill--offline';
-        heroLabel.textContent = 'Đang lấy vị trí GPS…';
+        setHeroStatus('offline', 'Đang lấy vị trí GPS…');
     }
 
     function setPaused(paused, options) {
@@ -146,14 +150,11 @@
 
         if (heroPill && heroLabel) {
             if (onTrip) {
-                heroPill.className = 'driver-status-pill driver-status-pill--busy';
-                heroLabel.textContent = 'Đang chạy chuyến';
+                setHeroStatus('busy', 'Đang chạy chuyến');
             } else if (tripUpcoming) {
-                heroPill.className = 'driver-status-pill driver-status-pill--assigned';
-                heroLabel.textContent = 'Đã nhận cuốc';
+                setHeroStatus('assigned', 'Đã nhận cuốc');
             } else if (paused) {
-                heroPill.className = 'driver-status-pill driver-status-pill--offline';
-                heroLabel.textContent = 'Tạm nghỉ';
+                setHeroStatus('offline', 'Tạm nghỉ');
                 clearLocationSharePrompt();
                 hideLocationFallback();
                 stopGpsTracking();
@@ -167,6 +168,16 @@
             hideLocationFallback();
         } else {
             startGpsTracking();
+        }
+
+        if (window.DriverBottomPanel && window.DriverBottomPanel.syncReadyCta) {
+            window.DriverBottomPanel.syncReadyCta();
+        }
+
+        var page = document.querySelector('.driver-page--map');
+        if (page) {
+            page.classList.toggle('is-duty-on', !paused);
+            page.classList.toggle('is-duty-off', !!paused);
         }
     }
 
@@ -206,6 +217,9 @@
         toggle.disabled = true;
         suppressNextChange = true;
         toggle.checked = wantAvailable;
+        if (window.DriverBottomPanel && window.DriverBottomPanel.syncReadyCta) {
+            window.DriverBottomPanel.syncReadyCta();
+        }
 
         fetch(url, {
             method: 'PATCH',

@@ -402,6 +402,19 @@ body.app-shell {
     border: 1px solid var(--app-border);
 }
 
+/* Ô / combobox co theo chữ — không kéo full hàng, không wrap lệch */
+select.vehicle-type-select,
+select[name="vehicle_type"],
+.field-auto-size,
+.fields-auto-size .form-control:not([type="file"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]),
+.fields-auto-size .form-select {
+    field-sizing: content;
+    width: auto;
+    max-width: 100%;
+    min-width: 6.5rem;
+    white-space: nowrap;
+}
+
 .form-control:focus,
 .form-select:focus {
     background-color: var(--app-surface-raised);

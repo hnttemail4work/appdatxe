@@ -32,13 +32,6 @@
             : { label: 'Đặt sau', tone: 'later' };
     }
 
-    function updateHeroCount(count) {
-        var stat = document.querySelector('.grab-home-topbar__stat strong');
-        if (stat) {
-            stat.textContent = String(count);
-        }
-    }
-
     function applyOffers(offers) {
         if (!Array.isArray(offers)) {
             return;
@@ -87,9 +80,6 @@
                     return;
                 }
                 applyOffers(data.offers || []);
-                if (typeof data.count === 'number') {
-                    updateHeroCount(data.count);
-                }
             })
             .catch(function () {});
     }

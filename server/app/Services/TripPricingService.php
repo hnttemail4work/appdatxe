@@ -5,17 +5,16 @@ namespace App\Services;
 use App\Models\Schedule;
 use App\Models\ScheduleTemplate;
 use App\Models\TripRoute;
-use App\Support\DeparturePlan;
 use App\Support\LocationCatalog;
 use App\Support\PlatformFees;
 use App\Support\ProvinceCenters;
 use App\Support\RouteDistanceCatalog;
 use App\Support\VehicleTypePricing;
 
-/** Giá thuê cả xe một chiều theo km / cấu hình template. */
+/** Giá cả xe một chiều theo km / cấu hình template. */
 class TripPricingService
 {
-    /** Giá tham chiếu: thuê cả xe 4 chỗ, ~100 km. */
+    /** Giá tham chiếu: cả xe 4 chỗ, ~100 km. */
     public const REFERENCE_WHOLE_CAR = 1_000_000;
     public const REFERENCE_CAPACITY = 4;
     public const REFERENCE_DISTANCE_KM = 100;
@@ -23,7 +22,7 @@ class TripPricingService
     /** Cùng tỉnh/thành — quãng đường tối đa (km) áp giá cố định. */
     public const INTRA_PROVINCE_FLAT_MAX_KM = 3;
 
-    /** Cùng tỉnh/thành — giá thuê cả xe cho chuyến ngắn (≤ {@see INTRA_PROVINCE_FLAT_MAX_KM} km). */
+    /** Cùng tỉnh/thành — giá cả xe cho chuyến ngắn (≤ {@see INTRA_PROVINCE_FLAT_MAX_KM} km). */
     public const INTRA_PROVINCE_FLAT_PRICE = 30_000;
 
     /** @return array<string, mixed> */
@@ -35,28 +34,21 @@ class TripPricingService
         ?float $pickupLng = null,
         ?float $dropoffLat = null,
         ?float $dropoffLng = null,
-        ?string $departurePlan = null,
-        ?int $laterReturnDays = null,
     ): array {
         $template->loadMissing(['route', 'vehicle']);
-        $plan = DeparturePlan::normalize($departurePlan);
 
         if ($pickup && $dropoff && $template->vehicle) {
-            return $this->applyDeparturePlanToQuote(
-                $this->quoteForVehicle($template->vehicle, $pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng),
-                $plan,
-                $laterReturnDays,
-            );
+            return $this->quoteForVehicle($template->vehicle, $pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
         }
 
         $wholeCar = $this->oneWayWholeCarPrice($template, $pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
         $distance = $this->resolveDistanceKm($template->route, $pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
 
-        return $this->applyDeparturePlanToQuote([
+        return [
             'distance_km'      => $distance,
             'whole_car_price'  => $wholeCar,
             'unit_price'       => $wholeCar,
-        ], $plan, $laterReturnDays);
+        ];
     }
 
     public function bookingTotal(
@@ -67,12 +59,8 @@ class TripPricingService
         ?float $pickupLng = null,
         ?float $dropoffLat = null,
         ?float $dropoffLng = null,
-        ?string $departurePlan = null,
-        ?int $laterReturnDays = null,
     ): float {
-        $base = $this->oneWayWholeCarPrice($entity, $pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
-
-        return (float) $this->priceWithDeparturePlan($base, $departurePlan, $laterReturnDays);
+        return (float) $this->oneWayWholeCarPrice($entity, $pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
     }
 
     public function oneWayWholeCarPrice(
@@ -235,32 +223,5 @@ class TripPricingService
     public function roundToThousand(float $amount): int
     {
         return PlatformFees::roundDisplayPrice($amount);
-    }
-
-    public function priceWithDeparturePlan(int|float $basePrice, ?string $departurePlan, ?int $laterReturnDays = null): int
-    {
-        $multiplier = DeparturePlan::priceMultiplier((string) $departurePlan, $laterReturnDays);
-
-        return $this->roundToThousand((float) $basePrice * $multiplier);
-    }
-
-    /** @param  array<string, mixed>  $quote */
-    private function applyDeparturePlanToQuote(array $quote, string $plan, ?int $laterReturnDays = null): array
-    {
-        $base = (int) ($quote['whole_car_price'] ?? 0);
-        $normalizedDays = $plan === DeparturePlan::LATER
-            ? DeparturePlan::normalizeLaterReturnDays($laterReturnDays)
-            : null;
-        $adjusted = $this->priceWithDeparturePlan($base, $plan, $normalizedDays);
-
-        return array_merge($quote, [
-            'base_whole_car_price' => $base,
-            'departure_plan'       => $plan,
-            'departure_plan_label' => DeparturePlan::displayLabel($plan, $normalizedDays),
-            'later_return_days'    => $normalizedDays,
-            'surcharge_percent'    => DeparturePlan::surchargePercent($plan, $normalizedDays),
-            'whole_car_price'      => $adjusted,
-            'unit_price'           => $adjusted,
-        ]);
     }
 }

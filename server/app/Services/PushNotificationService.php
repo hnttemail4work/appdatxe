@@ -443,6 +443,23 @@ class PushNotificationService
         $this->dispatch($subscriptions, $eventKey, $title, $body, $url, $dedupKey);
     }
 
+    /**
+     * Gửi Web Push tới tài xế (dùng chung cho cuốc + hộp thư).
+     *
+     * @param  array<string, mixed>  $extraData
+     */
+    public function notifyDriverUser(
+        int $driverUserId,
+        string $eventKey,
+        string $title,
+        string $body,
+        string $url,
+        string $dedupKey,
+        array $extraData = [],
+    ): void {
+        $this->sendToDriver($driverUserId, $eventKey, $title, $body, $url, $dedupKey, $extraData);
+    }
+
     protected function sendToDriver(
         int $driverUserId,
         string $eventKey,
@@ -452,6 +469,28 @@ class PushNotificationService
         string $dedupKey,
         array $extraData = [],
     ): void {
+        // Lưu hộp thư cùng khóa dedup với push — tránh spam khi gửi lại.
+        if (! str_starts_with($eventKey, 'driver.inbox_') && $this->claimDedup('inbox:' . $dedupKey)) {
+            try {
+                app(DriverInboxService::class)->storeNoticeWithoutPush(
+                    $driverUserId,
+                    $title,
+                    $body,
+                    [
+                        'type'      => 'push_event',
+                        'event_key' => $eventKey,
+                        'dedup_key' => $dedupKey,
+                    ],
+                );
+            } catch (\Throwable $e) {
+                Log::warning('driver_inbox_store_failed', [
+                    'driver_user_id' => $driverUserId,
+                    'event'          => $eventKey,
+                    'error'          => $e->getMessage(),
+                ]);
+            }
+        }
+
         $subscriptions = PushSubscription::query()
             ->where('audience', PushAudience::DRIVER)
             ->where('user_id', $driverUserId)

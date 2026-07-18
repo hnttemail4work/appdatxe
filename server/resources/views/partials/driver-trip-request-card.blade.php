@@ -22,7 +22,7 @@ $mapNav = $primaryBooking ? MapNavigation::driverPickupTarget($primaryBooking) :
     <header class="driver-request-card__header">
         <div class="driver-request-card__header-copy">
             <div class="driver-request-card__eyebrow-row">
-                <span class="driver-request-card__eyebrow">Cuốc chờ xác nhận</span>
+                <span class="driver-request-card__eyebrow">Cuốc mới — chờ nhận</span>
                 @if($schedule->shortTripCode())
                     <span class="driver-request-card__code">Mã {{ $schedule->shortTripCode() }}</span>
                 @endif
@@ -53,7 +53,7 @@ $mapNav = $primaryBooking ? MapNavigation::driverPickupTarget($primaryBooking) :
 
     @if($primaryBooking)
         <div class="driver-request-card__pickup">
-            @if($primaryBooking->pickupTimeLabel() || $primaryBooking->driverPickupDateLabel())
+            @if($primaryBooking->isScheduledPickup())
                 <div class="driver-request-card__pickup-schedule">
                     @if($primaryBooking->pickupTimeLabel())
                         <span><span class="driver-request-card__pickup-label">Giờ đón</span> {{ $primaryBooking->pickupTimeLabel() }}</span>
@@ -61,6 +61,10 @@ $mapNav = $primaryBooking ? MapNavigation::driverPickupTarget($primaryBooking) :
                     @if($primaryBooking->driverPickupDateLabel())
                         <span><span class="driver-request-card__pickup-label">Ngày đi</span> {{ $primaryBooking->driverPickupDateLabel() }}</span>
                     @endif
+                </div>
+            @else
+                <div class="driver-request-card__pickup-schedule">
+                    <span><span class="driver-request-card__pickup-label">Lịch đón</span> {{ $primaryBooking->pickupModeLabel() }}</span>
                 </div>
             @endif
             <div class="driver-request-card__pickup-address">
@@ -86,11 +90,10 @@ $mapNav = $primaryBooking ? MapNavigation::driverPickupTarget($primaryBooking) :
         </div>
     @endif
 
-    @if($mapNav)
-        <div class="driver-request-card__map-nav">
-            @include('partials.driver-map-nav-button', ['mapNav' => $mapNav, 'compact' => true])
-        </div>
-    @endif
+    @include('partials.driver-trip-quick-actions', [
+        'booking' => $primaryBooking,
+        'mapNav' => $mapNav,
+    ])
 
     @if($waitProgress)
         @include('partials.wait-progress', [
@@ -111,12 +114,12 @@ $mapNav = $primaryBooking ? MapNavigation::driverPickupTarget($primaryBooking) :
                 <button type="submit" class="btn btn-driver-reject-ghost">Hủy cuốc</button>
             </form>
             <form method="POST" action="{{ route('driver.tripRequests.accept', $tripRequest) }}" class="driver-workflow-compact-action driver-accept-form driver-request-card__accept-form"
-                  data-confirm="Xác nhận nhận chuyến này?"
-                  data-confirm-title="Xác nhận"
-                  data-confirm-ok="Xác nhận"
+                  data-confirm="Nhận chuyến này?"
+                  data-confirm-title="Nhận chuyến"
+                  data-confirm-ok="Nhận chuyến"
                   data-confirm-variant="success">
                 @csrf
-                <button type="submit" class="btn btn-success driver-btn-accept driver-request-card__accept-btn">Xác nhận</button>
+                <button type="submit" class="btn btn-success driver-btn-accept driver-request-card__accept-btn">Nhận chuyến</button>
             </form>
         </div>
     </div>

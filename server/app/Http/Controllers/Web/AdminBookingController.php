@@ -10,7 +10,6 @@ use App\Models\DriverProfile;
 use App\Models\DriverWalletTransaction;
 use App\Services\BookingWorkflowService;
 use App\Services\DriverTripRequestService;
-use App\Services\LaterReturnBookingService;
 use App\Services\PushNotificationService;
 use App\Services\ScheduleLifecycleService;
 use App\Support\PageList;
@@ -20,7 +19,7 @@ use InvalidArgumentException;
 
 /**
  * Nhóm "quản lý booking" — tách ra từ AdminController (Fat Controller):
- * danh sách/đồng bộ đơn, gán tài xế, nhắc tài xế, hủy đơn, tạo chuyến đón về, xóa hàng loạt.
+ * danh sách/đồng bộ đơn, gán tài xế, nhắc tài xế, hủy đơn, xóa hàng loạt.
  */
 class AdminBookingController extends Controller
 {
@@ -28,7 +27,6 @@ class AdminBookingController extends Controller
         private readonly ScheduleLifecycleService $scheduleLifecycle,
         private readonly DriverTripRequestService $tripRequests,
         private readonly BookingWorkflowService $workflow,
-        private readonly LaterReturnBookingService $laterReturnBookings,
         private readonly PushNotificationService $pushNotifications,
     ) {
     }
@@ -253,23 +251,5 @@ class AdminBookingController extends Controller
         return redirect()
             ->route('admin.bookings', ['list' => 'cancelled'])
             ->with('success', 'Đã hủy chuyến — khách và tài xế không còn thấy trên app.');
-    }
-
-    public function dispatchLaterReturnPickup(Booking $booking)
-    {
-        $this->scheduleLifecycle->sync();
-        $this->tripRequests->expireStale();
-
-        $booking->loadMissing(['schedule.template', 'schedule.route', 'schedule.vehicle']);
-
-        try {
-            $returnBooking = $this->laterReturnBookings->dispatchReturnPickup($booking);
-        } catch (InvalidArgumentException $e) {
-            return back()->withErrors(['booking' => $e->getMessage()]);
-        }
-
-        return redirect()
-            ->route('admin.bookings', ['list' => 'active'])
-            ->with('success', 'Đã tạo chuyến đón khách về — mã ' . ($returnBooking->booking_reference ?? '—') . '.');
     }
 }

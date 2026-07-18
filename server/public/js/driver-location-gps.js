@@ -14,6 +14,7 @@
     var lastSavedAt = 0;
     var lastSavedLat = null;
     var lastSavedLng = null;
+    var lastHeading = null;
     var PERIODIC_MS = 60 * 1000;
     var SAVE_MIN_INTERVAL_MS = 30 * 1000;
     var MOVE_MIN_METERS = 20;
@@ -88,13 +89,18 @@
             .catch(function () { return ''; });
     }
 
-    function dispatchApplied(lat, lng, address) {
+    function dispatchApplied(lat, lng, address, heading) {
+        if (heading != null && !Number.isNaN(heading)) {
+            lastHeading = heading;
+        }
+
         document.dispatchEvent(new CustomEvent('addressmap:applied', {
             detail: {
                 targetInputId: detailInput ? detailInput.id : 'driver-location-detail',
                 lat: lat,
                 lng: lng,
                 address: address,
+                heading: lastHeading,
             },
         }));
     }
@@ -146,8 +152,16 @@
         var force = !!options.force;
         var reverse = options.reverseGeocode !== false
             && (!detailInput || !String(detailInput.value || '').trim());
+        var heading = options.heading;
+
+        if (heading != null && !Number.isNaN(heading)) {
+            lastHeading = heading;
+        }
 
         if (!shouldPublishPosition(lat, lng, force)) {
+            if (heading != null && !Number.isNaN(heading)) {
+                dispatchApplied(lat, lng, detailInput ? detailInput.value : '', heading);
+            }
             return Promise.resolve(false);
         }
 
@@ -160,13 +174,13 @@
                     detailInput.value = address;
                 }
 
-                dispatchApplied(lat, lng, address);
+                dispatchApplied(lat, lng, address, lastHeading);
                 notifyGpsSuccess();
                 return true;
             });
         }
 
-        dispatchApplied(lat, lng, detailInput ? detailInput.value : '');
+        dispatchApplied(lat, lng, detailInput ? detailInput.value : '', lastHeading);
         notifyGpsSuccess();
         return Promise.resolve(true);
     }
@@ -192,6 +206,7 @@
                         force: true,
                         reverseGeocode: options.reverseGeocode,
                         maximumAge: options.maximumAge,
+                        heading: typeof pos.coords.heading === 'number' ? pos.coords.heading : null,
                     }).then(function (ok) {
                         resolve(ok);
                     }).finally(function () {
@@ -220,6 +235,7 @@
 
         applyPosition(pos.coords.latitude, pos.coords.longitude, {
             reverseGeocode: false,
+            heading: typeof pos.coords.heading === 'number' ? pos.coords.heading : null,
         });
     }
 
@@ -314,14 +330,14 @@
 
     function getLastKnownCoords() {
         if (lastSavedLat != null && lastSavedLng != null) {
-            return { lat: lastSavedLat, lng: lastSavedLng };
+            return { lat: lastSavedLat, lng: lastSavedLng, heading: lastHeading };
         }
 
         if (latInput && lngInput && latInput.value && lngInput.value) {
             var lat = parseFloat(latInput.value);
             var lng = parseFloat(lngInput.value);
             if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
-                return { lat: lat, lng: lng };
+                return { lat: lat, lng: lng, heading: lastHeading };
             }
         }
 
@@ -334,5 +350,8 @@
         stopAutoTracking: stopAutoTracking,
         ensureFreshLocation: ensureFreshLocation,
         getLastKnownCoords: getLastKnownCoords,
+        getLastKnownHeading: function () {
+            return lastHeading;
+        },
     };
 })();

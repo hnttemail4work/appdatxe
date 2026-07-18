@@ -43,6 +43,34 @@ class DriverMovementConfirmServiceTest extends TestCase
         $this->assertTrue($deadline->greaterThanOrEqualTo(now()->addMinutes(DriverMovementConfirmService::MIN_DEADLINE_BUFFER_MINUTES)));
     }
 
+    public function test_confirm_action_available_within_one_hour_before_pickup(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-06-27 08:00:00'));
+
+        $service = new DriverMovementConfirmService();
+
+        [$farSchedule, $farBooking] = $this->assignedFixtures(minutesToPickup: 180);
+        $this->assertFalse($service->isConfirmActionAvailable($farSchedule, $farBooking));
+
+        [$nearSchedule, $nearBooking] = $this->assignedFixtures(minutesToPickup: 45);
+        $this->assertTrue($service->isConfirmActionAvailable($nearSchedule, $nearBooking));
+    }
+
+    /** @return array{0: Schedule, 1: Booking} */
+    private function assignedFixtures(int $minutesToPickup): array
+    {
+        [$schedule, $booking] = $this->fixtures($minutesToPickup, 10.0);
+        $schedule->fill([
+            'driver_stage'                 => Schedule::DRIVER_STAGE_ASSIGNED,
+            'driver_movement_confirmed_at' => null,
+        ]);
+        $schedule->setRelation('bookings', collect([$booking]));
+        $schedule->setRelation('tripSettlement', null);
+        $booking->setRelation('schedule', $schedule);
+
+        return [$schedule, $booking];
+    }
+
     /** @return array{0: Schedule, 1: Booking} */
     private function fixtures(int $minutesToPickup, float $distanceKm): array
     {

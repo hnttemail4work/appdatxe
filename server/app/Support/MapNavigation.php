@@ -5,7 +5,7 @@ namespace App\Support;
 use App\Models\Booking;
 use App\Models\Schedule;
 
-/** Liên kết mở bản đồ chỉ đường trên điện thoại (geo URI). */
+/** Liên kết mở bản đồ chỉ đường (geo URI + Google Maps). */
 final class MapNavigation
 {
     public static function directionsUrl(?float $lat, ?float $lng, ?string $address = null): ?string
@@ -24,6 +24,44 @@ final class MapNavigation
         return 'geo:0,0?q='.rawurlencode($address);
     }
 
+    /**
+     * Google Maps Directions — origin/destination theo tọa độ.
+     * Thiếu origin → Google dùng vị trí hiện tại của thiết bị.
+     */
+    public static function googleDirectionsUrl(
+        ?float $originLat,
+        ?float $originLng,
+        ?float $destLat,
+        ?float $destLng,
+        ?string $destAddress = null,
+    ): ?string {
+        $destination = null;
+        if ($destLat !== null && $destLng !== null) {
+            $destination = self::formatCoordinate($destLat).','.self::formatCoordinate($destLng);
+        } else {
+            $address = trim((string) $destAddress);
+            if ($address !== '' && $address !== '—' && $address !== 'liên hệ khách') {
+                $destination = $address;
+            }
+        }
+
+        if ($destination === null) {
+            return null;
+        }
+
+        $params = [
+            'api'         => '1',
+            'destination' => $destination,
+            'travelmode'  => 'driving',
+        ];
+
+        if ($originLat !== null && $originLng !== null) {
+            $params['origin'] = self::formatCoordinate($originLat).','.self::formatCoordinate($originLng);
+        }
+
+        return 'https://www.google.com/maps/dir/?'.http_build_query($params);
+    }
+
     private static function formatCoordinate(float $value): string
     {
         return number_format($value, 6, '.', '');
@@ -40,9 +78,38 @@ final class MapNavigation
         return 'geo:'.$coords.'?q='.rawurlencode($query);
     }
 
-    /** @return array{label: string, url: string, use_current_origin?: bool}|null */
+    /**
+     * @return array{0: float|null, 1: float|null}
+     */
+    private static function coordsOrProvinceFallback(?float $lat, ?float $lng, ?string $province): array
+    {
+        if ($lat !== null && $lng !== null) {
+            return [(float) $lat, (float) $lng];
+        }
+
+        $center = ProvinceCenters::forProvince($province);
+        if ($center === null) {
+            return [null, null];
+        }
+
+        return [(float) $center['lat'], (float) $center['lng']];
+    }
+
+    /**
+     * @return array{
+     *   label: string,
+     *   url: string,
+     *   google_url: string|null,
+     *   dest_lat: float|null,
+     *   dest_lng: float|null,
+     *   origin_lat: float|null,
+     *   origin_lng: float|null,
+     *   use_current_origin: bool
+     * }|null
+     */
     public static function driverTargetForSchedule(Schedule $schedule, Booking $booking): ?array
     {
+        $schedule->loadMissing('route');
         $stage = $schedule->resolvedDriverStage();
         $toDropoff = in_array($stage, [
             Schedule::DRIVER_STAGE_PICKED_UP,
@@ -50,37 +117,106 @@ final class MapNavigation
         ], true);
 
         if ($toDropoff) {
-            $url = self::directionsUrl(
+            $destLabel = self::dropoffNavigationLabel($booking);
+            [$destLat, $destLng] = self::coordsOrProvinceFallback(
                 $booking->dropoff_lat !== null ? (float) $booking->dropoff_lat : null,
                 $booking->dropoff_lng !== null ? (float) $booking->dropoff_lng : null,
-                self::dropoffNavigationLabel($booking),
+                $schedule->route?->destination,
+            );
+            [$originLat, $originLng] = self::coordsOrProvinceFallback(
+                $booking->pickup_lat !== null ? (float) $booking->pickup_lat : null,
+                $booking->pickup_lng !== null ? (float) $booking->pickup_lng : null,
+                $schedule->route?->departure,
             );
 
-            return $url ? [
-                'label' => 'Chỉ đường',
-                'url'   => $url,
-            ] : null;
+            return self::packNavPayload(
+                self::directionsUrl($destLat, $destLng, $destLabel),
+                self::googleDirectionsUrl($originLat, $originLng, $destLat, $destLng, $destLabel),
+                $destLat,
+                $destLng,
+                $originLat,
+                $originLng,
+                useCurrentOrigin: $originLat === null || $originLng === null,
+            );
         }
 
-        $url = self::directionsUrl(
+        $destLabel = self::pickupNavigationLabel($booking);
+        [$destLat, $destLng] = self::coordsOrProvinceFallback(
             $booking->pickup_lat !== null ? (float) $booking->pickup_lat : null,
             $booking->pickup_lng !== null ? (float) $booking->pickup_lng : null,
-            self::pickupNavigationLabel($booking),
+            $schedule->route?->departure,
         );
 
-        return $url ? ['label' => 'Chỉ đường', 'url' => $url] : null;
+        return self::packNavPayload(
+            self::directionsUrl($destLat, $destLng, $destLabel),
+            self::googleDirectionsUrl(null, null, $destLat, $destLng, $destLabel),
+            $destLat,
+            $destLng,
+            null,
+            null,
+            useCurrentOrigin: true,
+        );
     }
 
-    /** @return array{label: string, url: string}|null */
-    public static function driverPickupTarget(Booking $booking): ?array
+    /** @return array{label: string, url: string, google_url: string|null, dest_lat: float|null, dest_lng: float|null, origin_lat: float|null, origin_lng: float|null, use_current_origin: bool}|null */
+    public static function driverPickupTarget(Booking $booking, ?Schedule $schedule = null): ?array
     {
-        $url = self::directionsUrl(
+        $schedule ??= $booking->schedule;
+        $schedule?->loadMissing('route');
+
+        $destLabel = self::pickupNavigationLabel($booking);
+        [$destLat, $destLng] = self::coordsOrProvinceFallback(
             $booking->pickup_lat !== null ? (float) $booking->pickup_lat : null,
             $booking->pickup_lng !== null ? (float) $booking->pickup_lng : null,
-            self::pickupNavigationLabel($booking),
+            $schedule?->route?->departure,
         );
 
-        return $url ? ['label' => 'Chỉ đường', 'url' => $url] : null;
+        return self::packNavPayload(
+            self::directionsUrl($destLat, $destLng, $destLabel),
+            self::googleDirectionsUrl(null, null, $destLat, $destLng, $destLabel),
+            $destLat,
+            $destLng,
+            null,
+            null,
+            useCurrentOrigin: true,
+        );
+    }
+
+    /**
+     * @return array{
+     *   label: string,
+     *   url: string,
+     *   google_url: string|null,
+     *   dest_lat: float|null,
+     *   dest_lng: float|null,
+     *   origin_lat: float|null,
+     *   origin_lng: float|null,
+     *   use_current_origin: bool
+     * }|null
+     */
+    private static function packNavPayload(
+        ?string $geoUrl,
+        ?string $googleUrl,
+        ?float $destLat,
+        ?float $destLng,
+        ?float $originLat,
+        ?float $originLng,
+        bool $useCurrentOrigin,
+    ): ?array {
+        if (! $geoUrl && ! $googleUrl) {
+            return null;
+        }
+
+        return [
+            'label'              => 'Điều hướng',
+            'url'                => $geoUrl ?: (string) $googleUrl,
+            'google_url'         => $googleUrl,
+            'dest_lat'           => $destLat,
+            'dest_lng'           => $destLng,
+            'origin_lat'         => $originLat,
+            'origin_lng'         => $originLng,
+            'use_current_origin' => $useCurrentOrigin,
+        ];
     }
 
     private static function pickupNavigationLabel(Booking $booking): string

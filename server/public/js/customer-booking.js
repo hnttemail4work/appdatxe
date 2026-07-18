@@ -1,22 +1,70 @@
 /**
- * Đặt xe — chọn xe/tài xế ngoài trang, ghim điểm đi/đến trên bản đồ, báo giá khi đặt.
+ * Đặt xe — flow inline kiểu Be: tuyến → chọn xe → liên hệ → đặt.
  */
 (function () {
-    var modalEl = document.getElementById('bookingModal');
+    var flowEl = document.getElementById('booking-flow');
     var form = document.getElementById('booking-form');
-    if (!modalEl || !form) {
+    var homeSurface = document.getElementById('booking-home-surface');
+    if (!flowEl || !form) {
         return;
     }
 
-    var modal = typeof bootstrap !== 'undefined' ? new bootstrap.Modal(modalEl) : null;
     var ctx = {};
     var quoteTimer = null;
     var quoteRequestSeq = 0;
 
     function $(id) { return document.getElementById(id); }
 
+    function isFlowOpen() {
+        return flowEl && !flowEl.classList.contains('d-none') && !flowEl.hasAttribute('hidden');
+    }
+
+    function showBookingFlow() {
+        if (!flowEl) {
+            return;
+        }
+        flowEl.classList.remove('d-none');
+        flowEl.removeAttribute('hidden');
+        if (homeSurface) {
+            homeSurface.classList.add('d-none');
+        }
+        document.body.classList.add('be-booking-flow-open');
+        try {
+            flowEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (e) {
+            /* ignore */
+        }
+    }
+
+    function hideBookingFlow() {
+        if (!flowEl) {
+            return;
+        }
+        flowEl.classList.add('d-none');
+        flowEl.setAttribute('hidden', '');
+        if (homeSurface) {
+            homeSurface.classList.remove('d-none');
+        }
+        document.body.classList.remove('be-booking-flow-open');
+        setStep(1);
+        if (window.FormFieldValidation) {
+            window.FormFieldValidation.clearAll(form);
+        }
+        if (window.AppFlash && window.AppFlash.clear) {
+            window.AppFlash.clear(document.getElementById('booking-modal-flash'));
+        }
+        var routeCard = document.getElementById('booking-route-card');
+        if (routeCard) {
+            try {
+                routeCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } catch (e) {
+                /* ignore */
+            }
+        }
+    }
+
     function notifyTarget() {
-        if (modalEl && modalEl.classList.contains('show')) {
+        if (isFlowOpen()) {
             return '#booking-modal-flash';
         }
         return '#app-flash-stack';
@@ -126,7 +174,7 @@
     }
 
     function submitBookingForm() {
-        syncDepartureDate();
+        syncScheduleLater();
         ensureBrowserIdOnForm();
         form.submit();
     }
@@ -445,10 +493,15 @@
         return $('booking-step-2') && !$('booking-step-2').classList.contains('d-none') ? 2 : 1;
     }
 
-    function scrollModalBodyToTop() {
-        var body = document.querySelector('#bookingModal .booking-modal-body');
+    function scrollFlowBodyToTop() {
+        var body = flowEl.querySelector('.be-booking-flow__body') || flowEl.querySelector('.booking-modal-body');
         if (body) {
             body.scrollTop = 0;
+        }
+        try {
+            flowEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (e) {
+            /* ignore */
         }
     }
 
@@ -457,7 +510,7 @@
         var s2 = $('booking-step-2');
         var f1 = $('modal-footer-step1');
         var f2 = $('modal-footer-step2');
-        var tripBanner = document.querySelector('#bookingModal .booking-trip-banner');
+        var tripBanner = flowEl.querySelector('.booking-trip-banner');
         if (s1) s1.classList.toggle('d-none', step !== 1);
         if (s2) s2.classList.toggle('d-none', step !== 2);
         if (f1) f1.classList.toggle('d-none', step !== 1);
@@ -465,10 +518,10 @@
         if (tripBanner) {
             tripBanner.classList.toggle('d-none', step === 2);
         }
-        document.querySelectorAll('.booking-step').forEach(function (el) {
+        flowEl.querySelectorAll('.booking-step').forEach(function (el) {
             el.classList.toggle('active', Number(el.dataset.step) === step);
         });
-        scrollModalBodyToTop();
+        scrollFlowBodyToTop();
     }
 
     function updatePriceDisplay(total, data) {
@@ -505,12 +558,8 @@
             dropoff_address: route.dropoff,
             pickup_detail: route.pickupDetail,
             dropoff_detail: route.dropoffDetail,
-            departure_plan: departurePlan(),
             contact_phone: $('modal-contact-phone') ? $('modal-contact-phone').value : '',
         });
-        if (departurePlan() === 'later') {
-            params.set('later_return_days', String(laterReturnDays()));
-        }
         ['modal-pickup-lat', 'modal-pickup-lng', 'modal-dropoff-lat', 'modal-dropoff-lng'].forEach(function (id) {
             var value = coordValue(id);
             if (value) {
@@ -637,121 +686,118 @@
         return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
     }
 
-    function tomorrowIso() {
-        var base = window.__todayDate ? new Date(window.__todayDate + 'T12:00:00') : new Date();
-        base.setDate(base.getDate() + 1);
-        return base.toISOString().slice(0, 10);
+    function scheduleLaterEnabled() {
+        var chip = $('booking-schedule-later');
+        return !!(chip && chip.getAttribute('aria-pressed') === 'true');
     }
 
-    function departurePlan() {
-        var checked = document.querySelector('input[name="departure_plan"]:checked');
-        return checked ? checked.value : 'oneway';
-    }
-
-    function departurePlanDisplayLabel() {
-        var labels = window.__departurePlanLabels || {
-            oneway: 'Một chiều',
-            today: 'Về trong ngày',
-            tomorrow: 'Về ngày mai',
-            later: 'Trên 2 ngày',
-        };
-        var plan = departurePlan();
-
-        if (plan === 'later') {
-            var days = laterReturnDays();
-
-            return labels.later + ' (' + days + ' ngày)';
-        }
-
-        return labels[plan] || labels.oneway;
-    }
-
-    function syncDeparturePlanLabel() {
-        var text = departurePlanDisplayLabel();
-        [
-            'modal-departure-plan-label',
-            'modal-departure-plan-label-step2',
-            'modal-price-departure-plan-step1',
-            'modal-price-departure-plan-step2',
-        ].forEach(function (id) {
-            setBannerText(id, text);
-        });
-    }
-
-    function laterReturnDays() {
-        var el = $('modal-later-return-days');
-        var min = Number(window.__laterReturnDaysMin || 3);
-        var max = Number(window.__laterReturnDaysMax || 60);
-        var raw = el ? parseInt(el.value, 10) : min;
-        if (!raw || raw < min) {
-            return min;
-        }
-        return Math.min(raw, max);
-    }
-
-    function syncLaterReturnDaysHint() {
-        var hint = $('modal-later-return-days-hint');
-        if (!hint) {
+    function setScheduleLaterEnabled(enabled) {
+        var chip = $('booking-schedule-later');
+        if (!chip) {
             return;
         }
-        var pct = Number(window.__laterReturnPercentPerDay || 0);
-        var days = laterReturnDays();
-        hint.textContent = 'Từ ' + (window.__laterReturnDaysMin || 3) + ' ngày. Mỗi ngày +' + pct + '% giá chuyến'
-            + (days > 0 && pct > 0 ? ' (≈ +' + Math.round(days * pct) + '% cho ' + days + ' ngày).' : '.');
+        chip.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+        chip.classList.toggle('is-active', !!enabled);
     }
 
-    function syncDepartureDate() {
+    function formatScheduleChipLabel(dateIso, timeValue) {
+        if (!dateIso || !timeValue) {
+            return 'Đặt sau';
+        }
+        var parts = String(dateIso).split('-');
+        if (parts.length !== 3) {
+            return timeValue;
+        }
+        var dateLabel = parts[2] + '/' + parts[1];
+        if (dateIso === todayIso()) {
+            return 'Hôm nay · ' + timeValue;
+        }
+        var tomorrow = new Date();
+        tomorrow.setHours(0, 0, 0, 0);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        var tomorrowIso = [
+            tomorrow.getFullYear(),
+            String(tomorrow.getMonth() + 1).padStart(2, '0'),
+            String(tomorrow.getDate()).padStart(2, '0'),
+        ].join('-');
+        if (dateIso === tomorrowIso) {
+            return 'Ngày mai · ' + timeValue;
+        }
+        return dateLabel + ' · ' + timeValue;
+    }
+
+    function syncScheduleChipLabel() {
+        var chip = $('booking-schedule-later');
+        if (!chip) {
+            return;
+        }
+        var labelEl = chip.querySelector('[data-schedule-chip-label]');
+        if (!labelEl) {
+            return;
+        }
+        if (!scheduleLaterEnabled()) {
+            labelEl.textContent = 'Đặt sau';
+            return;
+        }
         var dateEl = $('modal-service-date');
-        var dateWrap = $('modal-pickup-date-wrap');
-        if (!dateEl) {
-            return;
-        }
-
-        var plan = departurePlan();
-        var minDate = todayIso();
-
-        dateEl.min = minDate;
-
-        if (plan === 'later') {
-            if (dateWrap) {
-                dateWrap.classList.add('d-none');
-            }
-            dateEl.removeAttribute('required');
-            var base = window.__todayDate ? new Date(window.__todayDate + 'T12:00:00') : new Date();
-            base.setDate(base.getDate() + laterReturnDays());
-            dateEl.value = base.toISOString().slice(0, 10);
-            dateEl.readOnly = true;
-            return;
-        }
-
-        if (dateWrap) {
-            dateWrap.classList.remove('d-none');
-        }
-        dateEl.setAttribute('required', 'required');
-
-        if (plan === 'tomorrow') {
-            dateEl.value = tomorrowIso();
-            dateEl.readOnly = true;
-        } else if (plan === 'today') {
-            dateEl.value = todayIso();
-            dateEl.readOnly = true;
-        } else {
-            dateEl.readOnly = false;
-            if (!dateEl.value || dateEl.value < minDate) {
-                dateEl.value = minDate;
-            }
-        }
+        var timeEl = $('modal-pickup-time');
+        labelEl.textContent = formatScheduleChipLabel(
+            dateEl ? dateEl.value : '',
+            timeEl ? timeEl.value : '',
+        );
     }
 
-    function syncDeparturePlanUI() {
-        var wrap = $('modal-later-return-days-wrap');
-        var plan = departurePlan();
-        if (wrap) {
-            wrap.classList.toggle('d-none', plan !== 'later');
+    function syncScheduleLater() {
+        var enabled = scheduleLaterEnabled();
+        var fields = $('booking-schedule-fields');
+        var dateEl = $('modal-service-date');
+        var timeEl = $('modal-pickup-time');
+
+        if (fields) {
+            fields.classList.toggle('d-none', !enabled);
         }
-        syncLaterReturnDaysHint();
-        syncDepartureDate();
-        syncDeparturePlanLabel();
+
+        if (dateEl) {
+            dateEl.min = todayIso();
+            dateEl.disabled = !enabled;
+            if (enabled) {
+                dateEl.setAttribute('required', 'required');
+                if (!dateEl.value || dateEl.value < dateEl.min) {
+                    dateEl.value = window.__defaultServiceDate || todayIso();
+                }
+            } else {
+                dateEl.removeAttribute('required');
+                dateEl.value = '';
+            }
+        }
+
+        if (timeEl) {
+            timeEl.disabled = !enabled;
+            if (enabled) {
+                timeEl.setAttribute('required', 'required');
+                if (!timeEl.value) {
+                    timeEl.value = suggestedPickupTime();
+                }
+            } else {
+                timeEl.removeAttribute('required');
+                timeEl.value = '';
+            }
+        }
+
+        syncScheduleChipLabel();
+    }
+
+    function markSelectedVehicle(btn) {
+        document.querySelectorAll('#trips-list .vehicle-select-row').forEach(function (row) {
+            row.classList.remove('is-selected');
+        });
+        if (!btn) {
+            return;
+        }
+        var row = btn.closest('.vehicle-select-row');
+        if (row) {
+            row.classList.add('is-selected');
+        }
     }
 
     function openFromButton(btn) {
@@ -764,6 +810,7 @@
                 showDuplicateNotice(data.booking);
                 return;
             }
+            markSelectedVehicle(btn);
             openBookingModal(btn);
         });
     }
@@ -815,7 +862,7 @@
         }
 
         syncRouteLabels();
-        syncDeparturePlanUI();
+        syncScheduleLater();
 
         var vehicleMeta = ctx.offerLabel || [ctx.typeLabel, ctx.capacityLabel]
             .filter(Boolean)
@@ -847,29 +894,26 @@
             }
         }
 
-        var pickupTimeEl = $('modal-pickup-time');
-        if (pickupTimeEl && !pickupTimeEl.value) {
-            pickupTimeEl.value = suggestedPickupTime();
-        }
+        syncScheduleLater();
 
         updatePriceDisplay(0);
         setStep(2);
         applyCustomerPrefill();
         ensureBrowserIdOnForm();
+        showBookingFlow();
         refreshQuote();
-        if (modal) modal.show();
     }
 
     function openVehicleSelectModal() {
         syncRouteLabels();
-        syncDeparturePlanUI();
+        syncScheduleLater();
         setStep(1);
-        if (modal) modal.show();
+        showBookingFlow();
         refreshVehicleCardPrices();
     }
 
     function validateStep1() {
-        syncDepartureDate();
+        syncScheduleLater();
 
         var pickupDetail = $('modal-pickup-detail');
         var dropoffDetail = $('modal-dropoff-detail');
@@ -902,20 +946,10 @@
             return false;
         }
 
-        if (departurePlan() === 'later') {
-            var daysInput = $('modal-later-return-days');
-            var minDays = Number(window.__laterReturnDaysMin || 3);
-            if (!daysInput || laterReturnDays() < minDays) {
-                notify('Vui lòng nhập số ngày chờ về (tối thiểu ' + minDays + ' ngày).');
-                if (daysInput) {
-                    daysInput.focus();
-                }
-                return false;
-            }
-        } else {
+        if (scheduleLaterEnabled()) {
             var serviceDate = $('modal-service-date');
             if (!serviceDate || !serviceDate.value) {
-                notify('Vui lòng chọn ngày đón.');
+                notify('Vui lòng chọn ngày đón khi đặt sau.');
                 if (serviceDate) {
                     serviceDate.focus();
                 }
@@ -926,20 +960,15 @@
                 serviceDate.focus();
                 return false;
             }
-        }
 
-        var pickupTimeEl = $('modal-pickup-time');
-        if (!pickupTimeEl || !pickupTimeEl.value || !/^\d{1,2}:\d{2}$/.test(pickupTimeEl.value)) {
-            notify('Vui lòng chọn giờ đón.');
-            if (pickupTimeEl) {
-                pickupTimeEl.focus();
+            var pickupTimeEl = $('modal-pickup-time');
+            if (!pickupTimeEl || !pickupTimeEl.value || !/^\d{1,2}:\d{2}$/.test(pickupTimeEl.value)) {
+                notify('Vui lòng chọn giờ đón khi đặt sau.');
+                if (pickupTimeEl) {
+                    pickupTimeEl.focus();
+                }
+                return false;
             }
-            return false;
-        }
-
-        var route = modalRoute();
-        if (!route.pickup || !route.dropoff) {
-            syncDepartureDate();
         }
 
         return true;
@@ -989,30 +1018,31 @@
         window.FormFieldValidation.bindClearOnInput(form);
     }
 
-    document.querySelectorAll('input[name="departure_plan"]').forEach(function (el) {
-        el.addEventListener('change', function () {
-            syncDeparturePlanUI();
-            refreshQuote();
-        });
-    });
-    var laterDaysEl = $('modal-later-return-days');
-    if (laterDaysEl) {
-        laterDaysEl.addEventListener('input', function () {
-            syncDeparturePlanUI();
-            refreshQuote();
-        });
-        laterDaysEl.addEventListener('change', function () {
-            syncDeparturePlanUI();
+    var scheduleLaterChip = $('booking-schedule-later');
+    if (scheduleLaterChip) {
+        scheduleLaterChip.addEventListener('click', function () {
+            setScheduleLaterEnabled(!scheduleLaterEnabled());
+            syncScheduleLater();
             refreshQuote();
         });
     }
     var serviceDateEl = $('modal-service-date');
     if (serviceDateEl) {
         serviceDateEl.addEventListener('change', function () {
+            syncScheduleChipLabel();
             refreshQuote();
         });
     }
-    syncDeparturePlanUI();
+    var pickupTimeEl = $('modal-pickup-time');
+    if (pickupTimeEl) {
+        pickupTimeEl.addEventListener('change', function () {
+            syncScheduleChipLabel();
+        });
+        pickupTimeEl.addEventListener('input', function () {
+            syncScheduleChipLabel();
+        });
+    }
+    syncScheduleLater();
     syncRouteLabels();
     autoFillPickupFromGps();
 
@@ -1041,9 +1071,7 @@
 
     function handleModalBack() {
         if (currentStep() === 1) {
-            if (modal) {
-                modal.hide();
-            }
+            hideBookingFlow();
             return;
         }
         setStep(1);
@@ -1051,6 +1079,12 @@
 
     document.querySelectorAll('[data-modal-back]').forEach(function (btn) {
         btn.addEventListener('click', handleModalBack);
+    });
+
+    document.querySelectorAll('[data-booking-flow-close]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            hideBookingFlow();
+        });
     });
 
     ['modal-contact-phone'].forEach(function (id) {
@@ -1081,13 +1115,7 @@
         event.preventDefault();
 
         if (!validateStep1()) {
-            if (modal) {
-                modal.hide();
-            }
-            var routeCard = document.getElementById('booking-route-card');
-            if (routeCard) {
-                routeCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
+            hideBookingFlow();
             return;
         }
 
@@ -1124,21 +1152,6 @@
             openFromButton(restoreBtn);
         }
     }
-
-    modalEl.addEventListener('shown.bs.modal', function () {
-        scrollModalBodyToTop();
-        autoFillPickupFromGps();
-    });
-
-    modalEl.addEventListener('hidden.bs.modal', function () {
-        setStep(1);
-        if (window.FormFieldValidation) {
-            window.FormFieldValidation.clearAll(form);
-        }
-        if (window.AppFlash && window.AppFlash.clear) {
-            window.AppFlash.clear(document.getElementById('booking-modal-flash'));
-        }
-    });
 
     document.addEventListener('addressmap:applied', function (event) {
         var detail = event.detail || {};

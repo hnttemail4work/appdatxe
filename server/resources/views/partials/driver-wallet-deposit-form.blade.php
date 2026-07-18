@@ -30,12 +30,13 @@ $quickAmounts = [100_000, 200_000, 500_000, 1_000_000];
         @endif
 
         <div class="driver-deposit-amount-section">
+            <label class="driver-deposit-field-label" for="driver-deposit-amount">Số tiền nạp</label>
             <div class="driver-deposit-amount-row">
                 <input type="text" name="amount" id="driver-deposit-amount"
                        class="form-control driver-deposit-amount"
                        inputmode="numeric" pattern="[0-9]*" autocomplete="off"
                        value="{{ old('amount') !== null ? $amount : '' }}"
-                       placeholder="Nạp tối thiểu {{ DriverWalletConfig::minDepositFormatted() }}"
+                       placeholder="Tối thiểu {{ DriverWalletConfig::minDepositFormatted() }}"
                        aria-label="Số tiền nạp"
                        aria-describedby="driver-deposit-amount-error">
                 <span class="driver-deposit-amount-suffix">đ</span>
@@ -53,12 +54,14 @@ $quickAmounts = [100_000, 200_000, 500_000, 1_000_000];
         </div>
 
         <div class="driver-deposit-qr-section">
-            <p class="driver-deposit-qr-heading">Quét mã QR chuyển khoản</p>
+            <p class="driver-deposit-qr-heading">Quét QR để chuyển khoản</p>
+            <p class="driver-deposit-qr-hint">QR đã gồm ngân hàng, số TK và nội dung chuyển khoản.</p>
             <p class="driver-deposit-qr-amount" id="driver-deposit-amount-label" hidden></p>
             @include('partials.wallet-deposit-transfer', [
                 'amount' => $amount >= $minAmount ? $amount : 0,
                 'qrElementId' => $qrElementId,
                 'dynamicAmount' => true,
+                'hideBankDetails' => true,
             ])
         </div>
 
@@ -75,8 +78,8 @@ $quickAmounts = [100_000, 200_000, 500_000, 1_000_000];
             </div>
         </div>
 
-        <button type="submit" class="btn btn-primary btn-sm driver-deposit-submit-btn w-100">
-            Nạp tiền
+        <button type="submit" class="btn btn-warning fw-semibold driver-deposit-submit-btn w-100">
+            Gửi yêu cầu nạp
         </button>
     </div>
 </form>

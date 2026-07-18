@@ -14,19 +14,7 @@ $bookingRestoreModal = $errors->any() && old('capacity')
     ]
     : null;
 
-$bookingReferralSuccess = session('booking_success.referral_code')
-    ? [
-        'code' => session('booking_success.referral_code'),
-        'url' => session('booking_success.referral_url')
-            ?: route('home', ['ref' => session('booking_success.referral_code')]),
-        'discount_percent' => session('booking_success.referral_discount_percent'),
-        'pending' => session('booking_success.referral_pending', true),
-    ]
-    : null;
-
 $platformHotlinePhone = (string) config('app.contact_phone');
-$heroTitle = $bookingPageHeroTitle ?? 'Đặt xe liên tỉnh';
-$driverCount = ($driverOffers ?? collect())->sum('available_count');
 @endphp
 
 <div class="customer-page booking-page" id="booking-page-top">
@@ -50,56 +38,49 @@ $driverCount = ($driverOffers ?? collect())->sum('available_count');
 
     @include('partials.booking-active-session')
 
-    <section class="grab-home-topbar" aria-label="Trang đặt xe">
-        <div>
-            <p class="grab-home-topbar__eyebrow">Gọi xe · Thuê xe</p>
-            <h1 class="grab-home-topbar__title">{{ $heroTitle }}</h1>
-        </div>
-        @if($driverCount > 0)
-        <div class="grab-home-topbar__stat">
-            <strong>{{ $driverCount }}</strong>
-            <span>xe đang hoạt động</span>
-        </div>
-        @endif
-    </section>
+    <div id="booking-home-surface">
+        <section class="be-home-topbar grab-home-topbar" aria-label="Trang đặt xe">
+            <div>
+                <p class="grab-home-topbar__eyebrow">Gọi xe</p>
+            </div>
+        </section>
 
-    @if(($appliedReferral ?? null) || ($prefillReferral ?? '') !== '')
-    <div class="grab-home-referral @if(($prefillReferral ?? '') !== '' && ! ($appliedReferral ?? null)) grab-home-referral--warning @endif mb-3">
-        @if($appliedReferral ?? null)
-            Giới thiệu <strong>{{ $appliedReferral->name }}</strong> · mã <span class="driver-meta-code">{{ $appliedReferral->code }}</span>
-            @if($appliedReferral->grantsCustomerDiscount() && ($referralDiscountMeta['eligible'] ?? false))
-                <span class="text-success">— giảm {{ rtrim(rtrim(number_format($referralDiscountMeta['percent'] ?? 0, 1, '.', ''), '0'), '.') }}% khi đặt cuốc</span>
+        @if(($appliedReferral ?? null) || ($prefillReferral ?? '') !== '')
+        <div class="grab-home-referral @if(($prefillReferral ?? '') !== '' && ! ($appliedReferral ?? null)) grab-home-referral--warning @endif mb-3">
+            @if($appliedReferral ?? null)
+                Giới thiệu <strong>{{ $appliedReferral->name }}</strong> · mã <span class="driver-meta-code">{{ $appliedReferral->code }}</span>
+                @if($appliedReferral->grantsCustomerDiscount() && ($referralDiscountMeta['eligible'] ?? false))
+                    <span class="text-success">— giảm {{ rtrim(rtrim(number_format($referralDiscountMeta['percent'] ?? 0, 1, '.', ''), '0'), '.') }}% khi đặt cuốc</span>
+                @endif
+            @elseif(($prefillReferral ?? '') !== '')
+                Mã {{ $prefillReferral }} không hợp lệ.
             @endif
-        @elseif(($prefillReferral ?? '') !== '')
-            Mã {{ $prefillReferral }} không hợp lệ.
+        </div>
         @endif
+
+        @if($bookingPageBannerUrl ?? null)
+        <section class="grab-home-banner" aria-label="Khuyến mãi">
+            <img src="{{ $bookingPageBannerUrl }}" alt="" class="grab-home-banner__img" decoding="async">
+        </section>
+        @endif
+
+        @include('partials.booking-route-card', [
+            'defaultServiceDate' => $defaultServiceDate,
+            'defaultPickupTime' => $defaultPickupTime,
+        ])
     </div>
-    @endif
 
-    @if($bookingPageBannerUrl ?? null)
-    <section class="grab-home-banner" aria-label="Khuyến mãi">
-        <img src="{{ $bookingPageBannerUrl }}" alt="" class="grab-home-banner__img" decoding="async">
-    </section>
-    @endif
-
-    @include('partials.booking-route-card', [
+    @include('partials.booking-flow', [
         'defaultServiceDate' => $defaultServiceDate,
         'defaultPickupTime' => $defaultPickupTime,
+        'driverOffers' => $driverOffers ?? collect(),
     ])
-
-    @include('partials.customer-account-banner')
 
     @include('partials.customer-contact-fab', [
         'hotlinePhone' => $platformHotlinePhone,
         'variant' => 'fixed',
     ])
 </div>
-
-@include('partials.booking-modal', [
-    'defaultServiceDate' => $defaultServiceDate,
-    'defaultPickupTime' => $defaultPickupTime,
-    'driverOffers' => $driverOffers ?? collect(),
-])
 @endsection
 
 @push('styles')
@@ -114,7 +95,6 @@ $driverCount = ($driverOffers ?? collect())->sum('available_count');
     'defaultPickupTime' => $defaultPickupTime,
     'referralDiscountMeta' => $referralDiscountMeta ?? [],
     'appliedReferral' => $appliedReferral ?? null,
-    'bookingReferralSuccess' => $bookingReferralSuccess,
     'browserCancelCount' => $browserCancelCount ?? 0,
 ])
 @endpush

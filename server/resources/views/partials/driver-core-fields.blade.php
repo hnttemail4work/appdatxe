@@ -38,26 +38,26 @@
                    placeholder="09xxxxxxxx">
             <div class="invalid-feedback" data-client-feedback="phone">@error('phone'){{ $message }}@enderror</div>
         </div>
+        @if(($context ?? '') !== 'register')
         <div class="col-12 col-sm-6">
-            <label class="form-label">Mật khẩu {!! $star('password') !!}</label>
-            <input type="password" name="password"
+            <label class="form-label">PIN 6 số {!! $star('password') !!}</label>
+            <input type="password" name="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6"
                    class="form-control @error('password') is-invalid @enderror" {{ $req('password') }}
-                   minlength="8" pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}"
-                   title="Tối thiểu 8 ký tự, gồm chữ hoa, chữ thường và số"
                    autocomplete="new-password" spellcheck="false"
                    data-lpignore="true" data-1p-ignore="true"
-                   placeholder="••••••••">
+                   placeholder="••••••">
             <div class="invalid-feedback" data-client-feedback="password">@error('password'){{ $message }}@enderror</div>
         </div>
         <div class="col-12 col-sm-6">
-            <label class="form-label">Nhập lại MK {!! $star('password_confirmation') !!}</label>
-            <input type="password" name="password_confirmation"
+            <label class="form-label">Nhập lại PIN {!! $star('password_confirmation') !!}</label>
+            <input type="password" name="password_confirmation" inputmode="numeric" pattern="[0-9]{6}" maxlength="6"
                    class="form-control @error('password_confirmation') is-invalid @enderror" {{ $req('password_confirmation') }}
-                   minlength="8" autocomplete="new-password" spellcheck="false"
+                   autocomplete="new-password" spellcheck="false"
                    data-lpignore="true" data-1p-ignore="true"
-                   placeholder="••••••••">
+                   placeholder="••••••">
             <div class="invalid-feedback" data-client-feedback="password_confirmation">@error('password_confirmation'){{ $message }}@enderror</div>
         </div>
+        @endif
         <div class="col-12">
             <label class="form-label">Email</label>
             <input type="email" name="email" value="{{ $profileEmail }}"
@@ -84,7 +84,9 @@
         </div>
         <div class="col-12">
             <label class="form-label">Loại xe {!! $star('vehicle_type') !!}</label>
-            <select name="vehicle_type" class="form-select @error('vehicle_type') is-invalid @enderror" {{ $req('vehicle_type') }}>
+            <select name="vehicle_type"
+                    class="form-select vehicle-type-select field-auto-size @error('vehicle_type') is-invalid @enderror"
+                    {{ $req('vehicle_type') }}>
                 <option value="">-- Chọn --</option>
                 @foreach(DriverVehicleOptions::labels() as $val => $lbl)
                     <option value="{{ $val }}" {{ $vehicleType === $val ? 'selected' : '' }}>{{ $lbl }}</option>
