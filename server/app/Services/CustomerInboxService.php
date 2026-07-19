@@ -69,6 +69,25 @@ class CustomerInboxService
             ->update(['read_at' => now()]);
     }
 
+    /** Đánh dấu 1 tin đã đọc (chỉ khi user bấm vào dòng). */
+    public function markMessageRead(int $userId, int $messageId): bool
+    {
+        $message = CustomerInboxMessage::query()
+            ->where('user_id', $userId)
+            ->whereKey($messageId)
+            ->first();
+
+        if (! $message) {
+            return false;
+        }
+
+        if ($message->read_at === null) {
+            $message->forceFill(['read_at' => now()])->save();
+        }
+
+        return true;
+    }
+
     /**
      * @param  array<string, mixed>  $meta
      */

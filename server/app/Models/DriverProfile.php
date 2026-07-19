@@ -3,7 +3,9 @@
 namespace App\Models;
 
 use App\Services\DriverPhotoService;
+use App\Support\AuthOtp;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 class DriverProfile extends Model
 {
@@ -387,6 +389,33 @@ class DriverProfile extends Model
         return $this->user
             && $this->user->role === 'driver'
             && $this->approval_status === 'pending';
+    }
+
+    /** Thời điểm gửi yêu cầu duyệt — lúc tạo hồ sơ (OTP cấp sau khi admin duyệt). */
+    public function approvalRequestedAt(): ?\Carbon\CarbonInterface
+    {
+        return $this->created_at;
+    }
+
+    public function approvalDeadlineAt(): ?\Carbon\CarbonInterface
+    {
+        $requestedAt = $this->approvalRequestedAt();
+        if (! $requestedAt) {
+            return null;
+        }
+
+        return $requestedAt->copy()->addMinutes(AuthOtp::TTL_MINUTES);
+    }
+
+    public function isPendingApprovalExpired(): bool
+    {
+        if (! $this->isPendingApproval()) {
+            return false;
+        }
+
+        $deadline = $this->approvalDeadlineAt();
+
+        return $deadline !== null && $deadline->isPast();
     }
 
     public function isApproved(): bool

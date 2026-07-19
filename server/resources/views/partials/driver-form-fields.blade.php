@@ -63,6 +63,20 @@
         @error('email')<div class="invalid-feedback">{{ $message }}</div>@enderror
     </div>
 
+    <div class="col-12">
+        <label class="form-label" for="driver-address">Địa chỉ</label>
+        @if($readonly)
+        <textarea class="form-control driver-field-locked" id="driver-address" rows="2"
+                  readonly disabled tabindex="-1" aria-readonly="true">{{ $user->address ?? '' }}</textarea>
+        @else
+        <textarea name="address" id="driver-address" rows="2"
+                  class="form-control @error('address') is-invalid @enderror"
+                  maxlength="500"
+                  placeholder="Số nhà, đường, phường/xã, tỉnh/thành…">{{ old('address', $user->address ?? '') }}</textarea>
+        @endif
+        @error('address')<div class="invalid-feedback">{{ $message }}</div>@enderror
+    </div>
+
     @if(! $readonly && ! $isEdit)
     <div class="col-md-6">
         <label class="form-label">Mật khẩu</label>

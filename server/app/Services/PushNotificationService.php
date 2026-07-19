@@ -85,14 +85,13 @@ class PushNotificationService
         $this->notifyDriverTripRequest($request, 'driver:trip:' . $request->id . ':new');
     }
 
-    // TODO (Fix Stuck Offer UI): Báo app TX thu hồi offer đã hết hạn/hủy để ẩn UI ngay, không chờ poll reload.
+    /** Báo app TX thu hồi offer đã hết hạn/hủy (client_event → tab đang mở gỡ card). */
     public function onDriverTripRequestExpired(DriverTripRequest $request): void
     {
         $request->loadMissing('schedule.route');
         $schedule = $request->schedule;
         $routeLabel = trim(($schedule?->route?->departure ?? '') . ' → ' . ($schedule?->route?->destination ?? ''));
 
-        // TODO (Fix Stuck Offer UI): Dùng event đã bật sẵn cho tài xế và kèm payload client_event để tab đang mở tự gỡ card.
         $cancelledByGuest = $request->status === 'cancelled';
         $this->sendToDriver(
             (int) $request->driver_id,
@@ -294,7 +293,6 @@ class PushNotificationService
             '/driver/dashboard',
             $dedupKey,
             [
-                // TODO (Fix Stuck Offer UI): Kèm request id để tab đang mở có thể đồng bộ card đang hiển thị.
                 'client_event'      => 'driver_trip_request_created',
                 'driver_request_id' => (int) $request->id,
                 'request_status'    => (string) $request->status,
@@ -478,8 +476,11 @@ class PushNotificationService
         string $dedupKey,
         array $extraData = [],
     ): void {
-        // Lưu hộp thư cùng khóa dedup với push — tránh spam khi gửi lại.
-        if (! str_starts_with($eventKey, 'driver.inbox_') && $this->claimDedup('inbox:' . $dedupKey)) {
+        // Đã lưu hộp thư trước (có inbox_id) hoặc event inbox_* — không tạo tin trùng.
+        $inboxAlreadyStored = str_starts_with($eventKey, 'driver.inbox_')
+            || ! empty($extraData['inbox_id']);
+
+        if (! $inboxAlreadyStored && $this->claimDedup('inbox:' . $dedupKey)) {
             try {
                 app(DriverInboxService::class)->storeNoticeWithoutPush(
                     $driverUserId,
@@ -497,6 +498,14 @@ class PushNotificationService
                     'event'          => $eventKey,
                     'error'          => $e->getMessage(),
                 ]);
+            }
+        }
+
+        if (! isset($extraData['unread_total'])) {
+            try {
+                $extraData['unread_total'] = app(DriverSystemNotificationService::class)
+                    ->unreadBadgeTotal($driverUserId);
+            } catch (\Throwable) {
             }
         }
 
@@ -544,15 +553,21 @@ class PushNotificationService
                 ],
             ]);
 
-            $payload = json_encode([
-                'title' => $title,
-                'body'  => $body,
-                'url'   => url($url),
-                'tag'   => $dedupKey,
-                'icon'  => asset('favicon.svg'),
-                // TODO (Fix Stuck Offer UI): Kèm payload realtime để service worker đẩy message trực tiếp vào tab đang mở.
-                'data'  => $extraData,
-            ], JSON_UNESCAPED_UNICODE);
+            $unreadTotal = isset($extraData['unread_total'])
+                ? (int) $extraData['unread_total']
+                : null;
+
+            $payload = json_encode(array_filter([
+                'title'        => $title,
+                'body'         => $body,
+                'url'          => url($url),
+                'tag'          => $dedupKey,
+                'icon'         => asset('favicon.svg'),
+                'unread_total' => $unreadTotal,
+                'data'         => array_merge($extraData, [
+                    'url' => url($url),
+                ]),
+            ], static fn ($v) => $v !== null), JSON_UNESCAPED_UNICODE);
 
             foreach ($subscriptions as $row) {
                 $subscription = Subscription::create([

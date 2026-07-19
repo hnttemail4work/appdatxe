@@ -188,7 +188,7 @@ class BookingPresenter
         }
 
         if ($booking->trip_status === 'completed') {
-            return 'Hoàn tất';
+            return 'Hoàn thành';
         }
 
         if (! $booking->hasDriverAccepted()) {
@@ -323,7 +323,7 @@ class BookingPresenter
         }
 
         return match ($booking->trip_status) {
-            'completed'           => 'Hoàn tất',
+            'completed'           => 'Hoàn thành',
             'awaiting_completion' => 'Chờ xác nhận hoàn',
             'cancelled'           => 'Đã hủy',
             'confirmed'           => $this->scheduleTripPhaseLabel(),
@@ -340,7 +340,7 @@ class BookingPresenter
         $label = $this->tripDisplayLabel();
 
         return match ($label) {
-            'Hoàn tất', 'Chạy xong' => \App\Support\StatusBadge::SUCCESS,
+            'Hoàn thành', 'Chạy xong' => \App\Support\StatusBadge::SUCCESS,
             'Chờ xác nhận hoàn'     => \App\Support\StatusBadge::INFO,
             'Đã hủy'                => \App\Support\StatusBadge::DANGER,
             'Đang chạy'             => \App\Support\StatusBadge::GOLD,

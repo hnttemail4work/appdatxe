@@ -23,10 +23,13 @@
     if (titleEl) titleEl.textContent = text;
   }
 
+  var forDriver = root.getAttribute('data-for-driver') === '1';
+  var loginTitle = forDriver ? 'Đăng nhập tài xế' : 'Đăng nhập';
+
   function showPhone() {
     if (phoneStep) phoneStep.hidden = false;
     if (pinStep) pinStep.hidden = true;
-    setTitle('Đăng nhập');
+    setTitle(loginTitle);
     if (backLink) {
       backLink.setAttribute('href', homeUrl);
       backLink.onclick = null;
@@ -88,6 +91,9 @@
     var body = new URLSearchParams();
     body.set('phone', phoneInput.value || '');
     body.set('_token', csrf);
+    if (forDriver) {
+      body.set('for_driver', '1');
+    }
 
     fetch(checkUrl, {
       method: 'POST',
@@ -108,6 +114,10 @@
         var data = result.data;
         if (data.status === 'missing' && data.register_url) {
           window.location.href = data.register_url;
+          return;
+        }
+        if (data.status === 'needs_otp' && data.otp_url) {
+          window.location.href = data.otp_url;
           return;
         }
         if (data.status === 'inactive') {
@@ -177,5 +187,7 @@
 
   if (pinStep && !pinStep.hidden) {
     showPin();
+  } else if (root.getAttribute('data-auto-check-phone') === '1' && phoneInput && phoneOk()) {
+    continueAfterPhoneCheck();
   }
 })();

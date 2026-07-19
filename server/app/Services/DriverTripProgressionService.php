@@ -25,7 +25,11 @@ class DriverTripProgressionService
     ) {
     }
 
-    /** Tài xế nhận cuốc — khách trả trực tiếp, không cần QL xác nhận thanh toán. */
+    /**
+     * Tài xế nhận cuốc — khách trả trực tiếp với TX, không cần QL xác nhận thanh toán.
+     * `payment_status=paid` nghĩa là cổng thanh toán nền tảng đã xong (không chờ duyệt),
+     * không phải đã thu tiền mặt vào ví hệ thống.
+     */
     public function confirmForDriverAccept(Booking $booking): void
     {
         if (in_array($booking->booking_status, ['cancelled', 'rejected'], true)) {

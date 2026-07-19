@@ -1,5 +1,5 @@
 @php
-/** @var \Illuminate\Support\Collection<int, \App\Models\DriverWalletTransaction> $depositsPending */
+/** @var \Illuminate\Contracts\Pagination\LengthAwarePaginator|\Illuminate\Support\Collection $depositsPending */
 $depositsPending = $depositsPending ?? collect();
 $pendingTotal = (int) $depositsPending->sum('amount');
 @endphp
@@ -50,7 +50,8 @@ $pendingTotal = (int) $depositsPending->sum('amount');
                                aria-label="Chọn tất cả">
                     </th>
                     <th>Mã đơn</th>
-                    <th>Tài xế</th>
+                    <th>SĐT</th>
+                    <th>Vai trò</th>
                     <th>Số tiền</th>
                     <th>Ảnh CK</th>
                     <th>Gửi lúc</th>
@@ -58,41 +59,37 @@ $pendingTotal = (int) $depositsPending->sum('amount');
                 </tr>
             </thead>
             <tbody>
-                @foreach($depositsPending as $tx)
-                @php
-                    $driverProfile = $tx->wallet->driverProfile;
-                    $driverUser = $driverProfile->user;
-                @endphp
+                @foreach($depositsPending as $row)
                 <tr>
                     <td class="wallet-deposit-col-check">
                         <input type="checkbox"
                                class="form-check-input wallet-deposit-row-check"
-                               name="transaction_ids[]"
+                               name="items[]"
                                form="wallet-deposit-bulk-approve"
-                               value="{{ $tx->id }}"
-                               data-amount="{{ (int) $tx->amount }}"
-                               aria-label="Chọn đơn {{ $tx->depositReference() }}">
+                               value="{{ $row['bulk_key'] }}"
+                               data-amount="{{ (int) $row['amount'] }}"
+                               aria-label="Chọn đơn {{ $row['reference'] }}">
                     </td>
-                    <td class="cell-primary fw-semibold">{{ $tx->depositReference() }}</td>
+                    <td class="cell-primary fw-semibold">{{ $row['reference'] }}</td>
                     <td>
-                        {{ $driverUser->name }}
-                        @if($driverProfile->driver_code)
-                            <div class="cell-muted small">{{ $driverProfile->driver_code }}</div>
+                        <span class="cell-primary">{{ $row['phone'] }}</span>
+                        @if(! empty($row['display_name']) && $row['display_name'] !== '—')
+                            <div class="cell-muted small">{{ $row['display_name'] }}</div>
                         @endif
-                        <div class="cell-muted small">SĐT {{ $driverUser->phone ?? '—' }}</div>
                     </td>
+                    <td class="cell-muted">{{ $row['role_label'] }}</td>
                     <td class="fw-semibold text-success">
-                        +{{ number_format($tx->amount, 0, ',', '.') }} đ
+                        +{{ number_format($row['amount'], 0, ',', '.') }} đ
                     </td>
                     <td>
-                        @if($tx->proofImageUrl())
-                            <a href="{{ $tx->proofImageUrl() }}"
+                        @if(! empty($row['proof_url']))
+                            <a href="{{ $row['proof_url'] }}"
                                class="wallet-deposit-proof-thumb"
                                target="_blank"
                                rel="noopener"
-                               title="Xem ảnh chuyển khoản {{ $tx->depositReference() }}">
-                                <img src="{{ $tx->proofImageUrl() }}"
-                                     alt="Ảnh CK {{ $tx->depositReference() }}"
+                               title="Xem ảnh chuyển khoản {{ $row['reference'] }}">
+                                <img src="{{ $row['proof_url'] }}"
+                                     alt="Ảnh CK {{ $row['reference'] }}"
                                      width="56"
                                      height="56"
                                      loading="lazy">
@@ -101,19 +98,17 @@ $pendingTotal = (int) $depositsPending->sum('amount');
                             <span class="cell-muted small">—</span>
                         @endif
                     </td>
-                    <td class="cell-muted small">{{ $tx->created_at->format('d/m/Y H:i') }}</td>
+                    <td class="cell-muted small">{{ $row['created_at']?->format('d/m/Y H:i') ?? '—' }}</td>
                     <td class="text-end">
                         <div class="d-inline-flex flex-wrap gap-1 justify-content-end">
-                            <form method="POST"
-                                  action="{{ route('admin.walletTransactions.approve', $tx) }}"
-                                  class="d-inline">
+                            <form method="POST" action="{{ $row['approve_url'] }}" class="d-inline">
                                 @csrf
                                 <button type="submit" class="btn btn-sm btn-success">Duyệt</button>
                             </form>
                             <form method="POST"
-                                  action="{{ route('admin.walletTransactions.reject', $tx) }}"
+                                  action="{{ $row['reject_url'] }}"
                                   class="d-inline"
-                                  data-confirm="Từ chối yêu cầu {{ $tx->depositReference() }}?"
+                                  data-confirm="Từ chối yêu cầu {{ $row['reference'] }}?"
                                   data-confirm-title="Từ chối nạp ví"
                                   data-confirm-ok="Từ chối"
                                   data-confirm-variant="danger">

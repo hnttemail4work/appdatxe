@@ -51,11 +51,11 @@ $pendingDeposits = $pendingDeposits ?? collect();
         @if($pendingDeposits->isNotEmpty())
             <div class="console-alert info mb-3">
                 Có {{ $pendingDeposits->total() }} yêu cầu nạp tiền chờ duyệt.
-                <a href="{{ route('admin.driverWallet') }}" class="fw-semibold ms-1">Mở tab Nạp ví →</a>
+                <a href="{{ route('admin.walletDeposits') }}" class="fw-semibold ms-1">Mở tab Nạp ví →</a>
             </div>
         @else
             <p class="text-muted small mb-3">
-                Duyệt nạp ví tại <a href="{{ route('admin.driverWallet') }}">Nạp ví</a>.
+                Duyệt nạp ví tại <a href="{{ route('admin.walletDeposits') }}">Nạp ví</a>.
             </p>
         @endif
 

@@ -241,6 +241,8 @@
             var terms = form.querySelector('#customerTermsCheck');
             if (terms && !terms.checked) {
                 markInvalid(terms, termsMsg);
+                var termsWrap = terms.closest('[data-auth-terms]');
+                if (termsWrap) termsWrap.classList.add('auth-terms--invalid');
                 if (!firstInvalid) firstInvalid = terms;
             }
         }
@@ -312,6 +314,10 @@
     if (termsEl) {
         termsEl.addEventListener('change', function () {
             clearFieldInvalid(termsEl);
+            var wrap = termsEl.closest('[data-auth-terms]');
+            if (wrap) {
+                wrap.classList.toggle('auth-terms--invalid', !termsEl.checked);
+            }
         });
     }
 

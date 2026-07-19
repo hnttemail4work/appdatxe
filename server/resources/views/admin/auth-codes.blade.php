@@ -10,7 +10,7 @@
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 my-3">
             <div>
                 <h2 class="h5 mb-1">Mã OTP / đặt lại mật khẩu</h2>
-                <p class="text-muted small mb-0">Mã đang hiệu lực để nhắn tay cho khách / tài xế.</p>
+                <p class="text-muted small mb-0">OTP đăng ký chỉ xuất hiện sau khi duyệt hồ sơ. Mã đã dùng sẽ tự xóa.</p>
             </div>
         </div>
 

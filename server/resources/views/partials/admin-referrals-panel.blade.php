@@ -170,4 +170,3 @@ $assignableDrivers = $assignableDrivers ?? collect();
     </div>
     @include('partials.pagination', ['paginator' => $referralCodes])
 @endif
-@include('partials.referral-qr-modal')

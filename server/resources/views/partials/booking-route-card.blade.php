@@ -6,7 +6,7 @@ $bookingBlockedMessage = ($authUser && $authUser->role === 'customer' && ! $auth
     : null;
 $pickupValue = old('pickup_detail');
 $dropoffValue = old('dropoff_detail');
-$loginUrl = route('booking.start');
+$loginUrl = route('login');
 @endphp
 {{--
   Flow Grab/Be:
@@ -60,7 +60,7 @@ $loginUrl = route('booking.start');
         </button>
     </div>
 
-    @if($bookingBlockedMessage)
+    @if($bookingBlockedMessage && ! ($authUser && $authUser->isCustomerApprovalPending()))
         <p class="small text-muted mt-3 mb-0">{{ $bookingBlockedMessage }}
             <a href="{{ route('customer.account') }}">Xem tài khoản</a>
         </p>

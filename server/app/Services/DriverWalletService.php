@@ -156,7 +156,10 @@ class DriverWalletService
             $transaction->update(['proof_image_path' => $path]);
         }
 
-        return $transaction->fresh();
+        $fresh = $transaction->fresh();
+        app(AdminOperatorAlertService::class)->recordDriverDepositPending($fresh);
+
+        return $fresh;
     }
 
     public function approveDeposit(DriverWalletTransaction $transaction, int $actorId): void

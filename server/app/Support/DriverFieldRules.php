@@ -100,7 +100,7 @@ class DriverFieldRules
             'password_confirmation' => $passwordConfirmRules,
             'id_number'     => ['nullable', 'string', 'max:20'],
             'date_of_birth' => ['nullable', 'date', 'before:today'],
-            'address'       => ['nullable', 'string', 'max:255'],
+            'address'       => ['nullable', 'string', 'max:500'],
         ];
     }
 

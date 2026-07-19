@@ -6,15 +6,18 @@ use App\Models\AuthVerificationCode;
 use App\Models\User;
 use App\Support\AuthIdentifier;
 use App\Support\AuthMessages;
+use App\Support\AuthOtp;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
 class AuthVerificationService
 {
-    public const REGISTER_TTL_MINUTES = 5;
+    /** @deprecated Dùng AuthOtp::TTL_MINUTES */
+    public const REGISTER_TTL_MINUTES = AuthOtp::TTL_MINUTES;
 
-    public const RESET_TTL_MINUTES = 30;
+    /** @deprecated Dùng AuthOtp::TTL_MINUTES */
+    public const RESET_TTL_MINUTES = AuthOtp::TTL_MINUTES;
 
     public const MAX_VERIFY_ATTEMPTS = 5;
 
@@ -43,7 +46,7 @@ class AuthVerificationService
                 ->where('phone', $phone)
                 ->where('purpose', $purpose)
                 ->whereIn('status', [AuthVerificationCode::STATUS_ACTIVE, AuthVerificationCode::STATUS_PENDING_ADMIN])
-                ->update(['status' => AuthVerificationCode::STATUS_EXPIRED]);
+                ->delete();
 
             return AuthVerificationCode::query()->create([
                 'user_id'    => $user?->id,
@@ -85,7 +88,7 @@ class AuthVerificationService
                 AuthVerificationCode::PURPOSE_PASSWORD_RESET,
             ])
             ->whereIn('status', [AuthVerificationCode::STATUS_ACTIVE, AuthVerificationCode::STATUS_PENDING_ADMIN])
-            ->update(['status' => AuthVerificationCode::STATUS_EXPIRED]);
+            ->delete();
 
         return AuthVerificationCode::query()->create([
             'user_id'    => $user->id,
@@ -120,18 +123,12 @@ class AuthVerificationService
         $issued = $this->issue(
             $request->phone,
             AuthVerificationCode::PURPOSE_PASSWORD_RESET,
-            self::RESET_TTL_MINUTES,
+            AuthOtp::TTL_MINUTES,
             $user,
             ['from_request_id' => $request->id, 'role' => $user?->role],
         );
 
-        $request->update([
-            'status' => AuthVerificationCode::STATUS_CONSUMED,
-            'consumed_at' => now(),
-            'meta' => array_merge($request->meta ?? [], [
-                'issued_code_id' => $issued['code']->id,
-            ]),
-        ]);
+        $request->delete();
 
         return $issued;
     }
@@ -162,7 +159,7 @@ class AuthVerificationService
         }
 
         if ((int) $record->attempts >= self::MAX_VERIFY_ATTEMPTS) {
-            $record->update(['status' => AuthVerificationCode::STATUS_EXPIRED]);
+            $record->delete();
             throw ValidationException::withMessages([
                 'code' => 'Nhập sai quá nhiều lần. Vui lòng gửi lại mã mới.',
             ]);
@@ -171,20 +168,18 @@ class AuthVerificationService
         if (! Hash::check($plain, $record->code_hash)) {
             $record->increment('attempts');
             throw ValidationException::withMessages([
-                'code' => 'Mã xác minh không đúng.',
+                'code' => \App\Support\AuthMessages::CODE_INVALID,
             ]);
         }
 
-        $meta = $record->meta ?? [];
-        unset($meta['admin_display_code']);
+        // Đã dùng → xóa luôn (không giữ bản consumed).
+        $snapshot = $record->replicate();
+        $snapshot->id = $record->id;
+        $snapshot->status = AuthVerificationCode::STATUS_CONSUMED;
+        $snapshot->consumed_at = now();
+        $record->delete();
 
-        $record->update([
-            'status'      => AuthVerificationCode::STATUS_CONSUMED,
-            'consumed_at' => now(),
-            'meta'        => $meta,
-        ]);
-
-        return $record->fresh();
+        return $snapshot;
     }
 
     /**

@@ -189,9 +189,7 @@
         }
 
         if (window.DriverBottomPanel && window.DriverBottomPanel.refresh) {
-            if (!window.DriverBottomPanel.isTestMode || !window.DriverBottomPanel.isTestMode()) {
-                window.DriverBottomPanel.refresh();
-            }
+            window.DriverBottomPanel.refresh();
         }
 
         var dockItem = document.querySelector('.driver-dock-item[data-driver-tab="trips"]');

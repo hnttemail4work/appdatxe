@@ -605,10 +605,19 @@ body:has(.console-page) {
     color: #f5f5f5;
 }
 .console-page .console-form .form-control,
-.console-page .console-form .form-select {
+.console-page .console-form .form-select,
+.console-page select {
     background: #1a1a1a;
     border-color: var(--tl-border);
     color: #f5f5f5;
+    color-scheme: dark;
+}
+.console-page .console-form .form-select option,
+.console-page .console-form .form-select optgroup,
+.console-page select option,
+.console-page select optgroup {
+    background-color: #1a1f26 !important;
+    color: #f5f5f5 !important;
 }
 .console-page .console-form .form-control:focus,
 .console-page .console-form .form-select:focus {

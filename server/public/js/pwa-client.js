@@ -191,9 +191,10 @@
             return Promise.resolve(false);
         }
 
-        if (installBtn) {
-            installBtn.disabled = true;
-            installBtn.textContent = 'Đang mở...';
+        var bannerBtn = installBtn && installBtn.matches('[data-pwa-install]') ? installBtn : null;
+        if (bannerBtn) {
+            bannerBtn.disabled = true;
+            bannerBtn.textContent = 'Đang mở...';
         }
 
         var promptEvent = deferredPrompt;
@@ -213,19 +214,20 @@
                 subscribePush();
             }
 
+            syncInstallTriggers();
             return true;
             }).catch(function () {
                 return false;
             }).finally(function () {
-                if (installBtn) {
-                    installBtn.disabled = false;
-                    installBtn.textContent = 'Cài đặt';
+                if (bannerBtn) {
+                    bannerBtn.disabled = false;
+                    bannerBtn.textContent = 'Cài đặt';
                 }
             });
         } catch (err) {
-            if (installBtn) {
-                installBtn.disabled = false;
-                installBtn.textContent = 'Cài đặt';
+            if (bannerBtn) {
+                bannerBtn.disabled = false;
+                bannerBtn.textContent = 'Cài đặt';
             }
 
             return Promise.resolve(false);
@@ -286,15 +288,72 @@
         hint.classList.add('is-visible');
     }
 
-    function bindInstallUi() {
-        var banner = document.getElementById('pwa-install-banner');
-        if (!banner) {
-            return;
+    function syncInstallTriggers() {
+        var installed = isStandalone();
+        document.querySelectorAll('[data-pwa-install-trigger]').forEach(function (btn) {
+            btn.classList.toggle('is-installed', installed);
+            btn.setAttribute('aria-disabled', installed ? 'true' : 'false');
+            var meta = btn.querySelector('[data-pwa-install-meta]');
+            if (meta) {
+                meta.textContent = installed
+                    ? 'Đã ghim — mở từ icon trên màn hình chính'
+                    : 'Lối tắt mở màn sẵn sàng nhận cuốc';
+            }
+            var label = btn.querySelector('.driver-drawer__link-text, [data-pwa-install-label]');
+            if (label && btn.id === 'driver-drawer-pwa-install') {
+                label.textContent = installed ? 'Đã ghim app Tài xế' : 'Ghim vào màn hình chính';
+            }
+        });
+    }
+
+    function promptInstall(installBtn) {
+        if (isStandalone()) {
+            if (window.AppFlash && window.AppFlash.show) {
+                window.AppFlash.show('App đã được ghim trên màn hình chính.', {
+                    variant: 'success',
+                    title: 'Đã ghim',
+                });
+            }
+            syncInstallTriggers();
+            return Promise.resolve(true);
         }
 
-        var installBtn = banner.querySelector('[data-pwa-install]');
-        var dismissBtn = banner.querySelector('[data-pwa-dismiss]');
-        var pushBtn = banner.querySelector('[data-pwa-enable-push]');
+        if (deferredPrompt) {
+            return runNativeInstall(installBtn).then(function (ok) {
+                if (!ok) {
+                    showManualInstallHelp();
+                }
+                syncInstallTriggers();
+                return ok;
+            });
+        }
+
+        hideInstallBanner();
+
+        if (isIos()) {
+            showIosHint();
+            if (!isIosSafari()) {
+                showManualInstallHelp();
+            } else if (window.AppFlash && window.AppFlash.show) {
+                window.AppFlash.show(
+                    'Trên Safari: Chia sẻ → Thêm vào Màn hình chính. App mở thẳng màn sẵn sàng nhận cuốc.',
+                    { variant: 'info', title: 'Ghim app Tài xế' }
+                );
+            } else {
+                showManualInstallHelp();
+            }
+            return Promise.resolve(false);
+        }
+
+        showManualInstallHelp();
+        return Promise.resolve(false);
+    }
+
+    function bindInstallUi() {
+        var banner = document.getElementById('pwa-install-banner');
+        var installBtn = banner ? banner.querySelector('[data-pwa-install]') : null;
+        var dismissBtn = banner ? banner.querySelector('[data-pwa-dismiss]') : null;
+        var pushBtn = banner ? banner.querySelector('[data-pwa-enable-push]') : null;
 
         if (installBtn) {
             if (isIos()) {
@@ -302,28 +361,18 @@
             }
 
             installBtn.addEventListener('click', function () {
-                if (deferredPrompt) {
-                    runNativeInstall(installBtn).then(function (ok) {
-                        if (!ok) {
-                            showManualInstallHelp();
-                        }
-                    });
-                    return;
-                }
-
-                hideInstallBanner();
-
-                if (isIos()) {
-                    showIosHint();
-                    if (!isIosSafari()) {
-                        showManualInstallHelp();
-                    }
-                    return;
-                }
-
-                showManualInstallHelp();
+                promptInstall(installBtn);
             });
         }
+
+        document.querySelectorAll('[data-pwa-install-trigger]').forEach(function (trigger) {
+            trigger.addEventListener('click', function (event) {
+                event.preventDefault();
+                promptInstall(trigger);
+            });
+        });
+
+        syncInstallTriggers();
 
         if (dismissBtn) {
             dismissBtn.addEventListener('click', function () {
@@ -388,6 +437,9 @@
 
     window.PwaClient = {
         subscribePush: subscribePush,
+        isStandalone: isStandalone,
+        promptInstall: promptInstall,
+        syncInstallTriggers: syncInstallTriggers,
         touchContactPhone: function (phone) {
             if (!phone) {
                 return Promise.resolve();
@@ -413,12 +465,20 @@
         e.preventDefault();
         deferredPrompt = e;
         showInstallBanner();
+        syncInstallTriggers();
+    });
+
+    window.addEventListener('appinstalled', function () {
+        deferredPrompt = null;
+        hideInstallBanner();
+        syncInstallTriggers();
     });
 
     window.addEventListener('pwa-install-available', function () {
         if (!deferredPrompt && window.__pwaDeferredInstallPrompt) {
             deferredPrompt = window.__pwaDeferredInstallPrompt;
             showInstallBanner();
+            syncInstallTriggers();
         }
     });
 

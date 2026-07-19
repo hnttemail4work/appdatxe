@@ -36,7 +36,7 @@ class AdminAuthCodesController extends Controller
         }
 
         return back()
-            ->with('success', 'Đã cấp mã đặt lại mật khẩu (30 phút).')
+            ->with('success', 'Đã cấp mã đặt lại mật khẩu ('.\App\Support\AuthOtp::ttlLabel().').')
             ->with('auth_code_issued', [
                 'phone'   => $issued['code']->phone,
                 'purpose' => $issued['code']->purpose,

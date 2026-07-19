@@ -16,14 +16,6 @@
         'photo_license_front' => 'GPLX trước',
         'photo_license_back' => 'GPLX sau',
     ];
-
-    $fileLabel = static function (?string $path): string {
-        if (! is_string($path) || $path === '') {
-            return 'Chưa có ảnh';
-        }
-
-        return basename($path);
-    };
 @endphp
 <section class="driver-account-panel" aria-label="Cập nhật thông tin">
     <h2 class="driver-panel-title mb-3" data-i18n="account_update">Cập nhật thông tin</h2>
@@ -134,46 +126,24 @@
 
             <div class="driver-settings-card mb-3">
                 <h3 class="driver-settings-card__title">Ảnh giấy tờ</h3>
-                <div class="row g-2">
-                    @foreach($docFields as $field => $label)
-                        @php
-                            $pendingPath = $pendingDocs?->photos[$field] ?? null;
-                            $currentPath = is_string($pendingPath) && $pendingPath !== ''
-                                ? $pendingPath
-                                : ($profile->{$field} ?? null);
-                            $currentUrl = $pendingDocs?->photoUrl($field) ?: $profile->photoUrl($field);
-                            $currentName = $fileLabel($currentPath);
-                        @endphp
-                        <div class="col-6">
-                            <label class="form-label" for="driver-update-{{ $field }}">{{ $label }}</label>
-                            @if($currentUrl)
-                                <a href="{{ $currentUrl }}"
-                                   target="_blank"
-                                   rel="noopener"
-                                   class="driver-doc-thumb {{ $pendingPath ? 'is-pending' : '' }}">
-                                    <img src="{{ $currentUrl }}" alt="{{ $label }}" loading="lazy">
-                                    @if($pendingPath)
-                                        <span>Chờ duyệt</span>
-                                    @endif
-                                </a>
-                            @else
-                                <div class="driver-doc-thumb driver-doc-thumb--empty">Chưa có ảnh</div>
-                            @endif
-                            <div class="driver-file-field mt-1" data-driver-file-field>
-                                <input type="file"
-                                       name="{{ $field }}"
-                                       id="driver-update-{{ $field }}"
-                                       accept="image/*"
-                                       class="driver-file-field__input"
-                                       data-file-default="{{ $currentName }}">
-                                <button type="button" class="btn btn-sm btn-outline-light driver-file-field__btn" data-file-trigger>
-                                    Chọn tệp
-                                </button>
-                                <span class="driver-file-field__name" data-file-name>{{ $currentName }}</span>
-                            </div>
-                        </div>
-                    @endforeach
-                </div>
+                <p class="small text-muted mb-2">Bấm «Thay ảnh» chọn ảnh mới, rồi «Cập nhật» để gửi duyệt.</p>
+                @php
+                    $docSlots = [];
+                    foreach ($docFields as $field => $label) {
+                        $pendingPath = $pendingDocs?->photos[$field] ?? null;
+                        $docSlots[] = [
+                            'field' => $field,
+                            'label' => $label,
+                            'url' => $pendingDocs?->photoUrl($field) ?: $profile->photoUrl($field),
+                            'ratio' => $field === 'photo_portrait' ? 'portrait' : 'landscape',
+                            'badge' => (is_string($pendingPath) && $pendingPath !== '') ? 'Chờ duyệt' : null,
+                        ];
+                    }
+                @endphp
+                @include('partials.photo-upload-slots', [
+                    'columnsClass' => 'row g-2 row-cols-2',
+                    'slots' => $docSlots,
+                ])
             </div>
 
             <button type="submit" class="btn btn-warning w-100 fw-semibold">Cập nhật</button>

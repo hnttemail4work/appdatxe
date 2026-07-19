@@ -18,17 +18,6 @@
     ])
 
     <div class="auth-screen-body">
-        @if(session('info'))
-            <div class="auth-field-error" role="status" style="color: var(--app-accent, #d4af37);">
-                {{ session('info') }}
-            </div>
-        @endif
-        @if($errors->any())
-            <div class="auth-field-error" role="alert">
-                {{ $errors->first() }}
-            </div>
-        @endif
-
         <form method="POST" action="{{ route('customer.register') }}" id="customer-register-form"
               enctype="multipart/form-data" autocomplete="on" novalidate>
             @csrf
@@ -53,12 +42,7 @@
                 <div class="auth-step-panel" data-wizard-step="2" hidden>
                     <div class="auth-field-label">Ảnh CCCD</div>
                     @include('partials.customer-docs-upload-register', ['idCardRequired' => true])
-                    <div class="auth-terms-row">
-                        <input class="@error('terms') is-invalid @enderror" type="checkbox"
-                               name="terms" value="1" id="customerTermsCheck" {{ old('terms') ? 'checked' : '' }} required>
-                        <span>Đồng ý điều khoản {{ config('app.name') }}.</span>
-                    </div>
-                    <div class="invalid-feedback" data-client-feedback="terms">@error('terms'){{ $message }}@enderror</div>
+                    @include('partials.auth-terms-consent', ['checkboxId' => 'customerTermsCheck'])
                     <div class="auth-group-actions">
                         @include('partials.auth-next-btn', ['nextAttr' => 'data-wizard-next'])
                     </div>

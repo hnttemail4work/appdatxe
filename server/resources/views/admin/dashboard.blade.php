@@ -157,6 +157,35 @@ if ($errors->hasAny(['current_password', 'password', 'password_confirmation'])) 
                     </form>
                 </div>
                 <div class="mb-4 pb-4 border-bottom border-secondary">
+                    <h3 class="h6 fw-bold text-uppercase text-muted mb-3" style="letter-spacing:.04em">Âm thanh hộp thư / thông báo</h3>
+                    <p class="small text-muted mb-3">Mặc định khi có tin mới trong hộp thư (Thông báo / Thông tin). Tài xế có thể đổi riêng trong Cài đặt âm thanh.</p>
+                    <form method="POST" action="{{ route('admin.soundSettings.update') }}" class="console-form">
+                        @csrf
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" role="switch" id="sound-enabled"
+                                   name="enabled" value="1" @checked($soundSettings['enabled'] ?? true)>
+                            <label class="form-check-label" for="sound-enabled">Bật âm thanh khi có tin hộp thư mới</label>
+                        </div>
+                        <div class="row g-2 mb-3">
+                            @foreach($soundOptions ?? [] as $toneKey => $toneMeta)
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="preset"
+                                               value="{{ $toneKey }}" id="sound-preset-{{ $toneKey }}"
+                                               @checked(($soundSettings['preset'] ?? 'tone1') === $toneKey)>
+                                        <label class="form-check-label small" for="sound-preset-{{ $toneKey }}">
+                                            {{ $toneMeta['label'] }}
+                                        </label>
+                                        <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline"
+                                                data-sound-preview="{{ $toneKey }}">Nghe thử</button>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                        <button class="btn btn-outline-primary px-4 fw-semibold">Lưu âm thanh</button>
+                    </form>
+                </div>
+                <div class="mb-4 pb-4 border-bottom border-secondary">
                     <h3 class="h6 fw-bold text-uppercase text-muted mb-3" style="letter-spacing:.04em">Thông báo đẩy (PWA)</h3>
                     @unless($pushVapidReady ?? false)
                         <div class="alert alert-warning py-2 small mb-3">

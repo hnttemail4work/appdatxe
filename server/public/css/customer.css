@@ -2716,12 +2716,14 @@ body.modal-open .modal-backdrop.show {
     background: #b91c1c;
 }
 
-/* Driver photo manager — thumbnail nhỏ, bấm phóng to */
+/* Photo upload slots — khung đều, ảnh contain (không phình) */
+.photo-upload-manager,
 .driver-photo-manager,
 .photo-vehicles-block {
     overflow: hidden;
     max-width: 100%;
 }
+.photo-upload-manager .photo-slot,
 .driver-photo-manager .photo-slot {
     border: 1px solid var(--tl-border, #dee2e6);
     border-radius: .65rem;
@@ -2734,17 +2736,21 @@ body.modal-open .modal-backdrop.show {
     overflow: hidden;
     min-width: 0;
 }
+.photo-upload-manager .photo-slot.has-pending,
 .driver-photo-manager .photo-slot.has-pending {
     border-color: #ffc107;
     box-shadow: 0 0 0 2px rgba(255, 193, 7, .25);
 }
+.photo-upload-manager .photo-slot.is-locked,
 .driver-photo-manager .photo-slot.is-locked {
     background: var(--tl-surface, #f8f9fa);
     border-style: dashed;
 }
+.photo-upload-manager .photo-slot.is-locked .photo-file-label,
 .driver-photo-manager .photo-slot.is-locked .photo-file-label {
     display: none;
 }
+.photo-upload-manager .photo-slot-header,
 .driver-photo-manager .photo-slot-header {
     display: flex;
     justify-content: space-between;
@@ -2752,57 +2758,84 @@ body.modal-open .modal-backdrop.show {
     gap: .5rem;
     flex-shrink: 0;
 }
+.photo-upload-manager .photo-slot-title,
 .driver-photo-manager .photo-slot-title {
     font-size: .72rem;
     font-weight: 600;
     color: var(--tl-text-muted, #6c757d);
     line-height: 1.2;
 }
+.photo-upload-manager .photo-slot-badge,
+.driver-photo-manager .photo-slot-badge {
+    font-size: .62rem;
+    font-weight: 700;
+    color: #92400e;
+    background: #fef3c7;
+    border-radius: .25rem;
+    padding: .1rem .3rem;
+    line-height: 1.2;
+}
+.photo-upload-manager .photo-slot-preview,
 .driver-photo-manager .photo-slot-preview {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .4rem;
-    align-items: flex-start;
-    max-width: 100%;
-    overflow: hidden;
-}
-/* Thumbnail cố định — không bung full ảnh */
-.driver-photo-manager .photo-thumb {
-    flex: 0 0 auto;
     position: relative;
-    display: block;
-    border-radius: .4rem;
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: .35rem;
+    min-width: 0;
     overflow: hidden;
+    background: #0f0f0f;
     border: 1px solid var(--tl-border, #dee2e6);
-    background: #f8f9fa;
-    cursor: zoom-in;
+    border-radius: .45rem;
+}
+.photo-upload-manager .photo-ratio-landscape.photo-slot-preview,
+.driver-photo-manager .photo-ratio-landscape.photo-slot-preview {
+    aspect-ratio: 4 / 3;
+}
+.photo-upload-manager .photo-ratio-portrait.photo-slot-preview,
+.driver-photo-manager .photo-ratio-portrait.photo-slot-preview {
+    aspect-ratio: 3 / 4;
+    max-width: 7.5rem;
+    margin-inline: auto;
+}
+.photo-upload-manager .photo-thumb,
+.driver-photo-manager .photo-thumb,
+.photo-upload-manager .photo-placeholder,
+.driver-photo-manager .photo-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    overflow: hidden;
     text-decoration: none;
+    cursor: zoom-in;
 }
-.driver-photo-manager .photo-ratio-portrait .photo-thumb,
-.driver-photo-manager .photo-ratio-portrait .photo-placeholder {
-    width: 64px;
-    height: 80px;
-}
-.driver-photo-manager .photo-ratio-landscape .photo-thumb,
-.driver-photo-manager .photo-ratio-landscape .photo-placeholder {
-    width: 96px;
-    height: 64px;
-}
-.driver-photo-manager .photo-thumb img {
+.photo-upload-manager .photo-thumb img,
+.driver-photo-manager .photo-thumb img,
+.photo-upload-manager .photo-new-wrap .photo-new-img,
+.driver-photo-manager .photo-new-wrap .photo-new-img {
     display: block;
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    object-position: center;
 }
+.photo-upload-manager .photo-new-wrap.photo-thumb,
 .driver-photo-manager .photo-new-wrap.photo-thumb {
     border: 2px solid #ffc107;
     cursor: default;
+    z-index: 1;
 }
-.driver-photo-manager .photo-new-wrap .photo-new-img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
+.photo-upload-manager .photo-zoom-hint,
 .driver-photo-manager .photo-zoom-hint {
     position: absolute;
     bottom: 0;
@@ -2815,19 +2848,59 @@ body.modal-open .modal-backdrop.show {
     padding: .1rem .15rem;
     line-height: 1.2;
 }
+.photo-upload-manager .photo-placeholder,
 .driver-photo-manager .photo-placeholder {
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--tl-surface, #f8f9fa);
-    border: 1px dashed #ced4da;
-    border-radius: .4rem;
-    color: var(--tl-text-muted, #6c757d);
-    font-size: .62rem;
-    text-align: center;
-    padding: .25rem;
+    color: var(--tl-text-muted, #9ca3af);
+    font-size: .7rem;
+    cursor: default;
+    background: rgba(0, 0, 0, .08);
+}
+.photo-upload-manager .photo-new-label,
+.driver-photo-manager .photo-new-label {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    background: #ffc107;
+    color: #000;
+    font-size: .55rem;
+    font-weight: 700;
+    padding: .05rem .25rem;
+    border-radius: .2rem;
     line-height: 1.2;
+    z-index: 2;
+}
+.photo-upload-manager .photo-file-label,
+.driver-photo-manager .photo-file-label {
+    display: block;
+    margin: 0;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.photo-upload-manager .photo-file-label > span,
+.driver-photo-manager .photo-file-label > span {
+    display: block;
+    text-align: center;
+    font-size: .72rem;
+    font-weight: 600;
+    padding: .35rem .4rem;
+    border-radius: .5rem;
+    border: 1px solid var(--tl-primary, #0d6efd);
+    color: var(--tl-primary, #0d6efd);
+    background: rgba(13, 110, 253, .04);
+    transition: background .15s;
+}
+.photo-upload-manager .photo-file-label:hover > span,
+.driver-photo-manager .photo-file-label:hover > span {
+    background: rgba(13, 110, 253, .1);
+}
+.photo-upload-manager .photo-file-input,
+.driver-photo-manager .photo-file-input {
+    position: absolute;
+    width: 0.1px;
+    height: 0.1px;
+    opacity: 0;
+    overflow: hidden;
+    z-index: -1;
 }
 
 /* Lightbox phóng to ảnh giấy tờ / ảnh xe */
@@ -2868,39 +2941,6 @@ body.modal-open .modal-backdrop.show {
     font-size: 1.25rem;
     line-height: 1;
     cursor: pointer;
-}
-.driver-photo-manager .photo-new-label {
-    position: absolute;
-    top: 2px;
-    right: 2px;
-    background: #ffc107;
-    color: #000;
-    font-size: .55rem;
-    font-weight: 700;
-    padding: .05rem .25rem;
-    border-radius: .2rem;
-    line-height: 1.2;
-}
-.driver-photo-manager .photo-file-label {
-    display: block;
-    margin: 0;
-    cursor: pointer;
-    flex-shrink: 0;
-}
-.driver-photo-manager .photo-file-label > span {
-    display: block;
-    text-align: center;
-    font-size: .72rem;
-    font-weight: 600;
-    padding: .35rem .4rem;
-    border-radius: .5rem;
-    border: 1px solid var(--tl-primary, #0d6efd);
-    color: var(--tl-primary, #0d6efd);
-    background: rgba(13, 110, 253, .04);
-    transition: background .15s;
-}
-.driver-photo-manager .photo-file-label:hover > span {
-    background: rgba(13, 110, 253, .1);
 }
 .driver-photo-manager .photo-vehicle-add-btn {
     display: inline-block;
@@ -3137,10 +3177,19 @@ body.modal-open .modal-backdrop.show {
     color: var(--app-text-secondary, #d4d4d4);
 }
 .be-booking-flow .form-control,
-.be-booking-flow .form-select {
+.be-booking-flow .form-select,
+.be-booking-flow select {
     background: #141414;
     border-color: var(--tl-border);
     color: var(--tl-text);
+    color-scheme: dark;
+}
+.be-booking-flow .form-select option,
+.be-booking-flow .form-select optgroup,
+.be-booking-flow select option,
+.be-booking-flow select optgroup {
+    background-color: #1a1f26 !important;
+    color: #f5f5f5 !important;
 }
 .be-booking-flow .form-control::placeholder {
     color: #888;
@@ -3650,6 +3699,17 @@ body.booking-active-referral-qr-open {
     justify-content: space-between;
     gap: 0.75rem;
     flex-wrap: wrap;
+}
+.guest-trip-card__status {
+    font-size: .72rem;
+    font-weight: 700;
+    padding: .2rem .55rem;
+    border-radius: 999px;
+    background: rgba(212, 175, 55, .12);
+    color: var(--tl-primary-light);
+    white-space: nowrap;
+    flex-shrink: 0;
+    align-self: center;
 }
 .guest-trip-card__aside {
     display: flex;
@@ -4506,6 +4566,7 @@ body.guest-trip-vehicle-photo-open {
     gap: .65rem;
 }
 .customer-inbox-list__item {
+    cursor: pointer;
     border: 1px solid rgba(255, 255, 255, .06);
     border-radius: .8rem;
     padding: .75rem .85rem;

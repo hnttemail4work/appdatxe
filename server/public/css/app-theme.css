@@ -11,6 +11,8 @@
     --app-text: #f5f5f5;
     --app-text-secondary: #d4d4d4;
     --app-text-muted: #d1d5db;
+    --app-select-bg: #1a1f26;
+    --app-select-fg: #f5f5f5;
 
     /* Bootstrap — ép màu chữ trên nền tối */
     --bs-body-bg: #0a0a0a;
@@ -23,6 +25,12 @@
     --bs-border-color: #404040;
     --bs-link-color: #d4af37;
     --bs-link-hover-color: #e8c547;
+
+    color-scheme: dark;
+}
+
+html {
+    color-scheme: dark;
 }
 
 /* —— Navbar thống nhất —— */
@@ -398,10 +406,21 @@ body.app-shell {
 }
 
 .form-control,
-.form-select {
+.form-select,
+select {
     background-color: var(--app-surface-raised);
     color: var(--app-text);
     border: 1px solid var(--app-border);
+    color-scheme: dark;
+}
+
+/* Native dropdown (Windows/Chrome): tránh chữ sáng trên nền trắng */
+select option,
+select optgroup,
+.form-select option,
+.form-select optgroup {
+    background-color: var(--app-select-bg) !important;
+    color: var(--app-select-fg) !important;
 }
 
 /* Ô / combobox co theo chữ — không kéo full hàng, không wrap lệch */

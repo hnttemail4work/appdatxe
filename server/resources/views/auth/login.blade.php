@@ -1,16 +1,26 @@
 @extends('layouts.app')
 
 @section('content')
+@php
+    $forDriver = (bool) ($forDriver ?? false);
+    $loginAction = $loginAction ?? route('login');
+    $phoneValue = old('phone', $phone ?? request('phone'));
+@endphp
 <div class="auth-screen" data-auth-screen data-login-pin
-     data-check-phone-url="{{ route('login.checkPhone') }}">
+     data-check-phone-url="{{ route('login.checkPhone') }}"
+     data-for-driver="{{ $forDriver ? '1' : '0' }}"
+     data-auto-check-phone="{{ filled($phoneValue) && ! $errors->has('login') && ! old('password') ? '1' : '0' }}">
     @include('partials.auth-screen-header', [
-        'authTitle' => ($errors->has('login') || old('password')) ? 'Nhập PIN' : 'Đăng nhập',
-        'authBackUrl' => route('home'),
+        'authTitle' => ($errors->has('login') || old('password')) ? 'Nhập PIN' : ($forDriver ? 'Đăng nhập tài xế' : 'Đăng nhập'),
+        'authBackUrl' => $forDriver ? route('driver.login') : route('home'),
     ])
 
     <div class="auth-screen-body">
-        <form method="POST" action="/login" autocomplete="on" id="login-pin-form" data-pin-autosubmit="1">
+        <form method="POST" action="{{ $loginAction }}" autocomplete="on" id="login-pin-form" data-pin-autosubmit="1">
             @csrf
+            @if($forDriver)
+                <input type="hidden" name="for_driver" value="1">
+            @endif
 
             <div class="auth-step-panel" data-login-step="phone" @if($errors->has('login') || old('password')) hidden @endif>
                 @include('partials.auth-field-row', [
@@ -18,12 +28,12 @@
                     'fieldName' => 'phone',
                     'fieldId' => 'login-phone',
                     'fieldType' => 'tel',
-                    'fieldValue' => old('phone'),
+                    'fieldValue' => $phoneValue,
                     'fieldAutocomplete' => 'off',
                     'fieldInputmode' => 'tel',
                     'nextType' => 'button',
                     'nextAttr' => 'data-login-continue',
-                    'footerHtml' => '<a href="'.e(route('password.reset.request')).'">Quên mật khẩu?</a>',
+                    'footerHtml' => '<a href="'.e(route('password.reset.request', $forDriver ? ['for_driver' => 1] : [])).'">Quên mật khẩu?</a>',
                 ])
             </div>
 

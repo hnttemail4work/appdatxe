@@ -96,9 +96,6 @@ class StoreBookingRequest extends FormRequest
             'payment_method.required'     => 'Vui lòng chọn hình thức thanh toán.',
             'payment_proof.required_if'   => 'Vui lòng đính kèm ảnh chuyển khoản.',
             'payment_proof.image'         => 'Ảnh chuyển khoản phải là file ảnh.',
-            'passenger_name.required'     => 'Hồ sơ chưa có họ tên. Liên hệ hỗ trợ hoặc chờ admin cập nhật CCCD.',
-            'passenger_gender.required'   => 'Hồ sơ chưa có giới tính. Liên hệ hỗ trợ.',
-            'passenger_age.required'      => 'Hồ sơ chưa có ngày sinh. Liên hệ hỗ trợ.',
             'contact_phone.required'      => 'Tài khoản chưa có số điện thoại.',
         ];
     }

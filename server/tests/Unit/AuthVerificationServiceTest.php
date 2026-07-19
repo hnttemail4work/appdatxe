@@ -36,7 +36,7 @@ class AuthVerificationServiceTest extends TestCase
         $issued = $service->issue(
             '0909111222',
             AuthVerificationCode::PURPOSE_REGISTER_OTP,
-            AuthVerificationService::REGISTER_TTL_MINUTES,
+            \App\Support\AuthOtp::TTL_MINUTES,
         );
 
         $this->assertMatchesRegularExpression('/^\d{6}$/', $issued['plain']);
@@ -49,7 +49,10 @@ class AuthVerificationServiceTest extends TestCase
         );
 
         $this->assertSame(AuthVerificationCode::STATUS_CONSUMED, $verified->status);
-        $this->assertNull(data_get($verified->meta, 'admin_display_code'));
+        $this->assertFalse(
+            AuthVerificationCode::query()->whereKey($issued['code']->id)->exists(),
+            'OTP đã dùng phải bị xóa khỏi DB'
+        );
     }
 
     public function test_wrong_otp_increments_attempts(): void
@@ -58,7 +61,7 @@ class AuthVerificationServiceTest extends TestCase
         $issued = $service->issue(
             '0909333444',
             AuthVerificationCode::PURPOSE_REGISTER_OTP,
-            5,
+            \App\Support\AuthOtp::TTL_MINUTES,
         );
 
         try {

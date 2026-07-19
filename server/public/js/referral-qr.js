@@ -99,7 +99,7 @@
 
         document.getElementById('referral-qr-modal-code').textContent = code || '—';
         document.getElementById('referral-qr-modal-url').value = url;
-        document.getElementById('referral-qr-modal-title').textContent = code ? 'QR ' + code : 'Giới thiệu';
+        document.getElementById('referral-qr-modal-title').textContent = code ? 'QR ' + code : 'QR';
 
         loadLib(function () {
             renderModalQr(url);
@@ -151,8 +151,8 @@
                 var code = document.getElementById('referral-qr-modal-code').textContent;
                 if (navigator.share) {
                     navigator.share({
-                        title: 'Giới thiệu ' + code,
-                        text: 'Đặt xe qua mã ' + code,
+                        title: 'QR ' + code,
+                        text: url,
                         url: url,
                     }).catch(function () {});
                     return;

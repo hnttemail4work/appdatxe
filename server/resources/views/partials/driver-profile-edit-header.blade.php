@@ -23,11 +23,7 @@
         </div>
     </div>
 
-    @if($driver->isPendingApproval())
-        <div class="driver-edit-actions">
-            @include('partials.driver-approval-actions', ['driver' => $driver, 'compact' => true])
-        </div>
-    @elseif($driver->isRejected())
+    @if($driver->isRejected())
         <div class="driver-edit-actions">
             <span class="text-danger small fw-semibold d-block">Hồ sơ đã từ chối — tài xế không đăng nhập được.</span>
         </div>

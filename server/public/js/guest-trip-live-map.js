@@ -237,7 +237,10 @@
 
         var statusLine = booking.driver_status_line
             || (driver && driver.status_line)
-            || (inTrip ? 'Đang trong chuyến' : '');
+            || (inTrip ? 'Đang trong chuyến' : '')
+            || booking.guest_status_label
+            || booking.progress_label
+            || '';
         setLiveStatus(searching ? '' : statusLine);
 
         var center = [Number(pickupLng), Number(pickupLat)];

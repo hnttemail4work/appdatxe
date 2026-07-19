@@ -26,7 +26,7 @@
                         placeholder="Tài khoản quản trị"
                     >
                 </div>
-                <div class="auth-field-error" @error('login')@else hidden @enderror>@error('login'){{ $message }}@enderror</div>
+                <div class="auth-field-error" hidden></div>
             </div>
 
             <div class="auth-field-block">
@@ -47,7 +47,7 @@
                         </svg>
                     </button>
                 </div>
-                <div class="auth-field-error" @error('password')@else hidden @enderror>@error('password'){{ $message }}@enderror</div>
+                <div class="auth-field-error" hidden></div>
             </div>
         </form>
     </div>

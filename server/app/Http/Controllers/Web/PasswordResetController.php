@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuthVerificationCode;
 use App\Models\User;
 use App\Services\AuthVerificationService;
+use App\Support\AuthAudience;
 use App\Support\AuthIdentifier;
 use App\Support\AuthMessages;
 use App\Support\AuthPhone;
@@ -20,9 +21,16 @@ class PasswordResetController extends Controller
     ) {
     }
 
-    public function showRequestForm()
+    public function showRequestForm(Request $request)
     {
-        return view('auth.password-reset-request');
+        if (AuthAudience::isDriver($request)) {
+            AuthAudience::rememberDriver($request, true);
+        }
+
+        return view('auth.password-reset-request', [
+            'forDriver' => AuthAudience::isDriver($request),
+            'loginUrl'  => AuthAudience::loginUrl($request),
+        ]);
     }
 
     public function requestReset(Request $request)
@@ -38,11 +46,18 @@ class PasswordResetController extends Controller
         }
 
         $phone = AuthIdentifier::normalizePhone($validated['phone']);
+        $user = AuthIdentifier::findUserByPhone($phone);
+        if ($user) {
+            AuthAudience::rememberFromUser($request, $user);
+        } elseif (AuthAudience::isDriver($request)) {
+            AuthAudience::rememberDriver($request, true);
+        }
+
         $request->session()->put('password_reset.phone', $phone);
 
         return redirect()
             ->route('password.reset.code')
-            ->with('success', 'Đã gửi yêu cầu. Admin sẽ cấp mã 6 số (hiệu lực 30 phút). Nhập mã khi nhận được.');
+            ->with('success', 'Đã gửi yêu cầu. Admin sẽ cấp mã 6 số (hiệu lực '.\App\Support\AuthOtp::ttlLabel().'). Nhập mã khi nhận được.');
     }
 
     public function showCodeForm(Request $request)
@@ -52,7 +67,11 @@ class PasswordResetController extends Controller
             return redirect()->route('password.reset.request');
         }
 
-        return view('auth.password-reset-code', ['phone' => $phone]);
+        return view('auth.password-reset-code', [
+            'phone'     => $phone,
+            'forDriver' => AuthAudience::isDriver($request),
+            'loginUrl'  => AuthAudience::loginUrl($request),
+        ]);
     }
 
     public function verifyCode(Request $request)
@@ -76,6 +95,13 @@ class PasswordResetController extends Controller
             return back()->withErrors($e->errors())->withInput();
         }
 
+        if ($record->user_id) {
+            $user = User::query()->find($record->user_id);
+            if ($user) {
+                AuthAudience::rememberFromUser($request, $user);
+            }
+        }
+
         $request->session()->put('password_reset.verified_user_id', $record->user_id);
         $request->session()->put('password_reset.verified_at', now()->timestamp);
 
@@ -89,7 +115,10 @@ class PasswordResetController extends Controller
                 ->withErrors(['phone' => 'Phiên đặt lại mật khẩu đã hết hạn. Vui lòng thử lại.']);
         }
 
-        return view('auth.password-reset-pin');
+        return view('auth.password-reset-pin', [
+            'forDriver' => AuthAudience::isDriver($request),
+            'loginUrl'  => AuthAudience::loginUrl($request),
+        ]);
     }
 
     public function storeNewPin(Request $request)
@@ -113,6 +142,8 @@ class PasswordResetController extends Controller
             'login_locked_until'   => null,
         ])->save();
 
+        AuthAudience::rememberFromUser($request, $user);
+
         $request->session()->forget([
             'password_reset.phone',
             'password_reset.verified_user_id',
@@ -120,7 +151,7 @@ class PasswordResetController extends Controller
         ]);
 
         return redirect()
-            ->route('login')
+            ->to(AuthAudience::loginUrl($request))
             ->with('success', 'Đã đặt PIN mới. Đăng nhập bằng số điện thoại và PIN.');
     }
 
@@ -133,6 +164,11 @@ class PasswordResetController extends Controller
             return null;
         }
 
-        return User::query()->find($userId);
+        $user = User::query()->find($userId);
+        if ($user) {
+            AuthAudience::rememberFromUser($request, $user);
+        }
+
+        return $user;
     }
 }

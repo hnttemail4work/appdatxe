@@ -462,12 +462,10 @@ class DriverAutoAssignTest extends TestCase
             /** @var list<int> */
             public array $expiredRequestIds = [];
 
-            // TODO (Fix Stuck Offer UI): Chặn push tạo mới trong test để chỉ kiểm tra signal revoke khi timeout.
             public function onDriverTripRequestCreated(DriverTripRequest $request): void
             {
             }
 
-            // TODO (Fix Stuck Offer UI): Ghi nhận request đã bị thu hồi để đảm bảo expireStale phát tín hiệu realtime.
             public function onDriverTripRequestExpired(DriverTripRequest $request): void
             {
                 $this->expiredRequestIds[] = (int) $request->id;

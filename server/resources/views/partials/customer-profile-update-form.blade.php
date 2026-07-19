@@ -12,7 +12,7 @@
     </div>
 
     <div class="customer-account-card">
-        <p class="small text-muted mb-3">Gửi ảnh CCCD mới cho admin duyệt. Ảnh hiện tại vẫn giữ đến khi được duyệt.</p>
+        <p class="small text-muted mb-3">Xem ảnh hiện tại, bấm «Thay ảnh» chọn ảnh mới rồi gửi — ảnh cũ giữ đến khi admin duyệt.</p>
 
         @if($pendingChange)
             <div class="alert alert-warning py-2 small mb-3" role="status">
@@ -21,40 +21,32 @@
             </div>
         @endif
 
-        @if($frontUrl || $backUrl)
-            <div class="mb-3">
-                <p class="form-label mb-2">Ảnh hiện tại{{ ($frontPending || $backPending) ? ' / đang chờ duyệt' : '' }}</p>
-                <div class="customer-account-doc-thumbs">
-                    @if($frontUrl)
-                        <a href="{{ $frontUrl }}" target="_blank" rel="noopener"
-                           class="customer-account-doc-thumb {{ $frontPending ? 'is-pending' : '' }}">
-                            <img src="{{ $frontUrl }}" alt="CCCD trước" loading="lazy">
-                            <span>Trước</span>
-                        </a>
-                    @endif
-                    @if($backUrl)
-                        <a href="{{ $backUrl }}" target="_blank" rel="noopener"
-                           class="customer-account-doc-thumb {{ $backPending ? 'is-pending' : '' }}">
-                            <img src="{{ $backUrl }}" alt="CCCD sau" loading="lazy">
-                            <span>Sau</span>
-                        </a>
-                    @endif
-                </div>
-            </div>
-        @endif
-
         <form method="POST" action="{{ route('customer.profile.update') }}" enctype="multipart/form-data" class="customer-profile-update-form">
             @csrf
-            <div class="mb-3">
-                <p class="form-label mb-2">Ảnh CCCD mới <span class="text-danger">*</span></p>
-                @include('partials.customer-docs-upload-register', [
-                    'idCardRequired' => true,
-                    'inputIdPrefix' => 'cust-update',
-                ])
-            </div>
-            @error('profile')<div class="alert alert-danger py-2 small mb-0">{{ $message }}</div>@enderror
-            @error('photos')<div class="alert alert-danger py-2 small mb-0">{{ $message }}</div>@enderror
-            <button type="submit" class="btn btn-primary w-100 mt-2">Gửi yêu cầu duyệt</button>
+            @include('partials.photo-upload-slots', [
+                'columnsClass' => 'row g-2 row-cols-2',
+                'slots' => [
+                    [
+                        'field' => 'photo_id_card',
+                        'label' => 'CCCD trước',
+                        'url' => $frontUrl,
+                        'ratio' => 'landscape',
+                        'required' => true,
+                        'badge' => $frontPending ? 'Chờ duyệt' : null,
+                    ],
+                    [
+                        'field' => 'photo_id_card_back',
+                        'label' => 'CCCD sau',
+                        'url' => $backUrl,
+                        'ratio' => 'landscape',
+                        'required' => true,
+                        'badge' => $backPending ? 'Chờ duyệt' : null,
+                    ],
+                ],
+            ])
+            @error('profile')<div class="alert alert-danger py-2 small mt-3 mb-0">{{ $message }}</div>@enderror
+            @error('photos')<div class="alert alert-danger py-2 small mt-3 mb-0">{{ $message }}</div>@enderror
+            <button type="submit" class="btn btn-primary w-100 mt-3">Gửi yêu cầu duyệt</button>
         </form>
     </div>
 </section>

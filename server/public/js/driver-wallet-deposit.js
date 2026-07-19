@@ -1,5 +1,5 @@
 /**
- * Nạp ví tài xế — nhập số tiền, sinh QR VietQR, gửi POST thuần.
+ * Nạp ví — nhập số tiền, sinh QR VietQR, bắt buộc ảnh CK, gửi POST.
  */
 (function () {
     function csrfToken() {
@@ -64,7 +64,7 @@
         var qrSelector = form.dataset.depositQr || '';
         var qr = qrSelector ? document.querySelector(qrSelector) : null;
         var placeholder = form.querySelector('[data-deposit-qr-placeholder]');
-        var amountLabel = document.getElementById('driver-deposit-amount-label');
+        var amountLabel = form.querySelector('[data-deposit-amount-label]');
 
         if (qr) {
             qr.hidden = !visible;
@@ -95,8 +95,21 @@
         return '';
     }
 
-    function showAmountError(message) {
-        var amountError = document.getElementById('driver-deposit-amount-error');
+    function proofValidationMessage(form) {
+        var proofInput = form.querySelector('.driver-deposit-proof');
+        if (!proofInput) {
+            return '';
+        }
+
+        if (!proofInput.files || proofInput.files.length === 0) {
+            return 'Vui lòng đính kèm ảnh chụp chuyển khoản.';
+        }
+
+        return '';
+    }
+
+    function showAmountError(form, message) {
+        var amountError = form.querySelector('[data-deposit-amount-error]');
         if (!amountError) {
             return;
         }
@@ -112,11 +125,10 @@
         amountError.classList.add('d-none');
     }
 
-
     function updateProofPreview(form) {
         var proofInput = form.querySelector('.driver-deposit-proof');
-        var preview = document.getElementById('driver-deposit-proof-preview');
-        var previewImg = document.getElementById('driver-deposit-proof-preview-img');
+        var preview = form.querySelector('[data-deposit-proof-preview]');
+        var previewImg = form.querySelector('[data-deposit-proof-preview-img]');
         if (!proofInput || !preview || !previewImg) {
             return;
         }
@@ -148,7 +160,7 @@
         }
 
         submitBtn.disabled = !!submitting;
-        submitBtn.textContent = submitting ? 'Đang gửi...' : 'Nạp tiền';
+        submitBtn.textContent = submitting ? 'Đang gửi...' : 'Gửi yêu cầu nạp';
     }
 
     function updateDepositUi(form) {
@@ -157,7 +169,7 @@
         var valid = amount >= min;
         var qrSelector = form.dataset.depositQr || '';
         var qr = qrSelector ? document.querySelector(qrSelector) : null;
-        var amountLabel = document.getElementById('driver-deposit-amount-label');
+        var amountLabel = form.querySelector('[data-deposit-amount-label]');
         var message = amountValidationMessage(form, amount);
 
         setQrVisible(form, valid);
@@ -172,9 +184,9 @@
         }
 
         if (form.dataset.depositAttempted === '1') {
-            showAmountError(message);
+            showAmountError(form, message || proofValidationMessage(form));
         } else {
-            showAmountError('');
+            showAmountError(form, '');
         }
 
         form.querySelectorAll('.driver-deposit-preset').forEach(function (btn) {
@@ -196,17 +208,20 @@
         form.dataset.depositAttempted = '1';
 
         var amount = readAmount(form);
-        var message = amountValidationMessage(form, amount);
+        var amountMessage = amountValidationMessage(form, amount);
+        var proofMessage = proofValidationMessage(form);
 
         updateDepositUi(form);
 
-        if (message) {
+        if (amountMessage || proofMessage) {
             if (event) {
                 event.preventDefault();
                 event.stopPropagation();
             }
-            showAmountError(message);
-            amountInput.focus();
+            showAmountError(form, amountMessage || proofMessage);
+            if (amountMessage) {
+                amountInput.focus();
+            }
             return;
         }
 
@@ -219,7 +234,7 @@
         syncFormCsrf(form);
         form.dataset.depositSubmitting = '1';
         setSubmitState(form, true);
-        showAmountError('');
+        showAmountError(form, '');
         form.submit();
     }
 
@@ -260,7 +275,7 @@
         if (proofInput) {
             proofInput.addEventListener('change', function () {
                 updateProofPreview(form);
-                showAmountError('');
+                showAmountError(form, '');
             });
         }
 
@@ -280,22 +295,8 @@
         submitDepositForm(form, event);
     }, true);
 
-    document.addEventListener('click', function (event) {
-        var btn = event.target.closest('.driver-deposit-submit-btn');
-        if (!btn) {
-            return;
-        }
-
-        var form = btn.closest('.driver-wallet-deposit-form');
-        if (!form) {
-            return;
-        }
-
-        submitDepositForm(form, event);
-    }, true);
-
     document.addEventListener('drivertab:changed', function (event) {
-        if (!event.detail || event.detail.tab !== 'deposit') {
+        if (!event.detail || event.detail.tab !== 'wallet') {
             return;
         }
 

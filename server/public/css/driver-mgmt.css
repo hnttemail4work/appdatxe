@@ -117,7 +117,7 @@
 
 .driver-edit-actions {
     flex: 1 1 220px;
-    max-width: 100%;
+    max-width: 26rem;
 }
 
 @media (min-width: 768px) {
@@ -142,6 +142,19 @@
     background-color: var(--app-surface-raised, #1a1a1a);
     color: var(--app-text, #f5f5f5);
     border-color: var(--app-border, #404040);
+    color-scheme: dark;
+}
+
+.driver-edit-panel select,
+.driver-edit-panel .form-select {
+    color-scheme: dark;
+}
+.driver-edit-panel select option,
+.driver-edit-panel select optgroup,
+.driver-edit-panel .form-select option,
+.driver-edit-panel .form-select optgroup {
+    background-color: #1a1f26 !important;
+    color: #f5f5f5 !important;
 }
 
 .driver-edit-panel .form-control:disabled,
@@ -163,15 +176,18 @@
     box-shadow: none !important;
 }
 
+.driver-edit-panel .photo-upload-manager .photo-slot,
 .driver-edit-panel .driver-photo-manager .photo-slot {
     background: var(--app-surface-raised, #1a1a1a);
     border-color: var(--app-border, #404040);
 }
 
+.driver-edit-panel .photo-upload-manager .photo-slot-title,
 .driver-edit-panel .driver-photo-manager .photo-slot-title {
     color: var(--app-text-secondary, #d4d4d4);
 }
 
+.driver-edit-panel .photo-upload-manager .photo-placeholder,
 .driver-edit-panel .driver-photo-manager .photo-placeholder {
     background: var(--app-black, #0a0a0a);
     border-color: var(--app-border, #404040);
@@ -179,6 +195,7 @@
 }
 
 .driver-edit-panel .photo-vehicles-block h6,
+.driver-edit-panel .photo-upload-manager h6,
 .driver-edit-panel .driver-photo-manager h6 {
     color: var(--app-text, #f5f5f5);
 }
@@ -314,6 +331,258 @@
 .driver-reject-form textarea {
     resize: vertical;
     min-height: 4.5rem;
+}
+
+.admin-pending-review {
+    margin-top: 1rem;
+    max-width: 44rem;
+}
+
+.admin-pending-review__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem .75rem;
+    margin-bottom: 1rem;
+}
+
+.admin-pending-review__phone {
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: #f5f5f5;
+    letter-spacing: .02em;
+}
+
+.admin-pending-review__hint {
+    flex: 1 1 100%;
+}
+
+.admin-pending-review__cccd {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .75rem;
+    margin-bottom: 1rem;
+}
+
+.admin-pending-review__shot {
+    margin: 0;
+    border: 1px solid rgba(255, 255, 255, .12);
+    border-radius: .65rem;
+    background: rgba(255, 255, 255, .03);
+    overflow: hidden;
+}
+
+.admin-pending-review__shot figcaption {
+    padding: .45rem .65rem;
+    font-size: .78rem;
+    font-weight: 600;
+    color: #d4d4d4;
+    border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+
+.admin-pending-review__img-link {
+    display: block;
+    line-height: 0;
+    cursor: zoom-in;
+    background: #0f0f0f;
+}
+
+.admin-pending-review__stage {
+    position: relative;
+    display: block;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    background: #0f0f0f;
+    overflow: hidden;
+}
+.admin-pending-review__img-link {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: #0f0f0f;
+    overflow: hidden;
+}
+.admin-pending-review__img-link img,
+.admin-pending-review__stage > img,
+.admin-pending-review__stage img[data-cccd-img] {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: center;
+    background: #0f0f0f;
+}
+
+.admin-pending-review__empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 4 / 3;
+    width: 100%;
+    color: #9ca3af;
+    font-size: .85rem;
+    background: rgba(0, 0, 0, .2);
+}
+
+.admin-pending-review__tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+    padding: .45rem .55rem .55rem;
+    border-top: 1px solid rgba(255, 255, 255, .08);
+    background: rgba(0, 0, 0, .15);
+}
+
+.admin-pending-review__tools .btn {
+    font-size: .72rem;
+    padding: .2rem .45rem;
+    line-height: 1.3;
+}
+
+.admin-pending-review__tools .btn.is-active {
+    background: rgba(59, 130, 246, .25);
+    border-color: rgba(96, 165, 250, .7);
+    color: #dbeafe;
+}
+
+.admin-pending-review__img-link.is-rotating img {
+    opacity: .55;
+}
+
+.admin-pending-review__crop-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    cursor: crosshair;
+    background: rgba(0, 0, 0, .35);
+    touch-action: none;
+}
+
+.admin-pending-review__crop-box {
+    position: absolute;
+    border: 2px solid #60a5fa;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, .45);
+    background: transparent;
+    cursor: move;
+    min-width: 18%;
+    min-height: 18%;
+}
+
+.admin-pending-review__crop-box::after {
+    content: 'Cắt';
+    position: absolute;
+    top: .2rem;
+    left: .35rem;
+    font-size: .65rem;
+    font-weight: 700;
+    color: #93c5fd;
+    letter-spacing: .04em;
+}
+
+.admin-pending-review__shot.is-cropping .admin-pending-review__img-link {
+    pointer-events: none;
+}
+
+.admin-pending-review__form {
+    margin-top: .25rem;
+}
+
+.admin-pending-review .admin-idscan {
+    max-width: none;
+    min-width: 0;
+    margin-bottom: .85rem;
+}
+
+.admin-pending-review__reject {
+    margin: .75rem 0;
+    padding: .75rem;
+    border: 1px solid rgba(248, 113, 113, .35);
+    border-radius: .55rem;
+    background: rgba(220, 53, 69, .08);
+}
+
+.admin-pending-review__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    margin-top: .85rem;
+    padding-top: .85rem;
+    border-top: 1px solid rgba(255, 255, 255, .1);
+}
+
+@media (max-width: 575.98px) {
+    .admin-pending-review__cccd {
+        grid-template-columns: 1fr;
+    }
+}
+
+.admin-idscan {
+    min-width: 16rem;
+    max-width: 26rem;
+    padding: .65rem .7rem;
+    border: 1px solid rgba(255, 255, 255, .12);
+    border-radius: .65rem;
+    background: rgba(255, 255, 255, .03);
+    text-align: left;
+}
+
+.photo-zoom-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(0, 0, 0, .88);
+    cursor: zoom-out;
+}
+
+.photo-zoom-overlay[hidden] {
+    display: none !important;
+}
+
+.photo-zoom-overlay img {
+    max-width: min(96vw, 920px);
+    max-height: 90vh;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border-radius: .5rem;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, .55);
+    cursor: default;
+}
+
+.photo-zoom-overlay-close {
+    position: absolute;
+    top: .75rem;
+    right: .85rem;
+    width: 2rem;
+    height: 2rem;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, .14);
+    color: #fff;
+    font-size: 1.25rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.admin-idscan__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .35rem;
+    margin-bottom: .35rem;
+}
+
+.admin-idscan__head strong {
+    font-size: .82rem;
+}
+
+.admin-required {
+    color: #f87171;
+    font-weight: 700;
 }
 
 .admin-booking-actions-col {

@@ -1,5 +1,5 @@
 /**
- * Bottom panel idle / trip sheet + TEST mock flow.
+ * Bottom panel idle / trip sheet — opens only when live trips exist.
  */
 (function () {
     var panel = document.getElementById('driver-bottom-panel');
@@ -10,21 +10,10 @@
     var idleEl = document.getElementById('driver-bottom-idle');
     var tripSheet = document.getElementById('driver-trip-sheet');
     var liveEl = document.getElementById('driver-trip-live');
-    var mockEl = document.getElementById('driver-trip-mock');
     var readyCta = document.getElementById('driver-ready-cta');
     var readyInput = document.getElementById('driver-availability-input');
     var readyLabel = readyCta ? readyCta.querySelector('[data-ready-label]') : null;
-    var testFab = document.getElementById('driver-test-trip-fab');
-    var mockCta = document.getElementById('driver-mock-primary-cta');
     var page = document.querySelector('.driver-page--map');
-
-    var mockStages = [
-        'Nhận chuyến',
-        'Đã đến điểm đón',
-        'Bắt đầu chuyến',
-        'Hoàn tất',
-    ];
-    var testMode = false;
 
     function hasLiveTrips() {
         if (panel.dataset.hasLiveTrips === '1') {
@@ -60,8 +49,7 @@
         page.style.setProperty('--driver-map-fab-lift', Math.round(height + gap) + 'px');
     }
 
-    function setExpanded(expanded, options) {
-        options = options || {};
+    function setExpanded(expanded) {
         var overlayOpen = page && page.classList.contains('is-panel-open');
         if (overlayOpen) {
             expanded = false;
@@ -80,16 +68,8 @@
             tripSheet.classList.toggle('is-visible', expanded || hasLiveTrips());
         }
 
-        if (expanded) {
-            var useMock = options.forceMock || (testMode && !hasLiveTrips());
-            if (liveEl) {
-                liveEl.hidden = useMock || !hasLiveTrips();
-            }
-            if (mockEl) {
-                mockEl.hidden = !useMock;
-            }
-        } else if (mockEl) {
-            mockEl.hidden = true;
+        if (liveEl) {
+            liveEl.hidden = !hasLiveTrips();
         }
 
         requestAnimationFrame(function () {
@@ -99,27 +79,7 @@
     }
 
     function refreshPanelMode() {
-        if (testMode) {
-            setExpanded(true, { forceMock: !hasLiveTrips() });
-            return;
-        }
         setExpanded(hasLiveTrips());
-    }
-
-    function setTestMode(on) {
-        testMode = !!on;
-        if (testFab) {
-            testFab.classList.toggle('is-active', testMode);
-            testFab.setAttribute('aria-pressed', testMode ? 'true' : 'false');
-            testFab.textContent = testMode ? 'TEST: Đóng' : 'TEST: Có cuốc';
-        }
-        if (testMode && mockEl) {
-            mockEl.dataset.mockStage = '0';
-            if (mockCta) {
-                mockCta.textContent = mockStages[0];
-            }
-        }
-        refreshPanelMode();
     }
 
     if (readyCta && readyInput) {
@@ -127,7 +87,6 @@
             if (readyInput.disabled) {
                 return;
             }
-            // Trigger existing availability toggle pipeline.
             readyInput.checked = !readyInput.checked;
             readyInput.dispatchEvent(new Event('change', { bubbles: true }));
             syncReadyCta();
@@ -136,28 +95,8 @@
         syncReadyCta();
     }
 
-    if (testFab) {
-        testFab.addEventListener('click', function () {
-            setTestMode(!testMode);
-        });
-    }
-
-    if (mockCta && mockEl) {
-        mockCta.addEventListener('click', function () {
-            var stage = Number(mockEl.dataset.mockStage || 0);
-            if (stage >= mockStages.length - 1) {
-                setTestMode(false);
-                return;
-            }
-            stage += 1;
-            mockEl.dataset.mockStage = String(stage);
-            mockCta.textContent = mockStages[stage];
-        });
-    }
-
     document.addEventListener('driver:availability-sync', syncReadyCta);
 
-    // Keep bottom panel in sync after tab changes / live trip badge updates.
     if (page) {
         page.addEventListener('drivertab:changed', function () {
             refreshPanelMode();
@@ -170,19 +109,13 @@
             originalUpdate();
         }
         panel.dataset.hasLiveTrips = hasLiveTrips() ? '1' : '0';
-        if (!testMode) {
-            refreshPanelMode();
-        }
+        refreshPanelMode();
     };
 
     window.DriverBottomPanel = {
         refresh: refreshPanelMode,
-        setTestMode: setTestMode,
         syncReadyCta: syncReadyCta,
         syncMapFabLift: syncMapFabLift,
-        isTestMode: function () {
-            return testMode;
-        },
     };
 
     if (typeof ResizeObserver !== 'undefined') {

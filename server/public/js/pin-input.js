@@ -78,6 +78,7 @@
         }
         var value = (root.querySelector('[data-pin-value]') || {}).value || '';
         root.dispatchEvent(new CustomEvent('pin:change', {
+          bubbles: true,
           detail: { value: value },
         }));
         maybeAutoSubmit(root, value);
@@ -107,6 +108,7 @@
         e.preventDefault();
         fill(root, d);
         root.dispatchEvent(new CustomEvent('pin:change', {
+          bubbles: true,
           detail: { value: d },
         }));
         maybeAutoSubmit(root, d);

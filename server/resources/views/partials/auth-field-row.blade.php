@@ -41,7 +41,8 @@
             </svg>
         </button>
     </div>
-    <div class="auth-field-error" @error($fieldName)@else hidden @enderror>@error($fieldName){{ $message }}@enderror</div>
+    {{-- Lỗi server hiện ở flash trên; ô này chỉ cho JS validate client. --}}
+    <div class="auth-field-error" hidden></div>
     @if($footerHtml)
         <div class="auth-field-footer">{!! $footerHtml !!}</div>
     @endif

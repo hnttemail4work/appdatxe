@@ -51,5 +51,4 @@
         </div>
         <div data-vehicle-preview class="register-vehicle-preview"></div>
     </div>
-    @error('photos')<div class="alert alert-danger py-2 mt-2 mb-0">{{ $message }}</div>@enderror
 </div>

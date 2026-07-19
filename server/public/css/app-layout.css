@@ -6,6 +6,8 @@ html {
     height: 100%;
     background-color: #0a0a0a;
     -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    touch-action: manipulation;
 }
 
 body.app-shell {

@@ -18,22 +18,19 @@
      data-step-titles='@json($stepTitles)'>
     @include('partials.auth-screen-header', [
         'authTitle' => $stepTitles[1],
-        'authBackUrl' => route('home'),
+        'authBackUrl' => route('driver.login'),
     ])
 
     <div class="auth-screen-body">
-        @if($errors->any())
-            <div class="auth-field-error" role="alert">{{ $errors->first() }}</div>
-        @endif
-
-        <form method="POST" action="{{ route('register') }}"
+        <form method="POST" action="{{ route('register.submit') }}"
               id="driver-register-form" enctype="multipart/form-data" novalidate autocomplete="off">
             @csrf
             <input type="hidden" name="register_mode" value="driver">
-            @if($fromDriver)
-                <input type="hidden" name="from" value="driver">
-            @endif
-            @include('auth.partials.register-driver')
+            <input type="hidden" name="from" value="driver">
+            <input type="hidden" name="for_driver" value="1">
+            @include('auth.partials.register-driver', [
+                'prefillPhone' => $prefillPhone ?? null,
+            ])
         </form>
     </div>
 </div>

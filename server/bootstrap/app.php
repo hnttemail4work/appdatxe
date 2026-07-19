@@ -20,7 +20,6 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => RoleMiddleware::class,
             'guest' => \App\Http\Middleware\RedirectIfAuthenticated::class,
             'auth' => \App\Http\Middleware\Authenticate::class,
-            'customer.biometric' => \App\Http\Middleware\EnsureCustomerBiometricVerified::class,
             'driver.password' => \App\Http\Middleware\EnsureDriverPasswordChanged::class,
         ]);
 
@@ -51,7 +50,7 @@ return Application::configure(basePath: dirname(__DIR__))
                     : 'admin.dashboard';
                 $params = ['tab' => 'settings'];
                 if ($route === 'admin.referrals') {
-                    $params = [];
+                    $params = ['tab' => 'codes'];
                 }
                 if ($request->routeIs('admin.referrers.store')) {
                     $params['referrals_page'] = 1;

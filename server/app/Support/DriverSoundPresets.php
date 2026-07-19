@@ -2,10 +2,20 @@
 
 namespace App\Support;
 
-/** 5 tone Web Audio cho thông báo tài xế — tone1 là mặc định. */
+/** 5 tone Web Audio — dùng chung khách/tài xế; mặc định nền tảng ở NotificationSoundSettings. */
 class DriverSoundPresets
 {
     public const DEFAULT = 'tone1';
+
+    /** Mặc định hiện tại (admin), fallback tone1. */
+    public static function platformDefault(): string
+    {
+        try {
+            return NotificationSoundSettings::preset();
+        } catch (\Throwable) {
+            return self::DEFAULT;
+        }
+    }
 
     /**
      * @return array<string, array{label: string, label_en: string}>
@@ -34,7 +44,11 @@ class DriverSoundPresets
 
     public static function normalize(?string $key): string
     {
-        return self::isValid($key) ? $key : self::DEFAULT;
+        if (self::isValid($key)) {
+            return $key;
+        }
+
+        return self::platformDefault();
     }
 
     public static function label(string $key, string $locale = 'vi'): string

@@ -11,10 +11,11 @@
 
     <div class="auth-step-panel driver-wizard-panel" data-wizard-step="2" hidden>
         @include('partials.driver-core-fields', [
-            'context'  => 'register',
-            'user'     => null,
-            'profile'  => null,
-            'sections' => ['account'],
+            'context'      => 'register',
+            'user'         => null,
+            'profile'      => null,
+            'sections'     => ['account'],
+            'prefillPhone' => $prefillPhone ?? null,
         ])
         <div class="auth-group-actions">
             @include('partials.auth-next-btn', ['nextAttr' => 'data-wizard-next'])
@@ -47,12 +48,7 @@
     </div>
 
     <div class="auth-step-panel driver-wizard-panel" data-wizard-step="5" hidden>
-        <div class="auth-terms-row">
-            <input class="@error('terms') is-invalid @enderror" type="checkbox"
-                   name="terms" value="1" id="termsCheck" {{ old('terms') ? 'checked' : '' }} required>
-            <span>Đồng ý điều khoản {{ config('app.name') }}.</span>
-        </div>
-        <div class="invalid-feedback" data-client-feedback="terms">@error('terms'){{ $message }}@enderror</div>
+        @include('partials.auth-terms-consent', ['checkboxId' => 'termsCheck'])
         <div class="auth-group-actions">
             @include('partials.auth-next-btn', ['nextAttr' => 'data-wizard-next'])
         </div>

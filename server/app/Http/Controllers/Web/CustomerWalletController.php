@@ -18,10 +18,14 @@ class CustomerWalletController extends Controller
     {
         $request->validate([
             'amount'      => ['required', 'numeric', 'min:' . CustomerWalletService::MIN_DEPOSIT],
-            'proof_image' => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp,gif', 'max:5120'],
+            'proof_image' => ['required', 'image', 'mimes:jpeg,jpg,png,webp,gif', 'max:5120'],
         ], [
-            'amount.required' => 'Vui lòng nhập số tiền nạp.',
-            'amount.min'      => 'Số tiền nạp tối thiểu ' . number_format(CustomerWalletService::MIN_DEPOSIT, 0, ',', '.') . ' đ.',
+            'amount.required'      => 'Vui lòng nhập số tiền nạp.',
+            'amount.min'           => 'Số tiền nạp tối thiểu ' . number_format(CustomerWalletService::MIN_DEPOSIT, 0, ',', '.') . ' đ.',
+            'proof_image.required' => 'Vui lòng đính kèm ảnh chụp chuyển khoản.',
+            'proof_image.image'    => 'Ảnh chụp chuyển khoản phải là file ảnh.',
+            'proof_image.mimes'    => 'Ảnh chụp chuyển khoản phải là JPG, PNG, WebP hoặc GIF.',
+            'proof_image.max'      => 'Ảnh chụp chuyển khoản tối đa 5MB.',
         ]);
 
         try {

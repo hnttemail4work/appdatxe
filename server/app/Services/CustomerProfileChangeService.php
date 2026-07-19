@@ -66,12 +66,16 @@ class CustomerProfileChangeService
                 $existing->delete();
             }
 
-            return CustomerProfileChangeRequest::query()->create([
+            $change = CustomerProfileChangeRequest::query()->create([
                 'user_id' => $user->id,
                 'status'  => CustomerProfileChangeRequest::STATUS_PENDING,
                 'payload' => $payload ?: null,
                 'photos'  => $photos ?: null,
             ]);
+
+            app(AdminOperatorAlertService::class)->recordCustomerProfileChangePending($change);
+
+            return $change;
         });
     }
 

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Concerns\ApiResponds;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\BulkDeleteRejectedRegistrationsRequest;
 use App\Http\Requests\Admin\UpdateDriverInviteRequest;
 use App\Http\Requests\Driver\CancelScheduleRequest;
 use App\Http\Requests\Driver\RejectDriverProfileRequest;
@@ -17,6 +18,7 @@ use App\Models\DriverProfile;
 use App\Support\ProvinceResolver;
 use App\Models\DriverTripRequest;
 use App\Models\Schedule;
+use App\Support\AdminIdentityApproval;
 use App\Support\DriverDefaultPassword;
 use App\Services\BookingWorkflowService;
 use App\Services\DriverAvailabilityService;
@@ -31,6 +33,7 @@ use App\Services\GuestBookingDriverStatusService;
 use App\Services\DriverTripRequestService;
 use App\Services\DriverInboxService;
 use App\Services\DriverWalletService;
+use App\Services\PendingApprovalExpiryService;
 use App\Services\ReferralCodeService;
 use App\Services\ScheduleLifecycleService;
 use App\Services\TripChatService;
@@ -61,6 +64,7 @@ class DriverController extends Controller
         private readonly ReferralCodeService $referralCodes,
         private readonly DriverInboxService $driverInbox,
         private readonly TripChatService $tripChat,
+        private readonly PendingApprovalExpiryService $pendingExpiry,
     ) {
     }
 
@@ -674,6 +678,8 @@ class DriverController extends Controller
 
     public function index(Request $request)
     {
+        $this->pendingExpiry->expireStaleDrivers();
+
         $filter = in_array($request->query('filter'), ['pending', 'rejected'], true)
             ? $request->query('filter')
             : 'all';
@@ -687,6 +693,10 @@ class DriverController extends Controller
             } elseif ($filter === 'rejected') {
                 $query->where('approval_status', 'rejected')
                     ->whereHas('user', fn ($q) => $q->where('role', 'driver'));
+            } else {
+                // Danh sách chính: chỉ tài xế đã duyệt.
+                $query->where('approval_status', 'approved')
+                    ->whereHas('user', fn ($q) => $q->where('role', 'driver'));
             }
         } else {
             $query->forOperatorManagement(Auth::id());
@@ -695,20 +705,15 @@ class DriverController extends Controller
             } elseif ($filter === 'rejected') {
                 $query->where('approval_status', 'rejected')
                     ->whereHas('user', fn ($q) => $q->where('role', 'driver'));
+            } else {
+                $query->where('approval_status', 'approved');
             }
         }
 
         $drivers = PageList::paginateCollection(
             $query->latest()->get()
                 ->when($filter === 'all', fn ($c) => $c->sortBy(function ($d) {
-                    if ($d->isPendingApproval()) {
-                        return 0;
-                    }
-                    if ($d->pendingChangeRequest) {
-                        return 1;
-                    }
-
-                    return 2;
+                    return $d->pendingChangeRequest ? 0 : 1;
                 })->values())
                 ->when($filter !== 'all', fn ($c) => $c->values()),
             $request,
@@ -720,6 +725,7 @@ class DriverController extends Controller
             $driver->load(['user', 'wallet', 'pendingChangeRequest']);
         }
 
+        // Tab Chờ duyệt: luôn hiện tổng số đang chờ.
         $pendingCount = Auth::user()->role === 'admin'
             ? (int) DriverProfile::query()->pendingApproval()->count()
             : DriverProfile::pendingCountForOperator(Auth::id());
@@ -791,18 +797,11 @@ class DriverController extends Controller
         $pendingDeposits = PageList::paginateCollection($pendingDepositsAll, $request, 'deposit_page');
         $walletHistoryAll = $this->driverWallet->walletActivityHistory($driverWallet);
         $walletHistory = PageList::paginateCollection($walletHistoryAll, $request, 'history_page');
-        $inviteReferral = $this->referralCodes->forDriver($driverProfile)
-            ?? $driverProfile->referralCode;
-        $commissionReferral = $this->referralCodes->assignedCommissionForDriver($driverProfile)
-            ?? $driverProfile->assignedCommissionCode;
-
         return view('admin.drivers.edit', [
-            'driver'              => $driverProfile,
-            'driverWallet'        => $driverWallet,
-            'pendingDeposits'     => $pendingDeposits,
-            'walletHistory'       => $walletHistory,
-            'inviteReferral'      => $inviteReferral,
-            'commissionReferral'  => $commissionReferral,
+            'driver'          => $driverProfile,
+            'driverWallet'    => $driverWallet,
+            'pendingDeposits' => $pendingDeposits,
+            'walletHistory'   => $walletHistory,
         ]);
     }
 
@@ -826,8 +825,7 @@ class DriverController extends Controller
 
         $this->driverInbox->notifyPromoGranted($driverProfile, $discount);
 
-        return redirect()
-            ->route('admin.drivers.edit', $this->driverInviteEditParams($request, $driverProfile))
+        return $this->redirectAfterInviteManage($driverProfile)
             ->with('success', 'Đã tạo QR giới thiệu: giảm ' . number_format($discount, 1) . '%.');
     }
 
@@ -859,8 +857,7 @@ class DriverController extends Controller
             $this->driverInbox->notifyPromoUpdated($driverProfile, $discount);
         }
 
-        return redirect()
-            ->route('admin.drivers.edit', $this->driverInviteEditParams($request, $driverProfile))
+        return $this->redirectAfterInviteManage($driverProfile)
             ->with('success', 'Đã cập nhật khuyến mãi QR giới thiệu: giảm '
                 . number_format($discount, 1) . '%.');
     }
@@ -877,15 +874,13 @@ class DriverController extends Controller
 
         $previous = $this->referralCodes->suspendForDriver($driverProfile);
         if ($previous === null) {
-            return redirect()
-                ->route('admin.drivers.edit', $this->driverInviteEditParams($request, $driverProfile))
+            return $this->redirectAfterInviteManage($driverProfile)
                 ->with('success', 'Không có mã QR đang dùng để tạm ngưng.');
         }
 
         $this->driverInbox->notifyPromoRemoved($driverProfile, $previous);
 
-        return redirect()
-            ->route('admin.drivers.edit', $this->driverInviteEditParams($request, $driverProfile))
+        return $this->redirectAfterInviteManage($driverProfile)
             ->with('success', 'Đã tạm ngưng QR giảm ' . number_format($previous, 1) . '% — không hiện ở Mời bạn bè.');
     }
 
@@ -901,32 +896,23 @@ class DriverController extends Controller
 
         $restored = $this->referralCodes->restoreForDriver($driverProfile);
         if (! $restored) {
-            return redirect()
-                ->route('admin.drivers.edit', $this->driverInviteEditParams($request, $driverProfile))
+            return $this->redirectAfterInviteManage($driverProfile)
                 ->with('success', 'Không có mã QR đang tạm ngưng để bật lại.');
         }
 
         $discount = $restored->customerDiscountPercent();
         $this->driverInbox->notifyPromoGranted($driverProfile, $discount);
 
-        return redirect()
-            ->route('admin.drivers.edit', $this->driverInviteEditParams($request, $driverProfile))
+        return $this->redirectAfterInviteManage($driverProfile)
             ->with('success', 'Đã bật lại QR giảm ' . number_format($discount, 1) . '%.');
     }
 
-    /** @return array{driverProfile: DriverProfile, tab: string, from?: string} */
-    private function driverInviteEditParams(Request $request, DriverProfile $driverProfile): array
+    private function redirectAfterInviteManage(DriverProfile $driverProfile): \Illuminate\Http\RedirectResponse
     {
-        $params = [
-            'driverProfile' => $driverProfile,
-            'tab'           => 'invite',
-        ];
-
-        if ($request->input('from') === 'referrals' || $request->query('from') === 'referrals') {
-            $params['from'] = 'referrals';
-        }
-
-        return $params;
+        return redirect()->route('admin.referrals', [
+            'tab'           => 'codes',
+            'invite_driver' => $driverProfile->id,
+        ]);
     }
 
     public function update(UpdateDriverProfileRequest $request, DriverProfile $driverProfile)
@@ -966,6 +952,37 @@ class DriverController extends Controller
         $this->profileSync->setAccountStatus($driverProfile, 'suspended');
 
         return back()->with('success', 'Đã tạm ngưng tài xế.');
+    }
+
+    /** Xóa nhiều hồ sơ tài xế đã từ chối (kể cả hết hạn chờ duyệt). */
+    public function bulkDestroy(BulkDeleteRejectedRegistrationsRequest $request)
+    {
+        if (Auth::user()?->role !== 'admin') {
+            abort(403);
+        }
+
+        $ids = array_map('intval', $request->validated('ids'));
+        $deleted = 0;
+
+        DriverProfile::query()
+            ->whereIn('id', $ids)
+            ->where('approval_status', 'rejected')
+            ->whereHas('user', fn ($q) => $q->where('role', 'driver'))
+            ->with('user')
+            ->orderBy('id')
+            ->each(function (DriverProfile $profile) use (&$deleted): void {
+                if ($this->pendingExpiry->deleteDriverRegistration($profile)) {
+                    $deleted++;
+                }
+            });
+
+        if ($deleted < 1) {
+            return back()->withErrors(['ids' => 'Không có hồ sơ từ chối hợp lệ để xóa.']);
+        }
+
+        return redirect()
+            ->route('admin.drivers', ['filter' => 'rejected'])
+            ->with('success', "Đã xóa {$deleted} hồ sơ tài xế bị từ chối.");
     }
 
     public function activate(DriverProfile $driverProfile)
@@ -1021,20 +1038,34 @@ class DriverController extends Controller
         }
 
         $validated = $request->validate(
-            \App\Support\AdminIdentityApproval::rules(),
-            \App\Support\AdminIdentityApproval::messages(),
+            AdminIdentityApproval::driverRules(),
+            AdminIdentityApproval::messages(),
         );
+
+        $photoUpdates = AdminIdentityApproval::storeAdjustedIdCardPhotos(
+            $request,
+            $driverProfile,
+            'drivers/'.$driverProfile->id,
+            AdminIdentityApproval::driverPhotoFields(),
+        );
+        if ($photoUpdates !== []) {
+            $driverProfile->update($photoUpdates);
+        }
 
         $this->profileSync->approve(
             $driverProfile,
             Auth::id(),
-            \App\Support\AdminIdentityApproval::userAttributes($validated),
+            AdminIdentityApproval::userAttributes($validated),
         );
         $driverProfile->loadMissing('user');
+        if ($driverProfile->user) {
+            app(\App\Services\RegistrationService::class)->issueRegisterOtpAfterApproval($driverProfile->user);
+            app(\App\Services\UserInboxService::class)->notifyRegistrationApproved($driverProfile->user);
+        }
 
         return redirect()
-            ->route('admin.drivers')
-            ->with('success', 'Đã duyệt tài xế và lưu thông tin từ CCCD.');
+            ->route('admin.authCodes')
+            ->with('success', \App\Support\AuthOtp::approvedOtpReady());
     }
 
     public function reject(RejectDriverProfileRequest $request, DriverProfile $driverProfile)

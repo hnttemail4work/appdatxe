@@ -63,16 +63,5 @@
                 @include('partials.pagination', ['paginator' => $tripSchedules])
             @endif
         </div>
-
-        @include('partials.driver-trip-sheet-mock')
     </div>
 </section>
-
-<button type="button"
-        class="driver-test-trip-fab"
-        id="driver-test-trip-fab"
-        aria-pressed="false"
-        aria-controls="driver-trip-sheet"
-        title="Debug: xem TripBottomSheet">
-    TEST: Có cuốc
-</button>

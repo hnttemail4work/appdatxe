@@ -30,7 +30,7 @@
         <div class="driver-settings-card mb-3">
             <h3 class="driver-settings-card__title" data-i18n="settings_sound">Âm thanh thông báo</h3>
             <p class="driver-account-hint mb-2" data-i18n="settings_sound_hint">
-                Một âm thanh dùng chung khi có cuốc mới hoặc thông báo hệ thống. Chọn 1 trong 5 tone.
+                Âm thanh khi có cuốc mới hoặc tin hộp thư (Thông báo / Thông tin). Đồng bộ với mặc định admin; bạn có thể đổi tone riêng.
             </p>
 
             <label class="driver-settings-toggle mb-3">

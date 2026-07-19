@@ -217,32 +217,6 @@
         return '';
     }
 
-    function getHomeUrl() {
-        var link = document.querySelector('.customer-scroll-dock a[href]:not([href*="chuyen"])')
-            || document.querySelector('.customer-scroll-dock [href$="/"]');
-        if (link && link.href) {
-            return link.href;
-        }
-
-        return window.location.origin + '/';
-    }
-
-    function shouldRedirectEmptyTripToHome() {
-        if (window.__bookingSuccess) {
-            return false;
-        }
-
-        return true;
-    }
-
-    function redirectEmptyTripToHome() {
-        if (!shouldRedirectEmptyTripToHome()) {
-            return;
-        }
-
-        window.location.replace(getHomeUrl());
-    }
-
     function buildStatusParams() {
         var params = new URLSearchParams();
         var phone = getContactPhone();
@@ -558,6 +532,11 @@
         card.classList.remove('d-none');
 
         setText(qs('[data-field="trip_code"]', card), booking.trip_code || '—', true);
+        setText(
+            qs('[data-field="guest_status_label"]', card),
+            booking.guest_status_label || booking.progress_label || '',
+            !!(booking.guest_status_label || booking.progress_label)
+        );
 
         var routeParts = parseRoute(booking.route);
         setText(qs('[data-field="route_from"]', card), routeParts.from, true);
@@ -704,11 +683,7 @@
 
         var params = buildStatusParams();
         if (!params.toString()) {
-            if (options.initial) {
-                redirectEmptyTripToHome();
-            } else {
-                renderBooking(null);
-            }
+            renderBooking(null);
             return Promise.resolve(null);
         }
 
@@ -721,11 +696,6 @@
                 if (data && data.has_trip && data.booking) {
                     renderBooking(data.booking);
                     return data.booking;
-                }
-
-                if (options.initial) {
-                    redirectEmptyTripToHome();
-                    return null;
                 }
 
                 renderBooking(null);

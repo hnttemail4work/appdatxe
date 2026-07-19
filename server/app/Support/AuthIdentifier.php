@@ -36,4 +36,16 @@ class AuthIdentifier
             ->get()
             ->first(fn (User $user): bool => self::normalizePhone((string) $user->phone) === $normalized);
     }
+
+    /** Tìm user theo SĐT và đúng role (customer|driver). */
+    public static function findUserByPhoneAndRole(string $phone, string $role): ?User
+    {
+        $user = self::findUserByPhone($phone);
+
+        if (! $user || $user->role !== $role) {
+            return null;
+        }
+
+        return $user;
+    }
 }

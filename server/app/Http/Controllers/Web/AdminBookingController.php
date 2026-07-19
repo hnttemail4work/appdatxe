@@ -48,7 +48,6 @@ class AdminBookingController extends Controller
             'counts'                   => $data['bookingListCounts'],
             'catalog_off_duty_count'   => $data['catalogOffDutyBookingCount'],
             'late_pickup_alert_count'  => $data['latePickupAlertCount'],
-            'alerts'                   => app(\App\Services\AdminOperatorAlertService::class)->pullAlerts(),
             'html'                     => view('partials.admin-booking-list-table', [
                 'bookings'          => $data['passengers'],
                 'drivers'           => $data['drivers'],

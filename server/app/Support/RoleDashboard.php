@@ -12,7 +12,7 @@ class RoleDashboard
         return match ($role) {
             'admin' => route('admin.bookings'),
             'driver'   => route('driver.dashboard'),
-            'customer' => route('customer.account', ['tab' => 'account']),
+            'customer' => route('home'),
             default    => route('home'),
         };
     }
@@ -23,10 +23,6 @@ class RoleDashboard
     public static function forUser(User $user, ?Request $request = null): string
     {
         $request ??= request();
-
-        if ($user->role === 'customer' && ! $request->session()->get('customer_biometric_verified')) {
-            return route('auth.biometric');
-        }
 
         if ($user->role === 'driver' && $user->must_change_password) {
             return route('driver.dashboard', ['tab' => 'account-password']);

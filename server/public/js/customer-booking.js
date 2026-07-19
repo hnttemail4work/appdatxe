@@ -947,32 +947,15 @@
         });
     }
 
+    /** Prefill SĐT cũ (nếu còn ô liên hệ); họ tên / tuổi / GT lấy từ hồ sơ server khi submit. */
     function applyCustomerPrefill() {
         var prefill = window.__customerBookingPrefill;
         if (!prefill || typeof prefill !== 'object') {
             return;
         }
-
-        var nameEl = $('modal-passenger-name');
-        if (nameEl && !nameEl.value.trim() && prefill.passenger_name) {
-            nameEl.value = String(prefill.passenger_name);
-        }
-
         var phoneEl = $('modal-contact-phone');
         if (phoneEl && !phoneEl.value.trim() && prefill.contact_phone) {
             phoneEl.value = String(prefill.contact_phone);
-        }
-
-        if (prefill.passenger_gender) {
-            var genderEl = form.querySelector('input[name="passenger_gender"][value="' + prefill.passenger_gender + '"]');
-            if (genderEl) {
-                genderEl.checked = true;
-            }
-        }
-
-        var ageEl = $('modal-passenger-age');
-        if (ageEl && !ageEl.value.trim() && prefill.passenger_age != null && prefill.passenger_age !== '') {
-            ageEl.value = String(prefill.passenger_age);
         }
     }
 
@@ -1730,6 +1713,10 @@
         persistRouteDraft({ resume: true });
         if (card && card.getAttribute('data-can-book') !== '1') {
             var loginUrl = (card && card.getAttribute('data-login-url')) || '/login';
+            var contactPhone = customerContactPhone();
+            if (contactPhone) {
+                loginUrl += (loginUrl.indexOf('?') >= 0 ? '&' : '?') + 'phone=' + encodeURIComponent(contactPhone);
+            }
             window.location.href = loginUrl;
             return;
         }

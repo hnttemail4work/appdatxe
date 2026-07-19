@@ -36,6 +36,19 @@ class AdminPricingController extends Controller
     {
         $v = $request->validated();
 
+        if ($request->input('form_scope') === 'qr') {
+            PlatformSetting::setValue('referral_commission_first_percentage', ['value' => (float) $v['referral_commission_first']], 'finance');
+            PlatformSetting::setValue('referral_commission_repeat_percentage', ['value' => (float) $v['booking_qr_discount']], 'finance');
+            PlatformSetting::setValue('driver_invite_qr_discount_percentage', ['value' => (float) $v['driver_invite_qr_discount']], 'finance');
+
+            if ($request->boolean('sync_driver_invite_discount')) {
+                $this->referralCodes->syncDriverInviteDiscountPercent((float) $v['driver_invite_qr_discount']);
+            }
+
+            return redirect()->route('admin.referrals', ['tab' => 'rules'])
+                ->with('success', 'Đã lưu rule giảm giá QR.');
+        }
+
         PlatformSetting::setValue('pricing_km_rate_under_100', ['value' => (int) $v['km_rate_under_100']], 'finance');
         PlatformSetting::setValue('pricing_km_rate_over_100', ['value' => (int) $v['km_rate_over_100']], 'finance');
         PlatformSetting::setValue('pricing_intra_flat_max_km', ['value' => (int) $v['intra_flat_max_km']], 'finance');
@@ -43,14 +56,7 @@ class AdminPricingController extends Controller
         PlatformSetting::setValue('pricing_rounding_unit', ['value' => (int) $v['rounding_unit']], 'finance');
         PlatformSetting::setValue('app_commission_percentage', ['value' => (float) $v['app_commission']], 'finance');
         PlatformSetting::setValue('commission_percentage', ['value' => (float) $v['app_commission']], 'finance');
-        PlatformSetting::setValue('referral_commission_first_percentage', ['value' => (float) $v['referral_commission_first']], 'finance');
-        PlatformSetting::setValue('referral_commission_repeat_percentage', ['value' => (float) $v['booking_qr_discount']], 'finance');
-        PlatformSetting::setValue('driver_invite_qr_discount_percentage', ['value' => (float) $v['driver_invite_qr_discount']], 'finance');
         PricingConfig::setRainSurchargeEnabled($request->boolean('rain_surcharge_enabled'));
-
-        if ($request->boolean('sync_driver_invite_discount')) {
-            $this->referralCodes->syncDriverInviteDiscountPercent((float) $v['driver_invite_qr_discount']);
-        }
 
         return redirect()->route('admin.dashboard', ['tab' => 'fees'])
             ->with('success', 'Đã lưu cấu hình tính tiền.');

@@ -74,6 +74,9 @@
 @push('styles')
 <link rel="stylesheet" href="{{ asset('css/customer.css') }}?v={{ filemtime(public_path('css/customer.css')) }}">
 <link rel="stylesheet" href="{{ asset('css/auth.css') }}?v={{ filemtime(public_path('css/auth.css')) }}">
+@if($activeTab === 'wallet')
+<link rel="stylesheet" href="{{ asset('css/driver.css') }}?v={{ filemtime(public_path('css/driver.css')) }}">
+@endif
 @endpush
 
 @push('scripts')
@@ -84,39 +87,6 @@
 <script src="{{ asset('js/driver-wallet-deposit.js') }}?v={{ filemtime(public_path('js/driver-wallet-deposit.js')) }}"></script>
 @endif
 @if($activeTab === 'update')
-<script>
-document.querySelectorAll('.customer-profile-update-form [data-file-trigger]').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-        var wrap = btn.closest('.register-file-field');
-        var input = wrap && wrap.querySelector('input[type="file"]');
-        if (input) input.click();
-    });
-});
-document.querySelectorAll('.customer-profile-update-form input[type="file"]').forEach(function (input) {
-    input.addEventListener('change', function () {
-        var wrap = input.closest('.register-file-field');
-        var label = wrap && wrap.querySelector('[data-file-name]');
-        var preview = wrap && wrap.querySelector('[data-doc-preview]');
-        var file = input.files && input.files[0];
-        if (label) label.textContent = file ? file.name : 'Chưa chọn';
-        if (wrap) wrap.classList.toggle('has-file', !!file);
-        if (preview) {
-            if (preview.dataset.objectUrl) {
-                URL.revokeObjectURL(preview.dataset.objectUrl);
-                delete preview.dataset.objectUrl;
-            }
-            if (file && file.type.indexOf('image/') === 0) {
-                var url = URL.createObjectURL(file);
-                preview.dataset.objectUrl = url;
-                preview.src = url;
-                preview.classList.remove('d-none');
-            } else {
-                preview.removeAttribute('src');
-                preview.classList.add('d-none');
-            }
-        }
-    });
-});
-</script>
+<script src="{{ asset('js/photo-upload-slots.js') }}?v={{ filemtime(public_path('js/photo-upload-slots.js')) }}"></script>
 @endif
 @endpush

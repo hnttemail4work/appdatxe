@@ -18,6 +18,11 @@ class RedirectIfAuthenticated
             if (Auth::guard($guard)->check()) {
                 $user = Auth::guard($guard)->user();
 
+                // Admin mở form đăng nhập/đăng ký TX từ menu — không redirect về dashboard.
+                if (($user->role ?? null) === 'admin' && $this->adminMayPreviewDriverAuth($request)) {
+                    return $next($request);
+                }
+
                 return redirect(RoleDashboard::forUser($user, $request));
             }
         }
@@ -29,5 +34,17 @@ class RedirectIfAuthenticated
         $response->headers->set('Pragma', 'no-cache');
 
         return $response;
+    }
+
+    private function adminMayPreviewDriverAuth(Request $request): bool
+    {
+        if ($request->routeIs('driver.login', 'driver.register', 'register', 'login.checkPhone')) {
+            return true;
+        }
+
+        // POST /login khi đang ở luồng TX (for_driver).
+        return $request->isMethod('POST')
+            && $request->is('login')
+            && $request->boolean('for_driver');
     }
 }

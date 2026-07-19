@@ -75,7 +75,9 @@
             return null;
         }
 
-        clearTarget(target);
+        if (options.clear !== false) {
+            clearTarget(target);
+        }
 
         var variant = options.variant || 'warning';
         var icon = variant === 'success' ? '✓' : '!';

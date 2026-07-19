@@ -60,7 +60,10 @@ class CustomerWalletService
             $transaction->update(['proof_image_path' => $path]);
         }
 
-        return $transaction->fresh();
+        $fresh = $transaction->fresh();
+        app(AdminOperatorAlertService::class)->recordCustomerDepositPending($fresh);
+
+        return $fresh;
     }
 
     public function approveDeposit(CustomerWalletTransaction $transaction, int $actorId): void

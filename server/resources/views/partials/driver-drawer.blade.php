@@ -66,6 +66,26 @@
     <nav class="driver-drawer__nav" aria-label="Chức năng">
         <p class="driver-drawer__nav-label">Chức năng</p>
 
+        <button type="button"
+                class="driver-drawer__link"
+                id="driver-drawer-pwa-install"
+                data-pwa-install-trigger
+                data-driver-drawer-close>
+            <span class="driver-drawer__link-icon" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="5" y="2" width="14" height="20" rx="2.5"/>
+                    <path d="M12 7v7"/>
+                    <path d="m9 11 3 3 3-3"/>
+                    <path d="M9 18h6"/>
+                </svg>
+            </span>
+            <span class="driver-drawer__link-text-wrap">
+                <span class="driver-drawer__link-text">Ghim vào màn hình chính</span>
+                <span class="driver-drawer__link-meta" data-pwa-install-meta>Lối tắt mở màn sẵn sàng nhận cuốc</span>
+            </span>
+            <span class="driver-drawer__chevron" aria-hidden="true">›</span>
+        </button>
+
         <button type="button" class="driver-drawer__link" data-driver-tab="invite" data-driver-drawer-close>
             <span class="driver-drawer__link-icon" aria-hidden="true">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7"/><path d="M12 3v12"/><path d="m8 7 4-4 4 4"/></svg>

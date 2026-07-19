@@ -5,7 +5,9 @@ namespace App\Services;
 use App\Models\AuthVerificationCode;
 use App\Models\DriverProfile;
 use App\Models\User;
+use App\Support\AuthAudience;
 use App\Support\AuthIdentifier;
+use App\Support\AuthOtp;
 use App\Support\AuthPhone;
 use App\Support\DriverFieldRules;
 use App\Support\PinPassword;
@@ -20,6 +22,92 @@ class RegistrationService
         private readonly CustomerDocumentService $customerDocuments,
         private readonly AuthVerificationService $verification,
     ) {
+    }
+
+    /** Khách/tài xế đã duyệt nhưng chưa xác minh OTP lần đầu. */
+    public function shouldResumeRegisterOtp(User $user): bool
+    {
+        return $user->needsPostApprovalRegisterOtp();
+    }
+
+    /**
+     * Xóa slot đăng ký cũ (đã từ chối) để SĐT đăng ký lại.
+     * Hết hạn chờ duyệt → đánh dấu từ chối trước (giữ record cho admin), rồi mới xóa khi đăng ký lại.
+     */
+    public function releaseCustomerRegistrationIfReusable(User $user): bool
+    {
+        $expiry = app(PendingApprovalExpiryService::class);
+
+        if ($user->isCustomerApprovalPending() && $user->isCustomerPendingApprovalExpired()) {
+            $expiry->expireCustomer($user);
+            $user->refresh();
+        }
+
+        return $expiry->deleteCustomerRegistration($user);
+    }
+
+    /** Giữ trang OTP (chờ duyệt hoặc nhập mã) — không tự cấp OTP. */
+    public function openRegisterOtpPage(Request $request, User $user): string
+    {
+        $request->session()->put('pending_register_otp.user_id', $user->id);
+        AuthAudience::rememberFromUser($request, $user);
+
+        return route('auth.register.otp');
+    }
+
+    /** Gắn session OTP; chỉ cấp mã mới nếu chưa có mã active (giữ mã admin đang xem ở tab OTP). */
+    public function beginRegisterOtpResume(Request $request, User $user): string
+    {
+        $active = AuthVerificationCode::query()
+            ->where('user_id', $user->id)
+            ->where('purpose', AuthVerificationCode::PURPOSE_REGISTER_OTP)
+            ->where('status', AuthVerificationCode::STATUS_ACTIVE)
+            ->orderByDesc('id')
+            ->first();
+
+        if (! $active || ! $active->isUsable()) {
+            $this->verification->resend(
+                (string) $user->phone,
+                AuthVerificationCode::PURPOSE_REGISTER_OTP,
+                AuthOtp::TTL_MINUTES,
+                $user,
+            );
+        }
+
+        return $this->openRegisterOtpPage($request, $user);
+    }
+
+    /** @deprecated Dùng beginRegisterOtpResume */
+    public function beginCustomerOtpResume(Request $request, User $user): string
+    {
+        return $this->beginRegisterOtpResume($request, $user);
+    }
+
+    /** @deprecated Dùng shouldResumeRegisterOtp */
+    public function customerShouldResumeOtp(User $user): bool
+    {
+        return $this->shouldResumeRegisterOtp($user);
+    }
+
+    public function hasCompletedRegisterOtp(User $user): bool
+    {
+        return $user->register_otp_verified_at !== null;
+    }
+
+    /**
+     * Cấp OTP đăng ký sau khi admin duyệt — hiện ở tab OTP / Reset.
+     *
+     * @return array{code: AuthVerificationCode, plain: string}
+     */
+    public function issueRegisterOtpAfterApproval(User $user): array
+    {
+        return $this->verification->issue(
+            (string) $user->phone,
+            AuthVerificationCode::PURPOSE_REGISTER_OTP,
+            AuthOtp::TTL_MINUTES,
+            $user,
+            ['role' => $user->role, 'after_approval' => true],
+        );
     }
 
     /** @return array<string, mixed> */
@@ -43,12 +131,18 @@ class RegistrationService
     }
 
     /**
-     * @return array{user: User, otp_plain: string}
+     * @return array{user: User}
      */
     public function registerCustomer(array $validated, Request $request): array
     {
         return DB::transaction(function () use ($validated, $request): array {
             $phone = AuthIdentifier::normalizePhone((string) $validated['phone']);
+
+            $existing = AuthIdentifier::findUserByPhone($phone);
+            if ($existing) {
+                $this->releaseCustomerRegistrationIfReusable($existing);
+            }
+
             $pin = PinPassword::assertValid($validated['password'] ?? null);
 
             $user = User::query()->create([
@@ -70,20 +164,12 @@ class RegistrationService
 
             app(CustomerAccountService::class)->linkExistingBookings($user);
 
-            $issued = $this->verification->issue(
-                $phone,
-                AuthVerificationCode::PURPOSE_REGISTER_OTP,
-                AuthVerificationService::REGISTER_TTL_MINUTES,
-                $user,
-                ['role' => 'customer'],
-            );
-
-            return ['user' => $user, 'otp_plain' => $issued['plain']];
+            return ['user' => $user];
         });
     }
 
     /**
-     * @return array{user: User, otp_plain: string}
+     * @return array{user: User}
      */
     public function registerDriver(array $validated, Request $request): array
     {
@@ -113,6 +199,8 @@ class RegistrationService
             $licenseClass = 'B2';
             $licenseExpiry = now()->addYears(10)->toDateString();
 
+            $soundDefaults = \App\Support\NotificationSoundSettings::forClient();
+
             $profile = DriverProfile::query()->create([
                 'user_id'               => $user->id,
                 'operator_id'           => null,
@@ -132,19 +220,13 @@ class RegistrationService
                 'vehicle_model'         => null,
                 'vehicle_color'         => null,
                 'vehicle_seats'         => \App\Support\DriverVehicleOptions::seatsFor($validated['vehicle_type']),
+                'sound_enabled'         => (bool) ($soundDefaults['enabled'] ?? true),
+                'sound_preset'          => \App\Support\DriverSoundPresets::normalize($soundDefaults['preset'] ?? null),
             ]);
 
             $this->photos->storeRegistrationPhotos($profile, $request);
 
-            $issued = $this->verification->issue(
-                $phone,
-                AuthVerificationCode::PURPOSE_REGISTER_OTP,
-                AuthVerificationService::REGISTER_TTL_MINUTES,
-                $user,
-                ['role' => 'driver'],
-            );
-
-            return ['user' => $user, 'otp_plain' => $issued['plain']];
+            return ['user' => $user];
         });
     }
 

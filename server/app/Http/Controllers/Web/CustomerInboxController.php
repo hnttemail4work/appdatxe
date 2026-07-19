@@ -15,10 +15,22 @@ class CustomerInboxController extends Controller
         private readonly CustomerInboxService $inbox,
     ) {}
 
+    public function poll()
+    {
+        $userId = (int) Auth::id();
+        $counts = $this->inbox->unreadCounts($userId);
+
+        return response()->json([
+            'ok'     => true,
+            'unread' => $counts,
+        ]);
+    }
+
     public function markRead(Request $request)
     {
         $validated = $request->validate([
-            'category' => ['nullable', 'string', Rule::in([
+            'message_id' => ['nullable', 'integer', 'min:1'],
+            'category'   => ['nullable', 'string', Rule::in([
                 CustomerInboxMessage::CATEGORY_INFO,
                 CustomerInboxMessage::CATEGORY_NOTICE,
                 'all',
@@ -26,12 +38,14 @@ class CustomerInboxController extends Controller
         ]);
 
         $userId = (int) Auth::id();
-        $category = $validated['category'] ?? 'all';
 
-        if ($category === 'all') {
+        if (! empty($validated['message_id'])) {
+            $this->inbox->markMessageRead($userId, (int) $validated['message_id']);
+        } elseif (($validated['category'] ?? null) === 'all') {
+            // Giữ API cũ — UI chính không còn mark cả tab khi mở.
             $this->inbox->markAllRead($userId);
-        } else {
-            $this->inbox->markCategoryRead($userId, $category);
+        } elseif (! empty($validated['category'])) {
+            $this->inbox->markCategoryRead($userId, $validated['category']);
         }
 
         $counts = $this->inbox->unreadCounts($userId);
@@ -45,7 +59,7 @@ class CustomerInboxController extends Controller
 
         return redirect()->route('customer.account', [
             'tab'       => 'inbox',
-            'inbox_tab' => $category === 'all' ? 'notice' : $category,
+            'inbox_tab' => 'notice',
         ]);
     }
 }

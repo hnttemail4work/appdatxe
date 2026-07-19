@@ -119,24 +119,6 @@
         document.dispatchEvent(new CustomEvent('admin-bookings:bulk-controls'));
     }
 
-    function showOperatorAlerts(alerts) {
-        if (!alerts || !alerts.length || !window.AppFlash || typeof window.AppFlash.show !== 'function') {
-            return;
-        }
-
-        alerts.forEach(function (alert) {
-            if (!alert || !alert.message) {
-                return;
-            }
-
-            window.AppFlash.show(alert.message, {
-                variant: 'success',
-                title: alert.title || 'Tài xế đã nhận cuốc',
-                autoDismiss: 12000,
-            });
-        });
-    }
-
     function applySync(data) {
         if (!data || data.list !== currentList()) {
             return;
@@ -144,7 +126,6 @@
 
         updateTabBadges(data.counts);
         updateAlerts(data);
-        showOperatorAlerts(data.alerts);
 
         if (listPanel && typeof data.html === 'string') {
             listPanel.innerHTML = data.html;

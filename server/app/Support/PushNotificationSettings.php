@@ -29,6 +29,7 @@ class PushNotificationSettings
             'driver.movement_deadline'  => true,
             'driver.inbox_info'         => true,
             'driver.inbox_notice'       => true,
+            'driver.nearby_search_nudge' => true,
         ];
     }
 
@@ -144,8 +145,9 @@ class PushNotificationSettings
             'driver.pickup_urgent'      => 'Tài xế — Sát giờ đón, mở app',
             'driver.late_pickup'        => 'Tài xế — Đã đến giờ đón',
             'driver.movement_deadline'  => 'Tài xế — Hạn bấm Đến điểm đón',
-            'driver.inbox_info'         => 'Tài xế — Thông tin (hộp thư)',
-            'driver.inbox_notice'       => 'Tài xế — Thông báo (hộp thư)',
+            'driver.inbox_info'          => 'Tài xế — Thông tin (hộp thư)',
+            'driver.inbox_notice'        => 'Tài xế — Thông báo (hộp thư)',
+            'driver.nearby_search_nudge' => 'Tài xế — Khách gần đang tìm (tắt app)',
         ];
     }
 }

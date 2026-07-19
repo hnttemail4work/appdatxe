@@ -9,7 +9,7 @@
 <form method="POST" action="{{ route('admin.pricingSettings.update') }}" class="console-form mb-5">
     @csrf
     <h3 class="h6 fw-semibold mb-2">Đơn giá km & làm tròn</h3>
-    <p class="text-muted small mb-3">Giá gốc theo km, rồi nhân hệ số loại xe, cộng phụ phí/thu phí, cuối cùng áp % giảm giá referral.</p>
+    <p class="text-muted small mb-3">Giá gốc theo km, rồi nhân hệ số loại xe, cộng phụ phí/thu phí, cuối cùng áp % giảm giá QR (cấu hình ở tab QR).</p>
     <div class="row g-3">
         <div class="col-md-6 col-lg-3">
             <label class="form-label">Giá / km (≤ 100 km)</label>
@@ -56,30 +56,6 @@
                 <span class="input-group-text">%</span>
             </div>
         </div>
-        <div class="col-md-6 col-lg-3">
-            <label class="form-label">Hoa hồng GT mặc định (%)</label>
-            <div class="input-group">
-                <input type="number" name="referral_commission_first" class="form-control" min="0" max="100" step="0.1"
-                       value="{{ old('referral_commission_first', $pricingSettings['referral_commission_first']) }}" required>
-                <span class="input-group-text">%</span>
-            </div>
-        </div>
-        <div class="col-md-6 col-lg-3">
-            <label class="form-label">Giảm giá QR mã vé (%)</label>
-            <div class="input-group">
-                <input type="number" name="booking_qr_discount" class="form-control" min="0" max="100" step="0.1"
-                       value="{{ old('booking_qr_discount', $pricingSettings['booking_qr_discount']) }}" required>
-                <span class="input-group-text">%</span>
-            </div>
-        </div>
-        <div class="col-md-6 col-lg-3">
-            <label class="form-label">Giảm giá QR mời TX (%)</label>
-            <div class="input-group">
-                <input type="number" name="driver_invite_qr_discount" class="form-control" min="0" max="100" step="0.1"
-                       value="{{ old('driver_invite_qr_discount', $pricingSettings['driver_invite_qr_discount']) }}" required>
-                <span class="input-group-text">%</span>
-            </div>
-        </div>
         <div class="col-md-6 col-lg-3 d-flex align-items-end">
             <div class="form-check mb-2">
                 <input class="form-check-input" type="checkbox" name="rain_surcharge_enabled" value="1" id="rain-surcharge-enabled"
@@ -87,11 +63,8 @@
                 <label class="form-check-label" for="rain-surcharge-enabled">Bật phụ phí mưa</label>
             </div>
         </div>
-        <div class="col-md-6 col-lg-3 d-flex align-items-end">
-            <div class="form-check mb-2">
-                <input class="form-check-input" type="checkbox" name="sync_driver_invite_discount" value="1" id="sync-driver-invite">
-                <label class="form-check-label" for="sync-driver-invite">Đồng bộ % QR TX hiện có</label>
-            </div>
+        <div class="col-12">
+            <p class="text-muted small mb-0">Rule giảm giá QR / hoa hồng GT → tab <a href="{{ route('admin.referrals', ['tab' => 'rules']) }}">QR → Rule giảm giá</a>.</p>
         </div>
     </div>
     <button class="btn btn-primary px-4 fw-semibold mt-3">Lưu cấu hình gốc</button>

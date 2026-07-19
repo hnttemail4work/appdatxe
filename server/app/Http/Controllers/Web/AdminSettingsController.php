@@ -9,6 +9,7 @@ use App\Http\Requests\Admin\UpdateBankSettingsRequest;
 use App\Http\Requests\Admin\UpdateBookingPageSettingsRequest;
 use App\Http\Requests\Admin\UpdateBrandingSettingsRequest;
 use App\Http\Requests\Admin\UpdatePushSettingsRequest;
+use App\Http\Requests\Admin\UpdateSoundSettingsRequest;
 use App\Http\Requests\Admin\UpdateRouteDistancesRequest;
 use App\Models\PlatformSetting;
 use App\Models\TripRoute;
@@ -18,6 +19,8 @@ use App\Support\BookingPageSettings;
 use App\Support\LocationCatalog;
 use App\Support\PlatformPaymentInfo;
 use App\Support\ProvinceCenters;
+use App\Support\DriverSoundPresets;
+use App\Support\NotificationSoundSettings;
 use App\Support\PushNotificationSettings;
 use App\Support\RouteDistanceCatalog;
 use Illuminate\Support\Facades\Auth;
@@ -46,6 +49,8 @@ class AdminSettingsController extends Controller
         $pushSettings = PushNotificationSettings::forAdmin();
         $pushEventLabels = PushNotificationSettings::eventLabels();
         $pushVapidReady = PushNotificationSettings::vapidKeys() !== null;
+        $soundSettings = NotificationSoundSettings::forAdmin();
+        $soundOptions = DriverSoundPresets::options();
         $pricing = AdminPricingController::dashboardPayload();
 
         return view('admin.dashboard', array_merge(compact(
@@ -56,6 +61,8 @@ class AdminSettingsController extends Controller
             'pushSettings',
             'pushEventLabels',
             'pushVapidReady',
+            'soundSettings',
+            'soundOptions',
         ), $pricing));
     }
 
@@ -158,6 +165,17 @@ class AdminSettingsController extends Controller
 
         return redirect()->route('admin.dashboard', ['tab' => 'appearance'])
             ->with('success', 'Đã lưu cài đặt thông báo đẩy.');
+    }
+
+    public function updateSoundSettings(UpdateSoundSettingsRequest $request)
+    {
+        NotificationSoundSettings::saveFromAdmin([
+            'enabled' => $request->boolean('enabled'),
+            'preset'  => $request->validated('preset'),
+        ]);
+
+        return redirect()->route('admin.dashboard', ['tab' => 'appearance'])
+            ->with('success', 'Đã lưu âm thanh mặc định thông báo / hộp thư.');
     }
 
     public function updateRouteDistances(UpdateRouteDistancesRequest $request)

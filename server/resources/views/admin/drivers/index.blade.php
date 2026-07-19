@@ -7,6 +7,7 @@ $filter = $filter ?? 'all';
 $pendingCount = $pendingCount ?? 0;
 $statsMonth = $statsMonth ?? now()->startOfMonth();
 $driverMonthlyStats = $driverMonthlyStats ?? [];
+$showBulkDelete = $filter === 'rejected' && auth()->user()?->role === 'admin';
 $driverTabs = [
     ['key' => 'all', 'label' => 'Danh sách', 'href' => route('admin.drivers')],
     ['key' => 'pending', 'label' => 'Chờ duyệt', 'href' => route('admin.drivers', ['filter' => 'pending']), 'badge' => $pendingCount, 'hot' => $pendingCount > 0],
@@ -60,17 +61,49 @@ $driverTabs = [
                    aria-label="Chọn tháng">
         </form>
         @endif
-        <div class="driver-mgmt-panel pt-3">
+        <div class="driver-mgmt-panel pt-3" @if($showBulkDelete) data-bulk-root data-bulk-form="driver-bulk-delete" data-bulk-btn="driver-bulk-delete-btn" data-bulk-item=".driver-bulk-select" @endif>
     <div class="console-panel-head driver-mgmt-head px-0 pt-0">
         <div class="console-panel-head-accent">
             <h2>Danh sách</h2>
         </div>
+        @if($showBulkDelete)
+        <div class="d-flex justify-content-end mb-2">
+            <button type="submit"
+                    form="driver-bulk-delete"
+                    id="driver-bulk-delete-btn"
+                    class="btn btn-outline-danger btn-sm"
+                    disabled>
+                Xóa hồ sơ đã chọn
+            </button>
+        </div>
+        @error('ids')
+            <div class="alert alert-danger py-2 small">{{ $message }}</div>
+        @enderror
+        <form id="driver-bulk-delete"
+              method="POST"
+              action="{{ route('admin.drivers.bulkDestroy') }}"
+              data-confirm="Xóa các hồ sơ tài xế đã từ chối đã chọn? Không hoàn tác."
+              data-confirm-title="Xóa hồ sơ từ chối"
+              data-confirm-variant="danger"
+              data-confirm-ok="Xóa">
+            @csrf
+            @method('DELETE')
+        </form>
+        @endif
     </div>
     <div class="console-panel-body flush">
         <div class="console-table-wrap">
             <table class="console-table driver-mgmt-table">
                 <thead>
                     <tr>
+                        @if($showBulkDelete)
+                        <th class="col-check" scope="col">
+                            <input type="checkbox"
+                                   class="form-check-input"
+                                   data-bulk-select-all
+                                   aria-label="Chọn tất cả trên trang này">
+                        </th>
+                        @endif
                         @if($filter === 'all')
                             <th>Mã TX</th>
                         @else
@@ -102,6 +135,16 @@ $driverTabs = [
                         $requestCount = $d->pendingChangeRequest ? 1 : 0;
                     @endphp
                     <tr class="{{ $d->isPendingApproval() ? 'driver-row-pending' : '' }}">
+                        @if($showBulkDelete)
+                        <td class="col-check">
+                            <input type="checkbox"
+                                   class="form-check-input driver-bulk-select"
+                                   name="ids[]"
+                                   value="{{ $d->id }}"
+                                   form="driver-bulk-delete"
+                                   aria-label="Chọn tài xế #{{ $d->id }}">
+                        </td>
+                        @endif
                         <td>
                             @if($filter === 'all')
                                 @if($d->driver_code)
@@ -124,6 +167,9 @@ $driverTabs = [
                                     <div class="cell-primary">{{ $d->user->name }}</div>
                                     @if($d->driver_code)
                                         <div class="driver-meta-code">{{ $d->driver_code }}</div>
+                                    @endif
+                                    @if($filter === 'rejected' && $d->rejection_reason)
+                                        <div class="text-muted small mt-1">{{ \Illuminate\Support\Str::limit($d->rejection_reason, 80) }}</div>
                                     @endif
                                 </div>
                             </div>
@@ -225,9 +271,11 @@ $driverTabs = [
 @endsection
 
 @push('styles')
-<link rel="stylesheet" href="{{ asset('css/driver-mgmt.css') }}">
+<link rel="stylesheet" href="{{ asset('css/driver-mgmt.css') }}?v={{ filemtime(public_path('css/driver-mgmt.css')) }}">
 @endpush
 
+@if($showBulkDelete)
 @push('scripts')
-<script src="{{ asset('js/driver-approval-actions.js') }}"></script>
+<script src="{{ asset('js/admin-bulk-select.js') }}?v={{ filemtime(public_path('js/admin-bulk-select.js')) }}"></script>
 @endpush
+@endif

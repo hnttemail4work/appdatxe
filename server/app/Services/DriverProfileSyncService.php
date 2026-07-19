@@ -177,10 +177,15 @@ class DriverProfileSyncService
                 : null;
         }
 
-        foreach (['address', 'id_number', 'date_of_birth', 'gender'] as $field) {
+        foreach (['id_number', 'date_of_birth', 'gender'] as $field) {
             if (array_key_exists($field, $validated) && $validated[$field] !== null && $validated[$field] !== '') {
                 $userData[$field] = $validated[$field];
             }
+        }
+
+        if (array_key_exists('address', $validated)) {
+            $address = trim((string) ($validated['address'] ?? ''));
+            $userData['address'] = $address !== '' ? $address : null;
         }
 
         if ($userData !== []) {

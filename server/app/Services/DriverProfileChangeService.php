@@ -66,12 +66,16 @@ class DriverProfileChangeService
 
             $payload = $this->changedPayload($profile, $validated);
 
-            return DriverProfileChangeRequest::query()->create([
+            $change = DriverProfileChangeRequest::query()->create([
                 'driver_profile_id' => $profile->id,
                 'status'            => DriverProfileChangeRequest::STATUS_PENDING,
                 'payload'           => $payload ?: null,
                 'photos'            => $photos ?: null,
             ]);
+
+            app(AdminOperatorAlertService::class)->recordDriverProfileChangePending($change);
+
+            return $change;
         });
     }
 

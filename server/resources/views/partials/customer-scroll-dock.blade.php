@@ -8,7 +8,8 @@
 @endphp
 <nav class="customer-scroll-dock"
      style="--customer-dock-tabs: {{ $dockTabs }};"
-     aria-label="Menu khách">
+     aria-label="Menu khách"
+     @if($isCustomer) data-inbox-unread="{{ (int) $inboxUnreadTotal }}" @endif>
     <a href="{{ route('home') }}"
        class="customer-scroll-dock-item {{ request()->routeIs('home') ? 'is-active' : '' }}"
        aria-label="Trang chủ"
@@ -17,7 +18,7 @@
         <span class="customer-scroll-dock-icon" aria-hidden="true">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
         </span>
-        <span class="customer-scroll-dock-label">Trang</span>
+        <span class="customer-scroll-dock-label">Trang chủ</span>
     </a>
 
     <a href="{{ route('booking.trips') }}"
@@ -35,7 +36,8 @@
         <a href="{{ route('customer.account', ['tab' => 'inbox']) }}"
            class="customer-scroll-dock-item {{ request()->routeIs('customer.account') && request('tab') === 'inbox' ? 'is-active' : '' }}"
            aria-label="Hộp thư"
-           title="Hộp thư">
+           title="Hộp thư"
+           data-inbox-unread="{{ (int) $inboxUnreadTotal }}">
             <span class="customer-scroll-dock-icon" aria-hidden="true">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
             </span>
@@ -71,7 +73,7 @@
         @endif
     @else
         <a href="{{ route('login') }}"
-           class="customer-scroll-dock-item {{ request()->routeIs('login', 'customer.register', 'auth.biometric') ? 'is-active' : '' }}"
+           class="customer-scroll-dock-item {{ request()->routeIs('login', 'customer.register') ? 'is-active' : '' }}"
            aria-label="Đăng nhập"
            title="Đăng nhập">
             <span class="customer-scroll-dock-icon" aria-hidden="true">

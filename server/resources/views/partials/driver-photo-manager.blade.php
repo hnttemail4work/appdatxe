@@ -47,29 +47,23 @@
     </div>
 
     <h6 class="text-muted mb-3">Giấy tờ</h6>
-    <div class="row g-2 row-cols-2 row-cols-md-3 row-cols-xl-5">
-        @foreach($singleSlots as $field => $meta)
-            @php $photoUrl = $driver->photoUrl($field); @endphp
-            <div class="col">
-                <div class="photo-slot {{ $photoUrl ? 'has-photo' : 'is-empty' }}">
-                    <div class="photo-slot-header">
-                        <span class="photo-slot-title">{{ $meta['label'] }}</span>
-                    </div>
-                    <div class="photo-slot-preview photo-ratio-{{ $meta['ratio'] }}">
-                        @if($photoUrl)
-                            <a href="{{ $photoUrl }}" data-photo-zoom
-                               class="photo-thumb photo-current-link" title="Bấm để phóng to">
-                                <img src="{{ $photoUrl }}" alt="{{ $meta['label'] }}" class="photo-current-img">
-                                <span class="photo-zoom-hint">Phóng to</span>
-                            </a>
-                        @else
-                            <div class="photo-placeholder"><span>—</span></div>
-                        @endif
-                    </div>
-                </div>
-            </div>
-        @endforeach
-    </div>
+    @php
+        $viewSlots = [];
+        foreach ($singleSlots as $field => $meta) {
+            $viewSlots[] = [
+                'field' => $field,
+                'label' => $meta['label'],
+                'url' => $driver->photoUrl($field),
+                'ratio' => $meta['ratio'],
+            ];
+        }
+    @endphp
+    @include('partials.photo-upload-slots', [
+        'viewOnly' => true,
+        'wrapManager' => false,
+        'columnsClass' => 'row g-2 row-cols-2 row-cols-md-3 row-cols-xl-5',
+        'slots' => $viewSlots,
+    ])
 @else
     <section class="photo-vehicles-section photo-vehicles-block mb-4">
         <h6 class="mb-2">
@@ -146,47 +140,23 @@
 
         <h6 class="text-muted mb-3">Giấy tờ</h6>
 
-        <div class="row g-2 row-cols-2 row-cols-md-3 row-cols-xl-5">
-            @foreach($singleSlots as $field => $meta)
-                @php
-                    $photoUrl = $driver->photoUrl($field);
-                    $hasStoredPath = filled($driver->{$field});
-                    $isLocked = $lockIdentityPhotos && ($meta['identity'] ?? false);
-                @endphp
-                <div class="col">
-                    <div class="photo-slot {{ $photoUrl ? 'has-photo' : 'is-empty' }} {{ $isLocked ? 'is-locked' : '' }}" data-photo-slot="{{ $field }}">
-                        <div class="photo-slot-header">
-                            <span class="photo-slot-title">{{ $meta['label'] }}</span>
-                        </div>
-                        <div class="photo-slot-preview photo-ratio-{{ $meta['ratio'] }}">
-                            @if($photoUrl)
-                                <a href="{{ $photoUrl }}" data-photo-zoom
-                                   class="photo-thumb photo-current-link" data-current-wrap
-                                   title="Bấm để phóng to">
-                                    <img src="{{ $photoUrl }}" alt="{{ $meta['label'] }}" class="photo-current-img" data-current-img>
-                                    <span class="photo-zoom-hint">Phóng to</span>
-                                </a>
-                            @else
-                                <div class="photo-placeholder" data-current-wrap><span>—</span></div>
-                            @endif
-                            <div class="photo-thumb photo-new-wrap d-none" data-new-wrap>
-                                <img src="" alt="Ảnh mới" class="photo-new-img" data-new-img>
-                                <span class="photo-new-label">Mới</span>
-                            </div>
-                        </div>
-                        @unless($isLocked)
-                            <label class="photo-file-label">
-                                <span data-file-label>{{ $hasStoredPath ? 'Thay ảnh' : 'Chọn ảnh' }}</span>
-                                <input type="file" name="{{ $field }}" accept="image/jpeg,image/png,image/webp"
-                                       class="photo-file-input @error($field) is-invalid @enderror"
-                                       data-photo-input="{{ $field }}">
-                            </label>
-                            @error($field)<div class="invalid-feedback d-block small">{{ $message }}</div>@enderror
-                        @endunless
-                    </div>
-                </div>
-            @endforeach
-        </div>
+        @php
+            $editSlots = [];
+            foreach ($singleSlots as $field => $meta) {
+                $editSlots[] = [
+                    'field' => $field,
+                    'label' => $meta['label'],
+                    'url' => $driver->photoUrl($field),
+                    'ratio' => $meta['ratio'],
+                    'locked' => $lockIdentityPhotos && ($meta['identity'] ?? false),
+                ];
+            }
+        @endphp
+        @include('partials.photo-upload-slots', [
+            'wrapManager' => false,
+            'columnsClass' => 'row g-2 row-cols-2 row-cols-md-3 row-cols-xl-5',
+            'slots' => $editSlots,
+        ])
 
         @error('photos')<div class="alert alert-danger py-2 mt-3 mb-0">{{ $message }}</div>@enderror
 
@@ -197,6 +167,6 @@
 
 @once
     @push('scripts')
-    <script src="{{ asset('js/driver-photo-manager.js') }}?v={{ filemtime(public_path('js/driver-photo-manager.js')) }}"></script>
+    <script src="{{ asset('js/photo-upload-slots.js') }}?v={{ filemtime(public_path('js/photo-upload-slots.js')) }}"></script>
     @endpush
 @endonce

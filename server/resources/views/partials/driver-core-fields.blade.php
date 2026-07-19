@@ -17,12 +17,17 @@
     $vehicleType = old('vehicle_type', $profile->vehicle_type ?? '');
     $bankOptions = BankOptions::names();
     $currentBank = old('bank_name', $profile->bank_name ?? '');
+    $isRegister = ($context ?? '') === 'register';
+    $lockedPhone = $isRegister
+        ? trim((string) old('phone', $prefillPhone ?? request('phone', $user->phone ?? '')))
+        : '';
+    $phoneLocked = $isRegister && $lockedPhone !== '';
 @endphp
 
 @if(in_array('account', $sections, true) || in_array('contact', $sections, true))
 <div class="register-section" data-field-section="account">
     <div class="row g-2">
-        @if(($context ?? '') !== 'register')
+        @if(! $isRegister)
         <div class="col-12">
             <label class="form-label">Họ tên {!! $star('name') !!}</label>
             <input type="text" name="name" value="{{ old('name', $user->name ?? '') }}"
@@ -32,6 +37,9 @@
             <div class="invalid-feedback" data-client-feedback="name">@error('name'){{ $message }}@enderror</div>
         </div>
         @endif
+        @if($phoneLocked)
+            <input type="hidden" name="phone" value="{{ $lockedPhone }}" data-wizard-skip-validity="1">
+        @else
         <div class="col-12">
             <label class="form-label">SĐT {!! $star('phone') !!}</label>
             <input type="tel" name="phone" value="{{ old('phone', $user->phone ?? '') }}"
@@ -40,7 +48,8 @@
                    placeholder="09xxxxxxxx">
             <div class="invalid-feedback" data-client-feedback="phone">@error('phone'){{ $message }}@enderror</div>
         </div>
-        @if(($context ?? '') !== 'register')
+        @endif
+        @if(! $isRegister)
         <div class="col-12 col-sm-6">
             <label class="form-label">PIN 6 số {!! $star('password') !!}</label>
             <input type="password" name="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6"

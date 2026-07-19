@@ -20,7 +20,8 @@ class DriverInboxController extends Controller
     public function markRead(Request $request)
     {
         $validated = $request->validate([
-            'category' => ['nullable', 'string', Rule::in([
+            'message_id' => ['nullable', 'integer', 'min:1'],
+            'category'   => ['nullable', 'string', Rule::in([
                 DriverInboxMessage::CATEGORY_INFO,
                 DriverInboxMessage::CATEGORY_NOTICE,
                 'all',
@@ -28,12 +29,13 @@ class DriverInboxController extends Controller
         ]);
 
         $userId = (int) Auth::id();
-        $category = $validated['category'] ?? 'all';
 
-        if ($category === 'all') {
+        if (! empty($validated['message_id'])) {
+            $this->inbox->markMessageRead($userId, (int) $validated['message_id']);
+        } elseif (($validated['category'] ?? null) === 'all') {
             $this->inbox->markAllRead($userId);
-        } else {
-            $this->inbox->markCategoryRead($userId, $category);
+        } elseif (! empty($validated['category'])) {
+            $this->inbox->markCategoryRead($userId, $validated['category']);
         }
 
         $counts = $this->tripChat->mergeInboxUnread(
@@ -50,7 +52,7 @@ class DriverInboxController extends Controller
 
         return redirect()->route('driver.dashboard', [
             'tab'       => 'inbox',
-            'inbox_tab' => $category === 'all' ? 'notice' : $category,
+            'inbox_tab' => 'notice',
         ]);
     }
 }

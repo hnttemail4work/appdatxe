@@ -52,9 +52,8 @@ class CustomerRegistrationTest extends TestCase
             'terms'                 => '1',
         ]);
 
-        $response->assertRedirect(route('auth.register.otp'));
+        $response->assertRedirect(route('login'));
         $response->assertSessionHas('success');
-        $response->assertSessionHas('pending_register_otp.user_id');
 
         $user = User::query()->where('phone', '0909123456')->first();
         $this->assertNotNull($user);
@@ -65,16 +64,16 @@ class CustomerRegistrationTest extends TestCase
         $this->assertTrue(Hash::check('135790', $user->password));
         $this->assertNotEmpty($user->photo_id_card);
 
-        $this->assertTrue(
+        $this->assertFalse(
             AuthVerificationCode::query()
                 ->where('phone', '0909123456')
                 ->where('purpose', AuthVerificationCode::PURPOSE_REGISTER_OTP)
-                ->where('status', AuthVerificationCode::STATUS_ACTIVE)
-                ->exists()
+                ->exists(),
+            'OTP chỉ cấp sau khi admin duyệt'
         );
     }
 
-    public function test_register_customer_service_stores_documents_and_issues_otp(): void
+    public function test_register_customer_service_stores_documents_without_otp(): void
     {
         Storage::fake('public');
 
@@ -97,7 +96,7 @@ class CustomerRegistrationTest extends TestCase
 
         $user = $result['user'];
         $this->assertSame(User::APPROVAL_PENDING, $user->approval_status);
-        $this->assertMatchesRegularExpression('/^\d{6}$/', $result['otp_plain']);
+        $this->assertArrayNotHasKey('otp_plain', $result);
         Storage::disk('public')->assertExists($user->photo_id_card);
         $this->assertSame(
             ['photo_id_card', 'photo_id_card_back'],

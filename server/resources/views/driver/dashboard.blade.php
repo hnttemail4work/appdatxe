@@ -55,10 +55,12 @@
         : null;
 @endphp
 
+@php $inboxUnreadBoot = (int) (($inboxUnread['total'] ?? 0)); @endphp
 <div class="driver-page driver-page--map {{ $driverPaused ? 'is-duty-off' : 'is-duty-on' }}"
      data-driver-tabs
      data-driver-tabs-active="{{ $driverDefaultTab }}"
      data-driver-tabs-base="{{ route('driver.dashboard') }}"
+     data-driver-inbox-unread="{{ $inboxUnreadBoot }}"
      data-must-change-password="{{ $mustChangePassword ? '1' : '0' }}"
      data-wait-progress-root>
 @if($profile)
@@ -308,13 +310,20 @@
 
 @push('scripts')
 @php
+    $platformSound = \App\Support\NotificationSoundSettings::forClient();
     $driverAppSettings = [
         'locale' => ($profile->locale ?? null) ?: 'vi',
         'sound_enabled' => (bool) ($profile->sound_enabled ?? true),
-        'sound_preset' => \App\Support\DriverSoundPresets::normalize($profile->sound_preset ?? null),
+        // Tone TX; nếu chưa chọn thì lấy mặc định admin.
+        'sound_preset' => \App\Support\DriverSoundPresets::normalize(
+            filled($profile->sound_preset ?? null)
+                ? $profile->sound_preset
+                : ($platformSound['preset'] ?? null)
+        ),
     ];
 @endphp
 <script>
+window.__appSoundSettings = @json($platformSound);
 window.__driverLocationUrl = @json(route('driver.location.update'));
 window.__driverAvailabilityUrl = @json(route('driver.availability.update'));
 @include('partials.geocode-client-config')
@@ -351,6 +360,7 @@ window.__driverAppSettings = @json($driverAppSettings);
 <script src="{{ asset('js/swipe-to-action.js') }}?v={{ filemtime(public_path('js/swipe-to-action.js')) }}"></script>
 <script src="{{ asset('js/driver-workflow-actions.js') }}?v={{ filemtime(public_path('js/driver-workflow-actions.js')) }}"></script>
 <script src="{{ asset('js/wait-progress.js') }}?v={{ filemtime(public_path('js/wait-progress.js')) }}"></script>
+<script src="{{ asset('js/photo-upload-slots.js') }}?v={{ filemtime(public_path('js/photo-upload-slots.js')) }}"></script>
 <script src="{{ asset('js/driver-shell.js') }}?v={{ filemtime(public_path('js/driver-shell.js')) }}"></script>
 <script src="{{ asset('js/driver-tabs.js') }}?v={{ filemtime(public_path('js/driver-tabs.js')) }}"></script>
 <script src="{{ asset('js/driver-inbox.js') }}?v={{ filemtime(public_path('js/driver-inbox.js')) }}"></script>

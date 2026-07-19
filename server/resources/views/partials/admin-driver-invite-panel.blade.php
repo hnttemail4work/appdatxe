@@ -42,8 +42,8 @@
                 <form method="POST" action="{{ route('admin.drivers.invite.update', $driver) }}" class="driver-qr-card__form">
                     @csrf
                     @method('PATCH')
-                    @if($inviteFrom === 'referrals')
-                        <input type="hidden" name="from" value="referrals">
+                    @if(in_array($inviteFrom, ['qr', 'referrals'], true))
+                        <input type="hidden" name="from" value="qr">
                     @endif
                     <label class="form-label" for="driver-invite-discount">% giảm giá</label>
                     <div class="d-flex flex-wrap gap-2 align-items-start">
@@ -77,23 +77,23 @@
                 @if($inviteReferral->isSuspended())
                     <form method="POST" action="{{ route('admin.drivers.invite.restore', $driver) }}" id="driver-invite-restore-form" class="d-none">
                         @csrf
-                        @if($inviteFrom === 'referrals')
-                            <input type="hidden" name="from" value="referrals">
+                        @if(in_array($inviteFrom, ['qr', 'referrals'], true))
+                            <input type="hidden" name="from" value="qr">
                         @endif
                     </form>
                 @else
                     <form method="POST" action="{{ route('admin.drivers.invite.suspend', $driver) }}" id="driver-invite-suspend-form" class="d-none">
                         @csrf
-                        @if($inviteFrom === 'referrals')
-                            <input type="hidden" name="from" value="referrals">
+                        @if(in_array($inviteFrom, ['qr', 'referrals'], true))
+                            <input type="hidden" name="from" value="qr">
                         @endif
                     </form>
                 @endif
             @else
                 <form method="POST" action="{{ route('admin.drivers.invite.store', $driver) }}" class="driver-qr-card__form">
                     @csrf
-                    @if($inviteFrom === 'referrals')
-                        <input type="hidden" name="from" value="referrals">
+                    @if(in_array($inviteFrom, ['qr', 'referrals'], true))
+                        <input type="hidden" name="from" value="qr">
                     @endif
                     <label class="form-label" for="driver-invite-discount">% giảm giá</label>
                     <div class="d-flex flex-wrap gap-2 align-items-start">

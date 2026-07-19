@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\AuthAudience;
 use Illuminate\Auth\Middleware\Authenticate as Middleware;
 use Illuminate\Http\Request;
 
@@ -15,6 +16,10 @@ class Authenticate extends Middleware
 
         if ($request->is('admin') || $request->is('admin/*')) {
             return route('admin.login');
+        }
+
+        if ($request->is('driver') || $request->is('driver/*') || AuthAudience::isDriver($request)) {
+            return route('driver.login');
         }
 
         return route('login');

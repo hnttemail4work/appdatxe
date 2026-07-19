@@ -7,8 +7,10 @@ use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterDriverRequest;
 use App\Models\DriverProfile;
 use App\Services\AuthLoginGuard;
+use App\Services\CustomerAccountService;
 use App\Services\DriverAvailabilityService;
 use App\Services\RegistrationService;
+use App\Support\AuthAudience;
 use App\Support\AuthIdentifier;
 use App\Support\RoleDashboard;
 use App\Support\WebAuth;
@@ -22,12 +24,21 @@ class AuthController extends Controller
         private readonly RegistrationService $registration,
         private readonly DriverAvailabilityService $driverAvailability,
         private readonly AuthLoginGuard $loginGuard,
+        private readonly CustomerAccountService $customerAccounts,
     ) {
     }
 
-    public function showLogin()
+    public function showLogin(Request $request)
     {
-        return view('auth.login');
+        $forDriver = $this->isDriverAuthAudience($request);
+        AuthAudience::rememberDriver($request, $forDriver);
+        $phone = AuthIdentifier::normalizePhone((string) $request->query('phone', ''));
+
+        return view('auth.login', [
+            'forDriver'   => $forDriver,
+            'loginAction' => route('login'),
+            'phone'       => $phone !== '' ? $phone : null,
+        ]);
     }
 
     /** JSON: missing | inactive | active — dùng trước bước nhập PIN. */
@@ -35,6 +46,10 @@ class AuthController extends Controller
     {
         $raw = (string) $request->input('phone', '');
         $phone = AuthIdentifier::normalizePhone($raw);
+        $forDriver = $this->isDriverAuthAudience($request);
+        AuthAudience::rememberDriver($request, $forDriver);
+        $role = $forDriver ? 'driver' : 'customer';
+        $registerRoute = $forDriver ? 'driver.register' : 'customer.register';
 
         if ($phone === '' || ! preg_match('/^0\d{8,10}$/', preg_replace('/\D/', '', $raw))) {
             return response()->json([
@@ -43,19 +58,62 @@ class AuthController extends Controller
             ], 422);
         }
 
-        $user = AuthIdentifier::findUserByPhone($phone);
+        // KH chỉ dò user customer; TX chỉ dò user driver (có hồ sơ TX).
+        $user = AuthIdentifier::findUserByPhoneAndRole($phone, $role);
 
         if (! $user) {
             return response()->json([
                 'status'       => 'missing',
-                'register_url' => route('customer.register', ['phone' => $phone]),
+                'register_url' => route($registerRoute, ['phone' => $phone]),
             ]);
         }
 
-        if ($user->role === 'admin') {
+        // Hết hạn chờ duyệt → chuyển "Đã từ chối" (admin vẫn thấy), rồi mở đăng ký lại.
+        if ($user->isCustomer() && $user->isCustomerApprovalPending() && $user->isCustomerPendingApprovalExpired()) {
+            app(\App\Services\PendingApprovalExpiryService::class)->expireCustomer($user);
+            $user->refresh();
+        }
+        if ($user->isCustomer() && $user->isCustomerApprovalRejected()) {
             return response()->json([
-                'status'  => 'inactive',
-                'message' => 'Tài khoản quản trị vui lòng đăng nhập tại /admin/login.',
+                'status'       => 'missing',
+                'register_url' => route($registerRoute, ['phone' => $phone]),
+                'message'      => \App\Support\AuthOtp::pendingExpiredLoginMessage(),
+            ]);
+        }
+
+        // Chờ duyệt — giữ trang OTP (không đẩy về login).
+        if ($user->isAwaitingApprovalForRegisterOtp()) {
+            return response()->json([
+                'status'  => 'needs_otp',
+                'otp_url' => $this->registration->openRegisterOtpPage($request, $user),
+            ]);
+        }
+        if ($user->role === 'driver') {
+            $profile = DriverProfile::query()->where('user_id', $user->id)->first();
+            if (! $profile) {
+                return response()->json([
+                    'status'       => 'missing',
+                    'register_url' => route('driver.register', ['phone' => $phone]),
+                ]);
+            }
+            if ($profile->isPendingApproval() && $profile->isPendingApprovalExpired()) {
+                app(\App\Services\PendingApprovalExpiryService::class)->expireDriver($profile);
+                $profile->refresh();
+            }
+            if ($profile->isRejected()) {
+                return response()->json([
+                    'status'       => 'missing',
+                    'register_url' => route('driver.register', ['phone' => $phone]),
+                    'message'      => \App\Support\AuthOtp::pendingExpiredLoginMessage(),
+                ]);
+            }
+        }
+
+        // Đã duyệt → OTP lần đầu (admin lấy mã ở tab OTP / Reset).
+        if ($this->registration->shouldResumeRegisterOtp($user)) {
+            return response()->json([
+                'status'  => 'needs_otp',
+                'otp_url' => $this->registration->beginRegisterOtpResume($request, $user),
             ]);
         }
 
@@ -76,18 +134,55 @@ class AuthController extends Controller
     {
         $validated = $request->validated();
         $phone = AuthIdentifier::normalizePhone($validated['phone']);
-        $user = AuthIdentifier::findUserByPhone($phone);
+        $forDriver = $this->isDriverAuthAudience($request);
+        AuthAudience::rememberDriver($request, $forDriver);
+        $role = $forDriver ? 'driver' : 'customer';
+        $registerRoute = $forDriver ? 'driver.register' : 'customer.register';
+        $user = AuthIdentifier::findUserByPhoneAndRole($phone, $role);
 
         if (! $user) {
             return redirect()
-                ->route('customer.register', ['phone' => $phone])
+                ->route($registerRoute, ['phone' => $phone])
                 ->with('info', 'Số điện thoại chưa có tài khoản. Vui lòng đăng ký.');
         }
 
-        if ($user->role === 'admin') {
-            return back()
-                ->withErrors(['login' => 'Tài khoản quản trị vui lòng đăng nhập tại /admin/login.'])
-                ->withInput($request->only('phone'));
+        if ($user->isCustomer() && $user->isCustomerApprovalPending() && $user->isCustomerPendingApprovalExpired()) {
+            app(\App\Services\PendingApprovalExpiryService::class)->expireCustomer($user);
+            $user->refresh();
+        }
+        if ($user->isCustomer() && $user->isCustomerApprovalRejected()) {
+            return redirect()
+                ->route($registerRoute, ['phone' => $phone])
+                ->with('info', \App\Support\AuthOtp::pendingExpiredLoginMessage());
+        }
+
+        if ($user->isAwaitingApprovalForRegisterOtp()) {
+            return redirect($this->registration->openRegisterOtpPage($request, $user))
+                ->with('info', \App\Support\AuthOtp::awaitingApprovalOtpNotice($user->isCustomer()));
+        }
+        if ($user->role === 'driver') {
+            $driverProfile = DriverProfile::query()->where('user_id', $user->id)->first();
+            if (! $driverProfile) {
+                return redirect()
+                    ->route('driver.register', ['phone' => $phone])
+                    ->with('info', 'Số điện thoại chưa có tài khoản tài xế. Vui lòng đăng ký.');
+            }
+            if ($driverProfile->isPendingApproval() && $driverProfile->isPendingApprovalExpired()) {
+                app(\App\Services\PendingApprovalExpiryService::class)->expireDriver($driverProfile);
+                $driverProfile->refresh();
+            }
+            if ($driverProfile->isRejected()) {
+                return redirect()
+                    ->route('driver.register', ['phone' => $phone])
+                    ->with('info', \App\Support\AuthOtp::pendingExpiredLoginMessage());
+            }
+        }
+
+        if ($this->registration->shouldResumeRegisterOtp($user)) {
+            $otpUrl = $this->registration->beginRegisterOtpResume($request, $user);
+
+            return redirect($otpUrl)
+                ->with('success', \App\Support\AuthOtp::adminProvideHint());
         }
 
         if ($block = $user->loginBlockMessage()) {
@@ -141,19 +236,12 @@ class AuthController extends Controller
 
         $this->loginGuard->clearFailures($user);
 
-        if ($user->role === 'customer') {
-            $request->session()->regenerate();
-            $intended = $request->session()->pull('url.intended');
-            $request->session()->put('pending_auth.user_id', $user->id);
-            if ($intended) {
-                $request->session()->put('pending_auth.intended', $intended);
-            }
-
-            return redirect()->route('auth.biometric');
-        }
-
         Auth::login($user, $request->boolean('remember'));
         $request->session()->regenerate();
+
+        if ($user->role === 'customer') {
+            $this->customerAccounts->linkExistingBookings($user);
+        }
 
         if ($user->role === 'driver') {
             $profile = DriverProfile::query()->where('user_id', $user->id)->first();
@@ -180,12 +268,17 @@ class AuthController extends Controller
 
     public function showRegister(Request $request)
     {
-        $fromDriver = $request->query('from') === 'driver';
+        $fromDriver = $this->isDriverAuthAudience($request);
+        AuthAudience::rememberDriver($request, $fromDriver);
         $returnUrl = $fromDriver ? route('driver.dashboard') : null;
+        $prefillPhone = AuthIdentifier::normalizePhone((string) (
+            $request->query('phone', '') ?: old('phone', '')
+        ));
 
         return view('auth.register', [
-            'returnUrl' => $returnUrl,
-            'fromDriver' => $fromDriver,
+            'returnUrl'    => $returnUrl,
+            'fromDriver'   => $fromDriver,
+            'prefillPhone' => $prefillPhone !== '' ? $prefillPhone : null,
         ]);
     }
 
@@ -200,11 +293,21 @@ class AuthController extends Controller
         }
 
         $user = $result['user'];
-        $request->session()->put('pending_register_otp.user_id', $user->id);
+        AuthAudience::rememberFromUser($request, $user);
+        $profile = DriverProfile::query()->where('user_id', $user->id)->first();
+        if ($profile) {
+            app(\App\Services\AdminOperatorAlertService::class)->recordDriverRegistrationPending($profile);
+        }
+        app(\App\Services\UserInboxService::class)->notifyRegistrationSuccess($user);
 
-        return redirect()
-            ->route('auth.register.otp')
-            ->with('success', 'Đã tạo tài khoản. Nhập mã OTP 6 số (admin sẽ cung cấp, hiệu lực 5 phút).');
+        return redirect($this->registration->openRegisterOtpPage($request, $user))
+            ->with('success', \App\Support\AuthOtp::registerSuccess());
+    }
+
+    /** Login/register TX vs khách — cùng form login, khác URL đăng ký khi SĐT chưa có. */
+    private function isDriverAuthAudience(Request $request): bool
+    {
+        return AuthAudience::isDriver($request);
     }
 
     public function logout(Request $request)

@@ -26,7 +26,7 @@ class DriverTripRequestService
     /** Tài xế tự động được mời — Đặt Lịch (> 30 phút tới giờ đón). */
     public const SCHEDULED_ASSIGN_ACCEPT_MINUTES = 10;
 
-    /** Đặt Ngay: sau mốc này treo admin (không hủy đơn). */
+    /** Đặt Ngay: sau mốc này system hủy chuyến (driver_search_timeout). */
     public const ON_DEMAND_SEARCH_MAX_MINUTES = 10;
 
     /** Đặt Lịch: ngừng tìm TX khi còn X phút tới giờ đón — không có TX thì hủy. */
@@ -116,12 +116,9 @@ class DriverTripRequestService
 
                 if ($driverUnavailable) {
                     $request->update([
-                        // TODO (Fix Stuck Offer UI): Request quá hạn nhưng TX đã off-duty/không còn hợp lệ thì vẫn phải thu hồi UI ngay.
                         'status'       => 'cancelled',
-                        // TODO (Fix Stuck Offer UI): Ghi responded_at để cooldown/reassign hoạt động đúng sau khi thu hồi offer.
                         'responded_at' => now(),
                     ]);
-                    // TODO (Fix Stuck Offer UI): Bắn tín hiệu thu hồi offer để app tài xế ẩn popup/card hết hạn ngay.
                     $this->notifyDriverOfferRevoked($request->fresh(['schedule.route']));
 
                     try {
@@ -138,12 +135,9 @@ class DriverTripRequestService
 
                 $wasAutoAssign = $this->wasAutoAssignRequest($request);
                 $request->update([
-                    // TODO (Fix Stuck Offer UI): Pending quá hạn phải chuyển đúng sang expired để không còn hiện trên app TX cũ.
                     'status'       => 'expired',
-                    // TODO (Fix Stuck Offer UI): Lưu thời điểm timeout để cooldown/reassign dùng lại ngay.
                     'responded_at' => now(),
                 ]);
-                // TODO (Fix Stuck Offer UI): Bắn tín hiệu thu hồi offer để app tài xế đang mở tự ẩn card hết hạn.
                 $this->notifyDriverOfferRevoked($request->fresh(['schedule.route']));
                 if ($wasAutoAssign) {
                     $this->recordAutoAssignMiss((int) $request->driver_id);
@@ -160,11 +154,11 @@ class DriverTripRequestService
                 }
 
                 app(DriverCuocOfferHideService::class)->recordMissedOffer($request->fresh());
-                // TODO (Fix Flow): xoay TX khác — không gọi flagOperatorInviteExpired ở đây.
                 $this->tryRotateAfterAssignMiss($booking, (int) $request->driver_id);
             });
 
         $this->hangOverdueDriverSearches();
+        $this->nudgeOfflineDriversForOpenSearches();
 
         app(BookingWorkflowService::class)->expireScheduledSearchWithoutDriver();
         app(BookingWorkflowService::class)->expirePastPickupWithoutDriver();
@@ -177,7 +171,29 @@ class DriverTripRequestService
         app(DriverLatePickupService::class)->processPickupPushReminders();
     }
 
-    // TODO (Fix Flow): Hết hạn nhận cuốc auto-assign theo loại cuốc (1 phút / 10 phút).
+    /** Khách đang tìm TX — nhắc tài xế gần đã tắt app (tối đa 1 lần / phiên offline). */
+    private function nudgeOfflineDriversForOpenSearches(): void
+    {
+        $system = app(DriverSystemNotificationService::class);
+
+        Booking::query()
+            ->whereNotIn('booking_status', ['cancelled', 'rejected'])
+            ->whereNotIn('trip_status', ['completed', 'cancelled'])
+            ->whereHas('schedule', fn ($q) => $q->whereNull('driver_id'))
+            ->whereNotNull('pickup_lat')
+            ->whereNotNull('pickup_lng')
+            ->orderBy('id')
+            ->limit(40)
+            ->get()
+            ->each(function (Booking $booking) use ($system): void {
+                try {
+                    $system->notifyNearbySearchForBooking($booking);
+                } catch (\Throwable) {
+                }
+            });
+    }
+
+    /** Hết hạn nhận cuốc auto-assign: Đặt Ngay 1 phút / Đặt Lịch 10 phút. */
     public function acceptExpiresAtForBooking(Booking $booking): \Carbon\Carbon
     {
         $minutes = $booking->isOnDemandPickup()
@@ -187,7 +203,7 @@ class DriverTripRequestService
         return now()->addMinutes($minutes);
     }
 
-    // TODO (Fix Flow): Đặt Lịch — đã tới mốc T-30 mà vẫn chưa có TX.
+    /** Đặt Lịch: đã tới mốc T-30 mà vẫn chưa có TX. */
     public function hasReachedScheduledSearchStop(Booking $booking): bool
     {
         $booking->loadMissing('schedule');
@@ -211,7 +227,7 @@ class DriverTripRequestService
         );
     }
 
-    // TODO (Fix Flow): Sau timeout/từ chối — thử TX tiếp theo hoặc treo/hủy theo deadline tìm kiếm.
+    /** Sau timeout/từ chối — thử TX tiếp theo hoặc hủy theo deadline tìm kiếm. */
     private function tryRotateAfterAssignMiss(Booking $booking, int $formerDriverUserId = 0): void
     {
         $booking = $booking->fresh(['schedule.route', 'schedule.vehicle', 'schedule.template']);
@@ -363,6 +379,13 @@ class DriverTripRequestService
 
         if (! $this->proximity->pickBest($schedule, $booking, $exclude, true)) {
             $this->shouldDeferDriverSearchForLocation($schedule, $booking);
+        }
+
+        // TX gần điểm đón nhưng đã tắt app — nudge 1 lần / phiên offline.
+        try {
+            app(DriverSystemNotificationService::class)
+                ->notifyNearbySearchForBooking($booking->fresh(['schedule']));
+        } catch (\Throwable) {
         }
 
         return null;
@@ -731,7 +754,7 @@ class DriverTripRequestService
                 $contactPhone,
             );
 
-            // TODO (Fix Flow): Gửi cuốc chờ TX xác nhận — không gán thẳng schedule.driver_id.
+            // Offer chờ TX xác nhận — chưa gán schedule.driver_id.
             return DriverTripRequest::query()->create([
                 'schedule_id'   => $schedule->id,
                 'contact_phone' => $contactPhone,
@@ -1451,7 +1474,7 @@ class DriverTripRequestService
         $this->availability->markOffDuty($profile);
     }
 
-    // TODO (Fix Stuck Offer UI): Đồng bộ realtime khi offer không còn hiệu lực để app TX thu hồi card ngay.
+    /** Push + client_event để tab TX đang mở thu hồi card ngay. */
     private function notifyDriverOfferRevoked(DriverTripRequest $request): void
     {
         try {

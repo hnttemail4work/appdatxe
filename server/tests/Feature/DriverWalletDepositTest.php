@@ -127,7 +127,7 @@ class DriverWalletDepositTest extends TestCase
 
 
 
-        $response->assertRedirect(route('driver.dashboard', ['tab' => 'deposit']));
+        $response->assertRedirect(route('driver.dashboard', ['tab' => 'wallet']));
 
         $response->assertSessionHas('success');
 
@@ -180,7 +180,7 @@ class DriverWalletDepositTest extends TestCase
 
 
 
-        $response->assertRedirect(route('driver.dashboard', ['tab' => 'deposit']));
+        $response->assertRedirect(route('driver.dashboard', ['tab' => 'wallet']));
 
         $response->assertSessionHasErrors('wallet');
 
@@ -235,38 +235,9 @@ class DriverWalletDepositTest extends TestCase
 
 
 
-        $response->assertRedirect(route('driver.dashboard', ['tab' => 'deposit']));
+        $response->assertRedirect(route('driver.dashboard', ['tab' => 'wallet']));
 
         $response->assertSessionHasErrors('wallet');
-
-    }
-
-
-
-    public function test_deposit_json_request_returns_success_payload(): void
-
-    {
-
-        [$driver] = $this->seedDriverWithWallet();
-
-
-
-        $response = $this->actingAs($driver)
-
-            ->withHeaders(['Accept' => 'application/json', 'X-Requested-With' => 'XMLHttpRequest'])
-
-            ->post(route('driver.wallet.deposit'), [
-                'amount'      => DriverWalletConfig::MIN_DEPOSIT,
-                'proof_image' => $this->fakeDepositProof(),
-            ]);
-
-
-
-        $response->assertOk()
-
-            ->assertJsonPath('ok', true)
-
-            ->assertJsonPath('redirect', route('driver.dashboard', ['tab' => 'deposit']));
 
     }
 

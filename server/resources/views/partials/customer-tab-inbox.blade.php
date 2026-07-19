@@ -39,9 +39,12 @@
         @else
             <ul class="customer-inbox-list">
                 @foreach($noticeMessages as $msg)
-                    <li class="customer-inbox-list__item {{ $msg->isRead() ? '' : 'is-unread' }}">
-                        <strong>{{ $msg->title }}</strong>
-                        <p class="mb-1">{{ $msg->body }}</p>
+                    <li class="customer-inbox-list__item {{ $msg->isRead() ? '' : 'is-unread' }}"
+                        data-inbox-message-id="{{ $msg->id }}"
+                        role="button"
+                        tabindex="0">
+                        <strong class="customer-inbox-list__title">{{ $msg->title }}</strong>
+                        <p class="customer-inbox-list__body mb-1">{{ $msg->body }}</p>
                     </li>
                 @endforeach
             </ul>
@@ -56,9 +59,12 @@
         @else
             <ul class="customer-inbox-list">
                 @foreach($infoMessages as $msg)
-                    <li class="customer-inbox-list__item {{ $msg->isRead() ? '' : 'is-unread' }}">
-                        <strong>{{ $msg->title }}</strong>
-                        <p class="mb-1">{{ $msg->body }}</p>
+                    <li class="customer-inbox-list__item {{ $msg->isRead() ? '' : 'is-unread' }}"
+                        data-inbox-message-id="{{ $msg->id }}"
+                        role="button"
+                        tabindex="0">
+                        <strong class="customer-inbox-list__title">{{ $msg->title }}</strong>
+                        <p class="customer-inbox-list__body mb-1">{{ $msg->body }}</p>
                     </li>
                 @endforeach
             </ul>

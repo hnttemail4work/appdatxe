@@ -77,6 +77,25 @@ class DriverInboxService
             ->update(['read_at' => now()]);
     }
 
+    /** Đánh dấu 1 tin đã đọc (chỉ khi user bấm vào dòng). */
+    public function markMessageRead(int $userId, int $messageId): bool
+    {
+        $message = DriverInboxMessage::query()
+            ->where('user_id', $userId)
+            ->whereKey($messageId)
+            ->first();
+
+        if (! $message) {
+            return false;
+        }
+
+        if ($message->read_at === null) {
+            $message->forceFill(['read_at' => now()])->save();
+        }
+
+        return true;
+    }
+
     /**
      * @param  array<string, mixed>  $meta
      */
@@ -114,6 +133,11 @@ class DriverInboxService
             $url ??= '/driver/dashboard?tab=inbox';
             $dedupKey ??= 'driver-inbox:' . $message->id;
 
+            $unreadTotal = app(TripChatService::class)->mergeInboxUnread(
+                $this->unreadCounts($userId),
+                $userId,
+            )['total'] ?? $this->unreadCount($userId);
+
             $this->push->notifyDriverUser(
                 $userId,
                 $eventKey,
@@ -121,7 +145,11 @@ class DriverInboxService
                 $body,
                 $url,
                 $dedupKey,
-                ['inbox_id' => $message->id, 'inbox_category' => $category],
+                [
+                    'inbox_id'       => $message->id,
+                    'inbox_category' => $category,
+                    'unread_total'   => (int) $unreadTotal,
+                ],
             );
         }
 
@@ -172,8 +200,8 @@ class DriverInboxService
         $this->notify(
             $userId,
             DriverInboxMessage::CATEGORY_NOTICE,
-            'Yêu cầu cập nhật',
-            'Yêu cầu cập nhật thông tin của bạn đã được duyệt và áp dụng vào hồ sơ.',
+            'Cập nhật hồ sơ',
+            'Cập nhật hồ sơ thành công. Yêu cầu của bạn đã được duyệt và áp dụng.',
             ['type' => 'profile_change_approved', 'driver_profile_id' => $profile->id],
             dedupKey: 'driver-inbox:profile-approved:' . $profile->id . ':' . now()->format('YmdHi'),
         );
@@ -194,7 +222,7 @@ class DriverInboxService
         $this->notify(
             $userId,
             DriverInboxMessage::CATEGORY_NOTICE,
-            'Yêu cầu cập nhật',
+            'Cập nhật hồ sơ',
             $body,
             ['type' => 'profile_change_rejected', 'driver_profile_id' => $profile->id],
             dedupKey: 'driver-inbox:profile-rejected:' . $profile->id . ':' . now()->format('YmdHi'),
@@ -212,8 +240,8 @@ class DriverInboxService
         $this->notify(
             $userId,
             DriverInboxMessage::CATEGORY_NOTICE,
-            'Đã cấp QR giảm giá khách',
-            'Bạn đã được cấp QR giảm ' . $label . '%. Mã QR mới đã hiện trong mục Mời bạn bè.',
+            'Cấp QR giảm giá',
+            'Cấp QR giảm giá thành công: khách giảm ' . $label . '%. Mã QR mới đã hiện trong mục Mời bạn bè.',
             [
                 'type' => 'promo_granted',
                 'customer_discount_percent' => $discountPercent,
@@ -278,8 +306,8 @@ class DriverInboxService
         $this->notify(
             $userId,
             DriverInboxMessage::CATEGORY_NOTICE,
-            'Đã nhận mã hoa hồng giới thiệu',
-            'Bạn được gán mã ' . $referral->code . ' (hoa hồng ' . $percent
+            'Nhận mã hoa hồng',
+            'Nhận mã hoa hồng thành công: mã ' . $referral->code . ' (hoa hồng ' . $percent
                 . '%). Mã QR mới đã hiện trong mục Mời bạn bè.',
             [
                 'type' => 'commission_code_assigned',

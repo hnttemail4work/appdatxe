@@ -19,11 +19,6 @@
     var chatTitle = panel.querySelector('[data-inbox-chat-title]');
     var chatBadge = panel.querySelector('[data-inbox-chat-badge]');
 
-    function activeCategory() {
-        var btn = panel.querySelector('.driver-inbox-tabs__btn.is-active');
-        return (btn && btn.getAttribute('data-inbox-tab')) || 'notice';
-    }
-
     function setHidden(el, hidden) {
         if (!el) return;
         el.hidden = hidden;
@@ -49,36 +44,9 @@
         }
         var total = Number(unread.total) || 0;
         var chat = Number(unread.chat) || 0;
-        var bell = document.querySelector('[data-inbox-bell-badge]');
-        if (bell) {
-            if (total > 0) {
-                bell.hidden = false;
-                bell.textContent = total > 99 ? '99+' : String(total);
-                var dot = document.querySelector('.driver-map-chrome__bell-dot');
-                if (dot) {
-                    dot.remove();
-                }
-            } else {
-                bell.hidden = true;
-            }
-        }
 
-        var dockBtn = document.querySelector('.driver-dock-item[data-driver-tab="inbox"]');
-        if (dockBtn) {
-            var badge = dockBtn.querySelector('.driver-dock-badge');
-            if (total < 1) {
-                if (badge) {
-                    badge.remove();
-                }
-            } else {
-                if (!badge) {
-                    badge = document.createElement('span');
-                    badge.className = 'driver-dock-badge is-hot';
-                    dockBtn.appendChild(badge);
-                }
-                badge.textContent = String(total);
-                badge.classList.add('is-hot');
-            }
+        if (window.AppInboxBadge && window.AppInboxBadge.apply) {
+            window.AppInboxBadge.apply(unread);
         }
 
         if (chatBadge) {
@@ -113,8 +81,8 @@
         });
     }
 
-    function markRead(category) {
-        if (!markUrl) {
+    function markMessageRead(messageId, itemEl) {
+        if (!markUrl || !messageId) {
             return;
         }
         fetch(markUrl, {
@@ -126,22 +94,15 @@
                 'X-Requested-With': 'XMLHttpRequest',
             },
             credentials: 'same-origin',
-            body: JSON.stringify({ category: category || 'all' }),
+            body: JSON.stringify({ message_id: Number(messageId) }),
         })
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (data) {
-                if (!data || !data.unread) {
-                    return;
+                if (itemEl) {
+                    itemEl.classList.remove('is-unread');
                 }
-                updateBadges(data.unread);
-                if (category && category !== 'all') {
-                    panel.querySelectorAll('[data-inbox-pane="' + category + '"] .is-unread').forEach(function (el) {
-                        el.classList.remove('is-unread');
-                    });
-                } else {
-                    panel.querySelectorAll('[data-inbox-system] .is-unread').forEach(function (el) {
-                        el.classList.remove('is-unread');
-                    });
+                if (data && data.unread) {
+                    updateBadges(data.unread);
                 }
             })
             .catch(function () {});
@@ -248,9 +209,26 @@
 
     panel.querySelectorAll('[data-inbox-tab]').forEach(function (btn) {
         btn.addEventListener('click', function () {
-            var category = btn.getAttribute('data-inbox-tab') || 'notice';
-            showPane(category);
-            markRead(category);
+            showPane(btn.getAttribute('data-inbox-tab') || 'notice');
+        });
+    });
+
+    panel.querySelectorAll('[data-inbox-message-id]').forEach(function (item) {
+        function openItem() {
+            var id = item.getAttribute('data-inbox-message-id');
+            if (!id) {
+                return;
+            }
+            if (item.classList.contains('is-unread')) {
+                markMessageRead(id, item);
+            }
+        }
+        item.addEventListener('click', openItem);
+        item.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                openItem();
+            }
         });
     });
 
@@ -275,9 +253,7 @@
     document.addEventListener('drivertab:changed', function (event) {
         var tab = (event.detail && event.detail.tab) || '';
         if (tab === 'inbox') {
-            if (view === 'system') {
-                markRead(activeCategory());
-            }
+            // Không auto-đọc cả tab — chỉ đọc khi bấm từng dòng.
         } else if (view !== 'system') {
             showSystemView();
         }
@@ -285,7 +261,7 @@
 
     window.DriverInbox = {
         updateBadges: updateBadges,
-        markRead: markRead,
+        markMessageRead: markMessageRead,
         showPane: showPane,
         showChatsView: showChatsView,
         openChat: function (source) {
@@ -304,9 +280,4 @@
             openThread(source);
         },
     };
-
-    var page = document.querySelector('.driver-page[data-driver-tabs]');
-    if (page && page.dataset.driverTabsActive === 'inbox') {
-        markRead(activeCategory());
-    }
 })();

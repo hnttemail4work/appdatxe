@@ -9,7 +9,7 @@ class AuthMessages
 
     public const PHONE_INVALID = 'Số điện thoại không đúng định dạng Việt Nam.';
 
-    public const PHONE_TAKEN = 'Số điện thoại này đã được đăng ký. Vui lòng dùng số khác hoặc đăng nhập bằng số đó.';
+    public const PHONE_TAKEN = 'Số điện thoại đã được đăng ký';
 
     public const PHONE_NOT_FOUND = 'Không tìm thấy tài khoản với số điện thoại này.';
 
@@ -23,7 +23,9 @@ class AuthMessages
 
     public const CODE_DIGITS = 'Mã phải gồm đúng 6 chữ số.';
 
-    public const TERMS_ACCEPTED = 'Vui lòng đồng ý với điều khoản.';
+    public const CODE_INVALID = 'Mã OTP không đúng.';
+
+    public const TERMS_ACCEPTED = 'Vui lòng đồng ý điều khoản sử dụng để tiếp tục.';
 
     public const EMAIL_INVALID = 'Email không đúng định dạng.';
 

@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\BulkDeleteRejectedRegistrationsRequest;
 use App\Models\CustomerProfileChangeRequest;
 use App\Models\User;
 use App\Services\CustomerDocumentService;
 use App\Services\CustomerProfileChangeService;
+use App\Services\PendingApprovalExpiryService;
 use App\Support\AdminIdentityApproval;
 use App\Support\DriverDefaultPassword;
 use App\Support\PageList;
@@ -21,11 +23,14 @@ class AdminUserController extends Controller
     public function __construct(
         private readonly CustomerProfileChangeService $profileChanges,
         private readonly CustomerDocumentService $documents,
+        private readonly PendingApprovalExpiryService $pendingExpiry,
     ) {
     }
 
     public function index(Request $request)
     {
+        $this->pendingExpiry->expireStaleCustomers();
+
         $status = (string) $request->query('status', 'all');
         $q = trim((string) $request->query('q', ''));
 
@@ -46,6 +51,9 @@ class AdminUserController extends Controller
         } elseif ($status === 'suspended') {
             $query->where('approval_status', User::APPROVAL_APPROVED)
                 ->whereIn('status', ['suspended', 'inactive']);
+        } else {
+            // Danh sách chính: chỉ khách đã duyệt (chờ duyệt / từ chối ở tab riêng).
+            $query->where('approval_status', User::APPROVAL_APPROVED);
         }
 
         if ($q !== '') {
@@ -58,10 +66,17 @@ class AdminUserController extends Controller
 
         $users = $query->paginate(PageList::PER_PAGE)->withQueryString();
 
+        // Tab Chờ duyệt: luôn hiện tổng số đang chờ (không phụ thuộc đã xem hay chưa).
+        $pendingCount = (int) User::query()
+            ->where('role', 'customer')
+            ->where('approval_status', User::APPROVAL_PENDING)
+            ->count();
+
         return view('admin.users.index', [
-            'users'  => $users,
-            'status' => $status,
-            'q'      => $q,
+            'users'        => $users,
+            'status'       => $status,
+            'q'            => $q,
+            'pendingCount' => $pendingCount,
         ]);
     }
 
@@ -166,8 +181,14 @@ class AdminUserController extends Controller
                 AdminIdentityApproval::rules(),
                 AdminIdentityApproval::messages(),
             );
+            $photoUpdates = AdminIdentityApproval::storeAdjustedIdCardPhotos(
+                $request,
+                $user,
+                'customers/'.$user->id,
+            );
             $user->update(array_merge(
                 AdminIdentityApproval::userAttributes($validated),
+                $photoUpdates,
                 [
                     'status'              => 'active',
                     'approval_status'     => User::APPROVAL_APPROVED,
@@ -176,9 +197,13 @@ class AdminUserController extends Controller
                 ],
             ));
 
+            $fresh = $user->fresh();
+            app(\App\Services\RegistrationService::class)->issueRegisterOtpAfterApproval($fresh);
+            app(\App\Services\UserInboxService::class)->notifyRegistrationApproved($fresh);
+
             return redirect()
-                ->route('admin.users.edit', $user)
-                ->with('success', 'Đã duyệt khách và lưu thông tin từ CCCD.');
+                ->route('admin.authCodes')
+                ->with('success', \App\Support\AuthOtp::approvedOtpReady());
         }
 
         if ($user->approval_status !== User::APPROVAL_APPROVED) {
@@ -269,6 +294,36 @@ class AdminUserController extends Controller
                 'name'     => $user->preferredDisplayName(),
                 'phone'    => $user->phone,
             ]);
+    }
+
+    /** Xóa nhiều hồ sơ khách đã từ chối (kể cả hết hạn chờ duyệt). */
+    public function bulkDestroy(BulkDeleteRejectedRegistrationsRequest $request)
+    {
+        if (Auth::user()?->role !== 'admin') {
+            abort(403);
+        }
+
+        $ids = array_map('intval', $request->validated('ids'));
+        $deleted = 0;
+
+        User::query()
+            ->where('role', 'customer')
+            ->whereIn('id', $ids)
+            ->where('approval_status', User::APPROVAL_REJECTED)
+            ->orderBy('id')
+            ->each(function (User $user) use (&$deleted): void {
+                if ($this->pendingExpiry->deleteCustomerRegistration($user)) {
+                    $deleted++;
+                }
+            });
+
+        if ($deleted < 1) {
+            return back()->withErrors(['ids' => 'Không có hồ sơ từ chối hợp lệ để xóa.']);
+        }
+
+        return redirect()
+            ->route('admin.users', ['status' => 'rejected'])
+            ->with('success', "Đã xóa {$deleted} hồ sơ khách bị từ chối.");
     }
 
     private function assertManagedCustomer(?User $user): void

@@ -17,7 +17,17 @@ $bookingRestoreModal = $errors->any() && old('capacity')
 $platformHotlinePhone = (string) config('app.contact_phone');
 @endphp
 
-<div class="customer-page booking-page" id="booking-page-top">
+@php
+    $authCustomer = auth()->user();
+    $pendingApprovalDeadline = $authCustomer?->isCustomerApprovalPending()
+        ? $authCustomer->customerApprovalDeadlineAt()
+        : null;
+@endphp
+<div class="customer-page booking-page" id="booking-page-top"
+     @if($pendingApprovalDeadline)
+     data-pending-approval-deadline="{{ $pendingApprovalDeadline->toIso8601String() }}"
+     data-pending-approval-login-url="{{ route('login') }}"
+     @endif>
     <div id="booking-browser-guard-banner" class="booking-flash booking-flash-warning mb-3 @if(($browserCancelCount ?? 0) < \App\Services\BookingBrowserGuardService::CANCEL_BLOCK_LIMIT) d-none @endif" role="alert">
         <div class="booking-flash-icon" aria-hidden="true">!</div>
         <div class="booking-flash-body">
@@ -91,4 +101,23 @@ $platformHotlinePhone = (string) config('app.contact_phone');
     'appliedReferral' => $appliedReferral ?? null,
     'browserCancelCount' => $browserCancelCount ?? 0,
 ])
+<script>
+(function () {
+  var page = document.getElementById('booking-page-top');
+  if (!page) return;
+  var deadline = page.getAttribute('data-pending-approval-deadline');
+  var loginUrl = page.getAttribute('data-pending-approval-login-url') || '/login';
+  if (!deadline) return;
+  var ends = Date.parse(deadline);
+  if (!ends || isNaN(ends)) return;
+  var wait = ends - Date.now();
+  if (wait <= 0) {
+    window.location.replace(loginUrl);
+    return;
+  }
+  window.setTimeout(function () {
+    window.location.replace(loginUrl);
+  }, wait);
+})();
+</script>
 @endpush

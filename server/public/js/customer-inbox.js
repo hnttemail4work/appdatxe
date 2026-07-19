@@ -1,5 +1,6 @@
 /**
- * Hộp thư khách — Thông báo / Thông tin + đánh dấu đã đọc.
+ * Hộp thư khách — chỉ đánh dấu đã đọc khi bấm từng dòng.
+ * Đồng bộ badge tab / dock / icon app.
  */
 (function () {
     var panel = document.querySelector('[data-customer-inbox-panel]');
@@ -10,11 +11,6 @@
     var markUrl = panel.getAttribute('data-inbox-mark-url') || '';
     var csrf = document.querySelector('meta[name="csrf-token"]');
     var csrfToken = csrf ? csrf.getAttribute('content') : '';
-
-    function activeCategory() {
-        var btn = panel.querySelector('.customer-inbox-tabs__btn.is-active');
-        return (btn && btn.getAttribute('data-inbox-tab')) || 'notice';
-    }
 
     function showPane(category) {
         panel.querySelectorAll('.customer-inbox-tabs__btn').forEach(function (btn) {
@@ -33,22 +29,9 @@
         if (!unread) {
             return;
         }
-        var total = Number(unread.total) || 0;
-        var tabLink = document.querySelector('.customer-account-tab[data-customer-tab="inbox"]');
-        if (tabLink) {
-            var navBadge = tabLink.querySelector('.customer-account-tab__badge');
-            if (total < 1) {
-                if (navBadge) {
-                    navBadge.remove();
-                }
-            } else {
-                if (!navBadge) {
-                    navBadge = document.createElement('span');
-                    navBadge.className = 'customer-account-tab__badge';
-                    tabLink.appendChild(navBadge);
-                }
-                navBadge.textContent = total > 99 ? '99+' : String(total);
-            }
+
+        if (window.AppInboxBadge && window.AppInboxBadge.apply) {
+            window.AppInboxBadge.apply(unread);
         }
 
         ['notice', 'info'].forEach(function (cat) {
@@ -71,17 +54,10 @@
             }
             tabBadge.textContent = String(count);
         });
-
-        panel.querySelectorAll('.customer-inbox-list__item.is-unread').forEach(function (item) {
-            var pane = item.closest('[data-inbox-pane]');
-            if (pane && pane.getAttribute('data-inbox-pane') === activeCategory()) {
-                item.classList.remove('is-unread');
-            }
-        });
     }
 
-    function markRead(category) {
-        if (!markUrl) {
+    function markMessageRead(messageId, itemEl) {
+        if (!markUrl || !messageId) {
             return;
         }
         fetch(markUrl, {
@@ -92,11 +68,14 @@
                 'X-CSRF-TOKEN': csrfToken,
                 'X-Requested-With': 'XMLHttpRequest',
             },
-            body: JSON.stringify({ category: category || 'all' }),
+            body: JSON.stringify({ message_id: Number(messageId) }),
             credentials: 'same-origin',
         })
             .then(function (res) { return res.ok ? res.json() : null; })
             .then(function (data) {
+                if (itemEl) {
+                    itemEl.classList.remove('is-unread');
+                }
                 if (data && data.unread) {
                     updateBadges(data.unread);
                 }
@@ -106,28 +85,31 @@
 
     panel.querySelectorAll('.customer-inbox-tabs__btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
-            var category = btn.getAttribute('data-inbox-tab') || 'notice';
-            showPane(category);
-            markRead(category);
+            showPane(btn.getAttribute('data-inbox-tab') || 'notice');
         });
     });
 
-    function inboxPanelActive() {
-        var section = panel.closest('[data-customer-panel="inbox"]');
-        return !section || section.classList.contains('is-active');
-    }
-
-    document.querySelectorAll('.customer-account-tab[data-customer-tab="inbox"]').forEach(function (tab) {
-        tab.addEventListener('click', function () {
-            window.setTimeout(function () {
-                if (inboxPanelActive()) {
-                    markRead(activeCategory());
-                }
-            }, 0);
+    panel.querySelectorAll('[data-inbox-message-id]').forEach(function (item) {
+        function openItem() {
+            var id = item.getAttribute('data-inbox-message-id');
+            if (!id) {
+                return;
+            }
+            if (item.classList.contains('is-unread')) {
+                markMessageRead(id, item);
+            }
+        }
+        item.addEventListener('click', openItem);
+        item.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                openItem();
+            }
         });
     });
 
-    if (inboxPanelActive()) {
-        markRead(activeCategory());
-    }
+    window.CustomerInbox = {
+        updateBadges: updateBadges,
+        markMessageRead: markMessageRead,
+    };
 })();

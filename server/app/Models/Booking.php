@@ -297,7 +297,7 @@ class Booking extends Model
         return is_string($this->pickup_time) && trim($this->pickup_time) !== '';
     }
 
-    // TODO (Fix Flow): Đặt Ngay = không đặt sau, hoặc còn ≤ 30 phút tới giờ đón.
+    /** Phút tới giờ đón vận hành (âm nếu đã qua). Dùng cho isOnDemandPickup ≤ 30p. */
     public function minutesUntilOperationalPickup(): ?int
     {
         $pickupAt = $this->operationalPickupAt();

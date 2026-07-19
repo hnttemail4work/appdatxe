@@ -38,7 +38,6 @@ class CustomerAccountService
             'photo_id_card_back_url' => $user->idCardPhotoUrl('photo_id_card_back'),
             'approval_status'      => $user->approval_status,
             'avatar_initial'       => $user->avatarInitial(),
-            'has_biometric'        => app(WebAuthnService::class)->userHasCredentials($user),
             'trip_count'           => $this->bookingsQuery($user)->count(),
             'review_count'         => $this->reviewsQuery($user)->count(),
         ];

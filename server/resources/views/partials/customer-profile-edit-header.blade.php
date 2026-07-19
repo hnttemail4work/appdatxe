@@ -25,11 +25,7 @@
         </div>
     </div>
 
-    @if($user->isCustomerApprovalPending())
-        <div class="driver-edit-actions">
-            @include('partials.customer-approval-actions', ['user' => $user, 'compact' => true])
-        </div>
-    @elseif($user->approval_status === \App\Models\User::APPROVAL_REJECTED)
+    @if($user->approval_status === \App\Models\User::APPROVAL_REJECTED)
         <div class="driver-edit-actions">
             <span class="text-danger small fw-semibold d-block">Hồ sơ đã từ chối — khách không đặt xe được.</span>
         </div>

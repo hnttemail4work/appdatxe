@@ -26,7 +26,7 @@ class StoreReferrerRequest extends FormRequest
     protected function failedValidation(Validator $validator): void
     {
         throw new HttpResponseException(
-            redirect()->route('admin.referrals')->withErrors($validator)->withInput(),
+            redirect()->route('admin.referrals', ['tab' => 'codes'])->withErrors($validator)->withInput(),
         );
     }
 }

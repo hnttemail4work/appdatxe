@@ -34,9 +34,9 @@
 <html lang="vi" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    @if(request()->routeIs('home', 'about', 'booking.trips', 'customer.account', 'driver.dashboard', 'register', 'login', 'customer.register', 'auth.biometric', 'auth.register.otp', 'password.reset.*'))
+    @if(request()->routeIs('home', 'about', 'booking.trips', 'customer.account', 'driver.dashboard', 'register', 'login', 'driver.login', 'driver.register', 'customer.register', 'auth.register.otp', 'password.reset.*'))
     <script src="{{ asset('js/mobile-app-chrome.js') }}?v={{ filemtime(public_path('js/mobile-app-chrome.js')) }}"></script>
     @endif
     <title>{{ $appBrandName }}</title>
@@ -113,16 +113,7 @@
     @stack('styles')
 </head>
 @php
-    $isAuthChrome = request()->routeIs(
-        'login',
-        'register',
-        'customer.register',
-        'auth.biometric',
-        'auth.register.otp',
-        'password.reset.request',
-        'password.reset.code',
-        'password.reset.pin',
-    );
+    $isAuthChrome = \App\Support\AuthAudience::isAuthScreen();
 @endphp
 <body class="app-shell @if($isAuthChrome) app-shell--auth @endif @if($isAuthChrome || request()->routeIs('home', 'about', 'booking.trips', 'customer.account', 'driver.dashboard')) app-shell--mobile-app @endif">
 <nav class="navbar navbar-expand-lg app-navbar navbar-dark">
@@ -169,10 +160,10 @@
                            href="{{ route('login') }}">Đăng nhập</a>
                     </li>
                     @endif
-                    @if(! request()->routeIs('register'))
+                    @if(! request()->routeIs('driver.register', 'register'))
                     <li class="nav-item ms-1">
-                        <a class="btn btn-sm btn-outline-primary {{ request()->routeIs('register') ? 'active' : '' }}"
-                           href="{{ route('register') }}">Đăng ký tài xế</a>
+                        <a class="btn btn-sm btn-outline-primary {{ request()->routeIs('driver.register', 'register') ? 'active' : '' }}"
+                           href="{{ route('driver.register') }}">Đăng ký tài xế</a>
                     </li>
                     @endif
                 @endauth
@@ -261,11 +252,9 @@
             });
             return;
         }
-        if (isHome && payload.variant === 'success' && window.AppFlash && window.AppFlash.show) {
-            window.AppFlash.show(payload.text, {
-                title: payload.title,
-                variant: payload.variant,
-            });
+        // Trang chủ: không hiện flash “chờ duyệt / xác minh” — chỉ hộp thư.
+        if (isHome) {
+            return;
         }
     }
 
@@ -374,6 +363,21 @@
     }
 })();
 </script>
+<script>
+window.__appSoundSettings = @json(\App\Support\NotificationSoundSettings::forClient());
+@auth
+@if(auth()->user()->role === 'customer')
+window.__customerInboxPollUrl = @json(route('customer.inbox.poll'));
+@endif
+@endauth
+</script>
+<script src="{{ asset('js/app-sounds.js') }}?v={{ filemtime(public_path('js/app-sounds.js')) }}"></script>
+<script src="{{ asset('js/app-inbox-badge.js') }}?v={{ filemtime(public_path('js/app-inbox-badge.js')) }}"></script>
+@auth
+@if(auth()->user()->role === 'customer' && request()->routeIs('home', 'booking.trips', 'about', 'customer.account'))
+<script src="{{ asset('js/customer-inbox-poll.js') }}?v={{ filemtime(public_path('js/customer-inbox-poll.js')) }}"></script>
+@endif
+@endauth
 @stack('scripts')
 @if($pwaEnabled)
 <script>

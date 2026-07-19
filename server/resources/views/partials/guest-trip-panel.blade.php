@@ -49,6 +49,8 @@
 
                 </div>
 
+                <span class="guest-trip-card__status d-none" data-field="guest_status_label" aria-live="polite"></span>
+
             </div>
 
         </header>

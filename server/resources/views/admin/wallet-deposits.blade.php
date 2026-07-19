@@ -5,7 +5,7 @@
 
 <div class="console-panel">
     <div class="console-panel-body">
-        @include('partials.admin-nav-tabs', ['active' => 'deposits'])
+        @include('partials.admin-nav-tabs', ['active' => 'wallet-deposits'])
 
         @if(session('success'))
         <div class="console-alert success mb-3 mt-3" role="status">
@@ -13,8 +13,14 @@
         </div>
         @endif
 
+        @if($errors->has('wallet'))
+        <div class="console-alert danger mb-3 mt-3" role="alert">
+            {{ $errors->first('wallet') }}
+        </div>
+        @endif
+
         @if(($counts['deposits'] ?? 0) > 0)
-        <div class="console-alert info mb-3 {{ session('success') ? '' : 'mt-3' }}">
+        <div class="console-alert info mb-3 {{ session('success') || $errors->has('wallet') ? '' : 'mt-3' }}">
             <strong>{{ $counts['deposits'] }}</strong> yêu cầu nạp ví chờ duyệt.
         </div>
         @endif

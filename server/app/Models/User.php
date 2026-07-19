@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\AuthOtp;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -21,6 +22,12 @@ class User extends Authenticatable
 
     public const APPROVAL_REJECTED = 'rejected';
 
+    /** @deprecated Dùng AuthOtp::TTL_MINUTES */
+    public const PENDING_APPROVAL_TTL_HOURS = 0;
+
+    /** Thời gian chờ duyệt CCCD — khớp TTL OTP chung. */
+    public const PENDING_APPROVAL_WAIT_MINUTES = AuthOtp::TTL_MINUTES;
+
     protected $fillable = [
         'name',
         'email',
@@ -32,6 +39,7 @@ class User extends Authenticatable
         'role',
         'status',
         'approval_status',
+        'register_otp_verified_at',
         'rejection_reason',
         'rejection_reason_at',
         'address',
@@ -56,7 +64,8 @@ class User extends Authenticatable
             'must_change_password' => 'boolean',
             'login_fail_count'     => 'integer',
             'login_locked_until'   => 'datetime',
-            'rejection_reason_at'  => 'datetime',
+            'rejection_reason_at'       => 'datetime',
+            'register_otp_verified_at'  => 'datetime',
         ];
     }
 
@@ -113,12 +122,139 @@ class User extends Authenticatable
         return $this->isCustomer() && $this->approval_status === self::APPROVAL_PENDING;
     }
 
+    public function isCustomerApprovalRejected(): bool
+    {
+        return $this->isCustomer() && $this->approval_status === self::APPROVAL_REJECTED;
+    }
+
+    /** Thời điểm gửi yêu cầu duyệt — lúc tạo hồ sơ (OTP cấp sau khi admin duyệt). */
+    public function customerApprovalRequestedAt(): ?\Carbon\CarbonInterface
+    {
+        if (! $this->isCustomer()) {
+            return null;
+        }
+
+        return $this->created_at;
+    }
+
+    /** Đã duyệt nhưng chưa xác minh OTP lần đầu → bắt buộc nhập OTP (admin gửi từ tab OTP). */
+    public function needsPostApprovalRegisterOtp(): bool
+    {
+        if ($this->register_otp_verified_at) {
+            return false;
+        }
+
+        if ($this->isCustomer()) {
+            return $this->approval_status === self::APPROVAL_APPROVED;
+        }
+
+        if ($this->role === 'driver') {
+            $profile = $this->relationLoaded('driverProfile')
+                ? $this->driverProfile
+                : $this->driverProfile()->first();
+
+            return $profile !== null && $profile->approval_status === 'approved';
+        }
+
+        return false;
+    }
+
+    /** Đang chờ duyệt (chưa hết hạn / chưa từ chối) — giữ trang OTP, chưa nhập mã. */
+    public function isAwaitingApprovalForRegisterOtp(): bool
+    {
+        if ($this->register_otp_verified_at) {
+            return false;
+        }
+
+        if ($this->isCustomer()) {
+            return $this->isCustomerApprovalPending() && ! $this->isCustomerPendingApprovalExpired();
+        }
+
+        if ($this->role === 'driver') {
+            $profile = $this->relationLoaded('driverProfile')
+                ? $this->driverProfile
+                : $this->driverProfile()->first();
+
+            return $profile !== null
+                && $profile->isPendingApproval()
+                && ! $profile->isPendingApprovalExpired();
+        }
+
+        return false;
+    }
+
+    /** Được giữ trên /dang-ky/otp (chờ duyệt hoặc đã duyệt chờ nhập OTP). */
+    public function canStayOnRegisterOtpPage(): bool
+    {
+        return $this->isAwaitingApprovalForRegisterOtp() || $this->needsPostApprovalRegisterOtp();
+    }
+
+    public function customerApprovalDeadlineAt(): ?\Carbon\CarbonInterface
+    {
+        $requestedAt = $this->customerApprovalRequestedAt();
+        if (! $requestedAt) {
+            return null;
+        }
+
+        return $requestedAt->copy()->addMinutes(AuthOtp::TTL_MINUTES);
+    }
+
+    /** Chờ duyệt quá hạn mà admin chưa duyệt / chưa phản hồi. */
+    public function isCustomerPendingApprovalExpired(): bool
+    {
+        if (! $this->isCustomerApprovalPending()) {
+            return false;
+        }
+
+        $deadline = $this->customerApprovalDeadlineAt();
+
+        return $deadline !== null && $deadline->isPast();
+    }
+
+    /**
+     * Chỉ hồ sơ «Đã từ chối» mới mở SĐT đăng ký lại.
+     * Hết hạn chờ duyệt → đánh dấu từ chối trước (nếu đã lưu DB).
+     */
+    public function customerAllowsFreshRegistration(): bool
+    {
+        if (! $this->isCustomer()) {
+            return false;
+        }
+
+        if ($this->isCustomerApprovalRejected()) {
+            return true;
+        }
+
+        if (! ($this->isCustomerApprovalPending() && $this->isCustomerPendingApprovalExpired())) {
+            return false;
+        }
+
+        if (! $this->exists) {
+            return true;
+        }
+
+        app(\App\Services\PendingApprovalExpiryService::class)->expireCustomer($this);
+        $this->refresh();
+
+        return $this->isCustomerApprovalRejected();
+    }
+
     /** Khách đã duyệt CCCD (và active) — được đặt xe. */
     public function canBookTrips(): bool
     {
         return $this->isCustomer()
             && $this->isActive()
             && $this->approval_status === self::APPROVAL_APPROVED;
+    }
+
+    /** Banner / flash khi khách vừa OTP xong hoặc đang chờ duyệt. */
+    public function pendingApprovalNotice(): ?string
+    {
+        if (! $this->isCustomerApprovalPending()) {
+            return null;
+        }
+
+        return AuthOtp::pendingApprovalNotice(isCustomer: true);
     }
 
     public function bookingBlockMessage(): ?string
@@ -131,8 +267,8 @@ class User extends Authenticatable
             return null;
         }
 
-        if ($this->approval_status === self::APPROVAL_PENDING) {
-            return 'Hồ sơ đang chờ admin duyệt CCCD. Bạn có thể xem trang chủ nhưng chưa đặt được xe.';
+        if ($notice = $this->pendingApprovalNotice()) {
+            return $notice;
         }
 
         if ($this->approval_status === self::APPROVAL_REJECTED) {

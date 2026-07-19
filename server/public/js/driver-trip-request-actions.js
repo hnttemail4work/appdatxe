@@ -35,7 +35,7 @@
         removeRequestCardElement(card);
     }
 
-    // TODO (Fix Stuck Offer UI): Cho phép gỡ card theo request id khi backend báo offer đã hết hạn/hủy.
+    /** Gỡ card theo request id khi backend/SW báo offer đã hết hạn/hủy. */
     function removeRequestCardById(requestId) {
         if (!requestId) {
             return;
@@ -45,7 +45,7 @@
         removeRequestCardElement(card);
     }
 
-    // TODO (Fix Stuck Offer UI): Dùng chung animation xóa card cho click Reject và revoke realtime từ backend.
+    /** Animation xóa card dùng chung cho Reject và revoke realtime. */
     function removeRequestCardElement(card) {
         if (!card) {
             return;
@@ -69,7 +69,7 @@
         }, 280);
     }
 
-    // TODO (Fix Stuck Offer UI): Nhận message từ service worker để ẩn offer hết hạn ngay trên tab tài xế đang mở.
+    /** Nhận message từ service worker để ẩn offer hết hạn trên tab đang mở. */
     function bindServiceWorkerTripRequestSync() {
         if (!('serviceWorker' in navigator)) {
             return;
@@ -84,15 +84,6 @@
 
             removeRequestCardById(data.driver_request_id);
         });
-    }
-
-    function syncOffDuty(message) {
-        document.dispatchEvent(new CustomEvent('driver:availability-sync', {
-            detail: {
-                availability: 'off_duty',
-                message: message || 'Đã từ chối cuốc — bật Hoạt động lại khi muốn nhận chuyến.',
-            },
-        }));
     }
 
     function ensureReasonInput(form, reasonId) {
@@ -172,7 +163,7 @@
                 if (result.data && result.data.message && window.AppFlash && window.AppFlash.show) {
                     window.AppFlash.show(result.data.message, {
                         variant: 'success',
-                        title: 'Đã hủy cuốc',
+                        title: 'Đã từ chối',
                     });
                 }
             })

@@ -505,6 +505,9 @@ class DriverAvailabilityService
             1,
             now()->addMinutes(self::WEB_PRESENCE_MINUTES),
         );
+
+        // App đang mở lại — cho phép nudge “khách gần” sau lần tắt app tiếp theo.
+        app(DriverSystemNotificationService::class)->clearOfflineSession($driverUserId);
     }
 
     public function hasWebPresence(int $driverUserId): bool
@@ -558,6 +561,9 @@ class DriverAvailabilityService
 
     public function markOffDuty(DriverProfile $profile): void
     {
+        // Giữ vị trí / phiên offline TRƯỚC khi xóa GPS — dùng cho nudge khách gần.
+        app(DriverSystemNotificationService::class)->armOfflineSession($profile);
+
         $this->forgetWebPresence((int) $profile->user_id);
 
         app(DriverTripRequestService::class)->releasePendingRequestsOnOffDuty((int) $profile->user_id);
@@ -576,6 +582,7 @@ class DriverAvailabilityService
     {
         if ($this->activeTripCount((int) $profile->user_id) > 0) {
             $profile->update(['availability_status' => 'on_trip']);
+            app(DriverSystemNotificationService::class)->clearOfflineSession((int) $profile->user_id);
 
             return;
         }

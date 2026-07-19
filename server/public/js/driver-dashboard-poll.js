@@ -59,8 +59,15 @@
                     }
                 }
 
-                if (data.inbox_unread && window.DriverInbox && window.DriverInbox.updateBadges) {
-                    window.DriverInbox.updateBadges(data.inbox_unread);
+                if (data.inbox_unread) {
+                    if (window.DriverSounds && window.DriverSounds.onInboxUnread) {
+                        window.DriverSounds.onInboxUnread(data.inbox_unread);
+                    } else if (window.AppSounds && window.AppSounds.onInboxUnread) {
+                        window.AppSounds.onInboxUnread(data.inbox_unread);
+                    }
+                    if (window.DriverInbox && window.DriverInbox.updateBadges) {
+                        window.DriverInbox.updateBadges(data.inbox_unread);
+                    }
                 }
 
                 // TODO (Fix Driver Toggle): Đồng bộ switch Hoạt động từ server — tránh UI lệch sau poll/reload.

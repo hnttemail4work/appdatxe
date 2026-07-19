@@ -57,11 +57,11 @@
     </div>
     <div class="col-12">
         <label class="form-label" for="customer-address">Địa chỉ</label>
-        <input type="text" name="address" id="customer-address"
-               class="form-control @error('address') is-invalid @enderror"
-               value="{{ old('address', $user->address) }}"
-               maxlength="500"
-               @disabled($readonly)>
+        <textarea name="address" id="customer-address" rows="2"
+                  class="form-control @error('address') is-invalid @enderror"
+                  maxlength="500"
+                  placeholder="Số nhà, đường, phường/xã, tỉnh/thành…"
+                  @disabled($readonly)>{{ old('address', $user->address) }}</textarea>
         @error('address')<div class="invalid-feedback">{{ $message }}</div>@enderror
     </div>
 </div>

@@ -41,5 +41,6 @@
             ])
         @endunless
     </div>
-    <div class="auth-field-error" @error($pinErrorBag)@else hidden @enderror>@error($pinErrorBag){{ $message }}@enderror</div>
+    {{-- Lỗi server hiện ở flash trên; ô này chỉ cho JS validate client. --}}
+    <div class="auth-field-error" hidden></div>
 </div>

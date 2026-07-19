@@ -19,7 +19,7 @@ class DriverWalletDepositRequest extends FormRequest
     {
         return [
             'amount'      => ['required', 'numeric', 'min:' . DriverWalletConfig::MIN_DEPOSIT],
-            'proof_image' => ['nullable', 'image', 'mimes:jpeg,jpg,png,webp,gif', 'max:5120'],
+            'proof_image' => ['required', 'image', 'mimes:jpeg,jpg,png,webp,gif', 'max:5120'],
         ];
     }
 
@@ -27,31 +27,19 @@ class DriverWalletDepositRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'amount.required'   => 'Vui lòng nhập số tiền nạp.',
-            'amount.min'        => 'Số tiền nạp tối thiểu ' . DriverWalletConfig::minDepositFormatted() . '.',
-            'proof_image.image' => 'Ảnh chụp chuyển khoản phải là file ảnh.',
-            'proof_image.mimes' => 'Ảnh chụp chuyển khoản phải là JPG, PNG, WebP hoặc GIF.',
-            'proof_image.max'   => 'Ảnh chụp chuyển khoản tối đa 5MB.',
+            'amount.required'      => 'Vui lòng nhập số tiền nạp.',
+            'amount.min'           => 'Số tiền nạp tối thiểu ' . DriverWalletConfig::minDepositFormatted() . '.',
+            'proof_image.required' => 'Vui lòng đính kèm ảnh chụp chuyển khoản.',
+            'proof_image.image'    => 'Ảnh chụp chuyển khoản phải là file ảnh.',
+            'proof_image.mimes'    => 'Ảnh chụp chuyển khoản phải là JPG, PNG, WebP hoặc GIF.',
+            'proof_image.max'      => 'Ảnh chụp chuyển khoản tối đa 5MB.',
         ];
     }
 
-    /**
-     * Giữ đúng hành vi cũ: JSON (kể cả request AJAX không có Accept: application/json)
-     * trả lỗi dạng {message, errors}; web thì redirect về tab "deposit" kèm lỗi + input.
-     */
     protected function failedValidation(Validator $validator): void
     {
-        $wantsJson = $this->expectsJson() || $this->ajax();
-
-        if ($wantsJson) {
-            throw new HttpResponseException(response()->json([
-                'message' => $validator->errors()->first(),
-                'errors'  => $validator->errors(),
-            ], 422));
-        }
-
         throw new HttpResponseException(
-            redirect()->route('driver.dashboard', ['tab' => 'deposit'])
+            redirect()->route('driver.dashboard', ['tab' => 'wallet'])
                 ->withErrors($validator)
                 ->withInput(),
         );

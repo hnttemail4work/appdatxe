@@ -410,7 +410,6 @@ class BookingWorkflowService
             ->orderBy('id')
             ->chunkById(50, function ($bookings) use (&$cancelled): void {
                 foreach ($bookings as $booking) {
-                    // TODO (Fix Flow): Đặt Ngay — chỉ hủy khi đã qua operationalPickupAt().
                     $booking = $booking->fresh(['schedule']);
                     if (! $booking->isOnDemandPickup()) {
                         continue;
@@ -425,7 +424,7 @@ class BookingWorkflowService
         return $cancelled;
     }
 
-    // TODO (Fix Flow): Đặt Lịch — hết T-30 không có TX thì system cancel (tab Hủy admin).
+    /** Đặt Lịch — hết T-30 không có TX thì system cancel. */
     public function expireScheduledSearchWithoutDriver(): int
     {
         $cancelled = 0;
@@ -1333,7 +1332,6 @@ class BookingWorkflowService
                 continue;
             }
 
-            // TODO (Fix Flow): Quay lại tìm TX tự động nếu còn trong khung thời gian.
             $tripRequests->refreshCustomerSearchDeadline($fresh);
 
             if ($fresh->needs_operator_help_at) {

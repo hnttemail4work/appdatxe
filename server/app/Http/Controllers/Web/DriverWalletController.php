@@ -18,39 +18,22 @@ class DriverWalletController extends Controller
     public function deposit(DriverWalletDepositRequest $request)
     {
         $profile = DriverProfile::query()->where('user_id', Auth::id())->firstOrFail();
-        $depositRedirect = fn () => redirect()->route('driver.dashboard', ['tab' => 'deposit']);
-        $wantsJson = $request->expectsJson() || $request->ajax();
-
-        $validated = $request->validated();
 
         try {
-            $transaction = $this->wallets->requestDeposit(
+            $this->wallets->requestDeposit(
                 $profile,
-                (int) $validated['amount'],
+                (int) $request->validated()['amount'],
                 $request->file('proof_image'),
             );
         } catch (InvalidArgumentException $e) {
-            if ($wantsJson) {
-                return response()->json(['message' => $e->getMessage()], 422);
-            }
-
-            return $depositRedirect()
+            return redirect()
+                ->route('driver.dashboard', ['tab' => 'wallet'])
                 ->withErrors(['wallet' => $e->getMessage()])
                 ->withInput();
         }
 
-        $message = 'Đã gửi yêu cầu nạp tiền.';
-
-        if ($wantsJson) {
-            session()->flash('success', $message);
-
-            return response()->json([
-                'ok'       => true,
-                'message'  => $message,
-                'redirect' => route('driver.dashboard', ['tab' => 'deposit']),
-            ]);
-        }
-
-        return $depositRedirect()->with('success', $message);
+        return redirect()
+            ->route('driver.dashboard', ['tab' => 'wallet'])
+            ->with('success', 'Đã gửi yêu cầu nạp tiền.');
     }
 }

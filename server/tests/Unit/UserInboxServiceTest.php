@@ -66,7 +66,7 @@ class UserInboxServiceTest extends TestCase
         $message = CustomerInboxMessage::query()->where('user_id', $user->id)->first();
         $this->assertNotNull($message);
         $this->assertSame(CustomerInboxMessage::CATEGORY_NOTICE, $message->category);
-        $this->assertSame('Đăng ký thành công', $message->title);
+        $this->assertSame('Đăng ký', $message->title);
         $this->assertSame('registration_success', data_get($message->meta, 'type'));
         $this->assertNull($message->read_at);
         $this->assertSame(0, DriverInboxMessage::query()->count());
@@ -88,9 +88,32 @@ class UserInboxServiceTest extends TestCase
         $message = DriverInboxMessage::query()->where('user_id', $user->id)->first();
         $this->assertNotNull($message);
         $this->assertSame(DriverInboxMessage::CATEGORY_NOTICE, $message->category);
-        $this->assertSame('Đăng ký thành công', $message->title);
+        $this->assertSame('Đăng ký', $message->title);
         $this->assertSame('registration_success', data_get($message->meta, 'type'));
         $this->assertSame(0, CustomerInboxMessage::query()->count());
+    }
+
+    public function test_notify_registration_approved_rewrites_pending_message(): void
+    {
+        $user = User::query()->create([
+            'name'            => '0909111004',
+            'phone'           => '0909111004',
+            'password'        => Hash::make('123456'),
+            'role'            => 'customer',
+            'status'          => 'active',
+            'approval_status' => User::APPROVAL_APPROVED,
+        ]);
+
+        app(UserInboxService::class)->notifyRegistrationSuccess($user);
+        app(UserInboxService::class)->notifyRegistrationApproved($user);
+
+        $message = CustomerInboxMessage::query()->where('user_id', $user->id)->first();
+        $this->assertNotNull($message);
+        $this->assertSame('Duyệt hồ sơ', $message->title);
+        $this->assertSame('registration_approved', data_get($message->meta, 'type'));
+        $this->assertStringNotContainsString('chờ duyệt CCCD', $message->body);
+        $this->assertStringContainsString('thành công', $message->body);
+        $this->assertSame(1, CustomerInboxMessage::query()->where('user_id', $user->id)->count());
     }
 
     public function test_customer_inbox_prune_keeps_ten_per_category(): void

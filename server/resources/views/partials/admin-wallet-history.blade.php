@@ -1,11 +1,11 @@
 @php
-/** @var \Illuminate\Support\Collection<int, array{kind: string, amount: int, at: \Carbon\Carbon, label: string, meta: string|null, status: string|null, driver_name: string, driver_code: string|null}> $walletHistory */
+/** @var \Illuminate\Support\Collection<int, array<string, mixed>> $walletHistory */
 $walletHistory = $walletHistory ?? collect();
 @endphp
 
 <div class="console-panel-head px-0 pt-4 mt-2">
     <div class="console-panel-head-accent">
-        <h2>Lịch sử giao dịch</h2>
+        <h2>Lịch sử nạp ví</h2>
     </div>
 </div>
 
@@ -16,8 +16,9 @@ $walletHistory = $walletHistory ?? collect();
         <table class="console-table">
             <thead>
                 <tr>
-                    <th>Tài xế</th>
-                    <th>Loại</th>
+                    <th>SĐT</th>
+                    <th>Vai trò</th>
+                    <th>Mã / ghi chú</th>
                     <th>Số tiền</th>
                     <th>Ảnh CK</th>
                     <th>Thời gian</th>
@@ -28,25 +29,22 @@ $walletHistory = $walletHistory ?? collect();
                 @foreach($walletHistory as $item)
                 <tr>
                     <td class="cell-primary">
-                        {{ $item['driver_name'] }}
-                        @if($item['driver_code'])
-                            <div class="cell-muted small">{{ $item['driver_code'] }}</div>
+                        {{ $item['phone'] ?? '—' }}
+                        @if(! empty($item['display_name']) && ($item['display_name'] ?? '') !== '—')
+                            <div class="cell-muted small">{{ $item['display_name'] }}</div>
                         @endif
                     </td>
+                    <td class="cell-muted">{{ $item['role_label'] ?? '—' }}</td>
                     <td>
                         @if(! empty($item['reference']))
                             <div class="cell-primary fw-semibold">{{ $item['reference'] }}</div>
                         @endif
-                        @if($item['meta'])
+                        @if(! empty($item['meta']))
                             <div class="cell-muted small">{{ $item['meta'] }}</div>
                         @endif
                     </td>
-                    <td class="fw-semibold {{ $item['kind'] === 'deposit' ? 'text-success' : 'text-primary' }}">
-                        @if($item['kind'] === 'deposit')
-                            +{{ number_format($item['amount'], 0, ',', '.') }} đ
-                        @else
-                            −{{ number_format($item['amount'], 0, ',', '.') }} đ
-                        @endif
+                    <td class="fw-semibold text-success">
+                        +{{ number_format($item['amount'], 0, ',', '.') }} đ
                     </td>
                     <td>
                         @if(! empty($item['proof_image_url']))
@@ -65,17 +63,13 @@ $walletHistory = $walletHistory ?? collect();
                             <span class="cell-muted small">—</span>
                         @endif
                     </td>
-                    <td class="cell-muted small">{{ $item['at']->format('d/m/Y H:i') }}</td>
+                    <td class="cell-muted small">{{ $item['at']?->format('d/m/Y H:i') ?? '—' }}</td>
                     <td>
-                        @if($item['kind'] === 'deposit')
-                            @php
-                                $statusVariant = \App\Support\StatusBadge::depositStatus($item['status']);
-                                $statusLabel = \App\Models\DriverWalletTransaction::statusLabelFor($item['status']);
-                            @endphp
-                            <span class="status-pill status-pill--{{ $statusVariant }}">{{ $statusLabel }}</span>
-                        @else
-                            <span class="status-pill status-pill--success">Đã xác nhận</span>
-                        @endif
+                        @php
+                            $statusVariant = \App\Support\StatusBadge::depositStatus($item['status'] ?? null);
+                            $statusLabel = \App\Models\DriverWalletTransaction::statusLabelFor($item['status'] ?? null);
+                        @endphp
+                        <span class="status-pill status-pill--{{ $statusVariant }}">{{ $statusLabel }}</span>
                     </td>
                 </tr>
                 @endforeach

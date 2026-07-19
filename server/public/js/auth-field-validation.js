@@ -13,7 +13,7 @@
     pinMismatch: 'Nhập lại PIN không khớp.',
     codeRequired: 'Vui lòng nhập mã 6 số.',
     codeDigits: 'Mã phải gồm đúng 6 chữ số.',
-    terms: 'Vui lòng đồng ý với điều khoản.',
+    terms: 'Vui lòng đồng ý điều khoản sử dụng để tiếp tục.',
     emailInvalid: 'Email không đúng định dạng.',
     requiredFill: 'Vui lòng điền ',
     requiredChoose: 'Vui lòng chọn ',
@@ -66,7 +66,7 @@
   function fieldLabel(el) {
     if (!el) return 'trường này';
     if (el.dataset && el.dataset.validateLabel) return el.dataset.validateLabel.trim();
-    var block = el.closest('.auth-field-block, .register-file-field, .mb-3, .col-12, .col-md-6, .auth-terms-row');
+    var block = el.closest('.auth-field-block, .register-file-field, .mb-3, .col-12, .col-md-6, .auth-terms-row, .auth-terms');
     var label = block && (
       block.querySelector('.auth-field-label') ||
       block.querySelector('.register-file-tile-label') ||
@@ -78,9 +78,9 @@
 
   function errorNode(el) {
     if (!el) return null;
-    var block = el.closest('.auth-field-block, .auth-pin-row, [data-auth-pin-block], .register-file-field, .mb-3, .col-12, .auth-terms-row');
+    var block = el.closest('.auth-field-block, .auth-pin-row, [data-auth-pin-block], .register-file-field, .mb-3, .col-12, .auth-terms-row, .auth-terms');
     if (block) {
-      var existing = block.querySelector('.auth-field-error, .invalid-feedback');
+      var existing = block.querySelector('.auth-field-error, .invalid-feedback, [data-client-feedback]');
       if (existing) return existing;
       var node = document.createElement('div');
       node.className = 'auth-field-error';
@@ -96,6 +96,8 @@
     el.classList.add('is-invalid');
     var wrap = el.closest('.register-file-field');
     if (wrap) wrap.classList.add('is-invalid');
+    var terms = el.closest('.auth-terms');
+    if (terms) terms.classList.add('auth-terms--invalid');
     var node = errorNode(el);
     if (node) {
       node.textContent = message || '';
@@ -110,6 +112,8 @@
     el.classList.remove('is-invalid');
     var wrap = el.closest('.register-file-field');
     if (wrap) wrap.classList.remove('is-invalid');
+    var terms = el.closest('.auth-terms');
+    if (terms) terms.classList.remove('auth-terms--invalid');
     var node = errorNode(el);
     if (node) {
       node.textContent = '';

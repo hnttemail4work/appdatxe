@@ -2,6 +2,8 @@
 
 namespace App\Rules;
 
+use App\Models\DriverProfile;
+use App\Services\PendingApprovalExpiryService;
 use App\Support\AuthIdentifier;
 use App\Support\AuthMessages;
 use App\Support\AuthPhone;
@@ -29,8 +31,52 @@ class UniqueNormalizedPhone implements ValidationRule
         $normalized = AuthPhone::normalize((string) $value);
         $existing = AuthIdentifier::findUserByPhone($normalized);
 
-        if ($existing && ($this->ignoreUserId === null || $existing->id !== $this->ignoreUserId)) {
-            $fail(AuthMessages::PHONE_TAKEN);
+        if (! $existing) {
+            return;
         }
+
+        if ($this->ignoreUserId !== null && $existing->id === $this->ignoreUserId) {
+            return;
+        }
+
+        // Chỉ hồ sơ ở tab «Đã từ chối» mới cho đăng ký lại (KH + TX).
+        if ($this->allowsFreshRegistration($existing)) {
+            return;
+        }
+
+        $fail(AuthMessages::PHONE_TAKEN);
+    }
+
+    private function allowsFreshRegistration(\App\Models\User $user): bool
+    {
+        $expiry = app(PendingApprovalExpiryService::class);
+
+        if ($user->isCustomer()) {
+            if ($user->isCustomerApprovalPending() && $user->isCustomerPendingApprovalExpired()) {
+                $expiry->expireCustomer($user);
+                $user->refresh();
+            }
+
+            return $user->isCustomerApprovalRejected();
+        }
+
+        if ($user->role === 'driver') {
+            $profile = $user->relationLoaded('driverProfile')
+                ? $user->driverProfile
+                : DriverProfile::query()->where('user_id', $user->id)->first();
+
+            if (! $profile) {
+                return true;
+            }
+
+            if ($profile->isPendingApproval() && $profile->isPendingApprovalExpired()) {
+                $expiry->expireDriver($profile);
+                $profile->refresh();
+            }
+
+            return $profile->isRejected();
+        }
+
+        return false;
     }
 }

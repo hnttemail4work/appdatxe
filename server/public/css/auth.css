@@ -27,7 +27,20 @@
     border-radius: .85rem;
 }
 
+/* Lỗi server chỉ hiện ở flash trên — không nhân đôi dưới ô / OTP.
+   Client JS (wizard) gắn .d-block khi validate tại chỗ. */
+.app-shell--auth .invalid-feedback {
+    display: none !important;
+}
+.app-shell--auth .invalid-feedback.d-block {
+    display: block !important;
+}
+.app-shell--auth .register-section .alert.alert-danger {
+    display: none !important;
+}
+
 .auth-screen {
+    position: relative;
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -109,6 +122,26 @@
     width: 100%;
 }
 
+/* OTP: 6 ô + nút refresh góc phải dưới — chung KH / TX */
+.auth-otp-pin-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    width: fit-content;
+    max-width: 100%;
+    margin-inline: auto;
+}
+.auth-otp-pin-stack .auth-field-block {
+    width: 100%;
+}
+.auth-otp-pin-stack .auth-pin-row--solo .pin-boxes-row {
+    justify-content: flex-start;
+    width: auto;
+}
+.auth-otp-pin-stack .auth-pin-row--solo {
+    justify-content: flex-start;
+}
+
 .auth-field-input {
     flex: 1 1 auto;
     min-width: 0;
@@ -118,8 +151,9 @@
     border: 1px solid rgba(255, 255, 255, .12);
     background: rgba(255, 255, 255, .04);
     color: var(--app-text, #f5f5f5);
-    font-size: 1.05rem;
+    font-size: 16px;
     outline: none;
+    touch-action: manipulation;
 }
 
 .auth-field-input::placeholder {
@@ -166,6 +200,49 @@
     font-size: .8125rem;
     color: #f07178;
 }
+
+/* Thông báo chờ duyệt trên màn OTP */
+.auth-otp-notice {
+    margin: 0 0 1.15rem;
+    padding: .9rem 1rem;
+    border-radius: .95rem;
+    border: 1px solid rgba(212, 175, 55, .35);
+    background:
+        linear-gradient(145deg, rgba(212, 175, 55, .14), transparent 55%),
+        rgba(255, 255, 255, .04);
+}
+
+.auth-otp-notice__title {
+    display: block;
+    margin-bottom: .35rem;
+    font-size: .92rem;
+    font-weight: 700;
+    color: #e8c547;
+}
+
+.auth-otp-notice__text {
+    font-size: .86rem;
+    line-height: 1.45;
+    color: var(--app-text-secondary, #c8c8c8);
+}
+
+.auth-otp-notice__text strong {
+    color: #f5f5f5;
+    font-weight: 700;
+}
+
+.auth-otp-notice__meta {
+    margin-top: .55rem;
+    font-size: .78rem;
+    color: var(--app-text-muted, #9a9a9a);
+}
+
+.auth-otp-notice__phone {
+    color: #f5f5f5;
+    font-weight: 600;
+    letter-spacing: .02em;
+}
+
 
 .auth-field-footer {
     margin-top: .65rem;
@@ -217,7 +294,8 @@
     height: 3rem;
     box-sizing: border-box;
     text-align: center;
-    font-size: 1.25rem;
+    /* >= 16px — tránh iOS Safari tự zoom khi focus */
+    font-size: 16px;
     font-weight: 700;
     letter-spacing: 0;
     padding: .25rem;
@@ -225,13 +303,172 @@
     background: rgba(255, 255, 255, .04) !important;
     border: 1px solid rgba(255, 255, 255, .14) !important;
     color: #f5f5f5 !important;
+    touch-action: manipulation;
 }
 
 .pin-box:focus {
     border-color: rgba(212, 175, 55, .65) !important;
     box-shadow: 0 0 0 .15rem rgba(212, 175, 55, .18);
+    font-size: 16px;
 }
 
+/* Điều khoản — khối đồng ý (đăng ký) */
+.auth-terms {
+    margin: 1rem 0 1.15rem;
+    padding: .9rem 1rem;
+    border-radius: .95rem;
+    border: 1px solid rgba(255, 255, 255, .1);
+    background:
+        linear-gradient(145deg, rgba(212, 175, 55, .07), transparent 55%),
+        rgba(255, 255, 255, .03);
+    transition: border-color .15s ease, background-color .15s ease;
+}
+
+.auth-terms:has(.auth-terms__check:checked) {
+    border-color: rgba(212, 175, 55, .38);
+    background:
+        linear-gradient(145deg, rgba(212, 175, 55, .12), transparent 55%),
+        rgba(255, 255, 255, .04);
+}
+
+.auth-terms--invalid,
+.auth-terms:has(.auth-terms__check.is-invalid) {
+    border-color: rgba(227, 93, 106, .55);
+}
+
+.auth-terms__control {
+    display: flex;
+    align-items: flex-start;
+    gap: .75rem;
+    margin: 0;
+    cursor: pointer;
+}
+
+.auth-terms__check {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    pointer-events: none;
+}
+
+.auth-terms__box {
+    flex: 0 0 auto;
+    width: 1.35rem;
+    height: 1.35rem;
+    margin-top: .12rem;
+    border-radius: .4rem;
+    border: 1.5px solid rgba(255, 255, 255, .28);
+    background: rgba(0, 0, 0, .2);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04);
+    transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+    position: relative;
+}
+
+.auth-terms__box::after {
+    content: '';
+    position: absolute;
+    left: .38rem;
+    top: .12rem;
+    width: .35rem;
+    height: .65rem;
+    border: solid #0a0a0a;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg) scale(0);
+    transition: transform .12s ease;
+}
+
+.auth-terms__check:focus-visible + .auth-terms__box {
+    border-color: rgba(212, 175, 55, .85);
+    box-shadow: 0 0 0 .15rem rgba(212, 175, 55, .2);
+}
+
+.auth-terms__check:checked + .auth-terms__box {
+    border-color: #d4af37;
+    background: #d4af37;
+}
+
+.auth-terms__check:checked + .auth-terms__box::after {
+    transform: rotate(45deg) scale(1);
+}
+
+.auth-terms__copy {
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+    min-width: 0;
+}
+
+.auth-terms__title {
+    font-size: .92rem;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--app-text, #f5f5f5);
+}
+
+.auth-terms__linkish {
+    color: #e8c547;
+    text-decoration: underline;
+    text-decoration-color: rgba(232, 197, 71, .45);
+    text-underline-offset: .15em;
+}
+
+.auth-terms__hint {
+    font-size: .8rem;
+    line-height: 1.45;
+    color: var(--app-text-muted, #9a9a9a);
+}
+
+.auth-terms__details {
+    margin: .7rem 0 0 2.1rem;
+    font-size: .78rem;
+    color: var(--app-text-muted, #9a9a9a);
+}
+
+.auth-terms__details summary {
+    cursor: pointer;
+    list-style: none;
+    color: rgba(232, 197, 71, .9);
+    font-weight: 600;
+    user-select: none;
+}
+
+.auth-terms__details summary::-webkit-details-marker {
+    display: none;
+}
+
+.auth-terms__details summary::before {
+    content: '▸';
+    display: inline-block;
+    margin-right: .3rem;
+    transition: transform .12s ease;
+}
+
+.auth-terms__details[open] summary::before {
+    transform: rotate(90deg);
+}
+
+.auth-terms__list {
+    margin: .45rem 0 0;
+    padding-left: 1.1rem;
+    display: grid;
+    gap: .3rem;
+    line-height: 1.45;
+}
+
+.auth-terms__error {
+    display: block;
+    margin: .55rem 0 0 2.1rem;
+    font-size: .8125rem;
+    color: #f07178;
+}
+
+.auth-terms__error:empty {
+    display: none;
+}
+
+/* legacy driver register (nếu còn) */
 .auth-terms-row {
     display: flex;
     align-items: flex-start;
@@ -269,6 +506,35 @@
     color: #d4af37;
 }
 
+.auth-otp-refresh-wrap {
+    display: flex;
+    justify-content: flex-end;
+    width: 100%;
+    margin-top: .65rem;
+}
+.auth-otp-refresh {
+    width: 2.75rem;
+    height: 2.75rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 1px solid rgba(212, 175, 55, .45);
+    background: rgba(255, 255, 255, .04);
+    color: #e8c547;
+    text-decoration: none;
+    touch-action: manipulation;
+}
+.auth-otp-refresh:hover {
+    color: #f5d76e;
+    border-color: rgba(212, 175, 55, .75);
+    background: rgba(212, 175, 55, .1);
+}
+.auth-otp-refresh:focus-visible {
+    outline: 2px solid rgba(212, 175, 55, .65);
+    outline-offset: 2px;
+}
+
 /* Register groups (CCCD / driver docs) — no card chrome */
 .auth-screen .register-section,
 .auth-screen .driver-wizard-panel {
@@ -287,6 +553,21 @@
     border: 1px solid rgba(255, 255, 255, .12);
     background: rgba(255, 255, 255, .04);
     color: var(--app-text, #f5f5f5);
+    color-scheme: dark;
+    touch-action: manipulation;
+}
+
+/* Dropdown native (Windows): tránh chữ sáng trên nền trắng */
+.auth-screen select,
+.auth-screen .form-select {
+    color-scheme: dark;
+}
+.auth-screen select option,
+.auth-screen select optgroup,
+.auth-screen .form-select option,
+.auth-screen .form-select optgroup {
+    background-color: #1a1f26 !important;
+    color: #f5f5f5 !important;
 }
 
 .auth-screen .form-control:focus,
@@ -326,23 +607,4 @@
     height: 100%;
     object-fit: cover;
     border-radius: inherit;
-}
-
-/* Biometric — same chrome, compact actions */
-.auth-biometric-actions {
-    display: flex;
-    flex-direction: column;
-    gap: .75rem;
-    margin-top: .5rem;
-}
-
-.auth-biometric-actions .btn {
-    border-radius: .85rem;
-    min-height: 3rem;
-}
-
-.auth-biometric-hint {
-    margin: 0;
-    font-size: .85rem;
-    color: var(--app-text-muted, #9a9a9a);
 }

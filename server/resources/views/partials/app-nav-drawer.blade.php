@@ -39,8 +39,11 @@
                 @if(! request()->routeIs('customer.register'))
                     <a href="{{ route('customer.register') }}" class="app-nav-drawer-link {{ request()->routeIs('customer.register') ? 'is-active' : '' }}">Đăng ký khách</a>
                 @endif
-                @if(! request()->routeIs('register'))
-                    <a href="{{ route('register') }}" class="app-nav-drawer-link {{ request()->routeIs('register') ? 'is-active' : '' }}">Đăng ký tài xế</a>
+                @if(! request()->routeIs('driver.register', 'register'))
+                    <a href="{{ route('driver.register') }}" class="app-nav-drawer-link {{ request()->routeIs('driver.register', 'register') ? 'is-active' : '' }}">Đăng ký tài xế</a>
+                @endif
+                @if(! request()->routeIs('driver.login', 'login'))
+                    <a href="{{ route('driver.login') }}" class="app-nav-drawer-link {{ request()->routeIs('driver.login') ? 'is-active' : '' }}">Đăng nhập tài xế</a>
                 @endif
                 <a href="{{ route('about') }}" class="app-nav-drawer-link {{ request()->routeIs('about') ? 'is-active' : '' }}">Giới thiệu</a>
             @endauth
