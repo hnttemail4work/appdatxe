@@ -87,6 +87,10 @@
             mapEl.hidden = true;
             mapEl.classList.add('d-none');
         }
+        if (locateBtn) {
+            locateBtn.hidden = !show;
+            locateBtn.classList.toggle('d-none', !show);
+        }
     }
 
     function setLiveStatus(text) {
