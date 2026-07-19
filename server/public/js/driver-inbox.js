@@ -1,5 +1,5 @@
 /**
- * Hộp thư tài xế — Thông báo / Thông tin + tin nhắn khách.
+ * Hộp thư tài xế — Tin tức / Thông báo + tin nhắn khách.
  */
 (function () {
     var panel = document.querySelector('[data-driver-inbox-panel]');
@@ -209,7 +209,7 @@
 
     panel.querySelectorAll('[data-inbox-tab]').forEach(function (btn) {
         btn.addEventListener('click', function () {
-            showPane(btn.getAttribute('data-inbox-tab') || 'notice');
+            showPane(btn.getAttribute('data-inbox-tab') || 'info');
         });
     });
 

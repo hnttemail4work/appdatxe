@@ -3,7 +3,7 @@
  */
 (function () {
     var DOCK_SELECTORS = '.customer-scroll-dock, .driver-app-dock';
-    var FAB_SELECTOR = '.customer-contact-fab--fixed';
+    var FAB_SELECTOR = '.trip-chat-fab, .trip-locate-fab';
 
     function isMobileApp() {
         return document.body.classList.contains('app-shell--mobile-app');

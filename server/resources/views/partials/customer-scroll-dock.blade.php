@@ -2,7 +2,11 @@
     $isCustomer = auth()->check() && auth()->user()->role === 'customer';
     $inboxUnreadTotal = 0;
     if ($isCustomer) {
-        $inboxUnreadTotal = app(\App\Services\CustomerInboxService::class)->unreadCount((int) auth()->id());
+        $customerId = (int) auth()->id();
+        $inboxUnreadTotal = (int) (app(\App\Services\TripChatService::class)->mergeCustomerInboxUnread(
+            app(\App\Services\CustomerInboxService::class)->unreadCounts($customerId),
+            $customerId,
+        )['total'] ?? 0);
     }
     $dockTabs = $isCustomer ? 4 : 3;
 @endphp

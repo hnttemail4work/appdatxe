@@ -7,6 +7,7 @@ use App\Http\Requests\Chat\CustomerChatMessagesRequest;
 use App\Http\Requests\Chat\CustomerChatSendRequest;
 use App\Http\Requests\Chat\DriverSendMessageRequest;
 use App\Models\Booking;
+use App\Services\CustomerInboxService;
 use App\Services\DriverInboxService;
 use App\Services\TripChatService;
 use Illuminate\Foundation\Http\FormRequest;
@@ -19,12 +20,14 @@ class TripChatController extends Controller
     public function __construct(
         private readonly TripChatService $chat,
         private readonly DriverInboxService $driverInbox,
+        private readonly CustomerInboxService $customerInbox,
     ) {
     }
 
     public function customerMessages(CustomerChatMessagesRequest $request): JsonResponse
     {
         [$booking, $afterId] = $this->resolveCustomerBooking($request);
+        $this->chat->markCustomerRead($booking);
 
         return $this->messagesResponse($booking, $afterId);
     }
@@ -120,7 +123,12 @@ class TripChatController extends Controller
                     $this->driverInbox->unreadCounts((int) $user->id),
                     (int) $user->id,
                 )
-                : null,
+                : ($user && $user->role === 'customer'
+                    ? $this->chat->mergeCustomerInboxUnread(
+                        $this->customerInbox->unreadCounts((int) $user->id),
+                        (int) $user->id,
+                    )
+                    : null),
         ]);
     }
 }

@@ -65,15 +65,6 @@
         });
     }
 
-    var inboxOpen = document.getElementById('driver-inbox-open');
-    if (inboxOpen) {
-        inboxOpen.addEventListener('click', function () {
-            if (document.querySelector('.driver-map-chrome__bell-dot')) {
-                play();
-            }
-        });
-    }
-
     window.DriverSounds = {
         play: play,
         playTrip: play,

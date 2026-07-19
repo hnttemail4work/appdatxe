@@ -89,25 +89,6 @@
         badge.classList.add('is-hot');
     }
 
-    function setDriverBellBadge(total) {
-        var bell = document.querySelector('[data-inbox-bell-badge]');
-        if (!bell) {
-            return;
-        }
-        var n = Math.max(0, Number(total) || 0);
-        if (n > 0) {
-            bell.hidden = false;
-            bell.textContent = formatCount(n);
-            var dot = document.querySelector('.driver-map-chrome__bell-dot');
-            if (dot) {
-                dot.remove();
-            }
-        } else {
-            bell.hidden = true;
-            bell.textContent = '';
-        }
-    }
-
     /**
      * @param {number|object} unreadOrTotal
      */
@@ -121,7 +102,6 @@
         syncAppIconBadge(total);
         setCustomerDockBadge(total);
         setDriverDockBadge(total);
-        setDriverBellBadge(total);
     }
 
     function bootFromDom() {
@@ -146,7 +126,6 @@
         syncAppIconBadge: syncAppIconBadge,
         setCustomerDockBadge: setCustomerDockBadge,
         setDriverDockBadge: setDriverDockBadge,
-        setDriverBellBadge: setDriverBellBadge,
         bootFromDom: bootFromDom,
     };
 

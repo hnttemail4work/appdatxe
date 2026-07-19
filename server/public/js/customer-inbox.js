@@ -1,6 +1,5 @@
 /**
- * Hộp thư khách — chỉ đánh dấu đã đọc khi bấm từng dòng.
- * Đồng bộ badge tab / dock / icon app.
+ * Hộp thư khách — Tin tức / Thông báo + trò chuyện với tài xế.
  */
 (function () {
     var panel = document.querySelector('[data-customer-inbox-panel]');
@@ -11,6 +10,20 @@
     var markUrl = panel.getAttribute('data-inbox-mark-url') || '';
     var csrf = document.querySelector('meta[name="csrf-token"]');
     var csrfToken = csrf ? csrf.getAttribute('content') : '';
+    var view = 'system';
+    var headMain = panel.querySelector('[data-inbox-head-main]');
+    var headChat = panel.querySelector('[data-inbox-head-chat]');
+    var systemWrap = panel.querySelector('[data-inbox-system]');
+    var chatsWrap = panel.querySelector('[data-inbox-chats]');
+    var threadWrap = panel.querySelector('[data-inbox-thread]');
+    var chatTitle = panel.querySelector('[data-inbox-chat-title]');
+    var chatBadge = panel.querySelector('[data-inbox-chat-badge]');
+
+    function setHidden(el, hidden) {
+        if (!el) return;
+        el.hidden = hidden;
+        el.classList.toggle('d-none', hidden);
+    }
 
     function showPane(category) {
         panel.querySelectorAll('.customer-inbox-tabs__btn').forEach(function (btn) {
@@ -29,9 +42,20 @@
         if (!unread) {
             return;
         }
+        var chat = Number(unread.chat) || 0;
 
         if (window.AppInboxBadge && window.AppInboxBadge.apply) {
             window.AppInboxBadge.apply(unread);
+        }
+
+        if (chatBadge) {
+            if (chat < 1) {
+                chatBadge.classList.add('d-none');
+                chatBadge.textContent = '0';
+            } else {
+                chatBadge.classList.remove('d-none');
+                chatBadge.textContent = chat > 99 ? '99+' : String(chat);
+            }
         }
 
         ['notice', 'info'].forEach(function (cat) {
@@ -64,7 +88,7 @@
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Accept': 'application/json',
+                Accept: 'application/json',
                 'X-CSRF-TOKEN': csrfToken,
                 'X-Requested-With': 'XMLHttpRequest',
             },
@@ -83,9 +107,97 @@
             .catch(function () { /* ignore */ });
     }
 
+    function showSystemView() {
+        view = 'system';
+        setHidden(headMain, false);
+        setHidden(headChat, true);
+        setHidden(systemWrap, false);
+        setHidden(chatsWrap, true);
+        setHidden(threadWrap, true);
+    }
+
+    function showChatsView() {
+        view = 'chats';
+        setHidden(headMain, true);
+        setHidden(headChat, false);
+        setHidden(systemWrap, true);
+        setHidden(chatsWrap, false);
+        setHidden(threadWrap, true);
+        if (chatTitle) {
+            chatTitle.textContent = 'Tin nhắn';
+        }
+    }
+
+    function clearThreadMessages(chatPanel) {
+        if (!chatPanel) return;
+        var list = chatPanel.querySelector('[data-chat-messages]');
+        if (list) list.innerHTML = '';
+        chatPanel.dataset.lastMessageId = '0';
+        var empty = chatPanel.querySelector('[data-chat-empty]');
+        if (empty) empty.classList.remove('d-none');
+        var err = chatPanel.querySelector('[data-chat-error]');
+        if (err) {
+            err.textContent = '';
+            err.classList.add('d-none');
+        }
+    }
+
+    function openThread(source) {
+        if (!source) return;
+        var ref = source.getAttribute('data-booking-reference') || '';
+        var listUrl = source.getAttribute('data-chat-list-url') || '';
+        var sendUrl = source.getAttribute('data-chat-send-url') || '';
+        var peer = source.getAttribute('data-chat-peer') || 'Tài xế';
+        var open = source.getAttribute('data-chat-open') === '1';
+        if (!listUrl || !sendUrl || !ref) {
+            return;
+        }
+
+        view = 'thread';
+        setHidden(headMain, true);
+        setHidden(headChat, false);
+        setHidden(systemWrap, true);
+        setHidden(chatsWrap, true);
+        setHidden(threadWrap, false);
+        if (chatTitle) {
+            chatTitle.textContent = peer;
+        }
+
+        var chatPanel = threadWrap && threadWrap.querySelector('[data-trip-chat]');
+        if (!chatPanel) {
+            return;
+        }
+
+        clearThreadMessages(chatPanel);
+        chatPanel.classList.remove('d-none');
+        chatPanel.dataset.bookingReference = ref;
+        chatPanel.dataset.chatListUrl = listUrl;
+        chatPanel.dataset.chatSendUrl = sendUrl;
+        chatPanel.dataset.chatOpen = open ? '1' : '0';
+        chatPanel.dataset.chatMode = 'customer';
+
+        source.classList.remove('is-unread');
+        var itemBadge = source.querySelector('.customer-inbox-chat-item__badge');
+        if (itemBadge) {
+            itemBadge.remove();
+        }
+
+        if (window.TripChat && window.TripChat.openDriverPanel) {
+            window.TripChat.openDriverPanel(chatPanel);
+        }
+    }
+
+    function chatBack() {
+        if (view === 'thread') {
+            showChatsView();
+            return;
+        }
+        showSystemView();
+    }
+
     panel.querySelectorAll('.customer-inbox-tabs__btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
-            showPane(btn.getAttribute('data-inbox-tab') || 'notice');
+            showPane(btn.getAttribute('data-inbox-tab') || 'info');
         });
     });
 
@@ -108,8 +220,28 @@
         });
     });
 
+    var openChatsBtn = panel.querySelector('[data-inbox-open-chats]');
+    if (openChatsBtn) {
+        openChatsBtn.addEventListener('click', function () {
+            showChatsView();
+        });
+    }
+
+    var backBtn = panel.querySelector('[data-inbox-chat-back]');
+    if (backBtn) {
+        backBtn.addEventListener('click', chatBack);
+    }
+
+    panel.querySelectorAll('[data-inbox-chat-item]').forEach(function (item) {
+        item.addEventListener('click', function () {
+            openThread(item);
+        });
+    });
+
     window.CustomerInbox = {
         updateBadges: updateBadges,
         markMessageRead: markMessageRead,
+        showPane: showPane,
+        showChatsView: showChatsView,
     };
 })();

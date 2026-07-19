@@ -24,36 +24,21 @@
 
         <div class="guest-trip-live-map" id="guest-trip-live-map" hidden>
             <div class="guest-trip-live-map__canvas" id="guest-trip-live-map-canvas" aria-label="Bản đồ chuyến"></div>
-            <div class="guest-trip-radar d-none" id="guest-trip-radar" aria-live="polite">
-                <div class="guest-trip-radar__rings" aria-hidden="true">
-                    <span></span><span></span><span></span>
-                </div>
-                <div class="guest-trip-radar__copy">
-                    <strong id="guest-trip-radar-title">Đang tìm tài xế gần bạn…</strong>
-                </div>
-            </div>
             <div class="guest-trip-live-status d-none" id="guest-trip-live-status" aria-live="polite"></div>
         </div>
 
-        <header class="guest-trip-card__head">
-
-            <div class="guest-trip-card__head-row">
-
-                <div class="guest-trip-card__id">
-
-                    <span class="guest-trip-card__id-label">Mã chuyến</span>
-
-                    <code class="guest-trip-card__code" data-field="trip_code">—</code>
-
-                </div>
-
-                <span class="guest-trip-card__status d-none" data-field="guest_status_label" aria-live="polite"></span>
-
-            </div>
-
-        </header>
-
-
+        <div class="guest-trip-info-sheet is-collapsed" id="guest-trip-info-sheet" data-guest-trip-sheet>
+            <button type="button"
+                    class="guest-trip-info-sheet__handle"
+                    id="guest-trip-info-sheet-handle"
+                    data-guest-trip-sheet-handle
+                    aria-controls="guest-trip-info-sheet-body"
+                    aria-expanded="false"
+                    aria-label="Kéo để xem thông tin chuyến">
+                <span class="guest-trip-info-sheet__grip" aria-hidden="true"></span>
+                <span class="guest-trip-info-sheet__hint" id="guest-trip-info-sheet-hint">Đang tìm tài xế gần bạn…</span>
+            </button>
+            <div class="guest-trip-info-sheet__body" id="guest-trip-info-sheet-body">
 
         <div class="guest-trip-stops">
 
@@ -253,6 +238,9 @@
 
             <p class="guest-trip-cancel-error d-none" id="guest-trip-cancel-error"></p>
 
+        </div>
+
+            </div>
         </div>
 
     </article>

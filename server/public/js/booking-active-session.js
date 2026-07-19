@@ -61,6 +61,7 @@
         if (rootEl) {
             rootEl.classList.add('d-none');
         }
+        syncTripFabs(null);
     }
 
     function resolveHotlinePhone() {
@@ -85,22 +86,18 @@
         }
 
         var tel = hotline.replace(/[^\d+]/g, '');
-        var zaloDigits = tel.replace(/^\+/, '');
-        if (zaloDigits.indexOf('0') === 0) {
-            zaloDigits = '84' + zaloDigits.slice(1);
-        } else if (zaloDigits.indexOf('84') !== 0) {
-            zaloDigits = '84' + zaloDigits;
-        }
 
         document.querySelectorAll('[data-contact-hotline="phone"]').forEach(function (el) {
             el.setAttribute('href', 'tel:' + tel);
-            el.setAttribute('aria-label', 'Gọi tổng đài ' + hotline);
+            el.setAttribute('aria-label', 'Gọi khẩn cấp tổng đài ' + hotline);
         });
+    }
 
-        document.querySelectorAll('[data-contact-hotline="zalo"]').forEach(function (el) {
-            el.setAttribute('href', 'https://zalo.me/' + zaloDigits);
-            el.setAttribute('aria-label', 'Chat Zalo tổng đài ' + hotline);
-        });
+    function syncTripFabs(booking) {
+        if (!window.TripActionFabs || !window.TripActionFabs.setInTrip) {
+            return;
+        }
+        window.TripActionFabs.setInTrip(!!(booking && booking.is_active && booking.has_driver));
     }
 
     function updateNotes(payload) {
@@ -283,6 +280,7 @@
 
     function updateBookingSnapshot(booking) {
         updateDriverPanel(booking || null);
+        syncTripFabs(booking || null);
     }
 
     function render(payload) {

@@ -8,6 +8,7 @@ use App\Services\CustomerAccountService;
 use App\Services\CustomerInboxService;
 use App\Services\CustomerProfileChangeService;
 use App\Services\CustomerWalletService;
+use App\Services\TripChatService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
@@ -18,6 +19,7 @@ class CustomerController extends Controller
         private readonly CustomerProfileChangeService $profileChanges,
         private readonly CustomerInboxService $inbox,
         private readonly CustomerWalletService $wallets,
+        private readonly TripChatService $tripChat,
     ) {
     }
 
@@ -35,13 +37,16 @@ class CustomerController extends Controller
 
         $this->accounts->linkExistingBookings($user);
 
-        $inboxUnread = $this->inbox->unreadCounts((int) $user->id);
+        $inboxUnread = $this->tripChat->mergeCustomerInboxUnread(
+            $this->inbox->unreadCounts((int) $user->id),
+            (int) $user->id,
+        );
         $inboxTab = in_array($request->query('inbox_tab'), [
             CustomerInboxMessage::CATEGORY_INFO,
             CustomerInboxMessage::CATEGORY_NOTICE,
         ], true)
             ? (string) $request->query('inbox_tab')
-            : CustomerInboxMessage::CATEGORY_NOTICE;
+            : CustomerInboxMessage::CATEGORY_INFO;
 
         $wallet = null;
         $pendingDeposits = collect();
@@ -72,6 +77,9 @@ class CustomerController extends Controller
                 : collect(),
             'inboxInfoMessages' => $tab === 'inbox'
                 ? $this->inbox->listFor((int) $user->id, CustomerInboxMessage::CATEGORY_INFO)
+                : collect(),
+            'inboxChatThreads' => $tab === 'inbox'
+                ? $this->tripChat->recentThreadsForCustomer((int) $user->id)
                 : collect(),
             'wallet' => $wallet,
             'pendingDeposits' => $pendingDeposits,

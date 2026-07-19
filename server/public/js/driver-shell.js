@@ -14,7 +14,6 @@
 
     var inbox = document.getElementById('driver-inbox-modal');
     var inboxBackdrop = document.getElementById('driver-inbox-backdrop');
-    var inboxOpenBtn = document.getElementById('driver-inbox-open');
     var inboxCloseBtn = document.getElementById('driver-inbox-close');
 
     var overlay = document.getElementById('driver-overlay-panels');
@@ -40,10 +39,21 @@
         }
         inbox.hidden = !open;
         inboxBackdrop.hidden = !open;
-        if (inboxOpenBtn) {
-            inboxOpenBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-        }
     }
+
+    var TAB_TITLES = {
+        history: 'Lịch sử chạy',
+        earnings: 'Thu nhập',
+        wallet: 'Ví tài xế',
+        invite: 'Mời bạn bè',
+        customers: 'Khách của tôi',
+        inbox: 'Hộp thư',
+        account: 'Thông tin cá nhân',
+        'account-profile': 'Hồ sơ',
+        'account-update': 'Cập nhật thông tin',
+        'account-password': 'Đổi PIN',
+        settings: 'Cài đặt',
+    };
 
     function syncOverlay(tab) {
         var showOverlay = tab && tab !== 'trips';
@@ -60,8 +70,10 @@
             overlayBack.setAttribute('aria-label', 'Quay lại');
         }
         if (overlayTitle) {
-            overlayTitle.textContent = 'Quay lại';
-            overlayTitle.dataset.driverTab = backTab;
+            overlayTitle.textContent = TAB_TITLES[tab] || 'Menu';
+            overlayTitle.removeAttribute('data-driver-tab');
+            overlayTitle.removeAttribute('role');
+            overlayTitle.removeAttribute('tabindex');
         }
 
         page.classList.toggle('is-panel-open', showOverlay);
@@ -102,7 +114,6 @@
         });
     });
 
-    // Chuông mở tab hộp thư qua data-driver-tab (driver-tabs.js).
     if (inboxCloseBtn) {
         inboxCloseBtn.addEventListener('click', function () {
             setInboxOpen(false);

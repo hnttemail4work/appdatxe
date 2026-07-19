@@ -1,10 +1,8 @@
 @php
     $pendingChange = $pendingChange ?? null;
 @endphp
-<section class="customer-account-panel is-active" aria-label="Thông tin cá nhân">
-    <h2 class="customer-account-panel__title">Thông tin cá nhân</h2>
-
-    <nav class="customer-account-menu" aria-label="Mục thông tin cá nhân">
+<section class="customer-account-panel is-active" aria-label="Tài khoản">
+    <nav class="customer-account-menu" aria-label="Mục tài khoản">
         <a href="{{ route('customer.account', ['tab' => 'profile']) }}" class="customer-account-menu__item">
             <span class="customer-account-menu__copy">
                 <strong>Hồ sơ</strong>

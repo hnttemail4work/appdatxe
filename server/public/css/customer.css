@@ -106,16 +106,7 @@
     margin: -.15rem 0 .55rem;
 }
 
-/* Home: title + 1 thanh tìm điểm */
-.grab-home-title {
-    margin: 0 0 .75rem;
-    font-size: 1.35rem;
-    font-weight: 800;
-    letter-spacing: -.02em;
-    color: #fff;
-    line-height: 1.2;
-}
-
+/* Home: thanh tìm điểm */
 .grab-home-bar {
     display: grid;
     grid-template-columns: 2.75rem 1fr;
@@ -3257,6 +3248,18 @@ body.modal-open .modal-backdrop.show {
 }
 .booking-active-session {
     border: 1px solid rgba(34, 197, 94, 0.35);
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+    transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+a.booking-active-session:hover,
+a.booking-active-session:focus-visible {
+    color: inherit;
+    text-decoration: none;
+    border-color: rgba(34, 197, 94, 0.55);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, .34);
+    outline: none;
 }
 .booking-active-session.booking-flash {
     display: block;
@@ -3589,64 +3592,181 @@ body.booking-active-referral-qr-open {
     position: relative;
     height: 14.5rem;
     background: #1a1a1a;
+    transition: height .28s ease;
 }
 .guest-trip-live-map__canvas {
     width: 100%;
     height: 100%;
+}
+
+.guest-trip-info-sheet {
+    position: relative;
+    background: transparent;
+}
+.guest-trip-info-sheet__handle {
+    display: none;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    padding: .55rem .85rem .45rem;
+    text-align: center;
+    color: rgba(255, 255, 255, .72);
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+}
+.guest-trip-info-sheet__grip {
+    display: block;
+    width: 2.6rem;
+    height: .28rem;
+    margin: 0 auto .35rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .38);
+}
+.guest-trip-info-sheet__hint {
+    display: block;
+    font-size: .78rem;
+    font-weight: 700;
+    letter-spacing: .02em;
+}
+.guest-trip-info-sheet__body {
+    /* normal flow when not searching */
+}
+
+/* Đang tìm TX: map + sheet cố định full màn, đáy sát menu dock. */
+.guest-trip-card.is-searching {
+    --guest-trip-sheet-peek: 3.35rem;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: var(--customer-dock-height, 3.85rem);
+    z-index: 1030;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+    border-bottom: 0;
+    overflow: hidden;
+    box-shadow: none;
+}
+body.guest-trip-searching {
+    overflow: hidden;
+}
+body.guest-trip-searching .app-main > .container {
+    /* Tránh padding container làm hở phía dưới khi đang tìm. */
+    padding-bottom: 0 !important;
+}
+.guest-trip-card.is-searching .guest-trip-live-map {
+    position: absolute;
+    inset: 0;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+}
+.guest-trip-card.is-searching .guest-trip-info-sheet {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 4;
+    height: auto;
+    max-height: calc(100% - 3.25rem);
+    border-radius: 1.1rem 1.1rem 0 0;
+    background: linear-gradient(165deg, rgba(28, 28, 28, 0.98) 0%, rgba(16, 16, 16, 0.99) 100%);
+    border: 1px solid rgba(212, 175, 55, 0.22);
+    border-bottom: 0;
+    box-shadow: 0 -10px 28px rgba(0, 0, 0, .45);
+    transition: transform .28s ease, max-height .28s ease;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.guest-trip-card.is-searching .guest-trip-info-sheet__handle {
+    display: block;
+    flex: 0 0 var(--guest-trip-sheet-peek);
+    height: var(--guest-trip-sheet-peek);
+    box-sizing: border-box;
+    padding: .5rem .85rem .4rem;
+}
+.guest-trip-card.is-searching .guest-trip-info-sheet__body {
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    padding-bottom: .65rem;
+    min-height: 0;
+}
+/* Thu xuống: chỉ còn thanh trạng thái — ẩn hẳn điểm đón/trả. */
+.guest-trip-card.is-searching .guest-trip-info-sheet.is-collapsed {
+    height: var(--guest-trip-sheet-peek);
+    max-height: var(--guest-trip-sheet-peek);
+    transform: none;
+}
+.guest-trip-card.is-searching .guest-trip-info-sheet.is-collapsed .guest-trip-info-sheet__body {
+    display: none;
+}
+.guest-trip-card.is-searching .guest-trip-info-sheet.is-expanded {
+    transform: translateY(0);
+    max-height: calc(100% - 3.25rem);
+    height: auto;
 }
 .guest-trip-live-map .mapboxgl-ctrl-attrib,
 .guest-trip-live-map .mapboxgl-ctrl-logo,
 .guest-trip-live-map a[href*="goong.io"] {
     display: none !important;
 }
-.guest-trip-radar {
+/* Vòng xanh quanh marker vị trí hiện tại / điểm đón. */
+.guest-trip-radar-pin {
+    position: relative;
+    width: 7.5rem;
+    height: 7.5rem;
+    pointer-events: none;
+}
+.guest-trip-radar-pin__rings {
     position: absolute;
     inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-end;
-    padding: 0 .85rem 1rem;
-    pointer-events: none;
-    background: transparent;
 }
-.guest-trip-radar__rings {
-    position: absolute;
-    top: 42%;
-    left: 50%;
-    width: 7rem;
-    height: 7rem;
-    transform: translate(-50%, -50%);
-}
-.guest-trip-radar__rings span {
+.guest-trip-radar-pin__rings span {
     position: absolute;
     inset: 0;
     border-radius: 50%;
     border: 2px solid rgba(34, 197, 94, .55);
     animation: guest-trip-radar-pulse 2.2s ease-out infinite;
 }
-.guest-trip-radar__rings span:nth-child(2) { animation-delay: .7s; }
-.guest-trip-radar__rings span:nth-child(3) { animation-delay: 1.4s; }
+.guest-trip-radar-pin__rings span:nth-child(2) { animation-delay: .7s; }
+.guest-trip-radar-pin__rings span:nth-child(3) { animation-delay: 1.4s; }
 @keyframes guest-trip-radar-pulse {
-    0% { transform: scale(.35); opacity: .9; }
-    100% { transform: scale(1.55); opacity: 0; }
+    0% { transform: scale(.28); opacity: .9; }
+    100% { transform: scale(1.15); opacity: 0; }
 }
-.guest-trip-radar__copy {
-    position: relative;
-    z-index: 1;
-    width: 100%;
-    padding: .65rem .75rem;
-    border-radius: .75rem;
-    background: rgba(18, 18, 18, .88);
-    border: 1px solid rgba(34, 197, 94, .35);
-    color: #fff;
-    text-align: center;
+.guest-trip-radar-pin__dot {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 1.15rem;
+    height: 1.15rem;
+    margin: -.575rem 0 0 -.575rem;
+    border-radius: 50%;
+    background: #22c55e;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, .35), 0 2px 6px rgba(0, 0, 0, .35);
 }
-.guest-trip-radar__copy strong {
+.guest-trip-radar-pin__arrow {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 1.55rem;
+    height: 1.55rem;
+    margin: -.78rem 0 0 -.78rem;
+    color: #22c55e;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .45));
+}
+.guest-trip-radar-pin__arrow svg {
     display: block;
-    font-size: .92rem;
-    font-weight: 800;
-    margin-bottom: .2rem;
+    width: 100%;
+    height: 100%;
 }
 .guest-trip-live-status {
     position: absolute;
@@ -4363,8 +4483,20 @@ body.guest-trip-vehicle-photo-open {
     align-items: center;
     gap: .55rem;
 }
-.customer-account-subhead .customer-account-panel__title {
+.customer-account-subhead .customer-account-panel__title,
+.customer-account-page-title {
     margin: 0;
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #fff;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.customer-account-subhead .customer-account-panel__title {
+    font-size: .95rem;
+    font-weight: 700;
 }
 .customer-account-back {
     display: inline-flex;
@@ -4487,6 +4619,146 @@ body.guest-trip-vehicle-photo-open {
     border-color: rgba(251, 191, 36, .55);
 }
 
+.customer-inbox-head {
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+}
+.customer-inbox-head__main,
+.customer-inbox-head__chat {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: .65rem;
+}
+.customer-inbox-head__chat {
+    justify-content: flex-start;
+}
+.customer-inbox-head__chat-title {
+    flex: 1;
+    min-width: 0;
+    color: #fff;
+    font-size: 1rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.customer-inbox-back {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: .55rem;
+    border: 1px solid rgba(255, 255, 255, .08);
+    background: rgba(255, 255, 255, .03);
+    color: var(--tl-primary-light);
+    font-size: 1.1rem;
+    line-height: 1;
+}
+.customer-inbox-chat-btn {
+    position: relative;
+    min-height: 2.4rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .4rem;
+    padding: .35rem .75rem .35rem .85rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, .14);
+    background: rgba(255, 255, 255, .04);
+    color: #fff;
+}
+.customer-inbox-chat-btn__label {
+    font-size: .84rem;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+}
+.customer-inbox-chat-btn__badge {
+    position: absolute;
+    top: -.2rem;
+    right: -.2rem;
+    min-width: 1.05rem;
+    padding: 0 .25rem;
+    border-radius: 999px;
+    background: #ef4444;
+    color: #fff;
+    font-size: .65rem;
+    font-weight: 700;
+    line-height: 1.05rem;
+    text-align: center;
+}
+.customer-inbox-chat-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .55rem;
+}
+.customer-inbox-chat-item {
+    width: 100%;
+    text-align: left;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+    padding: .85rem .9rem;
+    border-radius: .85rem;
+    border: 1px solid rgba(255, 255, 255, .08);
+    background: rgba(255, 255, 255, .03);
+    color: inherit;
+}
+.customer-inbox-chat-item.is-unread {
+    border-color: rgba(212, 175, 55, .4);
+    background: rgba(212, 175, 55, .08);
+}
+.customer-inbox-chat-item__top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: .5rem;
+}
+.customer-inbox-chat-item__name {
+    color: #e5e5e5;
+    font-size: .92rem;
+    font-weight: 500;
+}
+.customer-inbox-chat-item.is-unread .customer-inbox-chat-item__name,
+.customer-inbox-chat-item.is-unread .customer-inbox-chat-item__preview {
+    color: #fff;
+    font-weight: 700;
+}
+.customer-inbox-chat-item__top time {
+    color: var(--tl-text-muted);
+    font-size: .72rem;
+    white-space: nowrap;
+}
+.customer-inbox-chat-item__preview {
+    color: #a3a3a3;
+    font-size: .82rem;
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    padding-right: 1.6rem;
+}
+.customer-inbox-chat-item__badge {
+    position: absolute;
+    right: .75rem;
+    bottom: .75rem;
+    min-width: 1.15rem;
+    padding: 0 .3rem;
+    border-radius: 999px;
+    background: #ef4444;
+    color: #fff;
+    font-size: .68rem;
+    font-weight: 700;
+    line-height: 1.15rem;
+    text-align: center;
+}
 .customer-inbox-tabs {
     display: flex;
     gap: .4rem;
@@ -4726,14 +4998,96 @@ body.guest-trip-vehicle-photo-open {
 
 
 
-/* Phone + Zalo contact — vertical stack */
-.customer-contact-fab {
-    display: flex;
-    flex-direction: column;
-    gap: .45rem;
-    pointer-events: auto;
+/* SOS (phải trên) + Chat (trái dưới) + Locate (phải dưới) */
+.trip-sos-fab,
+.trip-chat-fab,
+.trip-locate-fab {
+    position: fixed;
+    z-index: 1036;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3.25rem;
+    height: 3.25rem;
+    padding: 0;
+    border-radius: 50%;
+    background: rgba(12, 12, 12, .94);
+    text-decoration: none;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
 }
-
+.trip-sos-fab {
+    /* Dưới navbar back/title (~58px). */
+    top: calc(3.7rem + env(safe-area-inset-top, 0px));
+    right: .7rem;
+    border: 2px solid #ef4444;
+    color: #fca5a5;
+}
+.guest-trip-page:has(.guest-trip-card.is-searching) .trip-sos-fab {
+    /* Map full-screen đè navbar — SOS góc phải trên map. */
+    top: calc(.75rem + env(safe-area-inset-top, 0px));
+}
+.trip-sos-fab svg {
+    width: 1.35rem;
+    height: 1.35rem;
+    stroke: #f87171;
+}
+.trip-sos-fab:hover,
+.trip-sos-fab:focus-visible {
+    color: #fecaca;
+    border-color: #f87171;
+    background: rgba(40, 12, 12, .96);
+    outline: none;
+}
+.trip-chat-fab {
+    left: .7rem;
+    bottom: calc(var(--customer-dock-height, 3.85rem) + .55rem);
+    border: 1px solid rgba(212, 175, 55, .45);
+    color: #d4af37;
+}
+.trip-chat-fab svg {
+    width: 1.35rem;
+    height: 1.35rem;
+    stroke: currentColor;
+}
+.trip-chat-fab:hover,
+.trip-chat-fab:focus-visible {
+    color: #fde68a;
+    border-color: rgba(212, 175, 55, .7);
+    outline: none;
+}
+.trip-locate-fab {
+    right: .7rem;
+    bottom: calc(var(--customer-dock-height, 3.85rem) + .55rem);
+    border: 1px solid rgba(34, 197, 94, .45);
+    color: #86efac;
+}
+.trip-locate-fab svg {
+    width: 1.35rem;
+    height: 1.35rem;
+    stroke: currentColor;
+}
+.trip-locate-fab:hover,
+.trip-locate-fab:focus-visible {
+    color: #bbf7d0;
+    border-color: rgba(34, 197, 94, .7);
+    outline: none;
+}
+body.is-trip-fabs-active .trip-chat-toggle {
+    display: none;
+}
+.guest-trip-page:has(.guest-trip-card.is-searching) .trip-sos-fab {
+    z-index: 1040;
+}
+body.guest-trip-searching .app-navbar {
+    display: none !important;
+}
+/* legacy no-op stubs */
+.customer-contact-fab {
+    display: none !important;
+}
 .customer-contact-fab--fixed {
     position: fixed;
     right: .7rem;
@@ -4772,26 +5126,10 @@ body.guest-trip-vehicle-photo-open {
     outline: none;
 }
 
-.customer-contact-fab-btn--phone svg {
-    width: 1.5rem;
-    height: 1.5rem;
-    stroke: #d4af37;
-}
-
-.customer-contact-fab-zalo-label {
-    font-size: .88rem;
-    font-weight: 800;
-    letter-spacing: -.02em;
-    line-height: 1;
-    text-transform: lowercase;
-    color: inherit;
-}
-
 @media (min-width: 768px) {
-    .customer-contact-fab--fixed {
-        right: 1rem;
-        bottom: 2rem;
-    }
+    .trip-sos-fab { right: 1rem; }
+    .trip-chat-fab { left: 1rem; bottom: 2rem; }
+    .trip-locate-fab { right: 1rem; bottom: 2rem; }
 }
 
 .customer-page,

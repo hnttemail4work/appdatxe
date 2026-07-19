@@ -1,4 +1,4 @@
-/* Tài xế — vàng–đen */
+/* T?i x? ? v?ng??en */
 .driver-page {
     --drv-primary: #d4af37;
     --drv-primary-light: #e8c547;
@@ -103,7 +103,7 @@ body.driver-drawer-open {
 }
 
 .driver-page--map {
-    /* Khoảng nâng nút định vị / nav phía trên panel dưới — JS cập nhật theo chiều cao thật */
+    /* Kho?ng n?ng n?t ??nh v? / nav ph?a tr?n panel d??i ? JS c?p nh?t theo chi?u cao th?t */
     --driver-map-fab-lift: 5.1rem;
 }
 
@@ -156,38 +156,6 @@ body.driver-drawer-open {
 .driver-map-chrome__btn:focus-visible {
     outline: 2px solid var(--drv-primary);
     outline-offset: 2px;
-}
-
-.driver-map-chrome__bell {
-    position: relative;
-}
-
-.driver-map-chrome__bell-dot {
-    position: absolute;
-    top: .35rem;
-    right: .4rem;
-    width: .45rem;
-    height: .45rem;
-    border-radius: 50%;
-    background: #ef4444;
-    box-shadow: 0 0 0 2px rgba(12, 12, 12, .9);
-}
-
-.driver-map-chrome__bell-badge {
-    position: absolute;
-    top: .1rem;
-    right: .05rem;
-    min-width: 1.1rem;
-    height: 1.1rem;
-    padding: 0 .25rem;
-    border-radius: 999px;
-    background: #ef4444;
-    color: #fff;
-    font-size: .62rem;
-    font-weight: 700;
-    line-height: 1.1rem;
-    text-align: center;
-    box-shadow: 0 0 0 2px rgba(12, 12, 12, .9);
 }
 
 .driver-inbox-tabs {
@@ -454,7 +422,7 @@ body.driver-drawer-open {
     line-height: 1.2;
 }
 
-/* Bottom panel — luôn hiện ở idle; mở rộng khi có cuốc / TEST — nằm trên dock */
+/* Bottom panel ? lu?n hi?n ? idle; m? r?ng khi c? cu?c / TEST ? n?m tr?n dock */
 .driver-bottom-panel {
     position: absolute;
     left: 0;
@@ -1084,10 +1052,21 @@ body.driver-drawer-open {
 
 .driver-overlay-panels__title {
     flex: 1;
+    min-width: 0;
     font-size: 1rem;
+    font-weight: 700;
     color: #fff;
-    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     user-select: none;
+}
+/* Title tab ?? hi?n tr?n thanh quay l?i ? ?n tr?ng trong body. */
+.driver-page--map.is-panel-open .driver-panel-title {
+    display: none;
+}
+.driver-page--map.is-panel-open .driver-inbox-head__main {
+    justify-content: flex-end;
 }
 
 .driver-overlay-panels__spacer {
@@ -1285,10 +1264,69 @@ body.driver-drawer-open {
     flex-shrink: 0;
 }
 
+.driver-account-identity {
+    display: flex;
+    align-items: center;
+    gap: .85rem;
+    padding: .85rem .95rem;
+    border-radius: .95rem;
+    border: 1px solid rgba(255, 255, 255, .08);
+    background: rgba(255, 255, 255, .03);
+}
+.driver-account-identity__avatar {
+    flex: 0 0 auto;
+}
+.driver-account-identity__meta {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+}
+.driver-account-identity__name {
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.driver-account-identity__rating {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    color: var(--drv-primary-light, #e8c547);
+    font-size: .84rem;
+    font-weight: 600;
+}
+.driver-account-logout {
+    margin-top: 1rem;
+}
+.driver-account-logout__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .45rem;
+    width: 100%;
+    min-height: 2.75rem;
+    border-radius: .85rem;
+    border: 1px solid rgba(248, 113, 113, .35);
+    background: rgba(248, 113, 113, .08);
+    color: #fca5a5;
+    font-weight: 700;
+}
+.driver-account-logout__btn:hover,
+.driver-account-logout__btn:focus-visible {
+    border-color: rgba(248, 113, 113, .55);
+    background: rgba(248, 113, 113, .14);
+    outline: none;
+}
 .driver-account-menu {
     display: flex;
     flex-direction: column;
     gap: .55rem;
+}
+.driver-account-menu a.driver-account-menu__item {
+    text-decoration: none;
 }
 
 .driver-account-menu__item {
@@ -1655,8 +1693,8 @@ body.driver-drawer-open {
 }
 
 /* ============================================================
-   Bản đồ live (Grab-style) — thay cho hero cũ, luôn hiện vị trí
-   tài xế + ghim đón/trả khi có chuyến đang chạy.
+   B?n ?? live (Grab-style) ? thay cho hero c?, lu?n hi?n v? tr?
+   t?i x? + ghim ??n/tr? khi c? chuy?n ?ang ch?y.
    ============================================================ */
 .driver-map-hero {
     position: relative;
@@ -1676,7 +1714,7 @@ body.driver-drawer-open {
 }
 
 .driver-map-hero__canvas--error::after {
-    content: 'Không tải được bản đồ';
+    content: 'Kh?ng t?i ???c b?n ??';
     position: absolute;
     inset: 0;
     display: flex;
@@ -1797,7 +1835,7 @@ body.driver-drawer-open {
 }
 
 .driver-map-hero__locate-btn {
-    /* Không đổi màu khi bấm — chỉ recenter camera/mũi tên */
+    /* Kh?ng ??i m?u khi b?m ? ch? recenter camera/m?i t?n */
     transition: none;
 }
 
@@ -1921,7 +1959,7 @@ body.driver-drawer-open {
 
 
 
-/* Hero — profile + earnings overview (Grab-style) */
+/* Hero ? profile + earnings overview (Grab-style) */
 
 
 
@@ -1994,7 +2032,7 @@ body.driver-drawer-open {
     margin: 0;
     opacity: 0;
     cursor: pointer;
-    /* TODO (Fix Driver Toggle): Cho phép bấm trực tiếp lên switch — tránh kẹt không tắt/bật app. */
+    /* TODO (Fix Driver Toggle): Cho ph?p b?m tr?c ti?p l?n switch ? tr?nh k?t kh?ng t?t/b?t app. */
     pointer-events: auto;
 }
 
@@ -2195,7 +2233,7 @@ body.driver-drawer-open {
     color: var(--drv-primary-light);
 }
 
-/* Bottom dock navigation — mép thẳng, không bo tròn */
+/* Bottom dock navigation ? m?p th?ng, kh?ng bo tr?n */
 .driver-app-dock {
     --driver-dock-height: calc(3.85rem + env(safe-area-inset-bottom, 0px));
     position: fixed;
@@ -2282,74 +2320,59 @@ body.driver-drawer-open {
     background: #ef4444;
 }
 
-/* Phone + Zalo — góc phải dưới (giống trang đặt xe) */
 .driver-page .driver-location-fallback__actions {
     display: flex;
     gap: .5rem;
     flex-wrap: wrap;
 }
 
-.driver-page .customer-contact-fab {
-    display: flex;
-    flex-direction: column;
-    gap: .45rem;
-    pointer-events: auto;
-}
-
-.driver-page .customer-contact-fab--fixed {
-    position: fixed;
-    right: .7rem;
-    bottom: calc(var(--driver-dock-height, calc(3.35rem + env(safe-area-inset-bottom, 0px))) + .45rem);
-    z-index: 1035;
-}
-
-.driver-page .customer-contact-fab-btn {
+.driver-page .trip-sos-fab,
+.driver-page .trip-chat-fab {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 3.35rem;
-    height: 3.35rem;
+    width: 3.25rem;
+    height: 3.25rem;
+    padding: 0;
     border-radius: 50%;
-    border: 1px solid rgba(212, 175, 55, .42);
     background: rgba(12, 12, 12, .94);
-    color: #d4af37;
     text-decoration: none;
     box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
-    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
 }
-
-.driver-page .customer-contact-fab-btn:hover,
-.driver-page .customer-contact-fab-btn:focus-visible {
-    color: #fde68a;
-    background: rgba(20, 18, 12, .98);
-    border-color: rgba(212, 175, 55, .68);
-    transform: translateY(-1px);
-    box-shadow: 0 6px 18px rgba(0, 0, 0, .48);
-    outline: none;
+.driver-page .trip-sos-fab {
+    position: fixed;
+    top: calc(.7rem + env(safe-area-inset-top, 0px));
+    right: .85rem;
+    z-index: 1035;
+    border: 2px solid #ef4444;
+    color: #fca5a5;
 }
-
-.driver-page .customer-contact-fab-btn--phone svg {
-    width: 1.5rem;
-    height: 1.5rem;
+.driver-page .trip-sos-fab svg {
+    width: 1.35rem;
+    height: 1.35rem;
+    stroke: #f87171;
+}
+.driver-page .trip-chat-fab {
+    position: fixed;
+    left: .7rem;
+    bottom: calc(var(--driver-dock-height, 3.85rem) + .55rem);
+    z-index: 1035;
+    border: 1px solid rgba(212, 175, 55, .45);
+    color: #d4af37;
+}
+.driver-page .trip-chat-fab svg {
+    width: 1.35rem;
+    height: 1.35rem;
     stroke: currentColor;
 }
-
-.driver-page .customer-contact-fab-zalo-label {
-    font-size: .88rem;
-    font-weight: 800;
-    letter-spacing: -.02em;
-    line-height: 1;
-    text-transform: lowercase;
-    color: inherit;
+.driver-page--map.is-panel-open .trip-sos-fab,
+.driver-page--map.is-panel-open .trip-chat-fab {
+    visibility: hidden;
+    pointer-events: none;
 }
-
-@media (min-width: 768px) {
-    .driver-page .customer-contact-fab--fixed {
-        right: 1rem;
-        bottom: 2rem;
-    }
-}
-
 .driver-card-map-nav,
 .driver-request-card__map-nav {
     padding: 0 .85rem .65rem;
@@ -2695,7 +2718,7 @@ body.driver-drawer-open {
     color: #b0b0b0 !important;
 }
 
-/* —— Vàng–đen: thẻ chuyến, ví, thông báo —— */
+/* ?? V?ng??en: th? chuy?n, v?, th?ng b?o ?? */
 .driver-page .driver-trip-card,
 .driver-page .driver-schedule-card,
 .driver-page .driver-wallet-history-item,
@@ -3608,7 +3631,7 @@ body.driver-drawer-open {
 
 
 
-/* —— Xem chuyến: danh sách gọn —— */
+/* ?? Xem chuy?n: danh s?ch g?n ?? */
 .driver-trips-list {
     display: flex;
     flex-direction: column;
@@ -4145,7 +4168,7 @@ form[data-swipe-action].driver-workflow-compact-action {
     display: none;
 }
 
-/* —— Cuốc chờ nhận (incoming request) —— */
+/* ?? Cu?c ch? nh?n (incoming request) ?? */
 .driver-request-card--incoming {
     position: relative;
     border-color: rgba(212, 175, 55, .45);
@@ -4310,7 +4333,7 @@ form[data-swipe-action].driver-workflow-compact-action {
     border: 1px solid rgba(255, 255, 255, .06);
 }
 
-/* —— Cuốc chờ nhận (incoming request) —— */
+/* ?? Cu?c ch? nh?n (incoming request) ?? */
 .driver-request-card--incoming {
     position: relative;
     border-color: rgba(212, 175, 55, .45);

@@ -1,7 +1,7 @@
 @php
     $inboxTab = in_array(request('inbox_tab'), ['info', 'notice'], true)
         ? request('inbox_tab')
-        : 'notice';
+        : 'info';
     $infoMessages = $inboxInfoMessages ?? collect();
     $noticeMessages = $inboxNoticeMessages ?? collect();
     $chatThreads = $inboxChatThreads ?? collect();
@@ -27,9 +27,7 @@
             </button>
         </div>
         <div class="driver-inbox-head__chat d-none" data-inbox-head-chat hidden>
-            <button type="button" class="driver-inbox-back" data-inbox-chat-back aria-label="Quay lại">
-                ← Quay lại
-            </button>
+            <button type="button" class="driver-inbox-back" data-inbox-chat-back aria-label="Quay lại">←</button>
             <strong class="driver-inbox-head__chat-title" data-inbox-chat-title>Tin nhắn</strong>
         </div>
     </div>
@@ -56,6 +54,16 @@
     <div class="driver-inbox-system" data-inbox-system>
         <div class="driver-inbox-tabs mb-3" role="tablist">
             <button type="button"
+                    class="driver-inbox-tabs__btn {{ $inboxTab === 'info' ? 'is-active' : '' }}"
+                    data-inbox-tab="info"
+                    role="tab"
+                    aria-selected="{{ $inboxTab === 'info' ? 'true' : 'false' }}">
+                Tin tức
+                @if($unreadInfo > 0)
+                    <span class="driver-inbox-tabs__badge">{{ $unreadInfo }}</span>
+                @endif
+            </button>
+            <button type="button"
                     class="driver-inbox-tabs__btn {{ $inboxTab === 'notice' ? 'is-active' : '' }}"
                     data-inbox-tab="notice"
                     role="tab"
@@ -65,26 +73,16 @@
                     <span class="driver-inbox-tabs__badge">{{ $unreadNotice }}</span>
                 @endif
             </button>
-            <button type="button"
-                    class="driver-inbox-tabs__btn {{ $inboxTab === 'info' ? 'is-active' : '' }}"
-                    data-inbox-tab="info"
-                    role="tab"
-                    aria-selected="{{ $inboxTab === 'info' ? 'true' : 'false' }}">
-                Thông tin
-                @if($unreadInfo > 0)
-                    <span class="driver-inbox-tabs__badge">{{ $unreadInfo }}</span>
-                @endif
-            </button>
         </div>
 
-        <div class="driver-inbox-pane {{ $inboxTab === 'notice' ? 'is-active' : '' }}" data-inbox-pane="notice" @if($inboxTab !== 'notice') hidden @endif>
-            @if($noticeMessages->isEmpty())
+        <div class="driver-inbox-pane {{ $inboxTab === 'info' ? 'is-active' : '' }}" data-inbox-pane="info" @if($inboxTab !== 'info') hidden @endif>
+            @if($infoMessages->isEmpty())
                 <div class="driver-inbox-empty">
-                    <p class="mb-0">Chưa có thông báo.</p>
+                    <p class="mb-0">Chưa có tin tức.</p>
                 </div>
             @else
                 <ul class="driver-inbox-list">
-                    @foreach($noticeMessages as $msg)
+                    @foreach($infoMessages as $msg)
                         <li class="driver-inbox-list__item {{ $msg->isRead() ? '' : 'is-unread' }}"
                             data-inbox-message-id="{{ $msg->id }}"
                             role="button"
@@ -97,14 +95,14 @@
             @endif
         </div>
 
-        <div class="driver-inbox-pane {{ $inboxTab === 'info' ? 'is-active' : '' }}" data-inbox-pane="info" @if($inboxTab !== 'info') hidden @endif>
-            @if($infoMessages->isEmpty())
+        <div class="driver-inbox-pane {{ $inboxTab === 'notice' ? 'is-active' : '' }}" data-inbox-pane="notice" @if($inboxTab !== 'notice') hidden @endif>
+            @if($noticeMessages->isEmpty())
                 <div class="driver-inbox-empty">
-                    <p class="mb-0">Chưa có thông tin.</p>
+                    <p class="mb-0">Chưa có thông báo.</p>
                 </div>
             @else
                 <ul class="driver-inbox-list">
-                    @foreach($infoMessages as $msg)
+                    @foreach($noticeMessages as $msg)
                         <li class="driver-inbox-list__item {{ $msg->isRead() ? '' : 'is-unread' }}"
                             data-inbox-message-id="{{ $msg->id }}"
                             role="button"

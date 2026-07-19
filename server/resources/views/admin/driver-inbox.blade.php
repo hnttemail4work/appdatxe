@@ -19,7 +19,7 @@
         <div class="console-form" style="max-width: 40rem;">
             <p class="text-muted small mb-3">
                 <strong>Thông báo</strong> — cảnh báo / cập nhật cần chú ý.
-                <strong>Thông tin</strong> — khuyến mãi / tin chung.
+                <strong>Tin tức</strong> — khuyến mãi / tin chung.
             </p>
 
             <form method="POST" action="{{ route('admin.driverInbox.send') }}">
@@ -34,7 +34,7 @@
                         </label>
                         <label class="form-check">
                             <input class="form-check-input" type="radio" name="category" value="info" @checked(old('category') === 'info')>
-                            <span class="form-check-label">Thông tin</span>
+                            <span class="form-check-label">Tin tức</span>
                         </label>
                     </div>
                 </div>

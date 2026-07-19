@@ -15,6 +15,8 @@ class TripChatService
 {
     public const DRIVER_THREAD_LIMIT = 10;
 
+    public const CUSTOMER_THREAD_LIMIT = 10;
+
     public function isOpen(Booking $booking): bool
     {
         $booking->loadMissing('schedule');
@@ -123,6 +125,17 @@ class TripChatService
             ->count();
     }
 
+    public function unreadCountForCustomerBooking(Booking $booking): int
+    {
+        $lastRead = (int) ($booking->customer_chat_last_read_id ?? 0);
+
+        return (int) TripMessage::query()
+            ->where('booking_id', $booking->id)
+            ->where('sender_role', 'driver')
+            ->when($lastRead > 0, fn ($query) => $query->where('id', '>', $lastRead))
+            ->count();
+    }
+
     public function unreadCountForDriver(int $driverUserId): int
     {
         return (int) DB::table('trip_messages as m')
@@ -140,8 +153,21 @@ class TripChatService
             ->count();
     }
 
+    public function unreadCountForCustomer(int $customerUserId): int
+    {
+        return (int) DB::table('trip_messages as m')
+            ->join('bookings as b', 'b.id', '=', 'm.booking_id')
+            ->where('b.customer_id', $customerUserId)
+            ->where('m.sender_role', 'driver')
+            ->where(function ($query): void {
+                $query->whereNull('b.customer_chat_last_read_id')
+                    ->orWhereColumn('m.id', '>', 'b.customer_chat_last_read_id');
+            })
+            ->count();
+    }
+
     /**
-     * Gộp unread hệ thống + chat (badge dock / chuông).
+     * Gộp unread hệ thống + chat (badge dock / chuông) — tài xế.
      *
      * @param  array{info?: int, notice?: int, total?: int}  $inboxUnread
      * @return array{info: int, notice: int, chat: int, total: int}
@@ -160,7 +186,37 @@ class TripChatService
         ];
     }
 
+    /**
+     * Gộp unread hệ thống + chat — khách.
+     *
+     * @param  array{info?: int, notice?: int, total?: int}  $inboxUnread
+     * @return array{info: int, notice: int, chat: int, total: int}
+     */
+    public function mergeCustomerInboxUnread(array $inboxUnread, int $customerUserId): array
+    {
+        $info = (int) ($inboxUnread['info'] ?? 0);
+        $notice = (int) ($inboxUnread['notice'] ?? 0);
+        $chat = $this->unreadCountForCustomer($customerUserId);
+
+        return [
+            'info'   => $info,
+            'notice' => $notice,
+            'chat'   => $chat,
+            'total'  => $info + $notice + $chat,
+        ];
+    }
+
     public function markDriverRead(Booking $booking): void
+    {
+        $this->markChatRead($booking, 'driver_chat_last_read_id');
+    }
+
+    public function markCustomerRead(Booking $booking): void
+    {
+        $this->markChatRead($booking, 'customer_chat_last_read_id');
+    }
+
+    private function markChatRead(Booking $booking, string $column): void
     {
         $maxId = (int) TripMessage::query()
             ->where('booking_id', $booking->id)
@@ -170,11 +226,11 @@ class TripChatService
             return;
         }
 
-        if ((int) ($booking->driver_chat_last_read_id ?? 0) >= $maxId) {
+        if ((int) ($booking->{$column} ?? 0) >= $maxId) {
             return;
         }
 
-        $booking->forceFill(['driver_chat_last_read_id' => $maxId])->save();
+        $booking->forceFill([$column => $maxId])->save();
     }
 
     /**
@@ -199,19 +255,48 @@ class TripChatService
             ->get();
 
         return $bookings->map(function (Booking $booking): array {
-            $last = $booking->latestTripMessage;
-            $preview = $last?->body ?? '';
-            if (mb_strlen($preview) > 80) {
-                $preview = mb_substr($preview, 0, 80).'…';
-            }
-
-            return [
-                'booking' => $booking,
-                'unread'  => $this->unreadCountForBooking($booking),
-                'preview' => $preview,
-                'open'    => $this->isOpen($booking),
-                'last_at' => $last?->created_at?->format('d/m H:i'),
-            ];
+            return $this->mapThread($booking, $this->unreadCountForBooking($booking));
         });
+    }
+
+    /**
+     * @return Collection<int, array{booking: Booking, unread: int, preview: string, open: bool, last_at: ?string}>
+     */
+    public function recentThreadsForCustomer(int $customerUserId, ?int $limit = null): Collection
+    {
+        $limit ??= self::CUSTOMER_THREAD_LIMIT;
+
+        $bookings = Booking::query()
+            ->where('customer_id', $customerUserId)
+            ->whereHas('tripMessages')
+            ->with(['latestTripMessage', 'schedule', 'assignedDriver'])
+            ->withMax('tripMessages', 'created_at')
+            ->orderByDesc('trip_messages_max_created_at')
+            ->limit($limit)
+            ->get();
+
+        return $bookings->map(function (Booking $booking): array {
+            return $this->mapThread($booking, $this->unreadCountForCustomerBooking($booking));
+        });
+    }
+
+    /**
+     * @return array{booking: Booking, unread: int, preview: string, open: bool, last_at: ?string}
+     */
+    private function mapThread(Booking $booking, int $unread): array
+    {
+        $last = $booking->latestTripMessage;
+        $preview = $last?->body ?? '';
+        if (mb_strlen($preview) > 80) {
+            $preview = mb_substr($preview, 0, 80).'…';
+        }
+
+        return [
+            'booking' => $booking,
+            'unread'  => $unread,
+            'preview' => $preview,
+            'open'    => $this->isOpen($booking),
+            'last_at' => $last?->created_at?->format('d/m H:i'),
+        ];
     }
 }

@@ -6,11 +6,6 @@
     $backPending = (bool) $pendingChange?->photoUrl('photo_id_card_back');
 @endphp
 <section class="customer-account-panel is-active" aria-label="Cập nhật CCCD">
-    <div class="customer-account-subhead mb-3">
-        <a href="{{ route('customer.account', ['tab' => 'account']) }}" class="customer-account-back" aria-label="Quay lại">←</a>
-        <h2 class="customer-account-panel__title mb-0">Cập nhật CCCD</h2>
-    </div>
-
     <div class="customer-account-card">
         <p class="small text-muted mb-3">Xem ảnh hiện tại, bấm «Thay ảnh» chọn ảnh mới rồi gửi — ảnh cũ giữ đến khi admin duyệt.</p>
 

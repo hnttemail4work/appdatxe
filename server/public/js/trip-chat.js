@@ -90,6 +90,9 @@
             if (data.unread && window.DriverInbox && window.DriverInbox.updateBadges) {
                 window.DriverInbox.updateBadges(data.unread);
             }
+            if (data.unread && window.CustomerInbox && window.CustomerInbox.updateBadges) {
+                window.CustomerInbox.updateBadges(data.unread);
+            }
         }).catch(function (error) {
             setError(panel, error.message || 'Không tải được tin nhắn.');
         });

@@ -34,8 +34,6 @@ $loginUrl = route('login');
                value="{{ $dropoffValue }}">
     </div>
 
-    <h2 class="grab-home-title">Bạn muốn đi đâu?</h2>
-
     <div class="grab-home-bar" data-open-address-sheet>
         <button type="button"
                 class="grab-home-bar__map"

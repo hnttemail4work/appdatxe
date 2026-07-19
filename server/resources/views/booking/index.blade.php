@@ -80,9 +80,9 @@ $platformHotlinePhone = (string) config('app.contact_phone');
         'driverOffers' => $driverOffers ?? collect(),
     ])
 
-    @include('partials.customer-contact-fab', [
+    @include('partials.trip-action-fabs', [
         'hotlinePhone' => $platformHotlinePhone,
-        'variant' => 'fixed',
+        'inTrip' => false,
     ])
 </div>
 @endsection

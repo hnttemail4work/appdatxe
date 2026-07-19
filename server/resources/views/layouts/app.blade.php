@@ -30,6 +30,12 @@
     } elseif (auth()->check() && auth()->user()->role === 'customer') {
         $brandHref = route('customer.account', ['tab' => 'account']);
     }
+    // User: trang chủ không hiện brand; trang khác = back + title (giống tài xế).
+    $showUserBrandHeader = false;
+    $showUserBackHeader = request()->routeIs('booking.trips', 'customer.account', 'about');
+    $showMobileDrawer = ! auth()->check();
+    // Trang chủ: ẩn hẳn navbar nếu không còn gì để hiển thị (đã bỏ brand).
+    $hideNavbar = request()->routeIs('home') && ! $showMobileDrawer;
 @endphp
 <html lang="vi" data-bs-theme="dark">
 <head>
@@ -116,16 +122,24 @@
     $isAuthChrome = \App\Support\AuthAudience::isAuthScreen();
 @endphp
 <body class="app-shell @if($isAuthChrome) app-shell--auth @endif @if($isAuthChrome || request()->routeIs('home', 'about', 'booking.trips', 'customer.account', 'driver.dashboard')) app-shell--mobile-app @endif">
-<nav class="navbar navbar-expand-lg app-navbar navbar-dark">
+@unless($hideNavbar)
+<nav class="navbar navbar-expand-lg app-navbar navbar-dark @if($showUserBackHeader) app-navbar--back @endif">
     <div class="container app-navbar-inner">
-        <a class="navbar-brand app-brand-link app-brand-link--stacked" href="{{ $brandHref }}" aria-label="{{ $appBrandName }}">
-            <span class="app-brand-stack">
-                <span class="app-brand-title">{{ $appBrandTitle }}</span>
-                @if(! request()->routeIs('home'))
-                <span class="app-brand-tagline">{{ $appBrandTagline }}</span>
-                @endif
-            </span>
-        </a>
+        @if($showUserBackHeader)
+            <div class="app-nav-backhead">
+                <a href="@yield('navBack', route('home'))" class="app-nav-back" aria-label="Quay lại">←</a>
+                <strong class="app-nav-page-title">@yield('navTitle', 'Trang')</strong>
+            </div>
+        @elseif($showUserBrandHeader || ! $hidePublicNav || $minimalNav)
+            <a class="navbar-brand app-brand-link app-brand-link--stacked" href="{{ $brandHref }}" aria-label="{{ $appBrandName }}">
+                <span class="app-brand-stack">
+                    <span class="app-brand-title">{{ $appBrandTitle }}</span>
+                    @if(! request()->routeIs('home'))
+                    <span class="app-brand-tagline">{{ $appBrandTagline }}</span>
+                    @endif
+                </span>
+            </a>
+        @endif
         @if($minimalNav)
         <div class="app-navbar-desktop d-none d-lg-flex ms-auto align-items-center gap-2 gap-md-3 flex-wrap justify-content-end">
             @if(auth()->user()->role === 'admin')
@@ -176,7 +190,6 @@
         @endauth
         @endif
         @php
-            $showMobileDrawer = ! auth()->check();
             $showNavDrawerOnDesktop = $showMobileDrawer && $hidePublicNav;
         @endphp
         @if($showMobileDrawer)
@@ -191,6 +204,7 @@
         @endif
     </div>
 </nav>
+@endunless
 @if($pwaEnabled)
 @include('partials.pwa-install-prompt')
 @endif

@@ -1,13 +1,13 @@
 /**
- * Map chuyến khách: radar khi tìm TX; icon ô tô cập nhật sau khi nhận / trong chuyến.
+ * Map chuyến khách: radar quanh vị trí hiện tại khi tìm TX; icon ô tô sau khi nhận.
  */
 (function () {
     'use strict';
 
     var mapEl = document.getElementById('guest-trip-live-map');
     var canvas = document.getElementById('guest-trip-live-map-canvas');
-    var radarEl = document.getElementById('guest-trip-radar');
     var statusEl = document.getElementById('guest-trip-live-status');
+    var locateBtn = document.getElementById('guest-trip-locate-btn');
     if (!mapEl || !canvas) {
         return;
     }
@@ -16,7 +16,11 @@
     var pickupMarker = null;
     var dropoffMarker = null;
     var carMarker = null;
+    var radarMarker = null;
     var assetsPromise = null;
+    var lastPickup = null;
+    var lastUserPos = null;
+    var searchingActive = false;
 
     function ensureAssets() {
         if (window.goongjs && window.__goongMaptilesKey) {
@@ -63,6 +67,18 @@
         return el;
     }
 
+    function radarPinEl() {
+        var el = document.createElement('div');
+        el.className = 'guest-trip-radar-pin';
+        el.innerHTML = ''
+            + '<div class="guest-trip-radar-pin__rings" aria-hidden="true"><span></span><span></span><span></span></div>'
+            + '<div class="guest-trip-radar-pin__arrow" aria-hidden="true">'
+            + '<svg viewBox="0 0 24 24" fill="currentColor">'
+            + '<path d="M12 2.5L4.8 19.2c-.25.58.4 1.15.96.84L12 16.7l6.24 3.34c.56.3 1.21-.26.96-.84L12 2.5z"/>'
+            + '</svg></div>';
+        return el;
+    }
+
     function showMapShell(show) {
         if (show) {
             mapEl.hidden = false;
@@ -70,20 +86,6 @@
         } else {
             mapEl.hidden = true;
             mapEl.classList.add('d-none');
-        }
-    }
-
-    function setRadar(visible, waitProgress) {
-        if (!radarEl) {
-            return;
-        }
-        radarEl.classList.toggle('d-none', !visible);
-        if (!visible || !waitProgress) {
-            return;
-        }
-        var title = document.getElementById('guest-trip-radar-title');
-        if (title) {
-            title.textContent = waitProgress.label || waitProgress.title || 'Đang tìm tài xế gần bạn…';
         }
     }
 
@@ -145,6 +147,38 @@
         return null;
     }
 
+    function clearRadarPin() {
+        if (radarMarker) {
+            radarMarker.remove();
+            radarMarker = null;
+        }
+    }
+
+    function placeRadarPin(lat, lng) {
+        if (!mapInstance || lat == null || lng == null || !window.goongjs) {
+            return;
+        }
+        var lngLat = [Number(lng), Number(lat)];
+        if (!radarMarker) {
+            radarMarker = new window.goongjs.Marker({
+                element: radarPinEl(),
+                anchor: 'center',
+            }).setLngLat(lngLat).addTo(mapInstance);
+            return;
+        }
+        radarMarker.setLngLat(lngLat);
+    }
+
+    function activeLocateTarget() {
+        if (lastUserPos) {
+            return lastUserPos;
+        }
+        if (lastPickup) {
+            return lastPickup;
+        }
+        return null;
+    }
+
     function placeCar(lat, lng, heading) {
         if (!mapInstance || lat == null || lng == null || !window.goongjs) {
             return;
@@ -183,12 +217,71 @@
         mapInstance.fitBounds(bounds, { padding: 48, maxZoom: 15, duration: 500 });
     }
 
+    function readGps(options) {
+        options = options || {};
+        return new Promise(function (resolve, reject) {
+            if (!navigator.geolocation) {
+                reject(new Error('no_geo'));
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(
+                function (pos) {
+                    resolve({
+                        lat: pos.coords.latitude,
+                        lng: pos.coords.longitude,
+                    });
+                },
+                function (err) {
+                    reject(err || new Error('geo_fail'));
+                },
+                {
+                    enableHighAccuracy: !!options.highAccuracy,
+                    timeout: options.timeout || 10000,
+                    maximumAge: options.maximumAge != null ? options.maximumAge : 15000,
+                }
+            );
+        });
+    }
+
+    function syncRadarAroundLocation() {
+        if (!searchingActive) {
+            clearRadarPin();
+            return;
+        }
+        var target = activeLocateTarget();
+        if (!target) {
+            clearRadarPin();
+            return;
+        }
+        placeRadarPin(target.lat, target.lng);
+    }
+
+    function locateMe(fly) {
+        return readGps({ highAccuracy: true, timeout: 12000, maximumAge: 5000 })
+            .then(function (pos) {
+                lastUserPos = pos;
+                syncRadarAroundLocation();
+                if (fly !== false && mapInstance) {
+                    fitOrFly([[pos.lng, pos.lat]], 16);
+                }
+                return pos;
+            })
+            .catch(function () {
+                var fallback = lastPickup;
+                if (fallback && mapInstance && fly !== false) {
+                    fitOrFly([[fallback.lng, fallback.lat]], 16);
+                }
+                return fallback;
+            });
+    }
+
     function updateFromBooking(booking) {
         if (!booking || booking.trip_status === 'completed' || booking.trip_status === 'cancelled') {
+            searchingActive = false;
             showMapShell(false);
-            setRadar(false);
             setLiveStatus('');
             clearCar();
+            clearRadarPin();
             return;
         }
 
@@ -197,6 +290,7 @@
         var dropLat = booking.dropoff_lat;
         var dropLng = booking.dropoff_lng;
         var searching = !booking.has_driver;
+        searchingActive = searching;
         var driver = booking.driver || null;
         var stage = driver ? String(driver.stage || '') : '';
         var inTrip = stage === 'picked_up' || stage === 'running';
@@ -207,8 +301,9 @@
             return;
         }
 
+        lastPickup = { lat: Number(pickupLat), lng: Number(pickupLng) };
+
         showMapShell(true);
-        setRadar(searching, booking.wait_progress || null);
 
         var statusLine = booking.driver_status_line
             || (driver && driver.status_line)
@@ -220,8 +315,26 @@
 
         var center = [Number(pickupLng), Number(pickupLat)];
         ensureMap(center).then(function (map) {
-            map.resize();
-            placePin('pickup', pickupLat, pickupLng, '#22c55e');
+            window.requestAnimationFrame(function () {
+                try { map.resize(); } catch (e) { /* ignore */ }
+            });
+
+            if (searching) {
+                // Đang tìm: vòng xanh + mũi tên quanh vị trí (GPS nếu có, không thì điểm đón).
+                if (pickupMarker) {
+                    pickupMarker.remove();
+                    pickupMarker = null;
+                }
+                syncRadarAroundLocation();
+                if (!lastUserPos) {
+                    placeRadarPin(lastPickup.lat, lastPickup.lng);
+                    locateMe(false);
+                }
+            } else {
+                clearRadarPin();
+                placePin('pickup', pickupLat, pickupLng, '#22c55e');
+            }
+
             if (dropLat != null && dropLng != null && (inTrip || enRoute)) {
                 placePin('dropoff', dropLat, dropLng, '#ef4444');
             }
@@ -240,7 +353,8 @@
             } else {
                 clearCar();
                 if (searching) {
-                    fitOrFly([center], 16);
+                    var focus = activeLocateTarget();
+                    fitOrFly([[focus.lng, focus.lat]], 16);
                 } else if (dropLat != null && dropLng != null) {
                     fitOrFly([center, [Number(dropLng), Number(dropLat)]], 13);
                 } else {
@@ -252,7 +366,29 @@
         });
     }
 
+    function resize() {
+        if (!mapInstance) {
+            return;
+        }
+        try {
+            mapInstance.resize();
+        } catch (e) {
+            /* ignore */
+        }
+    }
+
+    if (locateBtn) {
+        locateBtn.addEventListener('click', function () {
+            locateBtn.disabled = true;
+            locateMe(true).finally(function () {
+                locateBtn.disabled = false;
+            });
+        });
+    }
+
     window.GuestTripLiveMap = {
         updateFromBooking: updateFromBooking,
+        resize: resize,
+        locateMe: locateMe,
     };
 })();

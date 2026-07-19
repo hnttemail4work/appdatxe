@@ -1,5 +1,8 @@
 @extends('layouts.app')
 
+@section('navTitle', 'Giới thiệu')
+@section('navBack', route('home'))
+
 @section('content')
 @php
 use App\Support\AppBrandingSettings;
@@ -14,7 +17,6 @@ $email = (string) config('app.contact_email');
 
 <div class="customer-page customer-about-page">
     <div class="customer-hero mb-4">
-        <h1>Về chúng tôi</h1>
         <p class="mb-0">{{ $brandTitle }} — {{ AppBrandingSettings::brandTagline() }}</p>
     </div>
 
@@ -41,14 +43,6 @@ $email = (string) config('app.contact_email');
         @endif
     </div>
 
-    <div class="mt-4">
-        <a href="{{ route('home') }}" class="btn btn-outline-primary">← Quay lại đặt xe</a>
-    </div>
-
-    @include('partials.customer-contact-fab', [
-        'hotlinePhone' => $platformHotlinePhone,
-        'variant' => 'fixed',
-    ])
 </div>
 @endsection
 
@@ -70,4 +64,4 @@ $email = (string) config('app.contact_email');
 .customer-about-card a { color: var(--tl-primary-light); }
 </style>
 @endpush
-
+

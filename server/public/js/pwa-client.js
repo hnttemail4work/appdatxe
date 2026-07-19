@@ -299,8 +299,8 @@
                     ? 'Đã ghim — mở từ icon trên màn hình chính'
                     : 'Lối tắt mở màn sẵn sàng nhận cuốc';
             }
-            var label = btn.querySelector('.driver-drawer__link-text, [data-pwa-install-label]');
-            if (label && btn.id === 'driver-drawer-pwa-install') {
+            var label = btn.querySelector('[data-pwa-install-label], .driver-drawer__link-text');
+            if (label) {
                 label.textContent = installed ? 'Đã ghim app Tài xế' : 'Ghim vào màn hình chính';
             }
         });

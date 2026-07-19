@@ -104,7 +104,10 @@
         </div>
     </section>
 
-    @include('partials.driver-map-chrome')
+    @include('partials.trip-action-fabs', [
+        'hotlinePhone' => config('app.contact_phone'),
+        'inTrip' => (bool) ($driverOnTrip || $driverTripActive),
+    ])
 
     <div id="driver-location-bar" class="d-none" aria-hidden="true"
          data-driver-paused="{{ $driverPaused ? '1' : '0' }}"
@@ -178,13 +181,12 @@
         ],
     ])
 
-    @include('partials.driver-drawer')
 @endif
 
     <div class="driver-overlay-panels {{ $driverDefaultTab !== 'trips' ? 'is-open' : '' }}" id="driver-overlay-panels" @if($driverDefaultTab === 'trips') hidden @endif>
         <div class="driver-overlay-panels__bar">
             <button type="button" class="driver-overlay-panels__back" data-driver-tab="trips" aria-label="Quay lại">←</button>
-            <strong class="driver-overlay-panels__title" id="driver-overlay-title" data-driver-tab="trips" role="button" tabindex="0">Quay lại</strong>
+            <strong class="driver-overlay-panels__title" id="driver-overlay-title">Hộp thư</strong>
             <span class="driver-overlay-panels__spacer" aria-hidden="true"></span>
         </div>
         <div class="driver-overlay-panels__body">
@@ -269,6 +271,10 @@
                 @include('partials.driver-tab-account', [
                     'mustChangePassword' => $mustChangePassword ?? false,
                     'pendingChangeRequest' => $pendingChangeRequest,
+                    'user' => $user ?? auth()->user(),
+                    'profile' => $profile,
+                    'driverWallet' => $driverWallet ?? null,
+                    'heroStatus' => $heroStatus ?? null,
                 ])
             </section>
 
@@ -343,6 +349,7 @@ window.__driverAppSettings = @json($driverAppSettings);
 <script src="{{ asset('js/driver-live-map.js') }}?v={{ filemtime(public_path('js/driver-live-map.js')) }}"></script>
 <script src="{{ asset('js/driver-availability-toggle.js') }}?v={{ filemtime(public_path('js/driver-availability-toggle.js')) }}"></script>
 <script src="{{ asset('js/trip-chat.js') }}?v={{ filemtime(public_path('js/trip-chat.js')) }}"></script>
+<script src="{{ asset('js/trip-action-fabs.js') }}?v={{ filemtime(public_path('js/trip-action-fabs.js')) }}"></script>
 <script>
 (function () {
     if (window.GeocodeAddressAutocomplete) {

@@ -506,6 +506,11 @@
         if (!booking) {
             empty.classList.remove('d-none');
             card.classList.add('d-none');
+            card.classList.remove('is-searching');
+            document.body.classList.remove('guest-trip-searching');
+            if (window.TripActionFabs && window.TripActionFabs.setInTrip) {
+                window.TripActionFabs.setInTrip(false);
+            }
             if (window.GuestTripLiveMap && window.GuestTripLiveMap.updateFromBooking) {
                 window.GuestTripLiveMap.updateFromBooking(null);
             }
@@ -518,13 +523,28 @@
 
         empty.classList.add('d-none');
         card.classList.remove('d-none');
-
-        setText(qs('[data-field="trip_code"]', card), booking.trip_code || '—', true);
-        setText(
-            qs('[data-field="guest_status_label"]', card),
-            booking.guest_status_label || booking.progress_label || '',
-            !!(booking.guest_status_label || booking.progress_label)
-        );
+        var wasSearching = card.classList.contains('is-searching');
+        var searching = !booking.has_driver;
+        card.classList.toggle('is-searching', searching);
+        document.body.classList.toggle('guest-trip-searching', searching);
+        if (window.TripActionFabs && window.TripActionFabs.setInTrip) {
+            window.TripActionFabs.setInTrip(!!(booking.is_active && booking.has_driver));
+        }
+        if (searching && !wasSearching && window.GuestTripSheet && window.GuestTripSheet.resetUserToggle) {
+            window.GuestTripSheet.resetUserToggle();
+        }
+        var sheetHint = document.getElementById('guest-trip-info-sheet-hint');
+        if (sheetHint) {
+            var waitLabel = booking.wait_progress && booking.wait_progress.label
+                ? String(booking.wait_progress.label)
+                : '';
+            sheetHint.textContent = searching
+                ? (waitLabel || 'Đang tìm tài xế gần bạn…')
+                : 'Thông tin chuyến';
+        }
+        if (window.GuestTripSheet && window.GuestTripSheet.sync) {
+            window.GuestTripSheet.sync();
+        }
 
         var scheduledPickup = isScheduledPickup(booking);
         setDetailRow(

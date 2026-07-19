@@ -92,6 +92,12 @@
                     );
                 }
 
+                if (window.TripActionFabs && window.TripActionFabs.setInTrip) {
+                    window.TripActionFabs.setInTrip(
+                        !!(data.driver_trip_active || data.availability_status === 'on_trip')
+                    );
+                }
+
                 if ((data.availability_status === 'available' || data.availability_status === 'on_trip')
                     && window.DriverLocationGps
                     && window.DriverLocationGps.ensureFreshLocation) {

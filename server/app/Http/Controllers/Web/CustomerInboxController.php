@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Controller;
 use App\Models\CustomerInboxMessage;
 use App\Services\CustomerInboxService;
+use App\Services\TripChatService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -13,12 +14,16 @@ class CustomerInboxController extends Controller
 {
     public function __construct(
         private readonly CustomerInboxService $inbox,
+        private readonly TripChatService $tripChat,
     ) {}
 
     public function poll()
     {
         $userId = (int) Auth::id();
-        $counts = $this->inbox->unreadCounts($userId);
+        $counts = $this->tripChat->mergeCustomerInboxUnread(
+            $this->inbox->unreadCounts($userId),
+            $userId,
+        );
 
         return response()->json([
             'ok'     => true,
@@ -48,7 +53,10 @@ class CustomerInboxController extends Controller
             $this->inbox->markCategoryRead($userId, $validated['category']);
         }
 
-        $counts = $this->inbox->unreadCounts($userId);
+        $counts = $this->tripChat->mergeCustomerInboxUnread(
+            $this->inbox->unreadCounts($userId),
+            $userId,
+        );
 
         if ($request->expectsJson()) {
             return response()->json([
@@ -59,7 +67,7 @@ class CustomerInboxController extends Controller
 
         return redirect()->route('customer.account', [
             'tab'       => 'inbox',
-            'inbox_tab' => 'notice',
+            'inbox_tab' => 'info',
         ]);
     }
 }

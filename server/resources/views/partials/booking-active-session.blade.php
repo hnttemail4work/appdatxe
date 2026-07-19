@@ -1,4 +1,8 @@
-<div id="booking-active-session" class="booking-active-session booking-flash booking-flash-success mb-3 d-none" role="region" aria-label="Chuyến đang trong phiên đặt">
+<a id="booking-active-session"
+   href="{{ route('booking.trips') }}"
+   class="booking-active-session booking-flash booking-flash-success mb-3 d-none"
+   role="region"
+   aria-label="Chuyến đang trong phiên đặt — mở tab Chuyến">
     <div class="booking-active-session-layout">
         <div class="booking-active-session-main">
             <div class="booking-active-head">
@@ -25,10 +29,6 @@
                     <div class="booking-active-driver-eta d-none" id="booking-active-driver-eta"></div>
                 </div>
             </div>
-
-            <div class="booking-active-session-actions mt-2">
-                <a href="{{ route('booking.trips') }}" class="btn btn-sm btn-outline-light">Xem chuyến / Hủy</a>
-            </div>
         </div>
     </div>
-</div>
+</a>

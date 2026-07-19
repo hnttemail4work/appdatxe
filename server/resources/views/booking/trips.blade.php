@@ -1,5 +1,8 @@
 @extends('layouts.app')
 
+@section('navTitle', 'Chuyến')
+@section('navBack', route('home'))
+
 @section('content')
 @php
 $platformHotlinePhone = (string) config('app.contact_phone');
@@ -22,9 +25,10 @@ $platformHotlinePhone = (string) config('app.contact_phone');
 
     @include('partials.guest-trip-panel')
 
-    @include('partials.customer-contact-fab', [
+    @include('partials.trip-action-fabs', [
         'hotlinePhone' => $platformHotlinePhone,
-        'variant' => 'fixed',
+        'showLocateBtn' => true,
+        'inTrip' => false,
     ])
 </div>
 @endsection
@@ -49,7 +53,9 @@ window.__guestBrowserCancelBlockLimit = @json(\App\Services\BookingBrowserGuardS
 <script src="{{ asset('js/idle-poll.js') }}?v={{ filemtime(public_path('js/idle-poll.js')) }}"></script>
 <script src="{{ asset('js/booking-active-session.js') }}?v={{ filemtime(public_path('js/booking-active-session.js')) }}"></script>
 <script src="{{ asset('js/trip-chat.js') }}?v={{ filemtime(public_path('js/trip-chat.js')) }}"></script>
+<script src="{{ asset('js/trip-action-fabs.js') }}?v={{ filemtime(public_path('js/trip-action-fabs.js')) }}"></script>
 <script src="{{ asset('js/guest-trip-live-map.js') }}?v={{ filemtime(public_path('js/guest-trip-live-map.js')) }}"></script>
+<script src="{{ asset('js/guest-trip-sheet.js') }}?v={{ filemtime(public_path('js/guest-trip-sheet.js')) }}"></script>
 <script src="{{ asset('js/guest-trip-page.js') }}?v={{ filemtime(public_path('js/guest-trip-page.js')) }}"></script>
 <script src="{{ asset('js/customer-scroll-dock.js') }}?v={{ filemtime(public_path('js/customer-scroll-dock.js')) }}"></script>
 @if(session('booking_success'))

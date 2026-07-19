@@ -401,7 +401,7 @@ class BookingPresenter
 
         if ($booking->adminReleasedAfterDriverEngagement()) {
             if ($booking->adminStillSearchingReplacementDriver()) {
-                return 'Đang tìm tài xế khác';
+                return 'Đang tìm tài xế';
             }
 
             return 'TX hủy — cần hủy chuyến';

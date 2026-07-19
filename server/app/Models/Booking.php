@@ -92,6 +92,7 @@ class Booking extends Model
         'dropoff_lng',
         'notes',
         'driver_chat_last_read_id',
+        'customer_chat_last_read_id',
         'operator_confirmed_at',
         'hold_expires_at',
         'driver_search_started_at',

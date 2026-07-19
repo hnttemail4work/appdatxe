@@ -8,11 +8,6 @@
     }
 @endphp
 <section class="customer-account-panel is-active" aria-label="Hồ sơ">
-    <div class="customer-account-subhead mb-3">
-        <a href="{{ route('customer.account', ['tab' => 'account']) }}" class="customer-account-back" aria-label="Quay lại">←</a>
-        <h2 class="customer-account-panel__title mb-0">Hồ sơ</h2>
-    </div>
-
     <div class="customer-account-card">
         <div class="customer-account-profile-rows">
             <div class="customer-account-profile-row">

@@ -40,6 +40,47 @@ html {
     box-shadow: 0 2px 16px rgba(0, 0, 0, .35) !important;
     min-height: 58px;
 }
+.app-navbar--back .app-navbar-inner {
+    justify-content: flex-start;
+}
+.app-nav-backhead {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    min-width: 0;
+    flex: 1;
+}
+.app-nav-back {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, .12);
+    background: transparent;
+    color: #fff;
+    text-decoration: none;
+    font-size: 1.1rem;
+    line-height: 1;
+}
+.app-nav-back:hover,
+.app-nav-back:focus-visible {
+    color: var(--app-gold-light, #e8c547);
+    border-color: rgba(212, 175, 55, .45);
+    outline: none;
+}
+.app-nav-page-title {
+    min-width: 0;
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 
 .app-navbar .navbar-brand {
     font-weight: 800;
