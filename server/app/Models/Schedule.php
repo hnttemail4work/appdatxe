@@ -135,24 +135,52 @@ class Schedule extends Model
 
     public function routeDepartureLabel(): string
     {
-        if ($this->route?->departure) {
-            return (string) $this->route->departure;
+        $booking = $this->resolveRouteLabelBooking();
+        if ($booking) {
+            $detail = trim((string) $booking->driverPickupDetailLabel());
+            if ($detail !== '' && $detail !== 'liên hệ khách') {
+                return $detail;
+            }
+
+            $city = trim((string) $booking->pickup_address);
+            if ($city !== '') {
+                return $city;
+            }
         }
 
-        $booking = $this->driverRelevantBookings()->first();
-
-        return $booking?->pickup_address ? (string) $booking->pickup_address : '—';
+        return $this->route?->departure ? (string) $this->route->departure : '—';
     }
 
     public function routeDestinationLabel(): string
     {
-        if ($this->route?->destination) {
-            return (string) $this->route->destination;
+        $booking = $this->resolveRouteLabelBooking();
+        if ($booking) {
+            $detail = trim((string) $booking->driverDropoffDetailLabel());
+            if ($detail !== '' && $detail !== 'liên hệ khách') {
+                return $detail;
+            }
+
+            $city = trim((string) $booking->dropoff_address);
+            if ($city !== '') {
+                return $city;
+            }
         }
 
-        $booking = $this->driverRelevantBookings()->first();
+        return $this->route?->destination ? (string) $this->route->destination : '—';
+    }
 
-        return $booking?->dropoff_address ? (string) $booking->dropoff_address : '—';
+    private function resolveRouteLabelBooking(): ?Booking
+    {
+        if ($this->relationLoaded('bookings')) {
+            $active = $this->bookings->first(
+                fn (Booking $booking): bool => ! in_array($booking->booking_status, ['cancelled', 'rejected'], true)
+            );
+
+            return $active ?? $this->bookings->first();
+        }
+
+        return $this->driverRelevantBookings()->first()
+            ?? $this->bookings()->latest('id')->first();
     }
 
     public function tripMetaLabel(): string
@@ -358,7 +386,7 @@ class Schedule extends Model
         if ($stage === self::DRIVER_STAGE_ASSIGNED) {
             return $this->driver_movement_confirmed_at
                 ? 'Tài xế đang đi đón'
-                : 'Đã có tài xế';
+                : 'Đã tìm thấy tài xế';
         }
 
         return match ($stage) {

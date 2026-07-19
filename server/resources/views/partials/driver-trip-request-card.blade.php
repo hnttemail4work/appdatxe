@@ -51,8 +51,8 @@ $mapNav = $primaryBooking ? MapNavigation::driverPickupTarget($primaryBooking) :
 
     <div class="driver-request-card__route">
         @include('partials.driver-route-head', [
-            'from' => $schedule->routeDepartureLabel(),
-            'to' => $schedule->routeDestinationLabel(),
+            'from' => $primaryBooking?->driverPickupDetailLabel() ?: $schedule->routeDepartureLabel(),
+            'to' => $primaryBooking?->driverDropoffDetailLabel() ?: $schedule->routeDestinationLabel(),
         ])
     </div>
 

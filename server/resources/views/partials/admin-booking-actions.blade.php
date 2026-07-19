@@ -1,31 +1,9 @@
 @php
-    use App\Services\DriverProximityService;
-
     $schedule = $booking->schedule;
-    $activeDriverId = (int) ($booking->resolveAssignedDriverId($schedule) ?? 0);
-    $activeProfile = $booking->activeDriverProfile();
-    $proximity = app(DriverProximityService::class);
     $isActiveTrip = ! in_array($booking->booking_status, ['cancelled', 'rejected'], true)
         && $booking->trip_status !== 'completed';
     $canModify = $isActiveTrip && $booking->adminCanModifyDriverOrCancel();
-
-    // Can thiệp trước Đã đón: luôn cho phép gán/hủy khi còn quyền modify.
-    $showManualAssign = $canModify;
-
-    $canReassign = $showManualAssign
-        && $booking->driverAcceptanceState() === 'accepted';
-
-    $canAssign = $showManualAssign
-        && ! $canReassign
-        && (
-            in_array($booking->driverAcceptanceState(), ['none', 'pending'], true)
-            || $booking->adminReleasedAfterDriverEngagement()
-        );
     $canCancelAfterTimeout = $canModify;
-    $chosenProfile = $booking->catalogChosenDriverProfile();
-    $chosenCode = $chosenProfile?->driver_code ? strtoupper(trim($chosenProfile->driver_code)) : '';
-    $activeCode = $activeProfile?->driver_code ? strtoupper(trim($activeProfile->driver_code)) : '';
-    $selectedCode = $canReassign ? $chosenCode : ($activeCode !== '' ? $activeCode : $chosenCode);
     $waitMinutes = $booking->adminWaitingMinutesRemaining();
 @endphp
 
@@ -40,20 +18,20 @@
         </div>
     @elseif($booking->adminReleasedAfterDriverEngagement())
         <div class="admin-booking-wait-hint admin-booking-wait-hint--expired mb-2">
-            Tài xế đã hủy cuốc — gán tài xế khác hoặc hủy chuyến
+            Tài xế đã hủy cuốc — có thể hủy chuyến
         </div>
     @elseif($canCancelAfterTimeout)
         <div class="admin-booking-wait-hint admin-booking-wait-hint--expired mb-2">
             @if($booking->operator_help_reason === 'driver_movement_timeout')
-                TX chưa xác nhận đi đón — gán lại hoặc hủy chuyến
+                TX chưa xác nhận đi đón — có thể hủy chuyến
             @elseif($booking->operator_help_reason === 'driver_search_timeout')
-                Chưa có tài xế nhận — gán tài xế hoặc hủy chuyến
+                Chưa có tài xế nhận — có thể hủy chuyến
             @elseif($booking->operator_help_reason === 'driver_cancelled_trip')
-                Tài xế đã hủy cuốc — gán tài xế khác hoặc hủy chuyến
+                Tài xế đã hủy cuốc — có thể hủy chuyến
             @elseif($booking->needs_operator_help_at)
-                Cần gán lại tài xế hoặc hủy chuyến
+                Cần xử lý — có thể hủy chuyến
             @else
-                Đã tới khung giờ đón − 15 phút — có thể hủy chuyến
+                Đã tới khung giờ đón − 1 tiếng — có thể hủy chuyến
             @endif
         </div>
     @endif
@@ -62,42 +40,6 @@
         <div class="cell-muted small mb-0">
             Đã đón khách — không thể đổi TX
         </div>
-    @elseif($canReassign || $canAssign)
-        <form method="POST"
-              action="{{ route('admin.bookings.assign', $booking) }}"
-              class="admin-booking-action-form mb-2">
-            @csrf
-            <select name="driver_code"
-                    class="form-select form-select-sm admin-booking-action-select"
-                    required
-                    aria-label="Chọn tài xế">
-                <option value="">Chọn tài xế</option>
-                @foreach($drivers as $d)
-                    @if($d->driver_code)
-                        @php
-                            $code = strtoupper(trim($d->driver_code));
-                            $includeDriver = (int) $d->user_id !== $activeDriverId
-                                || ($canReassign && $chosenCode !== '' && $code === $chosenCode);
-                            $diag = $schedule
-                                ? $proximity->assignDiagnostics($d, $booking, $schedule)
-                                : ['distance_label' => null, 'hint' => null];
-                            $isSelected = $selectedCode !== '' && $code === $selectedCode;
-                        @endphp
-                        @if($includeDriver)
-                        <option value="{{ $d->driver_code }}" @selected($isSelected)>
-                            {{ $d->user->name }}
-                            @if($diag['distance_label'])
-                                — {{ $diag['distance_label'] }}
-                            @endif
-                        </option>
-                        @endif
-                    @endif
-                @endforeach
-            </select>
-            <button type="submit" class="btn btn-primary btn-sm w-100 mt-1">
-                {{ $canReassign ? 'Gán lại tài xế' : 'Gán tài xế' }}
-            </button>
-        </form>
     @endif
 
     @if($canCancelAfterTimeout)

@@ -28,13 +28,10 @@ class AdminOperatorAlertService
 
         $passenger = trim((string) ($booking->passenger_name ?: $booking->contact_phone ?: 'Khách'));
         $reference = $booking->booking_reference ?? ('#' . $booking->id);
-        $route = $booking->schedule?->route;
-        $routeLabel = $route
-            ? trim(($route->departure ?? '') . ' → ' . ($route->destination ?? ''))
-            : '';
+        $routeLabel = trim($booking->routeDetailLabel());
 
         $message = $driverName . ' nhận chuyến ' . $reference . ' · ' . $passenger;
-        if ($routeLabel !== '' && $routeLabel !== '→') {
+        if ($routeLabel !== '' && $routeLabel !== '—') {
             $message .= ' · ' . $routeLabel;
         }
 

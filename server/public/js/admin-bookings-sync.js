@@ -105,7 +105,7 @@
         updateAlert(
             'admin-bookings-alert-offduty',
             data.catalog_off_duty_count || 0,
-            '<span class="fw-semibold">⚠</span><div><strong>:count đơn</strong> khách chọn tài xế nhưng tài xế đó <strong>chưa bật Sẵn sàng</strong> — xem cột <strong>Thời gian chờ</strong> để gán tài xế khác.</div>',
+            '<span class="fw-semibold">⚠</span><div><strong>:count đơn</strong> khách chọn tài xế nhưng tài xế đó <strong>chưa bật Sẵn sàng</strong> — xem cột <strong>Thời gian chờ</strong>.</div>',
         );
 
         updateAlert(

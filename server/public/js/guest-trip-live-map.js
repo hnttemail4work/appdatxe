@@ -82,33 +82,8 @@
             return;
         }
         var title = document.getElementById('guest-trip-radar-title');
-        var hint = document.getElementById('guest-trip-radar-hint');
-        var countdown = document.getElementById('guest-trip-radar-countdown');
         if (title) {
             title.textContent = waitProgress.label || waitProgress.title || 'Đang tìm tài xế gần bạn…';
-        }
-        if (hint) {
-            hint.textContent = waitProgress.hint || 'Hệ thống sẽ tự hủy sau 10 phút nếu không có tài xế nhận.';
-        }
-        if (countdown) {
-            var cd = waitProgress.countdown_label || '';
-            if (!cd && waitProgress.deadline_at) {
-                var remain = Math.max(0, Math.floor((Date.parse(waitProgress.deadline_at) - Date.now()) / 1000));
-                if (remain > 0) {
-                    var m = Math.floor(remain / 60);
-                    var s = remain % 60;
-                    cd = 'Còn ' + m + ':' + String(s).padStart(2, '0');
-                }
-            }
-            if (cd) {
-                countdown.textContent = cd;
-                countdown.classList.remove('d-none');
-                countdown.hidden = false;
-            } else {
-                countdown.textContent = '';
-                countdown.classList.add('d-none');
-                countdown.hidden = true;
-            }
         }
     }
 

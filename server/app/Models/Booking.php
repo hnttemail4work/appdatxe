@@ -34,7 +34,14 @@ class Booking extends Model
 
                 try {
                     $push = app(\App\Services\PushNotificationService::class);
-                    if ($booking->cancelled_by === 'system' && ! $booking->hadDriverEngagedForPickup()) {
+                    $reason = (string) ($booking->cancellation_reason_label ?? '');
+                    $searchTimeout = $booking->cancelled_by === 'system' && (
+                        str_contains($reason, 'Không tìm được tài xế')
+                        || str_contains($reason, 'Hết thời gian tìm tài xế')
+                        || ! $booking->hadDriverEngagedForPickup()
+                    );
+
+                    if ($searchTimeout) {
                         $push->onNoDriverFound($booking);
                     } else {
                         $push->onTripCancelled($booking);
@@ -332,7 +339,7 @@ class Booking extends Model
         return $pickupAt !== null && $pickupAt->lte(now());
     }
 
-    /** Giờ đón − 15 phút — lúc admin có thể hủy / hết hạn nhận cuốc. */
+    /** Giờ đón − 1 tiếng — lúc admin có thể hủy / hết hạn nhận cuốc đặt lịch. */
     public function pickupAdminActionStartsAt(): ?\Carbon\Carbon
     {
         $pickupAt = $this->operationalPickupAt();
@@ -427,6 +434,12 @@ class Booking extends Model
     public function dropoffLabel(): string
     {
         return $this->presenter()->dropoffLabel();
+    }
+
+    /** Tuyến đón → trả chi tiết cho TB / thẻ chuyến / trùng đơn. */
+    public function routeDetailLabel(): string
+    {
+        return $this->presenter()->routeDetailLabel();
     }
 
     public function schedule()
@@ -825,7 +838,7 @@ class Booking extends Model
         return (bool) $this->schedule?->passengerPickedUp();
     }
 
-    /** Admin hủy khi đã tới khung giờ đón − 15 phút. */
+    /** Admin hủy khi đã tới khung giờ đón − 1 tiếng. */
     public function adminCanCancelAfterInviteTimeout(): bool
     {
         if (! $this->adminCanModifyDriverOrCancel()) {
@@ -840,7 +853,7 @@ class Booking extends Model
         return now()->gte($windowStart);
     }
 
-    /** Admin còn được gán / đổi tài xế hoặc hủy chuyến. */
+    /** Admin còn được hủy chuyến (trước khi đã đón khách). */
     public function adminCanModifyDriverOrCancel(): bool
     {
         if (in_array($this->booking_status, ['cancelled', 'rejected'], true)) {
@@ -852,39 +865,6 @@ class Booking extends Model
         }
 
         return ! $this->passengerPickedUp();
-    }
-
-    // TODO (Fix Flow): Chỉ hiện nút gán thủ công khi có cảnh báo — không khi auto-assign đang chạy bình thường.
-    public function adminShouldShowManualAssign(): bool
-    {
-        if (! $this->adminCanModifyDriverOrCancel()) {
-            return false;
-        }
-
-        if ($this->needs_operator_help_at) {
-            return true;
-        }
-
-        if ($this->adminReleasedAfterDriverEngagement()) {
-            return true;
-        }
-
-        if (in_array($this->operator_help_reason, [
-            'driver_search_timeout',
-            'driver_invite_timeout',
-            'driver_movement_timeout',
-            'driver_late_no_show',
-            'driver_cancelled_trip',
-        ], true)) {
-            return true;
-        }
-
-        $alert = app(\App\Services\DriverLatePickupService::class)->adminAlertForBooking($this);
-        if ($alert && in_array($alert['level'] ?? '', ['warning', 'danger'], true)) {
-            return true;
-        }
-
-        return false;
     }
 
     public function adminWaitingMinutesRemaining(): ?int
@@ -943,7 +923,7 @@ class Booking extends Model
             ->hasExceededCustomerSearchDeadline($this);
     }
 
-    /** Chuyến đang chờ tài xế hoặc cần admin gán / gán lại TX. */
+    /** Chuyến đang chờ tài xế hoặc cần admin theo dõi / hủy. */
     public function needsAdminWaitingAttention(): bool
     {
         if (! $this->adminCanModifyDriverOrCancel()) {

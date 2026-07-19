@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Admin\AssignDriverRequest;
 use App\Http\Requests\Admin\BulkDismissBookingsRequest;
 use App\Models\Booking;
 use App\Models\DriverProfile;
@@ -19,7 +18,7 @@ use InvalidArgumentException;
 
 /**
  * Nhóm "quản lý booking" — tách ra từ AdminController (Fat Controller):
- * danh sách/đồng bộ đơn, gán tài xế, nhắc tài xế, hủy đơn, xóa hàng loạt.
+ * danh sách/đồng bộ đơn, nhắc tài xế, hủy đơn, xóa hàng loạt.
  */
 class AdminBookingController extends Controller
 {
@@ -50,10 +49,8 @@ class AdminBookingController extends Controller
             'late_pickup_alert_count'  => $data['latePickupAlertCount'],
             'html'                     => view('partials.admin-booking-list-table', [
                 'bookings'          => $data['passengers'],
-                'drivers'           => $data['drivers'],
                 'showBulkDelete'    => $bookingList === 'cancelled',
                 'bookingList'       => $bookingList,
-                'showAssignActions' => false,
                 'showWaitingColumn' => $bookingList === 'active',
             ])->render(),
             'synced_at'                => now()->format('H:i:s'),
@@ -119,11 +116,6 @@ class AdminBookingController extends Controller
                 ->withQueryString();
         }
 
-        $drivers = DriverProfile::query()
-            ->operational()
-            ->with('user')
-            ->get();
-
         $pendingDriverCount = (int) DriverProfile::query()->pendingApproval()->count();
         $pendingSettleCount = DriverWalletTransaction::query()
             ->where('type', 'deposit')
@@ -139,7 +131,6 @@ class AdminBookingController extends Controller
             ->count();
 
         return compact(
-            'drivers',
             'passengers',
             'pendingDriverCount',
             'pendingSettleCount',
@@ -172,43 +163,6 @@ class AdminBookingController extends Controller
 
         return redirect()->route('admin.bookings', ['list' => 'cancelled'])
             ->with('success', "Đã xóa {$updated} đơn hủy khỏi danh sách.");
-    }
-
-    public function confirmAndAssignBooking(AssignDriverRequest $request, Booking $booking)
-    {
-        $this->scheduleLifecycle->sync();
-        $this->tripRequests->expireStale();
-
-        $booking->loadMissing(['schedule.route', 'schedule.vehicle', 'schedule.template']);
-
-        if ($booking->passengerPickedUp()) {
-            return back()->withErrors(['driver_code' => 'Tài xế đã đón khách — không thể gán lại.']);
-        }
-
-        $validated = $request->validated();
-
-        $driverCode = strtoupper(trim($validated['driver_code']));
-
-        $isReassign = $booking->driverAcceptanceState() === 'accepted'
-            || $booking->needs_operator_help_at
-            || $booking->isPastPickupTime();
-
-        try {
-            $this->tripRequests->assignBookingDriver(
-                $booking->fresh(['schedule.route', 'schedule.vehicle', 'schedule.template']),
-                $driverCode,
-                (int) Auth::id(),
-            );
-        } catch (InvalidArgumentException $e) {
-            return back()->withErrors(['driver_code' => $e->getMessage()])->withInput();
-        }
-
-        return back()->with(
-            'success',
-            $isReassign
-                ? 'Đã tạo chuyến mới và gán lại tài xế — chờ xác nhận trong 15 phút.'
-                : 'Đã giao chuyến cho tài xế — chờ xác nhận trong 15 phút.',
-        );
     }
 
     public function nudgeDriverBooking(Booking $booking)

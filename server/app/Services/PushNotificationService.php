@@ -88,9 +88,7 @@ class PushNotificationService
     /** Báo app TX thu hồi offer đã hết hạn/hủy (client_event → tab đang mở gỡ card). */
     public function onDriverTripRequestExpired(DriverTripRequest $request): void
     {
-        $request->loadMissing('schedule.route');
-        $schedule = $request->schedule;
-        $routeLabel = trim(($schedule?->route?->departure ?? '') . ' → ' . ($schedule?->route?->destination ?? ''));
+        $routeLabel = $this->tripRequestRouteLabel($request);
 
         $cancelledByGuest = $request->status === 'cancelled';
         $this->sendToDriver(
@@ -98,10 +96,10 @@ class PushNotificationService
             'driver.trip_cancelled',
             $cancelledByGuest ? 'Khách đã hủy chuyến' : 'Cuốc chờ nhận đã thu hồi',
             $cancelledByGuest
-                ? ($routeLabel !== '→'
+                ? ($routeLabel !== ''
                     ? 'Khách đã hủy chuyến: ' . $routeLabel
                     : 'Khách đã hủy chuyến.')
-                : ($routeLabel !== '→'
+                : ($routeLabel !== ''
                     ? 'Yêu cầu nhận cuốc đã hết hạn: ' . $routeLabel
                     : 'Yêu cầu nhận cuốc đã hết hạn.'),
             '/driver/dashboard',
@@ -260,7 +258,22 @@ class PushNotificationService
 
     protected function routeLabel(Booking $booking): string
     {
-        $schedule = $booking->schedule;
+        $label = trim($booking->routeDetailLabel());
+
+        return $label !== '—' ? $label : '';
+    }
+
+    /** Địa điểm đón/trả chi tiết cho TB tài xế — không chỉ tỉnh/thành trên route. */
+    protected function tripRequestRouteLabel(DriverTripRequest $request): string
+    {
+        $request->loadMissing('schedule.route', 'schedule.bookings');
+        $booking = $request->relatedBooking();
+
+        if ($booking) {
+            return $this->routeLabel($booking);
+        }
+
+        $schedule = $request->schedule;
         $routeLabel = trim(($schedule?->route?->departure ?? '') . ' → ' . ($schedule?->route?->destination ?? ''));
 
         return $routeLabel !== '→' ? $routeLabel : '';
@@ -272,9 +285,7 @@ class PushNotificationService
             return false;
         }
 
-        $request->loadMissing('schedule.route');
-        $schedule = $request->schedule;
-        $routeLabel = trim(($schedule?->route?->departure ?? '') . ' → ' . ($schedule?->route?->destination ?? ''));
+        $routeLabel = $this->tripRequestRouteLabel($request);
 
         $subscriptions = PushSubscription::query()
             ->where('audience', PushAudience::DRIVER)
@@ -289,7 +300,7 @@ class PushNotificationService
             $subscriptions,
             'driver.new_trip_request',
             'Cuốc mới chờ nhận',
-            $routeLabel !== '→' ? $routeLabel : 'Có chuyến mới cần xác nhận.',
+            $routeLabel !== '' ? $routeLabel : 'Có chuyến mới cần xác nhận.',
             '/driver/dashboard',
             $dedupKey,
             [
@@ -417,12 +428,19 @@ class PushNotificationService
 
     public function onNoDriverFound(Booking $booking): void
     {
+        $reason = (string) ($booking->cancellation_reason_label ?? '');
+        $body = str_contains($reason, '1 tiếng') || str_contains($reason, 'đặt lịch')
+            ? 'Không tìm được tài xế trước giờ đón 1 tiếng. Chuyến đã hủy — bạn có thể đặt lại.'
+            : (str_contains($reason, '10 phút')
+                ? 'Không tìm được tài xế trong 10 phút. Chuyến đã hủy — bạn có thể đặt lại.'
+                : 'Hệ thống chưa tìm được tài xế phù hợp. Chuyến đã hủy — bạn có thể đặt lại.');
+
         $this->sendToGuestBooking(
             $booking,
             'guest.no_driver_found',
-            'Chưa ghép được tài xế',
-            'Hệ thống chưa tìm được tài xế phù hợp. Bạn có thể đặt lại chuyến.',
-            '/chuyen',
+            'Không tìm được tài xế',
+            $body,
+            '/',
             'guest:booking:' . $booking->id . ':no_driver',
         );
     }

@@ -21,25 +21,19 @@ class DriverTripRequestService
     public const ACCEPT_WINDOW_DAYS = 1;
 
     /** Tài xế tự động được mời — phải nhận trong thời gian này (Đặt Ngay). */
-    public const AUTO_ASSIGN_ACCEPT_MINUTES = 1;
-
-    /** Tài xế tự động được mời — Đặt Lịch (> 30 phút tới giờ đón). */
-    public const SCHEDULED_ASSIGN_ACCEPT_MINUTES = 10;
+    public const AUTO_ASSIGN_ACCEPT_MINUTES = 2;
 
     /** Đặt Ngay: sau mốc này system hủy chuyến (driver_search_timeout). */
     public const ON_DEMAND_SEARCH_MAX_MINUTES = 10;
 
     /** Đặt Lịch: ngừng tìm TX khi còn X phút tới giờ đón — không có TX thì hủy. */
-    public const SCHEDULED_SEARCH_STOP_MINUTES_BEFORE_PICKUP = 30;
+    public const SCHEDULED_SEARCH_STOP_MINUTES_BEFORE_PICKUP = 60;
 
     /** Không nhận cuốc tự động — chỉ xoay sang tài xế khác, không tắt Hoạt động. */
     public const AUTO_ASSIGN_MISS_OFF_DUTY_THRESHOLD = 0;
 
-    /** Quản lý mời tài xế thủ công. */
-    public const OPERATOR_INVITE_ACCEPT_MINUTES = 15;
-
-    /** Hết hạn nhận cuốc = giờ đón − 15 phút (không hủy đơn). */
-    public const PICKUP_INVITE_LEAD_MINUTES = 15;
+    /** Đặt Lịch: hết hạn nhận cuốc = giờ đón − 1 tiếng. */
+    public const PICKUP_INVITE_LEAD_MINUTES = 60;
 
     /** Sau khi tài xế từ chối — không gán lại cùng SĐT khách trong khoảng này. */
     public const DECLINE_CONTACT_COOLDOWN_MINUTES = 60;
@@ -51,7 +45,6 @@ class DriverTripRequestService
         private readonly DriverProximityService $proximity,
         private readonly DriverMovementConfirmService $movementConfirm,
         private readonly DriverDiscoveryService $discovery,
-        private readonly DriverManualAssignmentService $manualAssign,
     ) {
     }
 
@@ -193,17 +186,17 @@ class DriverTripRequestService
             });
     }
 
-    /** Hết hạn nhận cuốc auto-assign: Đặt Ngay 1 phút / Đặt Lịch 10 phút. */
+    /** Hết hạn nhận cuốc auto-assign: Đặt Ngay 2 phút / Đặt Lịch = giờ đón − 1 tiếng. */
     public function acceptExpiresAtForBooking(Booking $booking): \Carbon\Carbon
     {
-        $minutes = $booking->isOnDemandPickup()
-            ? self::AUTO_ASSIGN_ACCEPT_MINUTES
-            : self::SCHEDULED_ASSIGN_ACCEPT_MINUTES;
+        if ($booking->isOnDemandPickup()) {
+            return now()->addMinutes(self::AUTO_ASSIGN_ACCEPT_MINUTES);
+        }
 
-        return now()->addMinutes($minutes);
+        return $this->resolveInviteExpiresAt($booking);
     }
 
-    /** Đặt Lịch: đã tới mốc T-30 mà vẫn chưa có TX. */
+    /** Đặt Lịch: đã tới mốc T−1 tiếng mà vẫn chưa có TX. */
     public function hasReachedScheduledSearchStop(Booking $booking): bool
     {
         $booking->loadMissing('schedule');
@@ -257,7 +250,7 @@ class DriverTripRequestService
         $this->autoAssignForBooking($booking);
     }
 
-    /** Giờ hết hạn nhận cuốc = giờ đón − 15 phút. */
+    /** Giờ hết hạn nhận cuốc = giờ đón − 1 tiếng. */
     public function inviteExpiresAtForBooking(Booking $booking): ?\Carbon\Carbon
     {
         $pickupAt = $booking->operationalPickupAt();
@@ -276,17 +269,6 @@ class DriverTripRequestService
         return $expiresAt;
     }
 
-    /** @return Collection<int, DriverProfile> */
-    public function suggestDrivers(?Schedule $schedule = null): Collection
-    {
-        $query = DriverProfile::query()
-            ->operational()
-            ->with(['user', 'operator'])
-            ->orderByDesc('experience_years');
-
-        return $query->get();
-    }
-
     public function availabilityMeta(string $status): array
     {
         return match ($status) {
@@ -294,12 +276,6 @@ class DriverTripRequestService
             'on_trip'   => ['label' => 'Đang chạy', 'color' => 'primary', 'icon' => '🔵', 'suggested' => false],
             default     => ['label' => 'Nghỉ / Bận', 'color' => 'secondary', 'icon' => '⚫', 'suggested' => false],
         };
-    }
-
-    /** Quản lý mời TX thủ công — không áp dụng danh sách loại auto-assign. */
-    public function requestDriver(Schedule $schedule, string $driverCode, string $contactPhone): DriverTripRequest
-    {
-        return $this->manualAssign->requestDriver($schedule, $driverCode, $contactPhone);
     }
 
     /** Đánh dấu đơn chờ tài xế chủ động dò — không gửi cuốc tự động. */
@@ -969,7 +945,7 @@ class DriverTripRequestService
             return false;
         }
 
-        // Đặt ngay: tự hủy sau 10 phút; Đặt lịch dùng T-30 (cancelScheduledSearchTimeout).
+        // Đặt ngay: tự hủy sau 10 phút; Đặt lịch dùng T−1 tiếng (cancelScheduledSearchTimeout).
         if (! $booking->isOnDemandPickup()) {
             return false;
         }
@@ -1245,22 +1221,6 @@ class DriverTripRequestService
         }
     }
 
-    public function reassignScheduleDriver(Schedule $schedule, string $newDriverCode, int $operatorUserId): void
-    {
-        $this->manualAssign->reassignScheduleDriver($schedule, $newDriverCode, $operatorUserId);
-    }
-
-    /** Admin gán / gán lại TX — tạo chuyến mới cho khách, mời TX trong 15 phút. */
-    public function assignBookingDriver(Booking $booking, string $driverCode, int $operatorUserId): void
-    {
-        $this->manualAssign->assignBookingDriver($booking, $driverCode, $operatorUserId);
-    }
-
-    public function reassignBookingDriver(Booking $booking, string $newDriverCode, int $operatorUserId): void
-    {
-        $this->manualAssign->reassignBookingDriver($booking, $newDriverCode, $operatorUserId);
-    }
-
     public function reject(DriverTripRequest $request, int $driverUserId, int $cancellationReasonId): void
     {
         if ($request->driver_id !== $driverUserId) {
@@ -1404,17 +1364,10 @@ class DriverTripRequestService
         app(BookingWorkflowService::class)->flagOperatorHelpNeeded($booking, 'driver_cancelled_trip');
     }
 
-    /** Phân biệt lời mời tự động (2 phút) với quản lý gán tay (15 phút). */
+    /** Offer auto-assign (Đặt ngay ~2 phút hoặc Đặt lịch tới giờ đón − 1 tiếng). */
     private function wasAutoAssignRequest(DriverTripRequest $request): bool
     {
-        if (! $request->created_at || ! $request->expires_at) {
-            return false;
-        }
-
-        $minutes = (int) $request->created_at->diffInMinutes($request->expires_at, false);
-
-        return abs($minutes - self::AUTO_ASSIGN_ACCEPT_MINUTES) <= 1
-            || abs($minutes - self::SCHEDULED_ASSIGN_ACCEPT_MINUTES) <= 1;
+        return $request->created_at !== null && $request->expires_at !== null;
     }
 
     /** Đếm lần hết hạn cuốc tự động liên tiếp (không tính từ chối / đã nhận). */
@@ -1499,7 +1452,6 @@ class DriverTripRequestService
 
     /**
      * TX đã từ chối / hết hạn nhận / hủy cuốc — không gán lại tự động cho cùng đơn.
-     * Quản lý gán thủ công qua {@see requestDriver()} thì không áp dụng.
      *
      * @return Collection<int, int>
      */

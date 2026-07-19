@@ -10,10 +10,6 @@
                 <div class="booking-finding-driver__spin" aria-hidden="true"></div>
                 <div class="booking-finding-driver__copy">
                     <strong class="booking-finding-driver__title" id="booking-finding-driver-title">Đang tìm tài xế gần bạn…</strong>
-                    <p class="booking-active-contact-note mb-0" id="booking-finding-driver-hint">
-                        Hệ thống sẽ tự hủy sau 10 phút nếu không có tài xế nhận.
-                    </p>
-                    <p class="booking-finding-driver__countdown mb-0 d-none" id="booking-finding-driver-countdown" hidden></p>
                 </div>
             </div>
 

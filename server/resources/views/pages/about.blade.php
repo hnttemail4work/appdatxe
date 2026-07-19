@@ -27,7 +27,7 @@ $email = (string) config('app.contact_email');
         <ul class="customer-about-list mb-0">
             <li>Chọn xe và tài xế phù hợp ngay trên trang đặt xe</li>
             <li>Theo dõi trạng thái chuyến và liên hệ tổng đài khi cần hỗ trợ</li>
-            <li>Đội ngũ vận hành hỗ trợ gán tài xế và xử lý các tình huống phát sinh</li>
+            <li>Đội ngũ vận hành hỗ trợ xử lý các tình huống phát sinh</li>
         </ul>
     </div>
 

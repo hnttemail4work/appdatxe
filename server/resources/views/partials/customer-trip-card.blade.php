@@ -1,7 +1,7 @@
 <article class="customer-trip-card">
     <div class="customer-trip-card__head">
         <div>
-            <div class="customer-trip-card__route">{{ $trip['pickup_address'] ?? '—' }} → {{ $trip['dropoff_address'] ?? '—' }}</div>
+            <div class="customer-trip-card__route">{{ $trip['route_label'] ?? (($trip['pickup_address'] ?? '—') . ' → ' . ($trip['dropoff_address'] ?? '—')) }}</div>
             <div class="customer-trip-card__meta">{{ $trip['service_date_label'] ?? $trip['created_at_label'] ?? '' }}</div>
         </div>
         <span class="customer-trip-card__status">{{ $trip['guest_status_label'] ?? '' }}</span>

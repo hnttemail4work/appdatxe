@@ -15,8 +15,8 @@ $mapNav = ($primaryBooking && $isRunning)
     <div class="driver-card-top">
         <div class="driver-card-top-main">
             @include('partials.driver-route-head', [
-                'from' => $schedule->route->departure,
-                'to' => $schedule->route->destination,
+                'from' => $primaryBooking?->driverPickupDetailLabel() ?: $schedule->routeDepartureLabel(),
+                'to' => $primaryBooking?->driverDropoffDetailLabel() ?: $schedule->routeDestinationLabel(),
             ])
             @if($schedule->shortTripCode())
                 <div class="meta driver-schedule-trip-code">

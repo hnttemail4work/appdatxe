@@ -15,7 +15,8 @@ use InvalidArgumentException;
 
 class DriverAvailabilityService
 {
-    public const MIN_PICKUP_LEAD_MINUTES = 30;
+    /** Đặt lịch (Đặt sau): khách phải chọn giờ đón cách hiện tại ít nhất 2 tiếng. */
+    public const MIN_PICKUP_LEAD_MINUTES = 120;
 
     /** Thời gian coi tài xế còn "online" trên web sau lần tương tác cuối. */
     public const WEB_PRESENCE_MINUTES = 15;
@@ -270,8 +271,10 @@ class DriverAvailabilityService
             DepartureTimeDisplay::normalizeForClock($pickupTime),
         );
 
-        if ($date->isToday() && $departure->lt(now())) {
-            throw new InvalidArgumentException('Giờ đón phải sau thời gian hiện tại.');
+        $minAt = now()->copy()->addMinutes(self::MIN_PICKUP_LEAD_MINUTES)->startOfMinute();
+
+        if ($departure->lt($minAt)) {
+            throw new InvalidArgumentException('Đặt lịch phải cách giờ hiện tại ít nhất 2 tiếng.');
         }
     }
 

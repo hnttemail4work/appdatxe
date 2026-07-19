@@ -58,11 +58,23 @@ class TripLedgerService
 
     private function routeLabel(Schedule $schedule): ?string
     {
+        $schedule->loadMissing(['route', 'bookings']);
+        $booking = $schedule->driverRelevantBookings()->first()
+            ?? $schedule->bookings->first();
+
+        if ($booking) {
+            $label = trim($booking->routeDetailLabel());
+
+            return $label !== '' && $label !== '—' ? $label : null;
+        }
+
         if (! $schedule->route) {
             return null;
         }
 
-        return $schedule->route->departure . ' → ' . $schedule->route->destination;
+        $label = trim(($schedule->route->departure ?? '') . ' → ' . ($schedule->route->destination ?? ''));
+
+        return $label !== '→' ? $label : null;
     }
 
     /** @return array{route_label: string|null, actor_label: string|null, actor_code: string|null, amount: int} */

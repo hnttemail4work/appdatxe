@@ -148,18 +148,6 @@
         return line || '';
     }
 
-    function parseRoute(route) {
-        var raw = String(route || '').trim();
-        if (!raw || raw === '—') {
-            return { from: '—', to: '—' };
-        }
-        var parts = raw.split(/\s*→\s*/);
-        if (parts.length >= 2) {
-            return { from: parts[0].trim(), to: parts.slice(1).join(' → ').trim() };
-        }
-        return { from: raw, to: raw };
-    }
-
     function stopAddress(province, detail) {
         if (detail) {
             return String(detail).trim();
@@ -537,10 +525,6 @@
             booking.guest_status_label || booking.progress_label || '',
             !!(booking.guest_status_label || booking.progress_label)
         );
-
-        var routeParts = parseRoute(booking.route);
-        setText(qs('[data-field="route_from"]', card), routeParts.from, true);
-        setText(qs('[data-field="route_to"]', card), routeParts.to, true);
 
         var scheduledPickup = isScheduledPickup(booking);
         setDetailRow(

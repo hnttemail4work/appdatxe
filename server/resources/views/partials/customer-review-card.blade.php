@@ -8,7 +8,7 @@
         <time class="customer-review-card__time">{{ $review->created_at?->format('d/m/Y H:i') }}</time>
     </div>
     <div class="customer-review-card__route">
-        {{ $booking?->pickup_address ?? '—' }} → {{ $booking?->dropoff_address ?? '—' }}
+        {{ $booking?->routeDetailLabel() ?? '—' }}
     </div>
     @if($review->comment)
         <p class="customer-review-card__comment mb-0">{{ $review->comment }}</p>

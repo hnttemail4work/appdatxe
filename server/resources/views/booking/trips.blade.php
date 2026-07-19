@@ -20,10 +20,6 @@ $platformHotlinePhone = (string) config('app.contact_phone');
         </div>
     @endif
 
-    <div class="customer-hero customer-hero--compact mb-3">
-        <h1 class="h4 mb-0">Xem chuyến</h1>
-    </div>
-
     @include('partials.guest-trip-panel')
 
     @include('partials.customer-contact-fab', [

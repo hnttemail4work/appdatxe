@@ -67,7 +67,7 @@ class DriverCuocOfferHideService
             ->delete();
     }
 
-    /** Admin gán lại thủ công — gỡ chặn ẩn cuốc cho một tài xế trên chuyến + SĐT khách. */
+    /** Gỡ chặn ẩn cuốc cho một tài xế trên chuyến + SĐT khách (khi đẩy offer mới). */
     public function clearForOffer(int $driverUserId, Schedule $schedule, string $contactPhone): void
     {
         $phone = $this->normalizePhone($contactPhone);
@@ -82,7 +82,7 @@ class DriverCuocOfferHideService
             ->delete();
     }
 
-    /** Admin gán lại thủ công — gỡ mọi chặn ẩn cuốc trên chuyến + SĐT khách. */
+    /** Gỡ mọi chặn ẩn cuốc trên chuyến + SĐT khách. */
     public function clearHidesForContact(Schedule $schedule, string $contactPhone): void
     {
         $phone = $this->normalizePhone($contactPhone);

@@ -187,7 +187,7 @@ class GuestTripStatusFlowTest extends TestCase
         $this->assertTrue($payload['has_driver']);
         $this->assertNotNull($payload['driver']);
         $this->assertSame('Đã nhận chuyến', $payload['driver_status_line']);
-        $this->assertSame('Đã có tài xế', $payload['guest_status_label']);
+        $this->assertSame('Đã tìm thấy tài xế', $payload['guest_status_label']);
     }
 
     public function test_on_demand_search_timeout_cancels_booking(): void
@@ -207,6 +207,30 @@ class GuestTripStatusFlowTest extends TestCase
         $this->assertSame('cancelled', $booking->trip_status);
         $this->assertSame('system', $booking->cancelled_by);
         $this->assertStringContainsString('10 phút', (string) $booking->cancellation_reason_label);
+    }
+
+    public function test_scheduled_search_stop_cancels_booking_one_hour_before_pickup(): void
+    {
+        $pickupAt = now()->addMinutes(50);
+        $booking = $this->seedPendingOnDemandBooking([
+            'pickup_time' => $pickupAt->format('H:i'),
+            'driver_search_started_at' => now()->subHours(2),
+        ]);
+        $booking->schedule->update([
+            'departure_time' => $pickupAt,
+            'service_date'   => $pickupAt->toDateString(),
+        ]);
+
+        $service = app(DriverTripRequestService::class);
+        $fresh = $booking->fresh(['schedule']);
+        $this->assertTrue($service->hasReachedScheduledSearchStop($fresh));
+        $this->assertTrue(app(\App\Services\BookingWorkflowService::class)->cancelScheduledSearchTimeout($fresh));
+
+        $booking->refresh();
+        $this->assertSame('cancelled', $booking->booking_status);
+        $this->assertSame('cancelled', $booking->trip_status);
+        $this->assertSame('system', $booking->cancelled_by);
+        $this->assertStringContainsString('1 tiếng', (string) $booking->cancellation_reason_label);
     }
 
 }

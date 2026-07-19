@@ -145,6 +145,27 @@ class BookingPresenter
         return $detail !== '' ? $detail : ($city !== '' ? $city : '—');
     }
 
+    /** Tuyến đón → trả chi tiết (không dùng tỉnh/thành chung của TripRoute). */
+    public function routeDetailLabel(): string
+    {
+        $from = trim($this->driverPickupDetailLabel());
+        $to = trim($this->driverDropoffDetailLabel());
+
+        if ($from !== '' && $from !== 'liên hệ khách' && $to !== '' && $to !== 'liên hệ khách') {
+            return $from . ' → ' . $to;
+        }
+
+        if ($from !== '' && $from !== 'liên hệ khách') {
+            return $from;
+        }
+
+        $this->booking->loadMissing('schedule.route');
+        $schedule = $this->booking->schedule;
+        $routeLabel = trim(($schedule?->route?->departure ?? '') . ' → ' . ($schedule?->route?->destination ?? ''));
+
+        return $routeLabel !== '→' ? $routeLabel : '—';
+    }
+
     public function referralDiscountLabel(): ?string
     {
         $this->booking->loadMissing('appliedReferralCode');
@@ -226,10 +247,10 @@ class BookingPresenter
 
         if ($booking->needs_operator_help_at) {
             return match ($booking->operator_help_reason) {
-                'driver_invite_timeout'    => 'TX không nhận — cần gán lại',
-                'driver_late_no_show'      => 'Quá giờ đón — cần gán lại',
+                'driver_invite_timeout'    => 'TX không nhận — cần hủy chuyến',
+                'driver_late_no_show'      => 'Quá giờ đón — cần hủy chuyến',
                 'driver_movement_timeout'  => 'TX chưa xác nhận đi đón',
-                'driver_cancelled_trip'    => 'TX hủy cuốc — cần gán lại',
+                'driver_cancelled_trip'    => 'TX hủy cuốc — cần hủy chuyến',
                 default                    => 'Cần quản lý xử lý',
             };
         }
@@ -239,7 +260,7 @@ class BookingPresenter
             if ($booking->adminReleasedAfterDriverEngagement()) {
                 return $booking->adminStillSearchingReplacementDriver()
                     ? 'Đang tìm tài xế khác'
-                    : 'TX hủy cuốc — cần gán lại';
+                    : 'TX hủy cuốc — cần hủy chuyến';
             }
 
             return $this->awaitingDriverLabel();
@@ -307,8 +328,8 @@ class BookingPresenter
         return match ($label) {
             'Đã hủy', 'Từ chối'     => \App\Support\StatusBadge::DANGER,
             'Hoàn thành'            => \App\Support\StatusBadge::SUCCESS,
-            'Đang phục vụ', 'Đang chạy', 'Đã đón khách', 'Tài xế đã đến điểm đón', 'Tài xế đang đi đón', 'Đã có tài xế' => \App\Support\StatusBadge::GOLD,
-            'Chờ QL xác nhận', 'Chờ tài xế nhận', 'Đang tìm tài xế', 'Đang tìm tài xế khác', 'TX hủy — cần gán lại', 'TX hủy cuốc — cần gán lại' => \App\Support\StatusBadge::PENDING,
+            'Đang phục vụ', 'Đang chạy', 'Đã đón khách', 'Tài xế đã đến điểm đón', 'Tài xế đang đi đón', 'Đã tìm thấy tài xế', 'Đã có tài xế' => \App\Support\StatusBadge::GOLD,
+            'Chờ QL xác nhận', 'Chờ tài xế nhận', 'Đang tìm tài xế', 'Đang tìm tài xế khác', 'TX hủy — cần hủy chuyến', 'TX hủy cuốc — cần hủy chuyến' => \App\Support\StatusBadge::PENDING,
             'Cần QL hỗ trợ'        => \App\Support\StatusBadge::DANGER,
             default                 => \App\Support\StatusBadge::NEUTRAL,
         };
@@ -383,7 +404,7 @@ class BookingPresenter
                 return 'Đang tìm tài xế khác';
             }
 
-            return 'TX hủy — cần gán lại';
+            return 'TX hủy — cần hủy chuyến';
         }
 
         return 'Đang tìm tài xế';

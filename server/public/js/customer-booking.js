@@ -185,6 +185,18 @@
         }
     }
 
+    var bookingSubmitInFlight = false;
+
+    function setBookingSubmitBusy(busy) {
+        bookingSubmitInFlight = !!busy;
+        var submitBtn = $('modal-submit-btn');
+        if (!submitBtn) {
+            return;
+        }
+        submitBtn.disabled = !!busy;
+        submitBtn.textContent = busy ? 'Đang đặt…' : 'Đặt chuyến';
+    }
+
     function submitBookingForm() {
         syncScheduleLater();
         ensureBrowserIdOnForm();
@@ -806,7 +818,7 @@
     }
 
     function suggestedPickupTime() {
-        var lead = Number(window.__pickupLeadMinutes || 30);
+        var lead = Number(window.__pickupLeadMinutes || 120);
         var d = new Date();
         d.setSeconds(0, 0);
         d.setMinutes(d.getMinutes() + lead);
@@ -1807,6 +1819,16 @@
                 }
                 return false;
             }
+
+            var lead = Number(window.__pickupLeadMinutes || 120);
+            var pickupAt = new Date(serviceDate.value + 'T' + pickupTimeEl.value + ':00');
+            var minAt = new Date();
+            minAt.setMinutes(minAt.getMinutes() + lead);
+            if (!Number.isNaN(pickupAt.getTime()) && pickupAt < minAt) {
+                notify('Đặt lịch phải cách giờ hiện tại ít nhất 2 tiếng.');
+                pickupTimeEl.focus();
+                return false;
+            }
         }
 
         return true;
@@ -2109,10 +2131,13 @@
         }
 
         event.preventDefault();
+        if (bookingSubmitInFlight) {
+            return;
+        }
+
         syncNotesHidden();
 
         if (!validateStep1()) {
-            hideBookingFlow();
             return;
         }
 
@@ -2124,13 +2149,18 @@
         ensureBrowserIdOnForm();
 
         var phone = customerContactPhone();
+        setBookingSubmitBusy(true);
 
         checkBookingConstraints(phone).then(function (data) {
             if (data && data.duplicate) {
+                setBookingSubmitBusy(false);
                 showDuplicateNotice(data.booking);
                 return;
             }
             submitBookingForm();
+        }).catch(function () {
+            setBookingSubmitBusy(false);
+            notify('Không đặt được chuyến. Vui lòng thử lại.');
         });
     });
 

@@ -193,7 +193,6 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
 
     Route::get('admin/bookings',                   [AdminBookingController::class, 'bookings'])->name('admin.bookings');
     Route::get('admin/bookings/sync',              [AdminBookingController::class, 'bookingsSync'])->name('admin.bookings.sync');
-    Route::post('admin/bookings/{booking}/assign', [AdminBookingController::class, 'confirmAndAssignBooking'])->name('admin.bookings.assign');
     Route::post('admin/bookings/{booking}/nudge-driver', [AdminBookingController::class, 'nudgeDriverBooking'])->name('admin.bookings.nudgeDriver');
     Route::post('admin/bookings/{booking}/cancel', [AdminBookingController::class, 'cancelBooking'])->name('admin.bookings.cancel');
     Route::delete('admin/bookings/lo', [AdminBookingController::class, 'bulkDismissBookings'])->name('admin.bookings.bulkDismiss');

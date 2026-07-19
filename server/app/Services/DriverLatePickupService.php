@@ -178,50 +178,6 @@ class DriverLatePickupService
         return $reassigned;
     }
 
-    /**
-     * Admin gán / gán lại — TX phải bật app + GPS và kịp tới điểm đón trong khung cho phép.
-     */
-    public function assertOperatorCanReachPickup(
-        DriverProfile $profile,
-        Booking $booking,
-        Schedule $schedule,
-    ): void {
-        $diagnostics = app(DriverProximityService::class)->assignDiagnostics($profile, $booking, $schedule);
-
-        if (! ($diagnostics['auto_assign_eligible'] ?? false)) {
-            $hint = $diagnostics['hint'] ?? 'Tài xế chưa sẵn sàng hoặc chưa chia sẻ vị trí';
-
-            throw new InvalidArgumentException(
-                $hint . '. Vui lòng chọn tài xế gần hơn hoặc đang bật app.'
-            );
-        }
-
-        $pickupAt = $booking->operationalPickupAt();
-        if (! $pickupAt instanceof Carbon) {
-            return;
-        }
-
-        $minutesUntilPickup = max(0, (int) now()->diffInMinutes($pickupAt, false));
-        $allowedMinutes = max(
-            $minutesUntilPickup,
-            DriverTripRequestService::OPERATOR_INVITE_ACCEPT_MINUTES,
-        );
-        $travelMinutes = $this->travelMinutesForProfile($profile, $booking);
-
-        if ($travelMinutes === null) {
-            throw new InvalidArgumentException(
-                'Tài xế chưa cập nhật vị trí hoặc đơn thiếu tọa độ đón — không thể ước tính thời gian tới điểm đón.'
-            );
-        }
-
-        if ($travelMinutes > $allowedMinutes) {
-            throw new InvalidArgumentException(
-                'Tài xế cách xa — dự kiến ~' . $travelMinutes . ' phút mới tới điểm đón, không kịp trong '
-                . $allowedMinutes . ' phút. Chọn tài xế gần hơn.'
-            );
-        }
-    }
-
     public function travelMinutesForProfile(DriverProfile $profile, Booking $booking): ?int
     {
         $distanceKm = $this->livePickupDistanceKmForProfile($profile, $booking);

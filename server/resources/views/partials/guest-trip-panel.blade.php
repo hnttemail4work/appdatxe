@@ -30,8 +30,6 @@
                 </div>
                 <div class="guest-trip-radar__copy">
                     <strong id="guest-trip-radar-title">Đang tìm tài xế gần bạn…</strong>
-                    <p class="mb-0" id="guest-trip-radar-hint">Hệ thống sẽ tự hủy sau 10 phút nếu không có tài xế nhận.</p>
-                    <p class="guest-trip-radar__countdown d-none mb-0" id="guest-trip-radar-countdown" hidden></p>
                 </div>
             </div>
             <div class="guest-trip-live-status d-none" id="guest-trip-live-status" aria-live="polite"></div>
@@ -54,30 +52,6 @@
             </div>
 
         </header>
-
-
-
-        <div class="guest-trip-card__hero">
-
-            <div class="guest-trip-route" data-field="route_wrap">
-
-                <span class="guest-trip-route__city" data-field="route_from">—</span>
-
-                <span class="guest-trip-route__arrow" aria-hidden="true">
-
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-
-                        <path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/>
-
-                    </svg>
-
-                </span>
-
-                <span class="guest-trip-route__city" data-field="route_to">—</span>
-
-            </div>
-
-        </div>
 
 
 

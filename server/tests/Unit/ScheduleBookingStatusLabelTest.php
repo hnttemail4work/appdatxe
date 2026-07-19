@@ -16,7 +16,7 @@ class ScheduleBookingStatusLabelTest extends TestCase
             'driver_movement_confirmed_at' => null,
         ]);
 
-        $this->assertSame('Đã có tài xế', $schedule->bookingStatusLabel());
+        $this->assertSame('Đã tìm thấy tài xế', $schedule->bookingStatusLabel());
         $this->assertTrue($schedule->needsDriverMovementConfirm());
         $this->assertFalse($schedule->driverHasConfirmedMovement());
     }

@@ -519,7 +519,7 @@ class DriverWalletService
     {
         $wallet->loadMissing($depositsOnly
             ? ['transactions']
-            : ['transactions', 'settlements.schedule.route']);
+            : ['transactions', 'settlements.schedule.route', 'settlements.schedule.bookings']);
 
         $items = collect();
 
@@ -539,9 +539,15 @@ class DriverWalletService
         if (! $depositsOnly) {
             foreach ($wallet->settlements->where('status', 'completed') as $settlement) {
                 $schedule = $settlement->schedule;
-                $routeMeta = $schedule
-                    ? $schedule->route->departure . ' → ' . $schedule->route->destination
-                    : null;
+                $routeBooking = $schedule?->driverRelevantBookings()->first()
+                    ?? $schedule?->bookings->first();
+                $routeMeta = $routeBooking?->routeDetailLabel()
+                    ?: ($schedule
+                        ? trim(($schedule->route?->departure ?? '') . ' → ' . ($schedule->route?->destination ?? ''))
+                        : null);
+                if ($routeMeta === '→') {
+                    $routeMeta = null;
+                }
 
                 $items->push([
                     'kind'   => 'trip_revenue',

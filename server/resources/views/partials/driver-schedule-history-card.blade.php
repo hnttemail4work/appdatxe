@@ -28,9 +28,12 @@ $whenLabel = ($completedAt ?? $schedule->departure_time)->format('H:i · d/m/Y')
 <article class="driver-trip-card driver-trip-card--history {{ $outcome === 'completed' ? 'is-completed' : '' }} {{ $outcome === 'cancelled_driver' ? 'is-cancelled' : '' }}">
     <div class="driver-card-top driver-history-card-top">
         <div class="driver-card-top-main">
+            @php
+                $historyPrimary = $historyBookings->first();
+            @endphp
             @include('partials.driver-route-head', [
-                'from' => $schedule->routeDepartureLabel(),
-                'to' => $schedule->routeDestinationLabel(),
+                'from' => $historyPrimary?->driverPickupDetailLabel() ?: $schedule->routeDepartureLabel(),
+                'to' => $historyPrimary?->driverDropoffDetailLabel() ?: $schedule->routeDestinationLabel(),
             ])
             <div class="driver-history-meta">
                 <span class="driver-history-meta-item">{{ $whenLabel }}</span>

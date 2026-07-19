@@ -41,7 +41,7 @@ $completedTrips = $completedTrips ?? collect();
                         <div class="cell-muted small">{{ $booking->contact_phone }}</div>
                     </td>
                     <td class="small">
-                        <div class="fw-semibold">{{ $booking->schedule->routeDepartureLabel() }} → {{ $booking->schedule->routeDestinationLabel() }}</div>
+                        <div class="fw-semibold">{{ $booking->routeDetailLabel() }}</div>
                         @if($booking->schedule->shortTripCode())
                             <div class="cell-muted">{{ $booking->schedule->shortTripCode() }}</div>
                         @endif

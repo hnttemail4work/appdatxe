@@ -510,12 +510,6 @@
     margin-bottom: .2rem;
     color: #fff;
 }
-.booking-finding-driver__countdown {
-    margin-top: .35rem;
-    font-size: .82rem;
-    font-weight: 750;
-    color: #fde68a;
-}
 
 .grab-book-entry {
     display: flex;
@@ -3614,7 +3608,7 @@ body.booking-active-referral-qr-open {
     justify-content: flex-end;
     padding: 0 .85rem 1rem;
     pointer-events: none;
-    background: radial-gradient(ellipse at center, rgba(12, 12, 12, .15) 0%, rgba(12, 12, 12, .55) 100%);
+    background: transparent;
 }
 .guest-trip-radar__rings {
     position: absolute;
@@ -3653,15 +3647,6 @@ body.booking-active-referral-qr-open {
     font-size: .92rem;
     font-weight: 800;
     margin-bottom: .2rem;
-}
-.guest-trip-radar__copy p {
-    font-size: .78rem;
-    color: rgba(245, 245, 245, .72);
-}
-.guest-trip-radar__countdown {
-    margin-top: .25rem !important;
-    font-weight: 750;
-    color: #86efac !important;
 }
 .guest-trip-live-status {
     position: absolute;
@@ -3764,9 +3749,6 @@ body.booking-active-referral-qr-open {
     border: 1px solid rgba(212, 175, 55, 0.28);
 }
 
-.guest-trip-card__hero {
-    padding: 1rem 1rem 0.5rem;
-}
 .guest-trip-vehicle-section {
     margin: 0 0.85rem 0.75rem;
     border-radius: 0.9rem;
@@ -3820,26 +3802,6 @@ body.booking-active-referral-qr-open {
     color: #86efac;
     font-size: 1rem;
 }
-.guest-trip-route {
-    display: flex;
-    align-items: center;
-    gap: 0.55rem;
-    flex-wrap: wrap;
-    margin-bottom: 0;
-}
-.guest-trip-route__city {
-    font-size: 1.2rem;
-    font-weight: 800;
-    line-height: 1.2;
-    color: #fff;
-}
-.guest-trip-route__arrow {
-    display: inline-flex;
-    color: var(--tl-primary, #d4af37);
-    opacity: 0.95;
-}
-
-
 .guest-trip-stops {
     position: relative;
     padding: 0.35rem 1rem 0.85rem;

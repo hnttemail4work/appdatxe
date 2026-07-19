@@ -71,9 +71,7 @@ class DuplicateBookingService
         return [
             'booking_reference' => $booking->booking_reference,
             'trip_code'         => $booking->schedule?->shortTripCode() ?? '—',
-            'route'             => $booking->schedule?->route
-                ? $booking->schedule->route->departure . ' → ' . $booking->schedule->route->destination
-                : '—',
+            'route'             => $booking->routeDetailLabel(),
             'service_date'      => $booking->isScheduledPickup()
                 ? ($booking->guestPickupAt()?->format('d/m/Y H:i') ?? $booking->pickupModeLabel())
                 : $booking->pickupModeLabel(),

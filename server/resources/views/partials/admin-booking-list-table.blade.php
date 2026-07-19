@@ -1,10 +1,8 @@
 @php
 /** @var \Illuminate\Contracts\Pagination\LengthAwarePaginator|\Illuminate\Support\Collection $bookings */
-/** @var \Illuminate\Support\Collection<int, \App\Models\DriverProfile> $drivers */
 $bookings = $bookings ?? collect();
 $showBulkDelete = (bool) ($showBulkDelete ?? false);
 $bookingList = $bookingList ?? 'active';
-$showAssignActions = (bool) ($showAssignActions ?? false);
 $showWaitingColumn = (bool) ($showWaitingColumn ?? $bookingList === 'active');
 $showFeedbackColumn = in_array($bookingList, ['completed', 'feedback'], true);
 $showTripReviewInCustomer = in_array($bookingList, ['completed', 'feedback'], true);
@@ -93,7 +91,7 @@ $showDriverColumn = $bookingList !== 'active';
                         @include('partials.admin-booking-customer', ['booking' => $booking, 'showTripReview' => $showTripReviewInCustomer])
                     </td>
                     <td>
-                        <div class="fw-semibold">{{ $booking->schedule->routeDepartureLabel() }} → {{ $booking->schedule->routeDestinationLabel() }}</div>
+                        <div class="fw-semibold">{{ $booking->routeDetailLabel() }}</div>
                         @if($booking->schedule->shortTripCode())
                             <div class="cell-muted small">Mã chuyến: {{ $booking->schedule->shortTripCode() }}</div>
                         @endif
@@ -153,7 +151,6 @@ $showDriverColumn = $bookingList !== 'active';
                         @if($booking->needsAdminWaitingAttention())
                             @include('partials.admin-booking-actions', [
                                 'booking' => $booking,
-                                'drivers' => $drivers,
                             ])
                         @else
                             —
@@ -181,23 +178,14 @@ $showDriverColumn = $bookingList !== 'active';
                     @endif
                     @if($showDriverColumn)
                     <td class="small">
-                        @if($showAssignActions)
-                            @include('partials.admin-booking-assign', [
-                                'booking' => $booking,
-                                'drivers' => $drivers,
-                                'bookingList' => $bookingList,
-                                'displayOnly' => false,
-                            ])
+                        @php
+                            $profile = $booking->schedule->assignedDriverProfile
+                                ?? $booking->schedule->designatedDriverProfile();
+                        @endphp
+                        @if($profile)
+                            @include('partials.admin-booking-driver-code', ['profile' => $profile])
                         @else
-                            @php
-                                $profile = $booking->schedule->assignedDriverProfile
-                                    ?? $booking->schedule->designatedDriverProfile();
-                            @endphp
-                            @if($profile)
-                                @include('partials.admin-booking-driver-code', ['profile' => $profile])
-                            @else
-                                —
-                            @endif
+                            —
                         @endif
                     </td>
                     @endif

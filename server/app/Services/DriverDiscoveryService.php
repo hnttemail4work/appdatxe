@@ -152,7 +152,7 @@ class DriverDiscoveryService
             'accept_url'       => route('driver.bookings.claim', $booking),
             'claim_url'        => route('driver.bookings.claim', $booking),
             'reject_url'       => null,
-            'route'            => $schedule->route->departure . ' → ' . $schedule->route->destination,
+            'route'            => $booking->routeDetailLabel(),
             'departure_time'   => $schedule->departure_time->format('H:i, d/m/Y'),
             'expires_at'       => null,
             'expires_in_label' => null,
@@ -260,7 +260,8 @@ class DriverDiscoveryService
             'is_open_trip'     => false,
             'accept_url'       => route('driver.tripRequests.accept', $primary),
             'reject_url'       => route('driver.tripRequests.reject', $primary),
-            'route'            => $schedule->route->departure . ' → ' . $schedule->route->destination,
+            'route'            => ($passengers->first()?->routeDetailLabel())
+                ?: trim(($schedule->route?->departure ?? '') . ' → ' . ($schedule->route?->destination ?? '')),
             'departure_time'   => $schedule->departure_time->format('H:i, d/m/Y'),
             'expires_at'       => $primary->expires_at?->toIso8601String(),
             'expires_in_label' => null,

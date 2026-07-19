@@ -129,8 +129,9 @@ class CustomerAccountService
         return [
             'booking_reference'   => $booking->booking_reference,
             'passenger_name'      => $booking->passenger_name,
-            'pickup_address'      => $booking->pickup_address,
-            'dropoff_address'     => $booking->dropoff_address,
+            'pickup_address'      => $booking->driverPickupDetailLabel(),
+            'dropoff_address'     => $booking->driverDropoffDetailLabel(),
+            'route_label'         => $booking->routeDetailLabel(),
             'trip_status'         => $booking->trip_status,
             'booking_status'      => $booking->booking_status,
             'guest_status_label'  => $booking->primaryStatusLabel(),
