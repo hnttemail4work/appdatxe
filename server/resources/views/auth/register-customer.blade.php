@@ -5,9 +5,8 @@
     $stepTitles = [
         1 => 'Đăng ký tài khoản',
         2 => 'CCCD',
-        3 => 'Điều khoản',
-        4 => 'Tạo PIN',
-        5 => 'Nhập lại PIN',
+        3 => 'Tạo PIN',
+        4 => 'Nhập lại PIN',
     ];
 @endphp
 <div class="auth-screen" data-auth-screen data-customer-wizard-root
@@ -19,6 +18,11 @@
     ])
 
     <div class="auth-screen-body">
+        @if(session('info'))
+            <div class="auth-field-error" role="status" style="color: var(--app-accent, #d4af37);">
+                {{ session('info') }}
+            </div>
+        @endif
         @if($errors->any())
             <div class="auth-field-error" role="alert">
                 {{ $errors->first() }}
@@ -38,9 +42,8 @@
                         'fieldName' => 'phone',
                         'fieldId' => 'customer-register-phone',
                         'fieldType' => 'tel',
-                        'fieldValue' => old('phone'),
-                        'fieldPlaceholder' => '0901234567',
-                        'fieldAutocomplete' => 'tel',
+                        'fieldValue' => old('phone', request('phone')),
+                        'fieldAutocomplete' => 'off',
                         'fieldInputmode' => 'tel',
                         'nextType' => 'button',
                         'nextAttr' => 'data-wizard-next',
@@ -50,12 +53,6 @@
                 <div class="auth-step-panel" data-wizard-step="2" hidden>
                     <div class="auth-field-label">Ảnh CCCD</div>
                     @include('partials.customer-docs-upload-register', ['idCardRequired' => true])
-                    <div class="auth-group-actions">
-                        @include('partials.auth-next-btn', ['nextAttr' => 'data-wizard-next'])
-                    </div>
-                </div>
-
-                <div class="auth-step-panel" data-wizard-step="3" hidden>
                     <div class="auth-terms-row">
                         <input class="@error('terms') is-invalid @enderror" type="checkbox"
                                name="terms" value="1" id="customerTermsCheck" {{ old('terms') ? 'checked' : '' }} required>
@@ -67,24 +64,21 @@
                     </div>
                 </div>
 
-                <div class="auth-step-panel" data-wizard-step="4" hidden>
+                <div class="auth-step-panel" data-wizard-step="3" hidden>
                     @include('partials.auth-pin-row', [
                         'pinName' => 'pin_draft',
                         'pinId' => 'customer-pin',
                         'pinLabel' => 'PIN',
-                        'nextType' => 'button',
-                        'nextAttr' => 'data-wizard-next',
+                        'hideNext' => true,
                     ])
                 </div>
 
-                <div class="auth-step-panel" data-wizard-step="5" hidden>
+                <div class="auth-step-panel" data-wizard-step="4" hidden>
                     @include('partials.auth-pin-row', [
                         'pinName' => 'pin_confirm_draft',
                         'pinId' => 'customer-pin-confirm',
                         'pinLabel' => 'Nhập lại PIN',
-                        'nextType' => 'submit',
-                        'nextAttr' => 'data-wizard-submit',
-                        'nextAria' => 'Đăng ký',
+                        'hideNext' => true,
                     ])
                 </div>
             </div>

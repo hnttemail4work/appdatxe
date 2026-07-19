@@ -47,11 +47,13 @@ window.__bookingSuccess = @json(session('booking_success'));
 window.__appContactPhone = @json(config('app.contact_phone'));
 window.__guestBrowserCancelCount = @json((int) ($browserCancelCount ?? 0));
 window.__guestBrowserCancelBlockLimit = @json(\App\Services\BookingBrowserGuardService::CANCEL_BLOCK_LIMIT);
+@include('partials.geocode-client-config')
 </script>
 <script src="{{ asset('js/booking-browser-guard.js') }}?v={{ filemtime(public_path('js/booking-browser-guard.js')) }}"></script>
 <script src="{{ asset('js/idle-poll.js') }}?v={{ filemtime(public_path('js/idle-poll.js')) }}"></script>
 <script src="{{ asset('js/booking-active-session.js') }}?v={{ filemtime(public_path('js/booking-active-session.js')) }}"></script>
 <script src="{{ asset('js/trip-chat.js') }}?v={{ filemtime(public_path('js/trip-chat.js')) }}"></script>
+<script src="{{ asset('js/guest-trip-live-map.js') }}?v={{ filemtime(public_path('js/guest-trip-live-map.js')) }}"></script>
 <script src="{{ asset('js/guest-trip-page.js') }}?v={{ filemtime(public_path('js/guest-trip-page.js')) }}"></script>
 <script src="{{ asset('js/customer-scroll-dock.js') }}?v={{ filemtime(public_path('js/customer-scroll-dock.js')) }}"></script>
 @if(session('booking_success'))

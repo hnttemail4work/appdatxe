@@ -57,7 +57,7 @@
     var reverseUrl = window.__geocodeReverseUrl || '';
     var searchUrl = window.__geocodeSearchUrl || '';
     var RECENT_STORAGE_KEY = 'appdatxe:recentAddresses';
-    var RECENT_MAX = 6;
+    var RECENT_MAX = 10;
 
     var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     var mapInstance = null;
@@ -274,7 +274,10 @@
             btn.addEventListener('click', function () {
                 hideRecentPanel();
                 if (item.lat != null && item.lng != null) {
-                    placeMarker(item.lat, item.lng, true, { address: item.address, fromSearch: true });
+                    placeMarker(item.lat, item.lng, true, {
+                        address: item.address,
+                        fromSearch: true,
+                    });
                 }
             });
             recentListEl.appendChild(btn);
@@ -601,6 +604,7 @@
         pendingAddress = '';
         pendingProvince = '';
         needsPinFineTune = false;
+        preferLocateOnOpen = false;
         hideSearchResults();
         updateConfirmButton();
     }
@@ -742,9 +746,8 @@
             return;
         }
 
-        if (options.fromSearch) {
-            markPinNeedsFineTune();
-        } else if (!options.preserveFineTune) {
+        // Chọn gợi ý đã có tọa độ — bật xác nhận ngay; vẫn kéo ghim để chỉnh nếu cần.
+        if (!options.preserveFineTune) {
             markPinFineTuned();
         }
 
@@ -985,9 +988,15 @@
         }
 
         if (!placedExisting) {
-            focusMapOnProvince();
+            if (preferLocateOnOpen) {
+                locateMe();
+            } else {
+                focusMapOnProvince();
+            }
         }
     }
+
+    var preferLocateOnOpen = false;
 
     function openPicker(btn) {
         targetInputId = btn.getAttribute('data-address-map-for') || '';
@@ -997,6 +1006,7 @@
         pickerMode = btn.getAttribute('data-address-map-mode') || 'default';
         latInputId = btn.getAttribute('data-address-map-lat') || '';
         lngInputId = btn.getAttribute('data-address-map-lng') || '';
+        preferLocateOnOpen = btn.getAttribute('data-address-map-locate') === '1';
         if (!targetInputId) {
             return;
         }
@@ -1024,11 +1034,18 @@
 
         var existing = document.getElementById(targetInputId);
         var existingValue = existing ? String(existing.value || '').trim() : '';
+        var typedSearch = searchInput ? String(searchInput.value || '').trim() : '';
         if (searchInput) {
-            searchInput.value = existingValue;
+            // Giữ chữ đang gõ nếu field chưa có địa chỉ đã chọn; không xóa khi đóng/mở lại map.
+            if (existingValue) {
+                searchInput.value = existingValue;
+            } else if (!typedSearch) {
+                searchInput.value = '';
+            }
             syncSearchClearButton();
         }
-        if (!existingValue) {
+        var searchShown = searchInput ? String(searchInput.value || '').trim() : '';
+        if (!searchShown) {
             showRecentPanelIfIdle();
         } else {
             hideRecentPanel();
@@ -1055,8 +1072,9 @@
                     if (searchInput) {
                         searchInput.focus({ preventScroll: true });
                         moveSearchCaretToEnd();
-                        if (existingValue.length >= 2) {
-                            searchAddress(existingValue);
+                        var q = String(searchInput.value || '').trim();
+                        if (q.length >= 2 && !existingValue) {
+                            searchAddress(q);
                         }
                     }
                 }, 120);
@@ -1080,7 +1098,12 @@
         if (!btn) {
             return;
         }
+        // Không mở map khi click vùng mở sheet (trừ icon map).
+        if (btn.hasAttribute('data-open-address-sheet-main')) {
+            return;
+        }
         e.preventDefault();
+        e.stopPropagation();
         openPicker(btn);
     });
 
@@ -1159,9 +1182,7 @@
     modalEl.addEventListener('hidden.bs.modal', function () {
         teardownPicker();
         hideRecentPanel();
-        if (searchInput) {
-            searchInput.value = '';
-        }
+        // Giữ nội dung ô tìm kiếm khi đóng map / chuyển tab — chỉ xóa khi user bấm nút clear.
         syncSearchClearButton();
         setPreview('Chạm bản đồ hoặc tìm địa chỉ, rồi bấm Xác nhận.', false);
     });

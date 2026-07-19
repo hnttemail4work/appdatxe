@@ -8,13 +8,26 @@
         ->where('type', 'deposit')
         ->where('status', 'pending')
         ->count();
+    $pendingCustomerDeposits = (int) \App\Models\CustomerWalletTransaction::query()
+        ->where('type', 'deposit')
+        ->where('status', 'pending')
+        ->count();
+    $pendingCustomers = (int) \App\Models\User::query()
+        ->where('role', 'customer')
+        ->where('approval_status', \App\Models\User::APPROVAL_PENDING)
+        ->count();
+    $pendingCustomerUpdates = (int) \App\Models\CustomerProfileChangeRequest::query()
+        ->where('status', \App\Models\CustomerProfileChangeRequest::STATUS_PENDING)
+        ->count();
+    $usersActionCount = $pendingCustomers + $pendingCustomerUpdates;
 
     $tabs = [
         ['key' => 'bookings', 'label' => 'Đặt xe', 'href' => route('admin.bookings'), 'badge' => null, 'hot' => false],
         ['key' => 'revenue', 'label' => 'Doanh thu', 'href' => route('admin.revenue'), 'badge' => null, 'hot' => false],
         ['key' => 'drivers', 'label' => 'Tài xế', 'href' => route('admin.drivers'), 'badge' => $driversActionCount ?: null, 'hot' => $driversActionCount > 0],
-        ['key' => 'users', 'label' => 'Khách hàng', 'href' => route('admin.users'), 'badge' => null, 'hot' => false],
-        ['key' => 'deposits', 'label' => 'Nạp ví', 'href' => route('admin.driverWallet'), 'badge' => $pendingDeposits ?: null, 'hot' => $pendingDeposits > 0],
+        ['key' => 'users', 'label' => 'Khách hàng', 'href' => route('admin.users'), 'badge' => $usersActionCount ?: null, 'hot' => $usersActionCount > 0],
+        ['key' => 'deposits', 'label' => 'Nạp ví TX', 'href' => route('admin.driverWallet'), 'badge' => $pendingDeposits ?: null, 'hot' => $pendingDeposits > 0],
+        ['key' => 'customer-deposits', 'label' => 'Nạp ví KH', 'href' => route('admin.customerWallet'), 'badge' => $pendingCustomerDeposits ?: null, 'hot' => $pendingCustomerDeposits > 0],
         ['key' => 'referrals', 'label' => 'Giới thiệu', 'href' => route('admin.referrals'), 'badge' => null, 'hot' => false],
         ['key' => 'driver-inbox', 'label' => 'Tin tài xế', 'href' => route('admin.driverInbox'), 'badge' => null, 'hot' => false],
         ['key' => 'auth-codes', 'label' => 'OTP / Reset', 'href' => route('admin.authCodes'), 'badge' => null, 'hot' => false],

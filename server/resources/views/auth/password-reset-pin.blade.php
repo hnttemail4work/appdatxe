@@ -17,9 +17,7 @@
                     'pinId' => 'reset-pin',
                     'pinLabel' => 'PIN mới',
                     'pinErrorBag' => 'password',
-                    'nextType' => 'button',
-                    'nextAttr' => 'data-reset-to-confirm',
-                    'nextAria' => 'Tiếp tục',
+                    'hideNext' => true,
                 ])
             </div>
 
@@ -29,9 +27,8 @@
                     'pinId' => 'reset-pin-confirm',
                     'pinLabel' => 'Nhập lại PIN',
                     'pinErrorBag' => 'password_confirmation',
-                    'nextType' => 'submit',
-                    'nextAttr' => '',
-                    'nextAria' => 'Lưu PIN',
+                    'hideNext' => true,
+                    'pinAutoSubmit' => true,
                 ])
             </div>
         </form>
@@ -93,25 +90,30 @@
     }
   }
 
-  var toConfirm = root.querySelector('[data-reset-to-confirm]');
-  if (toConfirm) {
-    toConfirm.addEventListener('click', function () {
-      var wrap = pinStep.querySelector('[data-pin-boxes]');
-      if (V) {
-        if (!V.validatePinWrap(wrap)) return;
-        draft = V.pinValueFrom(wrap);
-        showConfirm();
-        return;
-      }
-      var val = PinInput.value(wrap);
-      if (!/^\d{6}$/.test(val)) {
-        PinInput.clear(wrap);
-        return;
-      }
-      draft = val;
+  function tryAdvanceFromPin() {
+    if (pinStep.hidden) return;
+    var wrap = pinStep.querySelector('[data-pin-boxes]');
+    if (V) {
+      if (!V.validatePinWrap(wrap)) return;
+      draft = V.pinValueFrom(wrap);
       showConfirm();
-    });
+      return;
+    }
+    var val = PinInput.value(wrap);
+    if (!/^\d{6}$/.test(val)) {
+      PinInput.clear(wrap);
+      return;
+    }
+    draft = val;
+    showConfirm();
   }
+
+  pinStep.addEventListener('pin:change', function (e) {
+    var value = (e.detail && e.detail.value) || '';
+    if (/^\d{6}$/.test(value)) {
+      tryAdvanceFromPin();
+    }
+  });
 
   if (form) {
     form.addEventListener('submit', function (e) {

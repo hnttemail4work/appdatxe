@@ -526,14 +526,14 @@ class BookingWorkflowService
         $this->browserGuard->clearActiveBookingForBooking($booking->fresh());
     }
 
-    /** Hết 15 phút tìm tài xế — hủy để khách đặt lại. */
+    /** Hết 10 phút tìm tài xế (Đặt ngay) — hủy để khách đặt lại. */
     public function cancelSearchTimeout(Booking $booking): void
     {
         if (in_array($booking->booking_status, ['cancelled', 'rejected'], true)) {
             return;
         }
 
-        if ($booking->schedule?->driver_id) {
+        if ($booking->schedule?->driver_id || $booking->hasDriverAccepted()) {
             return;
         }
 
@@ -547,7 +547,9 @@ class BookingWorkflowService
                 'payment_status'            => $booking->payment_status === 'paid' ? 'refunded' : 'unpaid',
                 'cancelled_at'              => now(),
                 'cancelled_by'              => 'system',
-                'cancellation_reason_label' => 'Hết thời gian tìm tài xế',
+                'cancellation_reason_label' => 'Không tìm được tài xế trong 10 phút',
+                'needs_operator_help_at'    => null,
+                'operator_help_reason'      => null,
             ];
 
             if (Schema::hasColumn('bookings', 'assigned_driver_id')) {
@@ -559,7 +561,7 @@ class BookingWorkflowService
             if ($schedule) {
                 DriverTripRequest::query()
                     ->where('schedule_id', $schedule->id)
-                    ->where('status', 'pending')
+                    ->whereIn('status', ['pending', 'accepted'])
                     ->update([
                         'status'       => 'cancelled',
                         'responded_at' => now(),
@@ -571,7 +573,35 @@ class BookingWorkflowService
             $this->audit($booking, null, 'booking_cancelled', $before, $booking->fresh()->toArray());
         });
 
-        $this->browserGuard->clearActiveBookingForBooking($booking->fresh());
+        $fresh = $booking->fresh();
+        $this->browserGuard->clearActiveBookingForBooking($fresh);
+
+        try {
+            app(PushNotificationService::class)->onTripCancelled($fresh);
+        } catch (\Throwable) {
+        }
+    }
+
+    public function notifyCustomerDriverSearchTimeout(Booking $booking): void
+    {
+        $customerId = (int) ($booking->customer_id ?? 0);
+        if ($customerId < 1) {
+            return;
+        }
+
+        try {
+            app(CustomerInboxService::class)->notify(
+                $customerId,
+                \App\Models\CustomerInboxMessage::CATEGORY_NOTICE,
+                'Không tìm được tài xế',
+                'Chuyến '.$booking->booking_reference.' đã tự hủy vì không có tài xế nhận trong 10 phút. Bạn có thể đặt lại.',
+                [
+                    'booking_reference' => $booking->booking_reference,
+                    'reason'            => 'driver_search_timeout',
+                ],
+            );
+        } catch (\Throwable) {
+        }
     }
 
     /** Hết 15 phút chờ tài xế xác nhận — giữ đơn ở tab Chuyến, báo admin gán lại (không tự chuyển Đã hủy). */
@@ -1076,29 +1106,41 @@ class BookingWorkflowService
     /** Quản lý hủy chuyến đang xử lý — chuyển sang tab Đã hủy, gỡ khỏi tài xế và trang khách. */
     public function cancelByAdmin(Booking $booking, int $adminUserId): void
     {
-        if (in_array($booking->booking_status, ['cancelled', 'rejected'], true)) {
-            throw new InvalidArgumentException('Đơn đã hủy.');
-        }
+        $formerDriverId = 0;
 
-        if ($booking->trip_status === 'completed') {
-            throw new InvalidArgumentException('Chuyến đã hoàn thành.');
-        }
+        DB::transaction(function () use ($booking, $adminUserId, &$formerDriverId): void {
+            $locked = Booking::query()
+                ->with(['schedule.vehicle', 'schedule.route'])
+                ->lockForUpdate()
+                ->findOrFail($booking->id);
 
-        if ($booking->passengerPickedUp()) {
-            throw new InvalidArgumentException('Tài xế đã đón khách — không thể hủy chuyến.');
-        }
+            if (in_array($locked->booking_status, ['cancelled', 'rejected'], true)) {
+                throw new InvalidArgumentException('Đơn đã hủy.');
+            }
 
-        $booking->loadMissing(['schedule.vehicle', 'schedule.route']);
-        $schedule = $booking->schedule;
-        $formerDriverId = (int) ($schedule?->driver_id ?? 0);
+            if ($locked->trip_status === 'completed') {
+                throw new InvalidArgumentException('Chuyến đã hoàn thành.');
+            }
 
-        DB::transaction(function () use ($booking, $adminUserId, $schedule, $formerDriverId): void {
-            $before = $booking->toArray();
+            if ($locked->passengerPickedUp()) {
+                throw new InvalidArgumentException('Tài xế đã đón khách — không thể hủy chuyến.');
+            }
 
+            $schedule = $locked->schedule;
+            if ($schedule) {
+                $schedule = Schedule::query()->lockForUpdate()->find($schedule->id) ?? $schedule;
+            }
+            $formerDriverId = (int) ($schedule?->driver_id
+                ?: $locked->assigned_driver_id
+                ?: 0);
+
+            $before = $locked->toArray();
+
+            // Giữ assigned_driver_id / schedule.driver_id đến sau khi observer gửi push hủy cho TX.
             $updates = [
                 'booking_status'            => 'cancelled',
                 'trip_status'               => 'cancelled',
-                'payment_status'            => $booking->payment_status === 'paid' ? 'refunded' : 'unpaid',
+                'payment_status'            => $locked->payment_status === 'paid' ? 'refunded' : 'unpaid',
                 'cancelled_at'              => now(),
                 'cancelled_by'              => 'admin',
                 'cancellation_reason_label' => 'Quản lý hủy chuyến',
@@ -1107,16 +1149,20 @@ class BookingWorkflowService
                 'operator_help_reason'      => null,
             ];
 
-            if (Schema::hasColumn('bookings', 'assigned_driver_id')) {
-                $updates['assigned_driver_id'] = null;
+            if ($formerDriverId > 0) {
+                $locked->cancelNotifyDriverId = $formerDriverId;
             }
 
-            $booking->update($updates);
+            $locked->update($updates);
+
+            if (Schema::hasColumn('bookings', 'assigned_driver_id') && $locked->assigned_driver_id) {
+                $locked->update(['assigned_driver_id' => null]);
+            }
 
             if ($schedule) {
                 DriverTripRequest::query()
                     ->where('schedule_id', $schedule->id)
-                    ->where('contact_phone', (string) $booking->contact_phone)
+                    ->where('contact_phone', (string) $locked->contact_phone)
                     ->whereIn('status', ['pending', 'accepted', 'expired'])
                     ->update([
                         'status'       => 'cancelled',
@@ -1137,7 +1183,7 @@ class BookingWorkflowService
                         'driver_stage'                            => null,
                         'driver_assigned_at'                      => null,
                         'driver_movement_deadline_at'             => null,
-                'driver_movement_confirmed_at'            => null,
+                        'driver_movement_confirmed_at'            => null,
                         'driver_late_pickup_prompt_at'            => null,
                         'driver_late_pickup_continue_deadline_at' => null,
                         'status'                                  => $schedule->status === 'running'
@@ -1147,16 +1193,19 @@ class BookingWorkflowService
                 }
             }
 
-            $booking->paymentTransactions()->where('status', 'pending')->update(['status' => 'failed']);
-            $this->audit($booking, $adminUserId, 'booking_cancelled_admin', $before, $booking->fresh()->toArray());
+            $locked->paymentTransactions()->where('status', 'pending')->update(['status' => 'failed']);
+            $this->audit($locked, $adminUserId, 'booking_cancelled_admin', $before, $locked->fresh()->toArray());
         });
 
         if ($formerDriverId > 0) {
             $this->driverAvailability->syncAfterTripCompleted($formerDriverId);
         }
 
-        $this->syncScheduleAvailability($booking->fresh()->schedule);
-        $this->browserGuard->clearActiveBookingForBooking($booking->fresh());
+        $fresh = $booking->fresh();
+        $this->syncScheduleAvailability($fresh?->schedule);
+        if ($fresh) {
+            $this->browserGuard->clearActiveBookingForBooking($fresh);
+        }
     }
 
     /** Tài xế hủy chuyến sau khi nhận — gỡ TX và tìm lại nếu còn thời gian. */
@@ -1279,7 +1328,7 @@ class BookingWorkflowService
             }
 
             if ($tripRequests->hasExceededCustomerSearchDeadline($fresh)) {
-                $tripRequests->hangDriverSearchIfOverdue($fresh);
+                $tripRequests->cancelCustomerSearchIfOverdue($fresh);
 
                 continue;
             }

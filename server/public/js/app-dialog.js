@@ -108,9 +108,18 @@
                 return;
             }
             form.dataset.confirmBypass = '1';
-            if (typeof form.requestSubmit === 'function') {
-                form.requestSubmit();
-            } else {
+            try {
+                if (typeof form.requestSubmit === 'function') {
+                    var submitter = form.querySelector('[type="submit"], button:not([type]), input[type="submit"]');
+                    if (submitter) {
+                        form.requestSubmit(submitter);
+                    } else {
+                        form.requestSubmit();
+                    }
+                } else {
+                    form.submit();
+                }
+            } catch (err) {
                 form.submit();
             }
         });

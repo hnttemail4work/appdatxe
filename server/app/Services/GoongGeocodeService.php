@@ -45,7 +45,165 @@ class GoongGeocodeService
             }
         }
 
+        // Geocode fallback đã có lat/lon — dùng để hiện km ngay.
         return $this->searchViaGeocode($input, $province);
+    }
+
+    /**
+     * Gợi ý địa điểm quanh tọa độ (lọc trong bán kính mét).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function nearby(float $lat, float $lng, int $radiusMeters = 300): array
+    {
+        if (! $this->isConfigured()) {
+            return [];
+        }
+
+        $radiusMeters = max(30, min(500, $radiusMeters));
+        $reverse = $this->reverse($lat, $lng);
+        $queries = [];
+
+        if ($reverse !== null) {
+            $address = trim((string) ($reverse['address'] ?? ''));
+            $segments = array_values(array_filter(array_map('trim', explode(',', $address))));
+            if ($segments !== []) {
+                $queries[] = $segments[0];
+                if (isset($segments[1])) {
+                    $queries[] = trim($segments[0].' '.$segments[1]);
+                }
+            }
+        }
+
+        $queries = array_values(array_unique(array_filter(
+            $queries,
+            static fn (string $q): bool => mb_strlen($q) >= 2,
+        )));
+
+        if ($queries === []) {
+            return [];
+        }
+
+        $radiusKm = max(1, (int) ceil($radiusMeters / 1000));
+        $seenPlaceIds = [];
+        $seenLabels = [];
+        $out = [];
+
+        foreach ($queries as $query) {
+            foreach ($this->autocompleteNear($query, $lat, $lng, $radiusKm) as $prediction) {
+                $placeId = trim((string) ($prediction['place_id'] ?? ''));
+                if ($placeId === '' || isset($seenPlaceIds[$placeId])) {
+                    continue;
+                }
+                $seenPlaceIds[$placeId] = true;
+
+                $resolved = $this->resolvePlaceId($placeId);
+                if ($resolved === null) {
+                    continue;
+                }
+
+                $itemLat = (float) $resolved['lat'];
+                $itemLng = (float) $resolved['lon'];
+                $dist = $this->haversineMeters($lat, $lng, $itemLat, $itemLng);
+                if ($dist > $radiusMeters || $dist < 8) {
+                    continue;
+                }
+
+                $title = trim((string) ($resolved['title'] ?? $prediction['title'] ?? ''));
+                $address = trim((string) ($resolved['address'] ?? ''));
+                $labelKey = $this->nearbyDedupeKey($title !== '' ? $title : $address, $address);
+                if ($labelKey !== '' && isset($seenLabels[$labelKey])) {
+                    continue;
+                }
+
+                // Trùng tọa độ với kết quả đã có (cùng chỗ, khác place_id)
+                $tooClose = false;
+                foreach ($out as $existing) {
+                    if ($this->haversineMeters($itemLat, $itemLng, (float) $existing['lat'], (float) $existing['lon']) < 25) {
+                        $tooClose = true;
+                        break;
+                    }
+                }
+                if ($tooClose) {
+                    continue;
+                }
+
+                if ($labelKey !== '') {
+                    $seenLabels[$labelKey] = true;
+                }
+
+                $out[] = [
+                    'title' => $title !== '' ? $title : $address,
+                    'subtitle' => (string) ($resolved['subtitle'] ?? $prediction['subtitle'] ?? ''),
+                    'address' => $address !== '' ? $address : $title,
+                    'lat' => $itemLat,
+                    'lon' => $itemLng,
+                    'place_id' => $placeId,
+                    'province' => (string) ($resolved['province'] ?? ''),
+                    'distance_m' => (int) round($dist),
+                    'kind_label' => (string) ($resolved['kind_label'] ?? $prediction['kind_label'] ?? 'Địa điểm'),
+                ];
+            }
+        }
+
+        usort($out, static fn (array $a, array $b): int => ($a['distance_m'] ?? 0) <=> ($b['distance_m'] ?? 0));
+
+        return array_slice($out, 0, 8);
+    }
+
+    private function nearbyDedupeKey(string $title, string $address): string
+    {
+        $raw = $address !== '' ? $address : $title;
+        $raw = mb_strtolower(trim($raw));
+        if ($raw === '') {
+            return '';
+        }
+
+        // Bỏ khoảng trắng / dấu câu thừa để gom “số 12 …” trùng nhau
+        $raw = preg_replace('/[^\p{L}\p{N}]+/u', '', $raw) ?? $raw;
+
+        return $raw;
+    }
+
+    private function haversineMeters(float $lat1, float $lng1, float $lat2, float $lng2): float
+    {
+        $earth = 6371000.0;
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLng = deg2rad($lng2 - $lng1);
+        $a = sin($dLat / 2) ** 2
+            + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) ** 2;
+
+        return 2 * $earth * asin(min(1, sqrt($a)));
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function autocompleteNear(string $input, float $lat, float $lng, int $radiusKm): array
+    {
+        $payload = $this->get('/Place/AutoComplete', [
+            'input' => $input,
+            'api_key' => $this->apiKey(),
+            'limit' => 10,
+            'more_compound' => 'true',
+            'location' => $lat.','.$lng,
+            'radius' => max(1, $radiusKm),
+        ]);
+
+        if ($payload === null || ($payload['status'] ?? '') !== 'OK') {
+            return [];
+        }
+
+        $results = [];
+        foreach ($payload['predictions'] ?? [] as $prediction) {
+            if (! is_array($prediction)) {
+                continue;
+            }
+            $mapped = $this->mapPrediction($prediction);
+            if ($mapped !== null) {
+                $results[] = $mapped;
+            }
+        }
+
+        return $results;
     }
 
     /** @return array<string, mixed>|null */
@@ -110,6 +268,96 @@ class GoongGeocodeService
         $presented['province'] = ProvinceResolver::fromMapPick($lat, $lon, $address) ?? '';
 
         return $presented;
+    }
+
+    /**
+     * Lộ trình xe theo đường (Goong Direction).
+     *
+     * @return array{coordinates: list<array{0: float, 1: float}>, distance_m: int|null, duration_s: int|null}|null
+     */
+    public function direction(float $originLat, float $originLng, float $destLat, float $destLng): ?array
+    {
+        if (! $this->isConfigured()) {
+            return null;
+        }
+
+        $payload = $this->get('/Direction', [
+            'origin' => $originLat.','.$originLng,
+            'destination' => $destLat.','.$destLng,
+            'vehicle' => 'car',
+            'api_key' => $this->apiKey(),
+        ]);
+
+        if ($payload === null) {
+            return null;
+        }
+
+        $routes = $payload['routes'] ?? null;
+        if (! is_array($routes) || $routes === []) {
+            return null;
+        }
+
+        $route = is_array($routes[0]) ? $routes[0] : null;
+        if ($route === null) {
+            return null;
+        }
+
+        $encoded = (string) data_get($route, 'overview_polyline.points', '');
+        $coordinates = $encoded !== '' ? $this->decodePolyline($encoded) : [];
+
+        if ($coordinates === []) {
+            $coordinates = [
+                [$originLng, $originLat],
+                [$destLng, $destLat],
+            ];
+        }
+
+        $distanceM = data_get($route, 'legs.0.distance.value');
+        $durationS = data_get($route, 'legs.0.duration.value');
+
+        return [
+            'coordinates' => $coordinates,
+            'distance_m' => is_numeric($distanceM) ? (int) $distanceM : null,
+            'duration_s' => is_numeric($durationS) ? (int) $durationS : null,
+        ];
+    }
+
+    /**
+     * Decode Google/Goong encoded polyline → [[lng, lat], …]
+     *
+     * @return list<array{0: float, 1: float}>
+     */
+    private function decodePolyline(string $encoded): array
+    {
+        $coordinates = [];
+        $index = 0;
+        $lat = 0;
+        $lng = 0;
+        $len = strlen($encoded);
+
+        while ($index < $len) {
+            $result = 0;
+            $shift = 0;
+            do {
+                $b = ord($encoded[$index++]) - 63;
+                $result |= ($b & 0x1F) << $shift;
+                $shift += 5;
+            } while ($b >= 0x20 && $index < $len);
+            $lat += ($result & 1) ? ~($result >> 1) : ($result >> 1);
+
+            $result = 0;
+            $shift = 0;
+            do {
+                $b = ord($encoded[$index++]) - 63;
+                $result |= ($b & 0x1F) << $shift;
+                $shift += 5;
+            } while ($b >= 0x20 && $index < $len);
+            $lng += ($result & 1) ? ~($result >> 1) : ($result >> 1);
+
+            $coordinates[] = [$lng / 1e5, $lat / 1e5];
+        }
+
+        return $coordinates;
     }
 
     /** @return array{address: string, lat: float, lon: float, province: string}|null */
@@ -267,8 +515,6 @@ class GoongGeocodeService
 
             $placeId = trim((string) ($row['place_id'] ?? ''));
             $presented = $this->presentResult($row, $formatted, $lat, $lon, '');
-            $presented['lat'] = null;
-            $presented['lon'] = null;
             $presented['place_id'] = $placeId;
 
             $results[] = $presented;

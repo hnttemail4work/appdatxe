@@ -15,4 +15,9 @@ $refFee = $booking->projectedReferrerCommissionAmount();
     <div class="cell-muted small mt-1">
         HH: @if($hasReferrerCommission && $refFee > 0){{ number_format($refFee, 0, ',', '.') }} đ@else—@endif
     </div>
+    @if($booking->price_subtotal || $booking->price_breakdown)
+        <div class="mt-2">
+            @include('partials.booking-price-breakdown', ['booking' => $booking, 'compact' => true])
+        </div>
+    @endif
 @endif

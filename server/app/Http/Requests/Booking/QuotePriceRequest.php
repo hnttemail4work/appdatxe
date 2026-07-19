@@ -28,6 +28,8 @@ class QuotePriceRequest extends FormRequest
             'dropoff_lat'        => ['required', 'numeric', 'between:-90,90'],
             'dropoff_lng'        => ['required', 'numeric', 'between:-180,180'],
             'contact_phone'      => ['nullable', 'string', 'max:30'],
+            'pickup_time'        => ['nullable', 'string', 'max:40'],
+            'service_date'       => ['nullable', 'date'],
         ];
     }
 }

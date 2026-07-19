@@ -64,20 +64,29 @@
 
         var next = pendingLocation;
         pendingLocation = null;
-        saveLocation(next.lat, next.lng, next.address);
+        saveLocation(next.lat, next.lng, next.address, next.heading);
     }
 
-    function saveLocation(lat, lng, address) {
+    function saveLocation(lat, lng, address, heading) {
         if (isPaused() || lat == null || lng == null || lat === '' || lng === '') {
             return;
         }
 
         if (sending) {
-            pendingLocation = { lat: lat, lng: lng, address: address };
+            pendingLocation = { lat: lat, lng: lng, address: address, heading: heading };
             return;
         }
 
         sending = true;
+
+        var payload = {
+            lat: Number(lat),
+            lng: Number(lng),
+            address: String(address || '').trim(),
+        };
+        if (heading != null && heading !== '' && !Number.isNaN(Number(heading))) {
+            payload.heading = Number(heading);
+        }
 
         fetch(url, {
             method: 'POST',
@@ -86,11 +95,7 @@
                 Accept: 'application/json',
                 'X-CSRF-TOKEN': csrf,
             },
-            body: JSON.stringify({
-                lat: Number(lat),
-                lng: Number(lng),
-                address: String(address || '').trim(),
-            }),
+            body: JSON.stringify(payload),
             credentials: 'same-origin',
         })
             .then(function (r) {
@@ -145,6 +150,6 @@
             fallbackDetailInput.value = String(detail.address || '').trim();
         }
 
-        saveLocation(detail.lat, detail.lng, detail.address);
+        saveLocation(detail.lat, detail.lng, detail.address, detail.heading);
     });
 })();

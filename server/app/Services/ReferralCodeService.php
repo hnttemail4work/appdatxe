@@ -147,6 +147,17 @@ class ReferralCodeService
         return $this->forDriver($profile) ?? $this->createForDriver($profile);
     }
 
+    /** Đồng bộ % giảm giá QR mời bạn bè cho mọi mã gắn tài xế (admin bấm đồng bộ). */
+    public function syncDriverInviteDiscountPercent(float $percent): int
+    {
+        $percent = max(0.0, min(100.0, $percent));
+
+        return ReferralCode::query()
+            ->whereNotNull('driver_profile_id')
+            ->where('type', ReferralCode::TYPE_REFERRER)
+            ->update(['customer_discount_percent' => $percent]);
+    }
+
     public function assignedCommissionForDriver(DriverProfile $profile): ?ReferralCode
     {
         return ReferralCode::query()

@@ -13,7 +13,7 @@ class DriverProfile extends Model
         'status', 'approval_status', 'rejection_reason', 'rejection_reason_at', 'availability_status', 'notes',
         'preference_likes', 'preference_dislikes',
         'cuoc_offer_count', 'cuoc_reject_count', 'cancel_rate_percent',
-        'last_lat', 'last_lng', 'last_location_at', 'last_province', 'last_address',
+        'last_lat', 'last_lng', 'last_heading', 'last_location_at', 'last_province', 'last_address',
         'missed_trip_strikes', 'missed_trip_locked_at',
         'bank_name', 'bank_account',
         'vehicle_license_plate', 'vehicle_type', 'vehicle_brand', 'vehicle_model', 'vehicle_color', 'vehicle_seats',
@@ -138,12 +138,8 @@ class DriverProfile extends Model
             return 'Chờ duyệt';
         }
 
-        if ($this->status === 'suspended') {
-            return 'Tạm ngưng';
-        }
-
         if ($this->status !== 'active') {
-            return 'Không hoạt động';
+            return 'Tạm ngưng';
         }
 
         $flags = app(\App\Services\DriverAvailabilityService::class)
@@ -162,35 +158,60 @@ class DriverProfile extends Model
             'Tạm nghỉ', 'Nghỉ'                      => \App\Support\StatusBadge::NEUTRAL,
             'Đã duyệt'           => \App\Support\StatusBadge::INFO,
             'Chờ duyệt'          => \App\Support\StatusBadge::PENDING,
-            'Tạm khóa', 'Từ chối', 'Tạm ngưng' => \App\Support\StatusBadge::DANGER,
+            'Tạm khóa', 'Từ chối', 'Tạm ngưng', 'Không hoạt động' => \App\Support\StatusBadge::DANGER,
             default              => \App\Support\StatusBadge::NEUTRAL,
         };
     }
 
-    /**
-     * Cột Trạng thái bảng danh sách tài xế (admin).
-     * Chỉ 3 giá trị: Sẵn sàng | Tạm nghỉ | Bị khóa.
-     */
+    /** Cột trạng thái tài khoản (admin list): Chờ duyệt | Từ chối | Đang hoạt động | Tạm ngưng. */
     public function listStatusLabel(): string
     {
-        if ($this->isMissedTripLocked() || $this->status === 'suspended') {
-            return 'Bị khóa';
+        if ($this->isRejected()) {
+            return 'Từ chối';
         }
 
-        if (($this->availability_status ?? 'off_duty') !== 'off_duty') {
-            return 'Sẵn sàng';
+        if ($this->isPendingApproval()) {
+            return 'Chờ duyệt';
         }
 
-        return 'Tạm nghỉ';
+        if ($this->isMissedTripLocked()) {
+            return 'Tạm khóa';
+        }
+
+        return \App\Support\AdminAccountStatus::label($this->status);
     }
 
     public function listStatusColor(): string
     {
         return match ($this->listStatusLabel()) {
-            'Sẵn sàng' => \App\Support\StatusBadge::SUCCESS,
-            'Bị khóa'  => \App\Support\StatusBadge::DANGER,
-            default    => \App\Support\StatusBadge::NEUTRAL,
+            'Đang hoạt động' => \App\Support\StatusBadge::ACCENT,
+            'Chờ duyệt'      => \App\Support\StatusBadge::PENDING,
+            'Từ chối', 'Tạm khóa', 'Tạm ngưng' => \App\Support\StatusBadge::DANGER,
+            default          => \App\Support\StatusBadge::NEUTRAL,
         };
+    }
+
+    /** App TX đang bật nhận chuyến (available / on_trip) hay tắt. */
+    public function isAppOn(): bool
+    {
+        return ($this->availability_status ?? 'off_duty') !== 'off_duty';
+    }
+
+    public function appOnLabel(): string
+    {
+        return $this->isAppOn() ? 'Đang bật' : 'Tắt';
+    }
+
+    public function appOnColor(): string
+    {
+        return $this->isAppOn()
+            ? \App\Support\StatusBadge::SUCCESS
+            : \App\Support\StatusBadge::NEUTRAL;
+    }
+
+    public function isAccountRunning(): bool
+    {
+        return \App\Support\AdminAccountStatus::isRunning($this->status);
     }
 
     /** Giá trị form quản lý — map 1 select → status + availability. */
@@ -206,6 +227,7 @@ class DriverProfile extends Model
             'missed_trip_locked_at' => 'datetime',
             'last_lat' => 'float',
             'last_lng' => 'float',
+            'last_heading' => 'float',
             'last_location_at' => 'datetime',
             'rejection_reason_at' => 'datetime',
             'cuoc_offer_count' => 'integer',

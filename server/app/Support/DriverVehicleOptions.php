@@ -2,10 +2,15 @@
 
 namespace App\Support;
 
-/** Danh mục loại xe tài xế — gắn sẵn số chỗ, dùng đăng ký / admin / hiển thị. */
+use App\Models\VehicleType;
+use Illuminate\Support\Facades\Schema;
+
+/** Danh mục loại xe — ưu tiên DB vehicle_types, fallback const seed. */
 class DriverVehicleOptions
 {
     /**
+     * Seed / fallback khi chưa migrate.
+     *
      * @var array<string, array{label: string, seats: int|null, family: string}>
      */
     public const OPTIONS = [
@@ -20,7 +25,6 @@ class DriverVehicleOptions
         'other'        => ['label' => 'Khác', 'seats' => null, 'family' => 'other'],
     ];
 
-    /** Kiểu cũ còn trong DB trước khi mở rộng danh mục. */
     private const LEGACY_LABELS = [
         'sedan'     => 'Sedan',
         'suv'       => 'SUV',
@@ -30,18 +34,33 @@ class DriverVehicleOptions
     /** @return list<string> */
     public static function keys(): array
     {
+        $fromDb = self::dbOptions();
+        if ($fromDb !== null) {
+            return array_keys($fromDb);
+        }
+
         return array_keys(self::OPTIONS);
     }
 
-    /** @return list<string> — keys hợp lệ khi validate (gồm legacy). */
+    /** @return list<string> */
     public static function allowedKeys(): array
     {
         return array_values(array_unique(array_merge(self::keys(), array_keys(self::LEGACY_LABELS))));
     }
 
-    /** @return array<string, string> value => label */
+    /** @return array<string, string> */
     public static function labels(): array
     {
+        $fromDb = self::dbOptions();
+        if ($fromDb !== null) {
+            $out = [];
+            foreach ($fromDb as $key => $meta) {
+                $out[$key] = $meta['label'];
+            }
+
+            return $out;
+        }
+
         $out = [];
         foreach (self::OPTIONS as $key => $meta) {
             $out[$key] = $meta['label'];
@@ -56,8 +75,9 @@ class DriverVehicleOptions
             return '';
         }
 
-        if (isset(self::OPTIONS[$type])) {
-            return self::OPTIONS[$type]['label'];
+        $labels = self::labels();
+        if (isset($labels[$type])) {
+            return $labels[$type];
         }
 
         return self::LEGACY_LABELS[$type] ?? $type;
@@ -67,6 +87,12 @@ class DriverVehicleOptions
     {
         if ($type === null || $type === '') {
             return null;
+        }
+
+        $type = VehicleTypePricing::normalizeTypeKey($type) ?? $type;
+        $fromDb = self::dbOptions();
+        if ($fromDb !== null && isset($fromDb[$type])) {
+            return $fromDb[$type]['seats'];
         }
 
         if (isset(self::OPTIONS[$type])) {
@@ -87,6 +113,12 @@ class DriverVehicleOptions
             return 'other';
         }
 
+        $type = VehicleTypePricing::normalizeTypeKey($type) ?? $type;
+        $fromDb = self::dbOptions();
+        if ($fromDb !== null && isset($fromDb[$type])) {
+            return $fromDb[$type]['family'];
+        }
+
         if (isset(self::OPTIONS[$type])) {
             return self::OPTIONS[$type]['family'];
         }
@@ -98,7 +130,6 @@ class DriverVehicleOptions
         return 'other';
     }
 
-    /** So khớp loại xe catalog (sedan/suv/limousine) với loại đăng ký tài xế. */
     public static function compatibleWithVehicleType(?string $driverType, ?string $vehicleType): bool
     {
         if (! $vehicleType || ! $driverType) {
@@ -112,5 +143,49 @@ class DriverVehicleOptions
         $family = self::family($driverType);
 
         return $family === 'other' || $family === $vehicleType;
+    }
+
+    /**
+     * @return array<string, array{label: string, seats: int|null, family: string}>|null
+     */
+    private static function dbOptions(): ?array
+    {
+        if (! self::tableReady()) {
+            return null;
+        }
+
+        try {
+            $rows = VehicleType::activeCached();
+            if ($rows->isEmpty()) {
+                return null;
+            }
+
+            $out = [];
+            foreach ($rows as $row) {
+                $out[$row->key] = [
+                    'label'  => $row->label,
+                    'seats'  => $row->seats,
+                    'family' => $row->family ?: 'other',
+                ];
+            }
+
+            return $out;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private static function tableReady(): bool
+    {
+        static $ready = null;
+        if ($ready !== null) {
+            return $ready;
+        }
+
+        try {
+            return $ready = Schema::hasTable('vehicle_types');
+        } catch (\Throwable) {
+            return $ready = false;
+        }
     }
 }

@@ -28,7 +28,7 @@
     if (auth()->check() && auth()->user()->role === 'driver') {
         $brandHref = \App\Support\RoleDashboard::route('driver');
     } elseif (auth()->check() && auth()->user()->role === 'customer') {
-        $brandHref = route('customer.account');
+        $brandHref = route('customer.account', ['tab' => 'account']);
     }
 @endphp
 <html lang="vi" data-bs-theme="dark">
@@ -124,7 +124,7 @@
         'password.reset.pin',
     );
 @endphp
-<body class="app-shell @if($isAuthChrome) app-shell--auth @endif @if($isAuthChrome || request()->routeIs('home', 'about', 'booking.trips', 'driver.dashboard')) app-shell--mobile-app @endif">
+<body class="app-shell @if($isAuthChrome) app-shell--auth @endif @if($isAuthChrome || request()->routeIs('home', 'about', 'booking.trips', 'customer.account', 'driver.dashboard')) app-shell--mobile-app @endif">
 <nav class="navbar navbar-expand-lg app-navbar navbar-dark">
     <div class="container app-navbar-inner">
         <a class="navbar-brand app-brand-link app-brand-link--stacked" href="{{ $brandHref }}" aria-label="{{ $appBrandName }}">
@@ -215,7 +215,7 @@
 </div>
 </main>
 
-@if(request()->routeIs('home', 'booking.trips', 'about'))
+@if(request()->routeIs('home', 'booking.trips', 'about', 'customer.account'))
     @include('partials.customer-scroll-dock')
 @endif
 

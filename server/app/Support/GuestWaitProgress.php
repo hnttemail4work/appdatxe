@@ -56,8 +56,8 @@ class GuestWaitProgress
 
                 return [
                     'kind'          => 'trip_accept',
-                    'label'         => 'Chờ tài xế',
-                    'hint'          => 'Tài xế cần xác nhận trong thời gian quy định.',
+                    'label'         => 'Đã tìm thấy — chờ tài xế xác nhận',
+                    'hint'          => 'Tài xế gần bạn đang xem chuyến. Vui lòng đợi xác nhận.',
                     'started_at'    => $started->toIso8601String(),
                     'deadline_at'   => $pendingRequest->expires_at->toIso8601String(),
                     'total_seconds' => $totalSeconds,
@@ -66,15 +66,28 @@ class GuestWaitProgress
             }
 
             $driverRequests = app(DriverTripRequestService::class);
-            $pickupLead = $booking->pickupAdminActionStartsAt();
+            $started = $driverRequests->customerSearchStartedAt($booking);
 
-            if ($pickupLead?->isFuture()) {
-                $started = $driverRequests->customerSearchStartedAt($booking);
+            if ($booking->isOnDemandPickup()) {
+                $deadline = $started->copy()->addMinutes(DriverTripRequestService::ON_DEMAND_SEARCH_MAX_MINUTES);
 
                 return [
                     'kind'          => 'driver_search',
+                    'label'         => 'Đang tìm tài xế gần bạn…',
+                    'hint'          => 'Hệ thống sẽ tự hủy sau 10 phút nếu không có tài xế nhận.',
+                    'started_at'    => $started->toIso8601String(),
+                    'deadline_at'   => $deadline->toIso8601String(),
+                    'total_seconds' => max(60, (int) $started->diffInSeconds($deadline)),
+                    'indeterminate' => false,
+                ];
+            }
+
+            $pickupLead = $booking->pickupAdminActionStartsAt();
+            if ($pickupLead?->isFuture()) {
+                return [
+                    'kind'          => 'driver_search',
                     'label'         => $booking->primaryStatusLabel(),
-                    'hint'          => 'Đơn được giữ đến giờ đón. Quản lý sẽ gán tài xế cho bạn.',
+                    'hint'          => 'Đơn được giữ đến giờ đón. Hệ thống đang tìm tài xế phù hợp.',
                     'started_at'    => $started->toIso8601String(),
                     'deadline_at'   => $pickupLead->toIso8601String(),
                     'total_seconds' => max(60, (int) now()->diffInSeconds($pickupLead)),

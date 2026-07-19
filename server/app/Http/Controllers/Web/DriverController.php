@@ -457,9 +457,14 @@ class DriverController extends Controller
 
         $address = trim((string) ($validated['address'] ?? ''));
 
+        $heading = array_key_exists('heading', $validated) && $validated['heading'] !== null
+            ? (float) $validated['heading']
+            : null;
+
         $profile->update([
             'last_lat'         => $validated['lat'],
             'last_lng'         => $validated['lng'],
+            'last_heading'     => $heading,
             'last_location_at' => now(),
             'last_address'     => $address !== '' ? $address : null,
             'last_province'    => ProvinceResolver::fromMapPick(
@@ -954,9 +959,13 @@ class DriverController extends Controller
             abort(403);
         }
 
-        $this->profileSync->setAccountStatus($driverProfile, 'inactive');
+        if (! $driverProfile->isApproved()) {
+            return back()->withErrors(['driver' => 'Chỉ tạm ngưng tài xế đã được duyệt.']);
+        }
 
-        return redirect()->route('admin.drivers')->with('success', 'Đã vô hiệu hoá tài xế.');
+        $this->profileSync->setAccountStatus($driverProfile, 'suspended');
+
+        return back()->with('success', 'Đã tạm ngưng tài xế.');
     }
 
     public function activate(DriverProfile $driverProfile)
@@ -968,16 +977,16 @@ class DriverController extends Controller
         $driverProfile->loadMissing('user');
 
         if (! $driverProfile->isApproved()) {
-            return back()->withErrors(['driver' => 'Chỉ kích hoạt lại tài xế đã được duyệt.']);
+            return back()->withErrors(['driver' => 'Chỉ mở lại tài xế đã được duyệt.']);
         }
 
         if ($driverProfile->status === 'active' && $driverProfile->user?->status === 'active') {
-            return back()->with('success', 'Tài xế đã đang hoạt động.');
+            return back()->with('success', 'Tài xế đang hoạt động.');
         }
 
         $this->profileSync->setAccountStatus($driverProfile, 'active');
 
-        return back()->with('success', 'Đã kích hoạt lại tài xế. Họ có thể đăng nhập.');
+        return back()->with('success', 'Đã mở lại tài xế. Họ có thể đăng nhập.');
     }
 
     public function uploadPhotos(Request $request, DriverProfile $driverProfile)
@@ -1011,12 +1020,21 @@ class DriverController extends Controller
             return back()->withErrors(['driver' => 'Tài xế này đã được duyệt hoặc không còn chờ duyệt.']);
         }
 
-        $this->profileSync->approve($driverProfile, Auth::id());
+        $validated = $request->validate(
+            \App\Support\AdminIdentityApproval::rules(),
+            \App\Support\AdminIdentityApproval::messages(),
+        );
+
+        $this->profileSync->approve(
+            $driverProfile,
+            Auth::id(),
+            \App\Support\AdminIdentityApproval::userAttributes($validated),
+        );
         $driverProfile->loadMissing('user');
 
         return redirect()
             ->route('admin.drivers')
-            ->with('success', 'Đã duyệt tài xế. Tài xế đăng nhập bằng SĐT và mật khẩu đã đăng ký.');
+            ->with('success', 'Đã duyệt tài xế và lưu thông tin từ CCCD.');
     }
 
     public function reject(RejectDriverProfileRequest $request, DriverProfile $driverProfile)

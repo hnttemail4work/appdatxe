@@ -115,11 +115,12 @@ $currentOrder = $order[$highlightStage] ?? 0;
             @if($showCancel)
                 <form method="POST" action="{{ route('driver.schedules.cancel', $schedule) }}"
                       class="driver-workflow-compact-action cancel-reason-form"
+                      data-swipe-action
                       data-audience="driver"
-                      data-reason-title="Lý do hủy cuốc"
+                      data-reason-title="Lý do hủy chuyến"
                       data-reason-hint="Chọn lý do để quản lý nắm thông tin và hỗ trợ khách.">
                     @csrf
-                    <button type="submit" class="btn btn-outline-danger btn-sm">Hủy cuốc</button>
+                    <button type="submit" class="btn btn-outline-danger btn-sm">Hủy chuyến</button>
                 </form>
             @endif
 
@@ -132,6 +133,7 @@ $currentOrder = $order[$highlightStage] ?? 0;
             @elseif($showComplete)
                 <form method="POST" action="{{ route('driver.schedules.complete', $schedule) }}"
                       class="driver-workflow-compact-action"
+                      data-swipe-action
                       data-confirm="Xác nhận đã chạy xong chuyến này ({{ $bookings->count() }} khách)?"
                       data-confirm-title="Hoàn thành chuyến"
                       data-confirm-ok="Hoàn thành"
@@ -141,7 +143,8 @@ $currentOrder = $order[$highlightStage] ?? 0;
                 </form>
             @elseif($showAdvance)
                 <form method="POST" action="{{ route('driver.schedules.advance', $schedule) }}"
-                      class="driver-workflow-compact-action">
+                      class="driver-workflow-compact-action"
+                      data-swipe-action>
                     @csrf
                     <button type="submit" class="btn btn-primary btn-sm">{{ $nextAction }}</button>
                 </form>

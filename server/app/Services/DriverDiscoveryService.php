@@ -301,6 +301,13 @@ class DriverDiscoveryService
             'dropoff'          => $booking->driverDropoffDetailLabel(),
             'notes'            => $booking->notes,
             'trip_total'       => Money::format((float) $booking->total_price),
+            'price_subtotal'   => (int) ($booking->price_subtotal ?? 0),
+            'referral_discount_amount' => (int) ($booking->referral_discount_amount ?? 0),
+            'surcharge_holiday'=> (int) ($booking->surcharge_holiday ?? 0),
+            'surcharge_peak'   => (int) ($booking->surcharge_peak ?? 0),
+            'surcharge_rain'   => (int) ($booking->surcharge_rain ?? 0),
+            'toll_amount'      => (int) ($booking->toll_amount ?? 0),
+            'price_breakdown'  => is_array($booking->price_breakdown) ? $booking->price_breakdown : null,
         ];
     }
 }

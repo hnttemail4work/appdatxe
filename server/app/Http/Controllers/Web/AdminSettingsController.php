@@ -46,8 +46,9 @@ class AdminSettingsController extends Controller
         $pushSettings = PushNotificationSettings::forAdmin();
         $pushEventLabels = PushNotificationSettings::eventLabels();
         $pushVapidReady = PushNotificationSettings::vapidKeys() !== null;
+        $pricing = AdminPricingController::dashboardPayload();
 
-        return view('admin.dashboard', compact(
+        return view('admin.dashboard', array_merge(compact(
             'bankSettings',
             'bankQrPreview',
             'bookingPageSettings',
@@ -55,7 +56,7 @@ class AdminSettingsController extends Controller
             'pushSettings',
             'pushEventLabels',
             'pushVapidReady',
-        ));
+        ), $pricing));
     }
 
     /** Bootstrap danh mục điểm đến HCM nếu DB trống (dùng cho đặt xe, không phải cấu hình giá). */

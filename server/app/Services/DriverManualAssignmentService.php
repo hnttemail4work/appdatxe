@@ -7,6 +7,7 @@ use App\Models\DriverProfile;
 use App\Models\DriverTripRequest;
 use App\Models\Schedule;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 /**
@@ -187,34 +188,43 @@ class DriverManualAssignmentService
     /** Admin gán / gán lại TX — tạo chuyến mới cho khách, mời TX trong 15 phút. */
     public function assignBookingDriver(Booking $booking, string $driverCode, int $operatorUserId): void
     {
-        $booking->loadMissing(['schedule.route', 'schedule.vehicle', 'schedule.template']);
+        DB::transaction(function () use ($booking, $driverCode, $operatorUserId): void {
+            $locked = Booking::query()
+                ->with(['schedule.route', 'schedule.vehicle', 'schedule.template'])
+                ->lockForUpdate()
+                ->findOrFail($booking->id);
 
-        if ($booking->passengerPickedUp()) {
-            throw new InvalidArgumentException('Tài xế đã đón khách — không thể gán lại.');
-        }
+            if ($locked->passengerPickedUp()) {
+                throw new InvalidArgumentException('Tài xế đã đón khách — không thể gán lại.');
+            }
 
-        $needsFreshTrip = $booking->driverAcceptanceState() === 'accepted'
-            || $booking->needs_operator_help_at
-            || $booking->isPastPickupTime();
+            if ($locked->schedule) {
+                Schedule::query()->lockForUpdate()->find($locked->schedule->id);
+            }
 
-        if ($needsFreshTrip) {
-            $this->reassignBookingDriver($booking, $driverCode, $operatorUserId);
+            $needsFreshTrip = $locked->driverAcceptanceState() === 'accepted'
+                || $locked->needs_operator_help_at
+                || $locked->isPastPickupTime();
 
-            return;
-        }
+            if ($needsFreshTrip) {
+                $this->reassignBookingDriver($locked, $driverCode, $operatorUserId);
 
-        $this->requestDriver(
-            $booking->schedule->fresh(['route']),
-            $driverCode,
-            (string) $booking->contact_phone,
-        );
-        $booking = $booking->fresh();
-        if (! $booking->operator_confirmed_at) {
-            $booking->update(['operator_confirmed_at' => now()]);
-            $booking = $booking->fresh();
-        }
-        app(DriverTripRequestService::class)->refreshCustomerSearchDeadline($booking);
-        $this->acknowledgeOperatorManualAssign($booking);
+                return;
+            }
+
+            $this->requestDriver(
+                $locked->schedule->fresh(['route']),
+                $driverCode,
+                (string) $locked->contact_phone,
+            );
+            $locked = $locked->fresh();
+            if (! $locked->operator_confirmed_at) {
+                $locked->update(['operator_confirmed_at' => now()]);
+                $locked = $locked->fresh();
+            }
+            app(DriverTripRequestService::class)->refreshCustomerSearchDeadline($locked);
+            $this->acknowledgeOperatorManualAssign($locked);
+        });
     }
 
     private function acknowledgeOperatorManualAssign(Booking $booking): void

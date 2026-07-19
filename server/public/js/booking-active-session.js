@@ -209,16 +209,71 @@
         };
     }
 
+    function formatCountdown(deadlineIso) {
+        if (!deadlineIso) {
+            return '';
+        }
+        var end = Date.parse(deadlineIso);
+        if (!end) {
+            return '';
+        }
+        var left = Math.max(0, Math.floor((end - Date.now()) / 1000));
+        var m = Math.floor(left / 60);
+        var s = left % 60;
+        return 'Còn ' + m + ':' + String(s).padStart(2, '0');
+    }
+
+    function updateFindingDriverUi(booking) {
+        var finding = document.getElementById('booking-finding-driver');
+        if (!finding) {
+            return;
+        }
+        var wait = booking && booking.wait_progress ? booking.wait_progress : null;
+        var titleEl = document.getElementById('booking-finding-driver-title');
+        var hintEl = document.getElementById('booking-finding-driver-hint');
+        var cdEl = document.getElementById('booking-finding-driver-countdown');
+        if (titleEl) {
+            titleEl.textContent = (wait && wait.label)
+                ? wait.label
+                : 'Đang tìm tài xế gần bạn…';
+        }
+        if (hintEl) {
+            hintEl.textContent = (wait && wait.hint)
+                ? wait.hint
+                : 'Hệ thống sẽ tự hủy sau 10 phút nếu không có tài xế nhận.';
+        }
+        if (cdEl) {
+            var text = wait && wait.deadline_at ? formatCountdown(wait.deadline_at) : '';
+            if (text) {
+                cdEl.textContent = text;
+                cdEl.hidden = false;
+                cdEl.classList.remove('d-none');
+            } else {
+                cdEl.textContent = '';
+                cdEl.hidden = true;
+                cdEl.classList.add('d-none');
+            }
+        }
+    }
+
     function updateDriverPanel(booking) {
         var panel = document.getElementById('booking-active-driver-panel');
         if (!panel) {
             return;
         }
 
+        var finding = document.getElementById('booking-finding-driver');
         var driver = booking && booking.driver ? booking.driver : null;
         if (!driver || !booking.has_driver) {
             panel.classList.add('d-none');
+            if (finding) {
+                finding.classList.remove('d-none');
+            }
+            updateFindingDriverUi(booking);
             return;
+        }
+        if (finding) {
+            finding.classList.add('d-none');
         }
 
         var nameText = driver.name || '—';
@@ -375,6 +430,11 @@
                 }
 
                 if (data && data.duplicate && data.booking) {
+                    if (data.booking.booking_status === 'cancelled'
+                        || data.booking.trip_status === 'cancelled') {
+                        clear();
+                        return;
+                    }
                     updateBookingSnapshot(data.booking);
                     var stored = load();
                     if (stored) {

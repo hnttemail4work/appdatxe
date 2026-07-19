@@ -334,7 +334,7 @@ class PushNotificationService
                 $this->sendToGuestBooking(
                     $booking,
                     'guest.driver_at_pickup',
-                    'Tài xế đã đến điểm đón',
+                    'Tài xế đã đến',
                     'Tài xế đang chờ bạn tại điểm đón.',
                     '/chuyen',
                     'guest:booking:' . $booking->id . ':at_pickup',
@@ -343,8 +343,8 @@ class PushNotificationService
                 $this->sendToGuestBooking(
                     $booking,
                     'guest.passenger_picked_up',
-                    'Chuyến đã bắt đầu',
-                    'Tài xế đã đón bạn — theo dõi chuyến trên ứng dụng.',
+                    'Đang trong chuyến',
+                    'Tài xế đã đón bạn — theo dõi hành trình trên ứng dụng.',
                     '/chuyen',
                     'guest:booking:' . $booking->id . ':picked_up',
                 );
@@ -380,7 +380,7 @@ class PushNotificationService
         );
     }
 
-    public function onTripCancelled(Booking $booking, ?string $reason = null): void
+    public function onTripCancelled(Booking $booking, ?string $reason = null, ?int $driverUserId = null): void
     {
         $body = 'Chuyến ' . ($booking->booking_reference ?? '#' . $booking->id) . ' đã hủy.';
         if ($reason) {
@@ -396,9 +396,18 @@ class PushNotificationService
             'guest:booking:' . $booking->id . ':cancelled',
         );
 
-        if ($booking->assigned_driver_id) {
+        // assigned_driver_id có thể đã clear — ưu tiên id truyền vào / property tạm / schedule.
+        $driverId = (int) ($driverUserId
+            ?: ($booking->cancelNotifyDriverId ?? 0)
+            ?: $booking->assigned_driver_id
+            ?: 0);
+        if ($driverId < 1) {
+            $booking->loadMissing('schedule');
+            $driverId = (int) ($booking->schedule?->driver_id ?? 0);
+        }
+        if ($driverId > 0) {
             $this->sendToDriver(
-                (int) $booking->assigned_driver_id,
+                $driverId,
                 'driver.trip_cancelled',
                 'Chuyến bị hủy',
                 'Chuyến ' . ($booking->booking_reference ?? '#' . $booking->id) . ' đã bị hủy.',

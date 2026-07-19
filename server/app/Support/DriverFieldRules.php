@@ -12,7 +12,7 @@ class DriverFieldRules
     /** @return list<string> */
     public static function requiredFieldsFor(string $context): array
     {
-        // Đăng ký: họ tên tùy chọn; SĐT + PIN 6 số bắt buộc.
+        // Đăng ký: không nhập họ tên (admin scan CCCD khi duyệt); SĐT + PIN 6 số bắt buộc.
         $contact = $context === 'register' ? ['phone'] : ['name', 'phone'];
         $account = $context === 'register' ? ['password', 'password_confirmation'] : [];
         $vehicle = ['vehicle_license_plate', 'vehicle_type'];

@@ -40,6 +40,11 @@ $mapNav = $primaryBooking ? MapNavigation::driverPickupTarget($primaryBooking) :
             <div class="driver-request-card__fare">
                 <span class="driver-request-card__fare-label">Thu khách</span>
                 <strong class="driver-request-card__fare-value">{{ number_format($tripTotal, 0, ',', '.') }} đ</strong>
+                @if($primaryBooking && ($primaryBooking->price_subtotal || $primaryBooking->price_breakdown))
+                    <div class="driver-request-card__fare-breakdown mt-1">
+                        @include('partials.booking-price-breakdown', ['booking' => $primaryBooking, 'compact' => true])
+                    </div>
+                @endif
             </div>
         </div>
     </header>

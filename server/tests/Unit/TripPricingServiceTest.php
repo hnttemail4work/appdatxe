@@ -44,8 +44,9 @@ class TripPricingServiceTest extends TestCase
             $center['lng'],
         );
 
-        $this->assertLessThanOrEqual(TripPricingService::INTRA_PROVINCE_FLAT_MAX_KM, $quote['distance_km']);
-        $this->assertSame(TripPricingService::INTRA_PROVINCE_FLAT_PRICE, $quote['whole_car_price']);
+        $this->assertLessThanOrEqual(TripPricingService::INTRA_PROVINCE_FLAT_MAX_KM, $quote->distanceKm);
+        $this->assertTrue($quote->usedIntraFlat);
+        $this->assertSame(TripPricingService::INTRA_PROVINCE_FLAT_PRICE, $quote->priceSubtotal);
     }
 
     public function test_inter_province_route_is_not_intra_province(): void

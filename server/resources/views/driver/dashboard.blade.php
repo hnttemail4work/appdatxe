@@ -129,7 +129,6 @@
         </div>
         <div class="driver-location-input-wrap">
             <input type="text" id="driver-location-fallback-detail" class="form-control driver-location-input"
-                   placeholder="Tìm địa chỉ hoặc chọn trên bản đồ"
                    autocomplete="off">
             <button type="button" class="driver-location-map-btn address-map-trigger"
                     data-address-map-for="driver-location-fallback-detail"
@@ -349,6 +348,7 @@ window.__driverAppSettings = @json($driverAppSettings);
 })();
 </script>
 <script src="{{ asset('js/driver-trip-request-actions.js') }}?v={{ filemtime(public_path('js/driver-trip-request-actions.js')) }}"></script>
+<script src="{{ asset('js/swipe-to-action.js') }}?v={{ filemtime(public_path('js/swipe-to-action.js')) }}"></script>
 <script src="{{ asset('js/driver-workflow-actions.js') }}?v={{ filemtime(public_path('js/driver-workflow-actions.js')) }}"></script>
 <script src="{{ asset('js/wait-progress.js') }}?v={{ filemtime(public_path('js/wait-progress.js')) }}"></script>
 <script src="{{ asset('js/driver-shell.js') }}?v={{ filemtime(public_path('js/driver-shell.js')) }}"></script>

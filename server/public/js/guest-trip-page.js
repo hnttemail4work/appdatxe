@@ -544,9 +544,13 @@
         if (!booking) {
             empty.classList.remove('d-none');
             card.classList.add('d-none');
+            if (window.GuestTripLiveMap && window.GuestTripLiveMap.updateFromBooking) {
+                window.GuestTripLiveMap.updateFromBooking(null);
+            }
             if (window.TripChat && window.TripChat.setCustomerBooking) {
                 window.TripChat.setCustomerBooking(null);
             }
+            syncPollInterval(null);
             return;
         }
 
@@ -582,6 +586,22 @@
             priceLabel = Number(booking.total_price).toLocaleString('vi-VN') + ' đ';
         }
         setDetailRow(card, 'total_price_wrap', 'total_price', priceLabel);
+        var extrasEl = qs('[data-field="price_extras"]', card);
+        if (extrasEl) {
+            var bits = [];
+            if (Number(booking.surcharge_holiday || 0) > 0) bits.push('Lễ/tết');
+            if (Number(booking.surcharge_peak || 0) > 0) bits.push('Cao điểm');
+            if (Number(booking.surcharge_rain || 0) > 0) bits.push('Mưa');
+            if (Number(booking.toll_amount || 0) > 0) bits.push('Thu phí');
+            if (Number(booking.referral_discount_amount || 0) > 0) bits.push('Đã giảm giá QR');
+            if (bits.length) {
+                extrasEl.textContent = bits.join(' · ');
+                extrasEl.classList.remove('d-none');
+            } else {
+                extrasEl.textContent = '';
+                extrasEl.classList.add('d-none');
+            }
+        }
 
         var pickupText = stopAddress(booking.pickup_address, booking.pickup_detail);
         var dropoffText = stopAddress(booking.dropoff_address, booking.dropoff_detail);
@@ -597,6 +617,9 @@
         );
 
         renderDriverPanel(booking);
+        if (window.GuestTripLiveMap && window.GuestTripLiveMap.updateFromBooking) {
+            window.GuestTripLiveMap.updateFromBooking(booking);
+        }
         if (window.TripChat && window.TripChat.setCustomerBooking) {
             window.TripChat.setCustomerBooking(booking);
         }
@@ -607,6 +630,7 @@
         syncActiveSession(booking);
         clearActiveSessionIfDone(booking);
         maybeFocusInlineReview(booking, previousBooking);
+        syncPollInterval(booking);
 
         var tripJustEnded = !!(
             previousBooking
@@ -970,6 +994,54 @@
         });
     }
 
+    var pollHandle = null;
+    var pollMs = 5000;
+
+    function needsFastPoll(booking) {
+        if (!booking || !booking.is_active) {
+            return false;
+        }
+        if (!booking.has_driver) {
+            return true;
+        }
+        var stage = booking.driver ? String(booking.driver.stage || '') : '';
+        return stage === 'assigned' || stage === 'at_pickup'
+            || stage === 'picked_up' || stage === 'running';
+    }
+
+    function stopPoll() {
+        if (pollHandle && typeof pollHandle.stop === 'function') {
+            pollHandle.stop();
+        } else if (pollHandle) {
+            window.clearInterval(pollHandle);
+        }
+        pollHandle = null;
+    }
+
+    function syncPollInterval(booking) {
+        var fast = needsFastPoll(booking);
+        var next = fast ? 3000 : 5000;
+        if (next === pollMs && pollHandle) {
+            return;
+        }
+        pollMs = next;
+        stopPoll();
+        // Tracking vị trí: setInterval cố định 3s (không dùng IdlePoll — tránh bỏ poll khi đang xem màn hình).
+        if (fast) {
+            pollHandle = window.setInterval(function () { fetchStatus(); }, pollMs);
+            return;
+        }
+        if (window.IdlePoll) {
+            pollHandle = window.IdlePoll.create({
+                intervalMs: pollMs,
+                onPoll: function () { fetchStatus(); },
+            });
+            pollHandle.start();
+        } else {
+            pollHandle = window.setInterval(function () { fetchStatus(); }, pollMs);
+        }
+    }
+
     function init() {
         bindReview();
         bindVehiclePhotoOverlay();
@@ -977,12 +1049,13 @@
         if (cancelBtn) {
             cancelBtn.addEventListener('click', cancelTrip);
         }
-        fetchStatus({ initial: true });
-
-        if (window.IdlePoll) {
-            window.IdlePoll.create({ onPoll: function () { fetchStatus(); } }).start();
+        var statusPromise = fetchStatus({ initial: true });
+        if (statusPromise && typeof statusPromise.then === 'function') {
+            statusPromise.then(function () {
+                syncPollInterval(currentBooking);
+            });
         } else {
-            window.setInterval(fetchStatus, 5000);
+            syncPollInterval(currentBooking);
         }
     }
 

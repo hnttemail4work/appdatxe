@@ -104,6 +104,11 @@
     gap: .65rem;
 }
 
+.auth-pin-row--solo .pin-boxes-row {
+    justify-content: center;
+    width: 100%;
+}
+
 .auth-field-input {
     flex: 1 1 auto;
     min-width: 0;
@@ -199,14 +204,18 @@
 .pin-boxes-row {
     display: flex;
     gap: .4rem;
-    justify-content: space-between;
+    justify-content: flex-start;
+    align-items: center;
 }
 
-.pin-box {
-    flex: 1 1 0;
-    min-width: 0;
+.pin-box,
+.pin-box.form-control {
+    flex: 0 0 2.85rem;
+    width: 2.85rem !important;
+    min-width: 2.85rem;
     max-width: 2.85rem;
     height: 3rem;
+    box-sizing: border-box;
     text-align: center;
     font-size: 1.25rem;
     font-weight: 700;

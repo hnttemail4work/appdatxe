@@ -334,17 +334,19 @@
 }
 
 .btn-logout {
-    width: 2.25rem;
-    height: 2.25rem;
-    padding: 0;
+    min-height: 2.25rem;
+    padding: .35rem .65rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: .35rem;
     line-height: 1;
+    white-space: nowrap;
 }
 
 .btn-logout svg {
     display: block;
+    flex-shrink: 0;
 }
 
 /* —— Chữ phụ trên nền tối —— */

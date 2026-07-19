@@ -3,44 +3,28 @@
 namespace App\Support;
 
 /**
- * Tỷ lệ phí / hoa hồng / đơn giá tạm (hardcoded).
- * Admin cấu hình tính tiền đã gỡ — sẽ làm lại sau.
+ * Tỷ lệ phí / hoa hồng / đơn giá — đọc từ PricingConfig (admin).
  */
 class PlatformFees
 {
-    public const APP_COMMISSION_PERCENT = 2.0;
-
-    public const REFERRAL_COMMISSION_FIRST_PERCENT = 8.0;
-
-    public const BOOKING_QR_DISCOUNT_PERCENT = 2.0;
-
-    public const DRIVER_INVITE_QR_DISCOUNT_PERCENT = 2.0;
-
-    public const KM_RATE_UNDER_100 = 13000;
-
-    public const KM_RATE_OVER_100 = 10000;
-
     public static function appCommissionPercent(): float
     {
-        return self::APP_COMMISSION_PERCENT;
+        return PricingConfig::appCommissionPercent();
     }
 
-    /** % hoa hồng người giới thiệu — mã admin tạo từ hệ thống. */
     public static function referralCommissionFirstPercent(): float
     {
-        return self::REFERRAL_COMMISSION_FIRST_PERCENT;
+        return PricingConfig::referralCommissionFirstPercent();
     }
 
-    /** % giảm giá khách khi quét mã QR từ chuyến hoàn tất — không tính vào doanh thu admin. */
     public static function bookingQrDiscountPercent(): float
     {
-        return self::BOOKING_QR_DISCOUNT_PERCENT;
+        return PricingConfig::bookingQrDiscountPercent();
     }
 
-    /** % giảm giá khách khi quét QR «Mời bạn bè» của tài xế. */
     public static function driverInviteQrDiscountPercent(): float
     {
-        return self::DRIVER_INVITE_QR_DISCOUNT_PERCENT;
+        return PricingConfig::driverInviteQrDiscountPercent();
     }
 
     /** @deprecated Dùng {@see bookingQrDiscountPercent()} hoặc {@see referralCommissionFirstPercent()}. */
@@ -51,25 +35,27 @@ class PlatformFees
 
     public static function kmRateUnder100(): int
     {
-        return self::KM_RATE_UNDER_100;
+        return PricingConfig::kmRateUnder100();
     }
 
     public static function kmRateOver100(): int
     {
-        return self::KM_RATE_OVER_100;
+        return PricingConfig::kmRateOver100();
     }
 
-    /** Giá khách — làm tròn đến chục nghìn gần nhất (1.096.200 → 1.100.000; 1.254.567 → 1.250.000). */
+    /** Giá khách — làm tròn theo đơn vị cấu hình (mặc định chục nghìn). */
     public static function roundDisplayPrice(float|int $amount): int
     {
         if ($amount <= 0) {
             return 0;
         }
 
-        return (int) (round((float) $amount / 10_000) * 10_000);
+        $unit = PricingConfig::roundingUnit();
+
+        return (int) (round((float) $amount / $unit) * $unit);
     }
 
-    /** Tiền cả xe theo km — đơn giá tạm ≤100 km / phần vượt. */
+    /** Tiền cả xe theo km — ≤100 km / phần vượt. */
     public static function wholeCarBaseFromDistanceKm(float $distanceKm): int
     {
         $km = max(0.0, $distanceKm);

@@ -25,6 +25,27 @@ class StoreBookingRequest extends FormRequest
             $value = trim((string) $this->input($field));
             $merge[$field] = $value === '' ? null : $value;
         }
+        if (! $this->filled('payment_method')) {
+            $merge['payment_method'] = 'cash';
+        }
+
+        // Lấy từ hồ sơ khách đã duyệt — không nhập lại trên form đặt xe.
+        $user = $this->user();
+        if ($user && $user->role === 'customer') {
+            $phone = trim((string) ($user->phone ?? ''));
+            $name = trim((string) ($user->name ?? ''));
+            $nameLooksLikePhone = $name === ''
+                || ($phone !== '' && preg_replace('/\D+/', '', $name) === preg_replace('/\D+/', '', $phone))
+                || (bool) preg_match('/^[\d\s.+()-]+$/', $name);
+
+            $merge['contact_phone'] = $phone;
+            $merge['passenger_name'] = $nameLooksLikePhone ? '' : $name;
+            $merge['passenger_gender'] = in_array($user->gender, ['male', 'female'], true)
+                ? $user->gender
+                : 'male';
+            $merge['passenger_age'] = $user->age();
+        }
+
         if ($merge !== []) {
             $this->merge($merge);
         }
@@ -39,8 +60,8 @@ class StoreBookingRequest extends FormRequest
             'service_date'     => ['nullable', 'date', 'after_or_equal:today', 'required_with:pickup_time'],
             'pickup_time'      => ['nullable', 'string', 'max:8', 'regex:/^\d{1,2}:\d{2}$/', 'required_with:service_date'],
             'passenger_name'   => ['required', 'string', 'max:255'],
-            'passenger_gender' => ['nullable', 'in:male,female'],
-            'passenger_age'    => ['nullable', 'integer', 'min:1', 'max:120'],
+            'passenger_gender' => ['required', 'in:male,female'],
+            'passenger_age'    => ['required', 'integer', 'min:1', 'max:120'],
             'contact_phone'    => ['required', 'string', 'max:30'],
             'pickup_address'   => ['nullable', 'string', 'max:255'],
             'dropoff_address'  => ['nullable', 'string', 'max:255'],
@@ -53,6 +74,8 @@ class StoreBookingRequest extends FormRequest
             'notes'            => ['nullable', 'string', 'max:500'],
             'referral_code'    => ['nullable', 'string', 'max:32'],
             'booking_browser_id' => ['nullable', 'string', 'max:128'],
+            'payment_method'   => ['required', 'in:cash,bank_transfer'],
+            'payment_proof'    => ['nullable', 'required_if:payment_method,bank_transfer', 'image', 'mimes:jpeg,jpg,png,webp,gif', 'max:5120'],
         ];
     }
 
@@ -70,6 +93,13 @@ class StoreBookingRequest extends FormRequest
             'dropoff_lng.required'        => 'Vui lòng ghim điểm trả trên bản đồ.',
             'pickup_detail.required'      => 'Vui lòng chọn điểm đón trên bản đồ.',
             'dropoff_detail.required'     => 'Vui lòng chọn điểm trả trên bản đồ.',
+            'payment_method.required'     => 'Vui lòng chọn hình thức thanh toán.',
+            'payment_proof.required_if'   => 'Vui lòng đính kèm ảnh chuyển khoản.',
+            'payment_proof.image'         => 'Ảnh chuyển khoản phải là file ảnh.',
+            'passenger_name.required'     => 'Hồ sơ chưa có họ tên. Liên hệ hỗ trợ hoặc chờ admin cập nhật CCCD.',
+            'passenger_gender.required'   => 'Hồ sơ chưa có giới tính. Liên hệ hỗ trợ.',
+            'passenger_age.required'      => 'Hồ sơ chưa có ngày sinh. Liên hệ hỗ trợ.',
+            'contact_phone.required'      => 'Tài khoản chưa có số điện thoại.',
         ];
     }
 

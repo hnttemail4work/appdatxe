@@ -32,6 +32,8 @@ class User extends Authenticatable
         'role',
         'status',
         'approval_status',
+        'rejection_reason',
+        'rejection_reason_at',
         'address',
         'id_number',
         'date_of_birth',
@@ -54,7 +56,36 @@ class User extends Authenticatable
             'must_change_password' => 'boolean',
             'login_fail_count'     => 'integer',
             'login_locked_until'   => 'datetime',
+            'rejection_reason_at'  => 'datetime',
         ];
+    }
+
+    public function hasRejectionNote(): bool
+    {
+        return filled($this->rejection_reason);
+    }
+
+    public function customerDisplayStatusLabel(): string
+    {
+        return match (true) {
+            $this->approval_status === self::APPROVAL_PENDING => 'Chờ duyệt',
+            $this->approval_status === self::APPROVAL_REJECTED => 'Từ chối',
+            default => \App\Support\AdminAccountStatus::label($this->status, 'customer'),
+        };
+    }
+
+    public function customerDisplayStatusColor(): string
+    {
+        return match (true) {
+            $this->approval_status === self::APPROVAL_PENDING => \App\Support\StatusBadge::PENDING,
+            $this->approval_status === self::APPROVAL_REJECTED => \App\Support\StatusBadge::DANGER,
+            default => \App\Support\AdminAccountStatus::color($this->status),
+        };
+    }
+
+    public function isAccountRunning(): bool
+    {
+        return \App\Support\AdminAccountStatus::isRunning($this->status);
     }
 
     public function driverProfile()
@@ -100,7 +131,7 @@ class User extends Authenticatable
             return null;
         }
 
-        if ($this->approval_status === self::APPROVAL_PENDING || $this->status === 'inactive') {
+        if ($this->approval_status === self::APPROVAL_PENDING) {
             return 'Hồ sơ đang chờ admin duyệt CCCD. Bạn có thể xem trang chủ nhưng chưa đặt được xe.';
         }
 
@@ -108,7 +139,7 @@ class User extends Authenticatable
             return 'Hồ sơ khách hàng đã bị từ chối. Vui lòng liên hệ hỗ trợ.';
         }
 
-        if ($this->status === 'suspended') {
+        if (! \App\Support\AdminAccountStatus::isRunning($this->status)) {
             return 'Tài khoản của bạn bị tạm ngưng.';
         }
 
@@ -180,7 +211,7 @@ class User extends Authenticatable
                 return null;
             }
 
-            return 'Tài khoản của bạn đã bị vô hiệu hóa.';
+            return 'Tài khoản của bạn bị tạm ngưng.';
         }
 
         if ($this->isCustomer()) {
@@ -197,14 +228,14 @@ class User extends Authenticatable
                 return null;
             }
 
-            return 'Tài khoản của bạn đã bị vô hiệu hóa.';
+            return 'Tài khoản của bạn bị tạm ngưng.';
         }
 
         if ($this->isActive()) {
             return null;
         }
 
-        return 'Tài khoản của bạn đã bị vô hiệu hóa.';
+        return 'Tài khoản của bạn bị tạm ngưng.';
     }
 
     /** Nhãn hiển thị: ưu tiên họ tên đã cập nhật, không thì số điện thoại. */

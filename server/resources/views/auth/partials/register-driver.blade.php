@@ -63,8 +63,7 @@
             'pinName' => 'pin_draft',
             'pinId' => 'driver-pin',
             'pinLabel' => 'PIN',
-            'nextType' => 'button',
-            'nextAttr' => 'data-wizard-next',
+            'hideNext' => true,
         ])
     </div>
 
@@ -73,9 +72,7 @@
             'pinName' => 'pin_confirm_draft',
             'pinId' => 'driver-pin-confirm',
             'pinLabel' => 'Nhập lại PIN',
-            'nextType' => 'submit',
-            'nextAttr' => 'data-wizard-submit',
-            'nextAria' => 'Đăng ký',
+            'hideNext' => true,
         ])
     </div>
 </div>

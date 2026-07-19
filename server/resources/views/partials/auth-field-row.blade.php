@@ -26,6 +26,11 @@
             class="auth-field-input @error($fieldName) is-invalid @enderror"
             @if($fieldRequired) required @endif
             autocomplete="{{ $fieldAutocomplete }}"
+            @if($fieldType === 'tel' || $fieldName === 'phone')
+                data-lpignore="true"
+                data-1p-ignore="true"
+                data-form-type="other"
+            @endif
             @if($fieldInputmode) inputmode="{{ $fieldInputmode }}" @endif
             @if($fieldPlaceholder !== '') placeholder="{{ $fieldPlaceholder }}" @endif
             autofocus

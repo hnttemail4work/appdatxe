@@ -5,7 +5,11 @@
 /** @var array{trips: int, revenue: int, app_fee: int, referral_commission: int, app_percent: float, referral_percent_default: float} $summary */
 /** @var \Illuminate\Support\Collection $referrerRows */
 /** @var \Illuminate\Contracts\Pagination\LengthAwarePaginator $completedTrips */
-$summary = $summary ?? ['trips' => 0, 'revenue' => 0, 'app_fee' => 0, 'referral_commission' => 0, 'app_percent' => 0, 'referral_percent_default' => 8];
+$summary = $summary ?? [
+    'trips' => 0, 'revenue' => 0, 'revenue_before_discount' => 0, 'referral_discount' => 0,
+    'surcharges' => 0, 'tolls' => 0, 'app_fee' => 0, 'referral_commission' => 0,
+    'app_percent' => 0, 'referral_percent_default' => 8,
+];
 $referrerRows = $referrerRows ?? collect();
 $completedTrips = $completedTrips ?? collect();
 @endphp
@@ -35,7 +39,28 @@ $completedTrips = $completedTrips ?? collect();
                     <div class="console-stat-icon success" aria-hidden="true">₫</div>
                     <div>
                         <div class="console-stat-value">{{ number_format($summary['revenue'], 0, ',', '.') }}</div>
-                        <div class="console-stat-label">Doanh thu vé</div>
+                        <div class="console-stat-label">Doanh thu vé (sau giảm)</div>
+                    </div>
+                </div>
+                <div class="console-stat">
+                    <div class="console-stat-icon info" aria-hidden="true">₫</div>
+                    <div>
+                        <div class="console-stat-value">{{ number_format($summary['revenue_before_discount'] ?? $summary['revenue'], 0, ',', '.') }}</div>
+                        <div class="console-stat-label">Trước giảm giá</div>
+                    </div>
+                </div>
+                <div class="console-stat">
+                    <div class="console-stat-icon warning" aria-hidden="true">−</div>
+                    <div>
+                        <div class="console-stat-value">{{ number_format($summary['referral_discount'] ?? 0, 0, ',', '.') }}</div>
+                        <div class="console-stat-label">Tổng giảm giá QR</div>
+                    </div>
+                </div>
+                <div class="console-stat">
+                    <div class="console-stat-icon info" aria-hidden="true">+</div>
+                    <div>
+                        <div class="console-stat-value">{{ number_format(($summary['surcharges'] ?? 0) + ($summary['tolls'] ?? 0), 0, ',', '.') }}</div>
+                        <div class="console-stat-label">Phụ phí + thu phí</div>
                     </div>
                 </div>
                 <div class="console-stat">

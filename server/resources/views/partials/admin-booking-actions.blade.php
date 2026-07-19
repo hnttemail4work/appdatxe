@@ -9,18 +9,19 @@
         && $booking->trip_status !== 'completed';
     $canModify = $isActiveTrip && $booking->adminCanModifyDriverOrCancel();
 
-    // TODO (Fix Flow): Chỉ hiện gán thủ công khi có cảnh báo — ẩn khi auto-assign bình thường.
-    $showManualAssign = $canModify && $booking->adminShouldShowManualAssign();
+    // Can thiệp trước Đã đón: luôn cho phép gán/hủy khi còn quyền modify.
+    $showManualAssign = $canModify;
 
     $canReassign = $showManualAssign
         && $booking->driverAcceptanceState() === 'accepted';
 
     $canAssign = $showManualAssign
+        && ! $canReassign
         && (
             in_array($booking->driverAcceptanceState(), ['none', 'pending'], true)
             || $booking->adminReleasedAfterDriverEngagement()
         );
-    $canCancelAfterTimeout = $canModify && $booking->adminCanCancelAfterInviteTimeout();
+    $canCancelAfterTimeout = $canModify;
     $chosenProfile = $booking->catalogChosenDriverProfile();
     $chosenCode = $chosenProfile?->driver_code ? strtoupper(trim($chosenProfile->driver_code)) : '';
     $activeCode = $activeProfile?->driver_code ? strtoupper(trim($activeProfile->driver_code)) : '';

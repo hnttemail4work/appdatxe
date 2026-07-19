@@ -1,22 +1,28 @@
-@extends('layouts.app')
+@extends('layouts.console')
 
-@section('content')
-<div class="console-page">
-    @include('partials.admin-nav-tabs', ['active' => 'driver-inbox'])
+@section('console')
+@include('partials.console-hero', ['title' => 'Quản trị hệ thống'])
 
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 mt-3">
-        <h1 class="h4 mb-0">Gửi tin tài xế</h1>
-    </div>
+<div class="console-panel">
+    <div class="console-panel-body">
+        @include('partials.admin-nav-tabs', ['active' => 'driver-inbox'])
 
-    <div class="card border-0 shadow-sm">
-        <div class="card-body">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 my-3">
+            <div>
+                <h2 class="h5 mb-1">Tin tài xế</h2>
+                <p class="text-muted small mb-0">
+                    Gửi thông báo / thông tin vào hộp thư tài xế (kèm push nếu đã bật).
+                </p>
+            </div>
+        </div>
+
+        <div class="console-form" style="max-width: 40rem;">
             <p class="text-muted small mb-3">
-                <strong>Thông tin</strong> — khuyến mãi / tin chung.
                 <strong>Thông báo</strong> — cảnh báo / cập nhật cần chú ý.
-                Tin sẽ vào hộp thư tài xế và gửi push nếu đã bật thông báo.
+                <strong>Thông tin</strong> — khuyến mãi / tin chung.
             </p>
 
-            <form method="POST" action="{{ route('admin.driverInbox.send') }}" class="console-form">
+            <form method="POST" action="{{ route('admin.driverInbox.send') }}">
                 @csrf
 
                 <div class="mb-3">
@@ -77,10 +83,10 @@
                     </div>
                 </div>
 
-                <button type="submit" class="btn btn-warning fw-semibold"
+                <button type="submit" class="btn btn-primary fw-semibold"
                         data-confirm="Gửi tin này tới tài xế đã chọn?"
                         data-confirm-title="Gửi tin tài xế"
-                        data-confirm-ok="Gửi">Gửi</button>
+                        data-confirm-ok="Gửi">Gửi tin</button>
             </form>
         </div>
     </div>

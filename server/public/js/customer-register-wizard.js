@@ -1,6 +1,6 @@
 /**
- * Wizard đăng ký khách — SĐT → CCCD → điều khoản → PIN → xác nhận PIN.
- * Chrome: back + title; mũi tên tiếp (không step icon).
+ * Wizard đăng ký khách — SĐT → CCCD + điều khoản → PIN → xác nhận PIN.
+ * PIN đủ 6 số tự chuyển bước / gửi form (không mũi tên).
  */
 (function () {
     var root = document.querySelector('[data-customer-wizard-root]');
@@ -48,7 +48,7 @@
             backLink.setAttribute('href', '#');
             backLink.onclick = function (e) {
                 e.preventDefault();
-                if (current === 5) draftPin = '';
+                if (current === 4) draftPin = '';
                 showStep(current - 1);
             };
         }
@@ -62,7 +62,7 @@
             panel.classList.toggle('d-none', step !== current);
         });
         syncChrome();
-        if ((current === 4 || current === 5) && window.PinInput) {
+        if ((current === 3 || current === 4) && window.PinInput) {
             var wrap = pinWrap(current);
             if (wrap) {
                 PinInput.clear(wrap);
@@ -171,30 +171,30 @@
     }
 
     function validateStep(step) {
-        if (step === 4) {
-            var wrap4 = pinWrap(4);
-            if (V && wrap4) {
-                if (!V.validatePinWrap(wrap4)) return false;
-                draftPin = V.pinValueFrom(wrap4);
+        if (step === 3) {
+            var wrap3 = pinWrap(3);
+            if (V && wrap3) {
+                if (!V.validatePinWrap(wrap3)) return false;
+                draftPin = V.pinValueFrom(wrap3);
                 return true;
             }
-            var pin = pinValue(4);
+            var pin = pinValue(3);
             if (!/^\d{6}$/.test(pin)) {
-                if (wrap4 && window.PinInput) PinInput.clear(wrap4);
+                if (wrap3 && window.PinInput) PinInput.clear(wrap3);
                 return false;
             }
             draftPin = pin;
             return true;
         }
 
-        if (step === 5) {
-            var wrap5 = pinWrap(5);
-            var confirm = V && wrap5 ? V.pinValueFrom(wrap5) : pinValue(5);
+        if (step === 4) {
+            var wrap4 = pinWrap(4);
+            var confirm = V && wrap4 ? V.pinValueFrom(wrap4) : pinValue(4);
             var mismatch = V ? V.pinsMatch(draftPin, confirm) : '';
             if (mismatch || !/^\d{6}$/.test(confirm) || confirm !== draftPin) {
-                if (V && wrap5) V.showPinError(wrap5, (V && V.MSG.pinMismatch) || 'Nhập lại PIN không khớp.');
+                if (V && wrap4) V.showPinError(wrap4, (V && V.MSG.pinMismatch) || 'Nhập lại PIN không khớp.');
                 draftPin = '';
-                showStep(4);
+                showStep(3);
                 return false;
             }
             if (passwordInput) passwordInput.value = draftPin;
@@ -238,9 +238,6 @@
                     if (!firstInvalid) firstInvalid = inp;
                 }
             });
-        }
-
-        if (step === 3) {
             var terms = form.querySelector('#customerTermsCheck');
             if (terms && !terms.checked) {
                 markInvalid(terms, termsMsg);
@@ -266,6 +263,23 @@
             e.preventDefault();
             goNext();
         });
+    });
+
+    // PIN đủ 6 số: bước tạo PIN → tiếp; bước xác nhận → submit form.
+    wizard.addEventListener('pin:change', function (e) {
+        var value = (e.detail && e.detail.value) || '';
+        if (!/^\d{6}$/.test(value)) return;
+        if (current === 3) {
+            goNext();
+            return;
+        }
+        if (current === 4 && validateStep(4)) {
+            if (typeof form.requestSubmit === 'function') {
+                form.requestSubmit();
+            } else {
+                form.submit();
+            }
+        }
     });
 
     form.querySelectorAll('[data-file-trigger]').forEach(function (btn) {
@@ -294,20 +308,33 @@
         });
     }
 
+    var termsEl = form.querySelector('#customerTermsCheck');
+    if (termsEl) {
+        termsEl.addEventListener('change', function () {
+            clearFieldInvalid(termsEl);
+        });
+    }
+
     form.addEventListener('submit', function (event) {
         for (var s = 1; s <= total; s++) {
             if (!validateStep(s)) {
                 event.preventDefault();
-                if (s !== 5) showStep(s);
+                if (s !== 4) showStep(s);
                 return;
             }
         }
     });
 
-    // Start: show only step 1
-    panels.forEach(function (panel) {
-        var step = parseInt(panel.dataset.wizardStep, 10);
-        panel.hidden = step !== 1;
-    });
-    showStep(1);
+    // Start: nếu SĐT đã có từ login (query/old) thì bỏ qua bước nhập lại.
+    var startStep = 1;
+    var phoneElInit = form.querySelector('#customer-register-phone');
+    if (phoneElInit) {
+        var phoneMsg = V ? V.validatePhone(phoneElInit.value) : '';
+        var digits = String(phoneElInit.value || '').replace(/\D/g, '');
+        var phoneOk = V ? !phoneMsg : /^0\d{8,10}$/.test(digits);
+        if (phoneOk) {
+            startStep = 2;
+        }
+    }
+    showStep(startStep);
 })();

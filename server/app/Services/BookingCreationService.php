@@ -7,7 +7,8 @@ use App\Models\BookingAudit;
 use App\Models\ReferralCode;
 use App\Models\Schedule;
 use App\Models\ScheduleTemplate;
-use App\Support\PlatformFees;
+use App\Support\PriceQuote;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
@@ -196,10 +197,20 @@ class BookingCreationService
                 throw new InvalidArgumentException('Chuyến không còn mở đặt vé (đang chạy hoặc đã kết thúc).');
             }
 
-            $totalPrice = $this->pricing->bookingTotal($schedule, $pickupAddress, $dropoffAddress, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
-            $totalPrice = $this->applyReferralToTotal($totalPrice, $contactPhone, $appliedReferralCodeId);
+            $priceQuote = $this->buildPricedQuote(
+                $schedule,
+                $pickupAddress,
+                $dropoffAddress,
+                $pickupLat,
+                $pickupLng,
+                $dropoffLat,
+                $dropoffLng,
+                $pickupTime,
+                $contactPhone,
+                $appliedReferralCodeId,
+            );
 
-            $booking = Booking::query()->create([
+            $booking = Booking::query()->create(array_merge([
                 'contact_phone'            => trim($contactPhone),
                 'passenger_name'           => trim($passengerName),
                 'passenger_gender'         => $passengerGender === 'female' ? 'female' : 'male',
@@ -207,7 +218,6 @@ class BookingCreationService
                 'schedule_id'              => $schedule->id,
                 'booking_reference'        => 'BK-' . now()->format('YmdHis') . '-' . Str::upper(Str::random(6)),
                 'applied_referral_code_id' => $appliedReferralCodeId,
-                'total_price'              => $totalPrice,
                 'payment_status'           => 'unpaid',
                 'trip_status'              => 'pending',
                 'booking_status'           => 'pending',
@@ -222,7 +232,7 @@ class BookingCreationService
                 'dropoff_lng'              => $dropoffLng,
                 'notes'                    => $notes,
                 'hold_expires_at'          => null,
-            ]);
+            ], $priceQuote->toBookingColumns()));
 
             $this->syncScheduleAvailability($schedule);
             $this->audit($booking, null, 'booking_created', null, $booking->toArray());
@@ -262,11 +272,21 @@ class BookingCreationService
         ?float $dropoffLat = null,
         ?float $dropoffLng = null,
     ): Booking {
-        $booking->loadMissing('schedule.route');
-        $totalPrice = $this->pricing->bookingTotal($booking->schedule, $pickupAddress, $dropoffAddress, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
-        $totalPrice = $this->applyReferralToTotal($totalPrice, $booking->contact_phone, $appliedReferralCodeId);
+        $booking->loadMissing('schedule.route', 'schedule.vehicle');
+        $priceQuote = $this->buildPricedQuote(
+            $booking->schedule,
+            $pickupAddress,
+            $dropoffAddress,
+            $pickupLat,
+            $pickupLng,
+            $dropoffLat,
+            $dropoffLng,
+            $pickupTime,
+            $booking->contact_phone,
+            $appliedReferralCodeId,
+        );
 
-        $refreshFields = [
+        $refreshFields = array_merge([
             'passenger_name'   => trim($passengerName),
             'passenger_gender' => $passengerGender === 'female' ? 'female' : 'male',
             'passenger_age'    => $passengerAge,
@@ -280,11 +300,10 @@ class BookingCreationService
             'dropoff_lat'      => $dropoffLat,
             'dropoff_lng'      => $dropoffLng,
             'notes'            => $notes,
-            'total_price'      => $totalPrice,
             'hold_expires_at'  => null,
             'driver_search_started_at' => now(),
             'needs_operator_help_at'   => null,
-        ];
+        ], $priceQuote->toBookingColumns());
 
         if (Booking::supportsOperatorDismiss()) {
             $refreshFields['operator_dismissed_at'] = null;
@@ -301,37 +320,76 @@ class BookingCreationService
         return $booking->fresh();
     }
 
-    private function applyReferralToTotal(float $subtotal, string $contactPhone, ?int &$appliedReferralCodeId): float
+    private function buildPricedQuote(
+        Schedule $schedule,
+        ?string $pickupAddress,
+        ?string $dropoffAddress,
+        ?float $pickupLat,
+        ?float $pickupLng,
+        ?float $dropoffLat,
+        ?float $dropoffLng,
+        ?string $pickupTime,
+        string $contactPhone,
+        ?int &$appliedReferralCodeId,
+    ): PriceQuote {
+        $at = $this->resolveQuoteAt($pickupTime);
+        $quote = $this->pricing->quoteDetailed(
+            $schedule,
+            $pickupAddress,
+            $dropoffAddress,
+            $pickupLat,
+            $pickupLng,
+            $dropoffLat,
+            $dropoffLng,
+            $at,
+        );
+
+        return $this->applyReferralToQuote($quote, $contactPhone, $appliedReferralCodeId);
+    }
+
+    private function resolveQuoteAt(?string $pickupTime): Carbon
+    {
+        if (! $pickupTime) {
+            return now();
+        }
+
+        try {
+            $stored = \App\Support\DepartureTimeDisplay::storageValue($pickupTime);
+
+            return Carbon::parse($stored, config('app.timezone', 'Asia/Ho_Chi_Minh'));
+        } catch (\Throwable) {
+            return now();
+        }
+    }
+
+    private function applyReferralToQuote(PriceQuote $quote, string $contactPhone, ?int &$appliedReferralCodeId): PriceQuote
     {
         if (! $appliedReferralCodeId) {
-            return (float) PlatformFees::roundDisplayPrice($subtotal);
+            return $quote->withReferral(0);
         }
 
         $referral = ReferralCode::query()->find($appliedReferralCodeId);
         if (! $referral || ! $referral->isUsable()) {
             $appliedReferralCodeId = null;
 
-            return (float) PlatformFees::roundDisplayPrice($subtotal);
+            return $quote->withReferral(0);
         }
 
         if ($referral->type === ReferralCode::TYPE_REFERRER) {
             if (! $this->referralCodes->shouldAttributeBooking($referral, $contactPhone)) {
                 $appliedReferralCodeId = null;
 
-                return (float) PlatformFees::roundDisplayPrice($subtotal);
+                return $quote->withReferral(0);
             }
 
             $percent = $this->referralCodes->customerDiscountPercent($referral, $contactPhone);
-            if ($percent > 0) {
-                return $this->referralCodes->applyDiscount($subtotal, $percent);
-            }
 
-            return (float) PlatformFees::roundDisplayPrice($subtotal);
+            return $quote->withReferral($percent > 0 ? $percent : 0);
         }
 
         $appliedReferralCodeId = null;
 
-        return (float) PlatformFees::roundDisplayPrice($subtotal);
+        return $quote->withReferral(0);
     }
 
     private function syncScheduleAvailability(Schedule $schedule): void

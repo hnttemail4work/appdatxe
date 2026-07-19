@@ -295,6 +295,22 @@
         });
     });
 
+    wizard.addEventListener('pin:change', function (e) {
+        var value = (e.detail && e.detail.value) || '';
+        if (!/^\d{6}$/.test(value)) return;
+        if (current === 6) {
+            goNext();
+            return;
+        }
+        if (current === 7 && validateStep(7)) {
+            if (typeof form.requestSubmit === 'function') {
+                form.requestSubmit();
+            } else {
+                form.submit();
+            }
+        }
+    });
+
     form.addEventListener('submit', function (e) {
         for (var s = 1; s <= total; s++) {
             if (!validateStep(s)) {

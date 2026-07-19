@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ApproveDepositsBulkRequest;
+use App\Models\CustomerWalletTransaction;
 use App\Models\DriverWalletTransaction;
+use App\Services\CustomerWalletService;
 use App\Services\DriverWalletService;
 use App\Support\PageList;
 use Illuminate\Http\Request;
@@ -18,6 +20,7 @@ class AdminWalletController extends Controller
 {
     public function __construct(
         private readonly DriverWalletService $driverWallet,
+        private readonly CustomerWalletService $customerWallet,
     ) {
     }
 
@@ -118,5 +121,60 @@ class AdminWalletController extends Controller
         return redirect()
             ->route('admin.driverWallet')
             ->with('success', $message);
+    }
+
+    public function customerWallet(Request $request)
+    {
+        $pendingAll = CustomerWalletTransaction::query()
+            ->with(['wallet.user'])
+            ->where('type', 'deposit')
+            ->where('status', 'pending')
+            ->latest()
+            ->get();
+
+        $historyAll = CustomerWalletTransaction::query()
+            ->with(['wallet.user'])
+            ->where('type', 'deposit')
+            ->latest()
+            ->limit(80)
+            ->get();
+
+        $depositsPending = PageList::paginateCollection($pendingAll, $request, 'deposit_page');
+        $walletHistory = PageList::paginateCollection($historyAll, $request, 'history_page');
+
+        return view('admin.customer-wallet', [
+            'depositsPending' => $depositsPending,
+            'walletHistory' => $walletHistory,
+            'counts' => [
+                'deposits' => $pendingAll->count(),
+                'total' => $pendingAll->count(),
+            ],
+        ]);
+    }
+
+    public function approveCustomerDeposit(CustomerWalletTransaction $transaction)
+    {
+        try {
+            $this->customerWallet->approveDeposit($transaction, Auth::id());
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['wallet' => $e->getMessage()]);
+        }
+
+        return redirect()
+            ->route('admin.customerWallet')
+            ->with('success', 'Đã cộng tiền vào ví khách.');
+    }
+
+    public function rejectCustomerDeposit(CustomerWalletTransaction $transaction)
+    {
+        try {
+            $this->customerWallet->rejectDeposit($transaction, Auth::id());
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['wallet' => $e->getMessage()]);
+        }
+
+        return redirect()
+            ->route('admin.customerWallet')
+            ->with('success', 'Đã từ chối yêu cầu nạp ví khách.');
     }
 }

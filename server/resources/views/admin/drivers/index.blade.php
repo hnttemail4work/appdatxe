@@ -90,6 +90,7 @@ $driverTabs = [
                         <th>Ví</th>
                         <th>Yêu cầu</th>
                         <th>Trạng thái</th>
+                        <th>App</th>
                         <th class="text-end" style="width:11rem">Hành động</th>
                     </tr>
                 </thead>
@@ -183,6 +184,13 @@ $driverTabs = [
                         <td>
                             <span class="status-pill status-pill--{{ $d->listStatusColor() }}">{{ $d->listStatusLabel() }}</span>
                         </td>
+                        <td>
+                            @if($d->isApproved() && $d->isAccountRunning())
+                                <span class="status-pill status-pill--{{ $d->appOnColor() }}">{{ $d->appOnLabel() }}</span>
+                            @else
+                                <span class="text-muted">—</span>
+                            @endif
+                        </td>
                         <td class="text-end">
                             <div class="d-flex flex-wrap gap-1 justify-content-end">
                                 <a href="{{ route('admin.drivers.edit', $requestCount > 0
@@ -191,6 +199,16 @@ $driverTabs = [
                                    class="btn btn-sm {{ ($d->isPendingApproval() || $requestCount > 0) ? 'btn-primary' : 'btn-outline-primary' }}">
                                     Xem
                                 </a>
+                                @if($d->isApproved())
+                                    @include('partials.admin-account-status-actions', [
+                                        'layout' => 'inline',
+                                        'entityLabel' => 'tài xế',
+                                        'isRunning' => $d->isAccountRunning(),
+                                        'suspendAction' => route('admin.drivers.destroy', $d),
+                                        'resumeAction' => route('admin.drivers.activate', $d),
+                                        'suspendMethod' => 'DELETE',
+                                    ])
+                                @endif
                             </div>
                         </td>
                     </tr>

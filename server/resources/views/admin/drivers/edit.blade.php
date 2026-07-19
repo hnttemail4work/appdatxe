@@ -87,28 +87,24 @@ if (! $viewOnly && $driver->isOperational()) {
                 ])
                 <div class="d-flex flex-wrap gap-2 mt-4 pt-3 border-top">
                     <button class="btn btn-primary px-4 fw-semibold">Lưu thông tin</button>
-                    @if($driver->status !== 'inactive')
-                        <button type="submit" form="driver-deactivate-form" class="btn btn-outline-danger ms-auto">Vô hiệu hoá</button>
-                    @elseif($driver->isApproved())
-                        <button type="submit" form="driver-activate-form" class="btn btn-outline-primary ms-auto">Kích hoạt lại</button>
-                    @endif
                 </div>
             </form>
-            @if($driver->status !== 'inactive')
-            <form method="POST" action="{{ route('admin.drivers.destroy', $driver) }}" id="driver-deactivate-form"
-                  data-confirm="Vô hiệu hoá tài xế này? Tài xế sẽ không đăng nhập được."
-                  data-confirm-title="Vô hiệu hoá tài xế"
-                  data-confirm-variant="danger"
-                  data-confirm-ok="Vô hiệu hoá">
-                @csrf @method('DELETE')
-            </form>
-            @elseif($driver->isApproved())
-            <form method="POST" action="{{ route('admin.drivers.activate', $driver) }}" id="driver-activate-form"
-                  data-confirm="Kích hoạt lại tài xế này?"
-                  data-confirm-title="Kích hoạt tài xế"
-                  data-confirm-ok="Kích hoạt">
-                @csrf
-            </form>
+            @if($driver->isApproved())
+                <div class="mt-4 pt-3 border-top">
+                    <h6 class="text-muted mb-2">Trạng thái tài khoản</h6>
+                    <p class="mb-2">
+                        <span class="status-pill status-pill--{{ \App\Support\AdminAccountStatus::color($driver->status) }}">
+                            {{ \App\Support\AdminAccountStatus::label($driver->status) }}
+                        </span>
+                    </p>
+                    @include('partials.admin-account-status-actions', [
+                        'entityLabel' => 'tài xế',
+                        'isRunning' => $driver->isAccountRunning(),
+                        'suspendAction' => route('admin.drivers.destroy', $driver),
+                        'resumeAction' => route('admin.drivers.activate', $driver),
+                        'suspendMethod' => 'DELETE',
+                    ])
+                </div>
             @endif
 
             @if($driver->user)
@@ -217,5 +213,29 @@ if (! $viewOnly && $driver->isOperational()) {
     font-size: .78rem;
     margin-bottom: .35rem;
 }
+.admin-idscan {
+    min-width: 16rem;
+    max-width: 22rem;
+    padding: .65rem .7rem;
+    border: 1px solid rgba(255, 255, 255, .12);
+    border-radius: .65rem;
+    background: rgba(255, 255, 255, .03);
+    text-align: left;
+}
+.admin-idscan__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: .35rem;
+    margin-bottom: .35rem;
+}
+.admin-idscan__head strong { font-size: .82rem; }
+.admin-idscan__actions { display: flex; flex-wrap: wrap; gap: .25rem; }
+.driver-edit-actions { max-width: 22rem; }
 </style>
+@endpush
+
+@push('scripts')
+<script src="{{ asset('js/admin-cccd-scan.js') }}?v={{ filemtime(public_path('js/admin-cccd-scan.js')) }}"></script>
 @endpush

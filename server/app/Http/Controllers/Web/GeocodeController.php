@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Geocode\DirectionGeocodeRequest;
+use App\Http\Requests\Geocode\NearbyGeocodeRequest;
 use App\Http\Requests\Geocode\ResolvePlaceRequest;
 use App\Http\Requests\Geocode\ReverseGeocodeRequest;
 use App\Http\Requests\Geocode\SearchGeocodeRequest;
@@ -57,7 +59,7 @@ class GeocodeController extends Controller
         $province = trim((string) ($validated['province'] ?? ''));
         $query = $validated['q'];
 
-        $cacheKey = 'geocode_search:goong:'.hash('xxh128', mb_strtolower(trim($query)).'|'.$province);
+        $cacheKey = 'geocode_search:goong:v2:'.hash('xxh128', mb_strtolower(trim($query)).'|'.$province);
         $results = Cache::remember($cacheKey, now()->addMinutes(15), function () use ($query, $province): array {
             return $this->goongGeocode->search($query, $province);
         });
@@ -79,5 +81,46 @@ class GeocodeController extends Controller
         }
 
         return response()->json($result);
+    }
+
+    public function direction(DirectionGeocodeRequest $request): JsonResponse
+    {
+        if ($error = $this->ensureConfigured()) {
+            return $error;
+        }
+
+        $validated = $request->validated();
+
+        $result = $this->goongGeocode->direction(
+            (float) $validated['origin_lat'],
+            (float) $validated['origin_lng'],
+            (float) $validated['dest_lat'],
+            (float) $validated['dest_lng'],
+        );
+
+        if ($result === null) {
+            return response()->json(['message' => 'Không lấy được lộ trình.'], 502);
+        }
+
+        return response()->json($result);
+    }
+
+    public function nearby(NearbyGeocodeRequest $request): JsonResponse
+    {
+        if ($error = $this->ensureConfigured()) {
+            return $error;
+        }
+
+        $validated = $request->validated();
+        $lat = (float) $validated['lat'];
+        $lng = (float) $validated['lng'];
+        $radius = (int) ($validated['radius_m'] ?? 300);
+
+        $cacheKey = 'geocode_nearby:v2:'.hash('xxh128', round($lat, 5).'|'.round($lng, 5).'|'.$radius);
+        $results = Cache::remember($cacheKey, now()->addMinutes(10), function () use ($lat, $lng, $radius): array {
+            return $this->goongGeocode->nearby($lat, $lng, $radius);
+        });
+
+        return response()->json(['results' => $results]);
     }
 }

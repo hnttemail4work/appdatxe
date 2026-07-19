@@ -42,9 +42,10 @@ class CustomerProfileChangeService
         $payload = $this->changedPayload($user, $validated);
         $hasPhotos = $this->requestHasPhotos($request);
 
-        if ($payload === [] && ! $hasPhotos) {
+        // Cập nhật từ app khách: bắt buộc có ảnh CCCD mới (số CCCD không còn nhập trên form).
+        if (! $hasPhotos) {
             throw ValidationException::withMessages([
-                'profile' => 'Chưa có thay đổi.',
+                'photos' => 'Vui lòng chọn ảnh CCCD để gửi duyệt.',
             ]);
         }
 

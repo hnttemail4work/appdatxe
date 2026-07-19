@@ -19,6 +19,10 @@ class DriverProfileSyncService
                 $profileUpdates['availability_status'] = 'available';
             }
 
+            if (in_array($status, ['suspended', 'inactive'], true)) {
+                $profileUpdates['availability_status'] = 'off_duty';
+            }
+
             $profile->update($profileUpdates);
             $profile->user->update(['status' => $status]);
         });
@@ -31,11 +35,14 @@ class DriverProfileSyncService
         }
     }
 
-    public function approve(DriverProfile $profile, ?int $operatorId = null): void
+    /**
+     * @param  array<string, mixed>|null  $identity  name / date_of_birth / gender / id_number
+     */
+    public function approve(DriverProfile $profile, ?int $operatorId = null, ?array $identity = null): void
     {
         $profile->loadMissing('user');
 
-        DB::transaction(function () use ($profile, $operatorId): void {
+        DB::transaction(function () use ($profile, $operatorId, $identity): void {
             $updates = [
                 'status'              => 'active',
                 'approval_status'     => 'approved',
@@ -47,7 +54,12 @@ class DriverProfileSyncService
             }
 
             $profile->update($updates);
-            $profile->user->update(['status' => 'active']);
+
+            $userData = ['status' => 'active'];
+            if (is_array($identity) && $identity !== []) {
+                $userData = array_merge($userData, $identity);
+            }
+            $profile->user->update($userData);
         });
 
         app(DriverCatalogService::class)->syncCatalogForDriver($profile->fresh());
@@ -165,7 +177,7 @@ class DriverProfileSyncService
                 : null;
         }
 
-        foreach (['address', 'id_number', 'date_of_birth'] as $field) {
+        foreach (['address', 'id_number', 'date_of_birth', 'gender'] as $field) {
             if (array_key_exists($field, $validated) && $validated[$field] !== null && $validated[$field] !== '') {
                 $userData[$field] = $validated[$field];
             }

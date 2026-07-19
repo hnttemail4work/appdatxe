@@ -4,147 +4,122 @@ $canBookNow = $authUser && $authUser->role === 'customer' && $authUser->canBookT
 $bookingBlockedMessage = ($authUser && $authUser->role === 'customer' && ! $authUser->canBookTrips())
     ? $authUser->bookingBlockMessage()
     : null;
-$scheduleLaterOn = filled(old('pickup_time')) || filled(old('service_date'));
+$pickupValue = old('pickup_detail');
+$dropoffValue = old('dropoff_detail');
+$loginUrl = route('booking.start');
 @endphp
-<div class="be-route-card grab-search-card" id="booking-route-card">
+{{--
+  Flow Grab/Be:
+  Home: title + 1 thanh (map | hint)
+  → Sheet: Điểm đi / Điểm đến + gợi ý
+  → Đủ 2 điểm: auto mở bảng giá/xe
+  → Đặt xe (trong flow) → tìm TX → trạng thái
+--}}
+<div class="be-route-card grab-search-card" id="booking-route-card"
+     data-can-book="{{ $canBookNow ? '1' : '0' }}"
+     data-login-url="{{ $loginUrl }}"
+     @if($bookingBlockedMessage) data-booking-blocked="{{ $bookingBlockedMessage }}" @endif>
+
     <input type="hidden" name="pickup_lat" id="modal-pickup-lat" form="booking-form" value="{{ old('pickup_lat') }}">
     <input type="hidden" name="pickup_lng" id="modal-pickup-lng" form="booking-form" value="{{ old('pickup_lng') }}">
     <input type="hidden" name="dropoff_lat" id="modal-dropoff-lat" form="booking-form" value="{{ old('dropoff_lat') }}">
     <input type="hidden" name="dropoff_lng" id="modal-dropoff-lng" form="booking-form" value="{{ old('dropoff_lng') }}">
 
-    <div class="grab-search-card__toolbar">
+    <div class="visually-hidden" aria-hidden="true">
+        <input type="text" name="pickup_detail" id="modal-pickup-detail" form="booking-form"
+               class="address-map-readonly-input" required readonly tabindex="-1"
+               value="{{ $pickupValue }}">
+        <input type="text" name="dropoff_detail" id="modal-dropoff-detail" form="booking-form"
+               class="address-map-readonly-input" required readonly tabindex="-1"
+               value="{{ $dropoffValue }}">
+    </div>
+
+    <h2 class="grab-home-title">Bạn muốn đi đâu?</h2>
+
+    <div class="grab-home-bar" data-open-address-sheet>
         <button type="button"
-                id="booking-schedule-later"
-                class="grab-schedule-chip{{ $scheduleLaterOn ? ' is-active' : '' }}"
-                aria-pressed="{{ $scheduleLaterOn ? 'true' : 'false' }}"
-                aria-controls="booking-schedule-fields"
-                title="Đặt sau">
-            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none"
-                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <rect x="3" y="4" width="18" height="18" rx="2"/>
-                <path d="M16 2v4M8 2v4M3 10h18"/>
+                class="grab-home-bar__map"
+                data-address-map-for="modal-dropoff-detail"
+                data-address-map-lat="modal-dropoff-lat"
+                data-address-map-lng="modal-dropoff-lng"
+                data-address-map-default-province="TP.HCM"
+                data-address-map-label="Chọn điểm trả"
+                data-address-map-locate="1"
+                aria-label="Chọn trên bản đồ"
+                title="Bản đồ">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                <circle cx="12" cy="10" r="3"/>
             </svg>
-            <span data-schedule-chip-label>Đặt sau</span>
+        </button>
+
+        <button type="button" class="grab-home-bar__main" data-open-address-sheet-main aria-label="Chọn điểm đến">
+            <span class="grab-home-bar__hint" data-home-dest-label>
+                {{ filled($dropoffValue) ? $dropoffValue : 'Bạn muốn đi đâu?' }}
+            </span>
         </button>
     </div>
 
-    <div class="be-route-card__addresses grab-search-card__addresses">
-        <div class="be-route-card__rail grab-search-rail" aria-hidden="true">
-            <span class="grab-search-dot grab-search-dot--pickup"></span>
-            <span class="grab-search-rail__line"></span>
-            <span class="grab-search-dot grab-search-dot--dropoff"></span>
-        </div>
-        <div class="be-route-card__fields grab-search-card__fields">
-            <div class="grab-search-row">
-                <div class="grab-search-field flex-grow-1">
-                    <label class="grab-search-label" for="modal-pickup-detail">Điểm đi</label>
-                    <div class="booking-address-input-wrap">
-                        <input type="text" name="pickup_detail" id="modal-pickup-detail" form="booking-form"
-                               class="grab-search-input address-map-readonly-input" required readonly
-                               placeholder="Tự lấy GPS hoặc chọn trên bản đồ"
-                               value="{{ old('pickup_detail') }}"
-                               data-address-map-for="modal-pickup-detail"
-                               data-address-map-lat="modal-pickup-lat"
-                               data-address-map-lng="modal-pickup-lng"
-                               data-address-map-default-province="TP.HCM"
-                               data-address-map-label="Chọn điểm đón">
-                        <button type="button" class="booking-address-map-btn"
-                                data-address-map-for="modal-pickup-detail"
-                                data-address-map-lat="modal-pickup-lat"
-                                data-address-map-lng="modal-pickup-lng"
-                                data-address-map-default-province="TP.HCM"
-                                data-address-map-label="Chọn điểm đón"
-                                aria-label="Chọn điểm đón trên bản đồ" title="Bản đồ">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
-                                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-                                <circle cx="12" cy="10" r="3"/>
-                            </svg>
-                        </button>
-                    </div>
+    @if($bookingBlockedMessage)
+        <p class="small text-muted mt-3 mb-0">{{ $bookingBlockedMessage }}
+            <a href="{{ route('customer.account') }}">Xem tài khoản</a>
+        </p>
+    @endif
+</div>
+
+{{-- Full-screen address sheet --}}
+<div id="booking-address-sheet" class="booking-addr-sheet" hidden aria-hidden="true">
+    <div class="booking-addr-sheet__panel" role="dialog" aria-modal="true" aria-labelledby="booking-addr-sheet-title">
+        <header class="booking-addr-sheet__header">
+            <button type="button" class="booking-addr-sheet__back" data-addr-sheet-close aria-label="Đóng">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M15 18l-6-6 6-6" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
+            <h2 class="booking-addr-sheet__title" id="booking-addr-sheet-title">Bạn muốn đi đâu?</h2>
+            <button type="button" class="booking-addr-sheet__map booking-addr-sheet__map--text" data-addr-sheet-map
+                    aria-label="Chọn từ bản đồ" title="Chọn từ bản đồ">
+                Chọn từ bản đồ
+            </button>
+        </header>
+        {{-- Trigger ẩn: mở map picker cho ô đang focus --}}
+        <button type="button" id="addr-sheet-map-trigger" class="d-none" tabindex="-1" aria-hidden="true"
+                data-address-map-for="modal-dropoff-detail"
+                data-address-map-lat="modal-dropoff-lat"
+                data-address-map-lng="modal-dropoff-lng"
+                data-address-map-default-province="TP.HCM"
+                data-address-map-label="Chọn điểm trên bản đồ"
+                data-address-map-locate="1"></button>
+
+        <div class="booking-addr-sheet__fields">
+            <div class="booking-addr-sheet__rail" aria-hidden="true">
+                <span class="grab-route-dot grab-route-dot--pickup"></span>
+                <span class="booking-addr-sheet__line"></span>
+                <span class="grab-route-dot grab-route-dot--dropoff"></span>
+            </div>
+            <div class="booking-addr-sheet__inputs">
+                <div class="booking-addr-field" data-addr-field="pickup">
+                    <span class="booking-addr-field__label" aria-hidden="true">Điểm đi</span>
+                    <label class="visually-hidden" for="addr-sheet-pickup">Điểm đi</label>
+                    <input type="text" id="addr-sheet-pickup" class="booking-addr-field__input"
+                           placeholder="Nhập điểm đón" autocomplete="off" enterkeyhint="next">
+                    <button type="button" class="booking-addr-field__clear d-none" data-addr-clear="pickup" aria-label="Xóa điểm đi">×</button>
+                </div>
+                <div class="booking-addr-field" data-addr-field="dropoff">
+                    <span class="booking-addr-field__label" aria-hidden="true">Điểm đến</span>
+                    <label class="visually-hidden" for="addr-sheet-dropoff">Điểm đến</label>
+                    <input type="text" id="addr-sheet-dropoff" class="booking-addr-field__input"
+                           placeholder="Nhập điểm trả" autocomplete="off" enterkeyhint="search">
+                    <button type="button" class="booking-addr-field__clear d-none" data-addr-clear="dropoff" aria-label="Xóa điểm đến">×</button>
                 </div>
             </div>
-            <div class="grab-search-row">
-                <div class="grab-search-field flex-grow-1">
-                    <label class="grab-search-label" for="modal-dropoff-detail">Điểm đến</label>
-                    <div class="booking-address-input-wrap">
-                        <input type="text" name="dropoff_detail" id="modal-dropoff-detail" form="booking-form"
-                               class="grab-search-input address-map-readonly-input" required readonly
-                               placeholder="Tìm địa chỉ hoặc chọn trên bản đồ"
-                               value="{{ old('dropoff_detail') }}"
-                               data-address-map-for="modal-dropoff-detail"
-                               data-address-map-lat="modal-dropoff-lat"
-                               data-address-map-lng="modal-dropoff-lng"
-                               data-address-map-default-province="TP.HCM"
-                               data-address-map-label="Chọn điểm trả">
-                        <button type="button" class="booking-address-map-btn"
-                                data-address-map-for="modal-dropoff-detail"
-                                data-address-map-lat="modal-dropoff-lat"
-                                data-address-map-lng="modal-dropoff-lng"
-                                data-address-map-default-province="TP.HCM"
-                                data-address-map-label="Chọn điểm trả"
-                                aria-label="Chọn điểm trả trên bản đồ" title="Bản đồ">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
-                                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-                                <circle cx="12" cy="10" r="3"/>
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-            </div>
+            <button type="button" class="booking-addr-sheet__swap" data-addr-swap aria-label="Đảo điểm đi và điểm đến" title="Đảo điểm">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M7 7h11l-3-3M17 17H6l3 3" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
         </div>
-    </div>
 
-    <div id="booking-schedule-fields"
-         class="be-route-card__schedule grab-search-card__schedule{{ $scheduleLaterOn ? '' : ' d-none' }}">
-        <div class="row g-2 g-md-3 align-items-end booking-pickup-schedule-row">
-            <div class="col-6 col-md-6" id="modal-pickup-date-wrap">
-                <label class="form-label" for="modal-service-date">Ngày đón <span class="text-danger">*</span></label>
-                <input type="date" name="service_date" id="modal-service-date" form="booking-form"
-                       class="form-control @error('service_date') is-invalid @enderror"
-                       value="{{ old('service_date', $scheduleLaterOn ? $defaultServiceDate : '') }}"
-                       min="{{ $defaultServiceDate }}"
-                       @if($scheduleLaterOn) required @endif
-                       @if(! $scheduleLaterOn) disabled @endif>
-                @error('service_date')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
-            </div>
-            <div class="col-6 col-md-6" id="modal-pickup-time-wrap">
-                @include('partials.vi-pickup-time-input', [
-                    'name' => 'pickup_time',
-                    'id' => 'modal-pickup-time',
-                    'formAttr' => 'booking-form',
-                    'value' => old('pickup_time', $scheduleLaterOn ? $defaultPickupTime : ''),
-                    'label' => 'Giờ đón',
-                    'required' => $scheduleLaterOn,
-                    'disabled' => ! $scheduleLaterOn,
-                ])
-            </div>
-        </div>
-    </div>
-
-    <div class="be-route-card__footer grab-search-card__footer">
-        @if($canBookNow)
-        <button type="button" class="grab-search-cta be-route-card__cta" id="route-continue-btn">
-            <span>Tìm xe</span>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-        </button>
-        @elseif($bookingBlockedMessage)
-        <div class="w-100">
-            <p class="small text-muted mb-2">{{ $bookingBlockedMessage }}</p>
-            <a href="{{ route('customer.account') }}" class="grab-search-cta be-route-card__cta">
-                <span>Xem tài khoản</span>
-            </a>
-        </div>
-        @else
-        <a href="{{ auth()->check() ? route('dashboard') : route('booking.start') }}" class="grab-search-cta be-route-card__cta">
-            <span>{{ auth()->check() ? 'Về trang tài khoản' : 'Đăng nhập để đặt xe' }}</span>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-        </a>
-        @endif
+        <div class="booking-addr-sheet__suggest" id="booking-addr-suggest" role="listbox" aria-label="Gợi ý địa chỉ"></div>
     </div>
 </div>

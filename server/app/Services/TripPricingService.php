@@ -7,23 +7,33 @@ use App\Models\ScheduleTemplate;
 use App\Models\TripRoute;
 use App\Support\LocationCatalog;
 use App\Support\PlatformFees;
+use App\Support\PriceQuote;
+use App\Support\PricingConfig;
 use App\Support\ProvinceCenters;
 use App\Support\RouteDistanceCatalog;
-use App\Support\VehicleTypePricing;
+use Carbon\CarbonInterface;
 
-/** Giá cả xe một chiều theo km / cấu hình template. */
+/** Giá cả xe một chiều — distance helpers + facade sang PricingEngine. */
 class TripPricingService
 {
-    /** Giá tham chiếu: cả xe 4 chỗ, ~100 km. */
-    public const REFERENCE_WHOLE_CAR = 1_000_000;
-    public const REFERENCE_CAPACITY = 4;
-    public const REFERENCE_DISTANCE_KM = 100;
-
-    /** Cùng tỉnh/thành — quãng đường tối đa (km) áp giá cố định. */
+    /** @deprecated Dùng PricingConfig::intraFlatMaxKm() */
     public const INTRA_PROVINCE_FLAT_MAX_KM = 3;
 
-    /** Cùng tỉnh/thành — giá cả xe cho chuyến ngắn (≤ {@see INTRA_PROVINCE_FLAT_MAX_KM} km). */
+    /** @deprecated Dùng PricingConfig::intraFlatPrice() */
     public const INTRA_PROVINCE_FLAT_PRICE = 30_000;
+
+    public const REFERENCE_WHOLE_CAR = 1_000_000;
+
+    public const REFERENCE_CAPACITY = 4;
+
+    public const REFERENCE_DISTANCE_KM = 100;
+
+    private ?PricingEngine $engine = null;
+
+    private function engine(): PricingEngine
+    {
+        return $this->engine ??= app(PricingEngine::class);
+    }
 
     /** @return array<string, mixed> */
     public function quote(
@@ -34,21 +44,54 @@ class TripPricingService
         ?float $pickupLng = null,
         ?float $dropoffLat = null,
         ?float $dropoffLng = null,
+        ?CarbonInterface $at = null,
     ): array {
         $template->loadMissing(['route', 'vehicle']);
 
         if ($pickup && $dropoff && $template->vehicle) {
-            return $this->quoteForVehicle($template->vehicle, $pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
+            return $this->quoteForVehicle(
+                $template->vehicle,
+                $pickup,
+                $dropoff,
+                $pickupLat,
+                $pickupLng,
+                $dropoffLat,
+                $dropoffLng,
+                $at,
+            )->toApiArray();
         }
 
-        $wholeCar = $this->oneWayWholeCarPrice($template, $pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
-        $distance = $this->resolveDistanceKm($template->route, $pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
+        $quote = $this->buildQuoteForEntity($template, $pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng, $at);
 
-        return [
-            'distance_km'      => $distance,
-            'whole_car_price'  => $wholeCar,
-            'unit_price'       => $wholeCar,
-        ];
+        return $quote->toApiArray();
+    }
+
+    public function quoteDetailed(
+        ScheduleTemplate|Schedule $entity,
+        ?string $pickup = null,
+        ?string $dropoff = null,
+        ?float $pickupLat = null,
+        ?float $pickupLng = null,
+        ?float $dropoffLat = null,
+        ?float $dropoffLng = null,
+        ?CarbonInterface $at = null,
+    ): PriceQuote {
+        $entity->loadMissing(['route', 'vehicle']);
+
+        if ($pickup && $dropoff && $entity->vehicle) {
+            return $this->quoteForVehicle(
+                $entity->vehicle,
+                $pickup,
+                $dropoff,
+                $pickupLat,
+                $pickupLng,
+                $dropoffLat,
+                $dropoffLng,
+                $at,
+            );
+        }
+
+        return $this->buildQuoteForEntity($entity, $pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng, $at);
     }
 
     public function bookingTotal(
@@ -59,8 +102,9 @@ class TripPricingService
         ?float $pickupLng = null,
         ?float $dropoffLat = null,
         ?float $dropoffLng = null,
+        ?CarbonInterface $at = null,
     ): float {
-        return (float) $this->oneWayWholeCarPrice($entity, $pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
+        return (float) $this->quoteDetailed($entity, $pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng, $at)->priceSubtotal;
     }
 
     public function oneWayWholeCarPrice(
@@ -72,36 +116,9 @@ class TripPricingService
         ?float $dropoffLat = null,
         ?float $dropoffLng = null,
     ): int {
-        $entity->loadMissing(['route', 'vehicle']);
-        $capacity = $entity instanceof ScheduleTemplate
-            ? $entity->capacity()
-            : (int) ($entity->vehicle?->capacity ?? 4);
-        $vehicleType = $entity->vehicle?->type ? (string) $entity->vehicle->type : null;
-
-        if ($pickup && $dropoff) {
-            $distanceKm = $this->resolveRouteDistanceKm($pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
-            if ($distanceKm > 0) {
-                return $this->wholeCarPriceForRoute($pickup, $dropoff, $distanceKm, $capacity, $vehicleType);
-            }
-        }
-
-        $configured = (int) ($entity->whole_car_price ?? 0);
-
-        if ($configured > 0) {
-            return $this->roundToThousand($configured);
-        }
-
-        $distanceKm = $this->resolveDistanceKm($entity->route, $pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
-        if ($distanceKm > 0) {
-            return $this->wholeCarOneWayFromDistance((int) $distanceKm, $capacity, $vehicleType);
-        }
-
-        $routeBase = $this->roundToThousand((float) ($entity->route?->base_price ?? 0));
-
-        return max($routeBase, 0);
+        return $this->quoteDetailed($entity, $pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng)->priceSubtotal;
     }
 
-    /** @return array<string, mixed> */
     public function quoteForVehicle(
         \App\Models\Vehicle $vehicle,
         string $pickup,
@@ -110,32 +127,56 @@ class TripPricingService
         ?float $pickupLng = null,
         ?float $dropoffLat = null,
         ?float $dropoffLng = null,
-    ): array {
+        ?CarbonInterface $at = null,
+    ): PriceQuote {
+        return $this->quoteForVehicleType(
+            $pickup,
+            $dropoff,
+            (int) $vehicle->capacity,
+            $vehicle->type ? (string) $vehicle->type : null,
+            $pickupLat,
+            $pickupLng,
+            $dropoffLat,
+            $dropoffLng,
+            $at,
+        );
+    }
+
+    /** Báo giá theo loại xe/số chỗ — không phụ thuộc template/tài xế. */
+    public function quoteForVehicleType(
+        string $pickup,
+        string $dropoff,
+        int $capacity,
+        ?string $vehicleType = null,
+        ?float $pickupLat = null,
+        ?float $pickupLng = null,
+        ?float $dropoffLat = null,
+        ?float $dropoffLng = null,
+        ?CarbonInterface $at = null,
+    ): PriceQuote {
         $pickup = trim($pickup);
         $dropoff = trim($dropoff);
         $distanceKm = $this->resolveRouteDistanceKm($pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
 
-        $wholeCar = $this->wholeCarPriceForRoute(
+        return $this->engine()->quoteForRoute(
             $pickup,
             $dropoff,
             max(1, $distanceKm),
-            (int) $vehicle->capacity,
-            $vehicle->type ? (string) $vehicle->type : null,
+            $vehicleType,
+            $capacity,
+            $at,
         );
-
-        return [
-            'distance_km'     => $distanceKm,
-            'whole_car_price' => $wholeCar,
-            'unit_price'      => $wholeCar,
-        ];
     }
 
     public function wholeCarOneWayFromDistance(float $distanceKm, int $capacity, ?string $vehicleType = null): int
     {
-        $base = PlatformFees::wholeCarBaseFromDistanceKm($distanceKm);
-        $multiplier = VehicleTypePricing::multiplierFor($vehicleType, $capacity);
-
-        return $this->roundToThousand($base * $multiplier);
+        return $this->engine()->quoteForRoute(
+            'A',
+            'B',
+            (int) max(1, round($distanceKm)),
+            $vehicleType,
+            $capacity,
+        )->priceSubtotal;
     }
 
     public function isIntraProvinceRoute(?string $pickup, ?string $dropoff): bool
@@ -153,13 +194,13 @@ class TripPricingService
         int $capacity,
         ?string $vehicleType = null,
     ): int {
-        if ($this->isIntraProvinceRoute($pickup, $dropoff)
-            && $distanceKm > 0
-            && $distanceKm <= self::INTRA_PROVINCE_FLAT_MAX_KM) {
-            return self::INTRA_PROVINCE_FLAT_PRICE;
-        }
-
-        return $this->wholeCarOneWayFromDistance($distanceKm, $capacity, $vehicleType);
+        return $this->engine()->quoteForRoute(
+            $pickup,
+            $dropoff,
+            $distanceKm,
+            $vehicleType,
+            $capacity,
+        )->priceSubtotal;
     }
 
     public function resolveDistanceKm(
@@ -223,5 +264,79 @@ class TripPricingService
     public function roundToThousand(float $amount): int
     {
         return PlatformFees::roundDisplayPrice($amount);
+    }
+
+    private function buildQuoteForEntity(
+        ScheduleTemplate|Schedule $entity,
+        ?string $pickup,
+        ?string $dropoff,
+        ?float $pickupLat,
+        ?float $pickupLng,
+        ?float $dropoffLat,
+        ?float $dropoffLng,
+        ?CarbonInterface $at,
+    ): PriceQuote {
+        $capacity = $entity instanceof ScheduleTemplate
+            ? $entity->capacity()
+            : (int) ($entity->vehicle?->capacity ?? 4);
+        $vehicleType = $entity->vehicle?->type ? (string) $entity->vehicle->type : null;
+
+        if ($pickup && $dropoff) {
+            $distanceKm = $this->resolveRouteDistanceKm($pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
+            if ($distanceKm > 0) {
+                return $this->engine()->quoteForRoute($pickup, $dropoff, $distanceKm, $vehicleType, $capacity, $at);
+            }
+        }
+
+        $configured = (int) ($entity->whole_car_price ?? 0);
+        if ($configured > 0) {
+            $rounded = $this->roundToThousand($configured);
+
+            return new PriceQuote(
+                distanceKm: 0,
+                priceBase: $rounded,
+                usedIntraFlat: false,
+                vehicleTypeKey: $vehicleType,
+                vehicleMultiplier: 1.0,
+                priceVehicle: $rounded,
+                surchargeHoliday: 0,
+                surchargePeak: 0,
+                surchargeRain: 0,
+                tollAmount: 0,
+                priceSubtotal: $rounded,
+                totalPrice: $rounded,
+                meta: ['source' => 'configured_whole_car_price'],
+            );
+        }
+
+        $distanceKm = (int) $this->resolveDistanceKm($entity->route, $pickup, $dropoff, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
+        if ($distanceKm > 0) {
+            return $this->engine()->quoteForRoute(
+                $pickup ?: (string) ($entity->route?->departure ?? 'A'),
+                $dropoff ?: (string) ($entity->route?->destination ?? 'B'),
+                $distanceKm,
+                $vehicleType,
+                $capacity,
+                $at,
+            );
+        }
+
+        $routeBase = $this->roundToThousand((float) ($entity->route?->base_price ?? 0));
+
+        return new PriceQuote(
+            distanceKm: 0,
+            priceBase: max($routeBase, 0),
+            usedIntraFlat: false,
+            vehicleTypeKey: $vehicleType,
+            vehicleMultiplier: 1.0,
+            priceVehicle: max($routeBase, 0),
+            surchargeHoliday: 0,
+            surchargePeak: 0,
+            surchargeRain: 0,
+            tollAmount: 0,
+            priceSubtotal: max($routeBase, 0),
+            totalPrice: max($routeBase, 0),
+            meta: ['source' => 'route_base_price'],
+        );
     }
 }

@@ -8,16 +8,15 @@
     ])
 
     <div class="auth-screen-body">
-        <form method="POST" action="{{ route('password.reset.code') }}">
+        <form method="POST" action="{{ route('password.reset.code') }}" data-pin-autosubmit="1">
             @csrf
             @include('partials.auth-pin-row', [
                 'pinName' => 'code',
                 'pinId' => 'reset-code',
                 'pinLabel' => 'Mã xác minh',
                 'pinErrorBag' => 'code',
-                'nextType' => 'submit',
-                'nextAttr' => '',
-                'nextAria' => 'Tiếp tục',
+                'hideNext' => true,
+                'pinAutoSubmit' => true,
             ])
         </form>
     </div>

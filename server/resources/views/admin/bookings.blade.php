@@ -42,7 +42,7 @@ $bookingListTabs = [
 
          data-booking-list="{{ $bookingList }}"
 
-         data-admin-bookings-poll-ms="15000">
+         data-admin-bookings-poll-ms="5000">
 
         @include('partials.admin-nav-tabs', ['active' => 'bookings'])
 

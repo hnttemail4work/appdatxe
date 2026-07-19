@@ -32,8 +32,8 @@ body.app-shell {
     }
 
     body.app-shell--mobile-app {
-        --customer-dock-height: calc(3.1rem + env(safe-area-inset-bottom, 0px));
-        --driver-dock-height: calc(3.35rem + env(safe-area-inset-bottom, 0px));
+        --customer-dock-height: calc(3.85rem + env(safe-area-inset-bottom, 0px));
+        --driver-dock-height: calc(3.85rem + env(safe-area-inset-bottom, 0px));
         min-height: calc(var(--app-vh, 1vh) * 100);
         padding-bottom: 0;
     }

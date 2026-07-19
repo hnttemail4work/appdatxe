@@ -22,6 +22,21 @@
 
     <article id="guest-trip-card" class="guest-trip-card d-none" aria-live="polite">
 
+        <div class="guest-trip-live-map" id="guest-trip-live-map" hidden>
+            <div class="guest-trip-live-map__canvas" id="guest-trip-live-map-canvas" aria-label="Bản đồ chuyến"></div>
+            <div class="guest-trip-radar d-none" id="guest-trip-radar" aria-live="polite">
+                <div class="guest-trip-radar__rings" aria-hidden="true">
+                    <span></span><span></span><span></span>
+                </div>
+                <div class="guest-trip-radar__copy">
+                    <strong id="guest-trip-radar-title">Đang tìm tài xế gần bạn…</strong>
+                    <p class="mb-0" id="guest-trip-radar-hint">Hệ thống sẽ tự hủy sau 10 phút nếu không có tài xế nhận.</p>
+                    <p class="guest-trip-radar__countdown d-none mb-0" id="guest-trip-radar-countdown" hidden></p>
+                </div>
+            </div>
+            <div class="guest-trip-live-status d-none" id="guest-trip-live-status" aria-live="polite"></div>
+        </div>
+
         <header class="guest-trip-card__head">
 
             <div class="guest-trip-card__head-row">
@@ -187,6 +202,7 @@
                     <div class="guest-trip-detail guest-trip-detail--price d-none" data-field="total_price_wrap">
                         <span class="guest-trip-detail__label">Giá chuyến</span>
                         <span class="guest-trip-detail__value guest-trip-detail__value--price" data-field="total_price"></span>
+                        <div class="small text-muted mt-1 d-none" data-field="price_extras"></div>
                     </div>
 
             </div>

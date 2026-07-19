@@ -68,12 +68,13 @@
     color: #9ca3af;
 }
 
+/* Phải cao hơn booking address sheet (1080) để map hiện được */
 .address-map-picker-modal {
-    z-index: 1070;
+    z-index: 1200 !important;
 }
 
-.address-map-picker-modal + .modal-backdrop.show {
-    z-index: 1065;
+body:has(.address-map-picker-modal.show) .modal-backdrop.show {
+    z-index: 1190 !important;
 }
 
 .address-map-picker-dialog {

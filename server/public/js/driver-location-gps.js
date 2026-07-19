@@ -15,10 +15,29 @@
     var lastSavedLat = null;
     var lastSavedLng = null;
     var lastHeading = null;
-    var PERIODIC_MS = 60 * 1000;
-    var SAVE_MIN_INTERVAL_MS = 30 * 1000;
+    var PERIODIC_MS_IDLE = 60 * 1000;
+    var PERIODIC_MS_TRIP = 3 * 1000;
+    var SAVE_MIN_INTERVAL_IDLE_MS = 30 * 1000;
+    var SAVE_MIN_INTERVAL_TRIP_MS = 3 * 1000;
+    var PERIODIC_MS = PERIODIC_MS_IDLE;
+    var SAVE_MIN_INTERVAL_MS = SAVE_MIN_INTERVAL_IDLE_MS;
     var MOVE_MIN_METERS = 20;
     var STALE_NUDGE_MS = 2 * 60 * 1000;
+    var tripTracking = false;
+
+    function setTripTracking(active) {
+        var next = !!active;
+        if (tripTracking === next) {
+            return;
+        }
+        tripTracking = next;
+        PERIODIC_MS = tripTracking ? PERIODIC_MS_TRIP : PERIODIC_MS_IDLE;
+        SAVE_MIN_INTERVAL_MS = tripTracking ? SAVE_MIN_INTERVAL_TRIP_MS : SAVE_MIN_INTERVAL_IDLE_MS;
+        if (autoTracking) {
+            stopAutoTracking();
+            startAutoTracking();
+        }
+    }
 
     function isPaused() {
         return locationBar && locationBar.getAttribute('data-driver-paused') === '1';
@@ -349,6 +368,7 @@
         startAutoTracking: startAutoTracking,
         stopAutoTracking: stopAutoTracking,
         ensureFreshLocation: ensureFreshLocation,
+        setTripTracking: setTripTracking,
         getLastKnownCoords: getLastKnownCoords,
         getLastKnownHeading: function () {
             return lastHeading;

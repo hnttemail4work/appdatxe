@@ -5,6 +5,7 @@ use App\Http\Controllers\Web\PwaController;
 use App\Http\Controllers\Web\AdminBookingController;
 use App\Http\Controllers\Web\AdminReferralController;
 use App\Http\Controllers\Web\AdminRevenueController;
+use App\Http\Controllers\Web\AdminPricingController;
 use App\Http\Controllers\Web\AdminSettingsController;
 use App\Http\Controllers\Web\AdminUserController;
 use App\Http\Controllers\Web\AdminWalletController;
@@ -24,6 +25,7 @@ use App\Http\Controllers\Web\GuestBookingController;
 use App\Http\Controllers\Web\CustomerAuthController;
 use App\Http\Controllers\Web\CustomerController;
 use App\Http\Controllers\Web\CustomerInboxController;
+use App\Http\Controllers\Web\CustomerWalletController;
 use App\Http\Controllers\Web\TripChatController;
 use App\Support\RoleDashboard;
 use Illuminate\Http\Request;
@@ -49,6 +51,7 @@ Route::post('register', [AuthController::class, 'register']);
 Route::middleware('guest')->group(function () {
     Route::get('login',    [AuthController::class, 'showLogin'])->name('login');
     Route::post('login',   [AuthController::class, 'login']);
+    Route::post('login/check-phone', [AuthController::class, 'checkPhone'])->name('login.checkPhone');
     Route::get('admin/login',  [AdminAuthController::class, 'showLogin'])->name('admin.login');
     Route::post('admin/login', [AdminAuthController::class, 'login']);
     Route::get('dang-ky', [CustomerAuthController::class, 'showRegister'])->name('customer.register');
@@ -104,7 +107,9 @@ Route::get('gioi-thieu', [GuestBookingController::class, 'about'])->name('about'
 Route::middleware(['auth', 'role:customer', 'customer.biometric'])->group(function () {
     Route::get('tai-khoan', [CustomerController::class, 'account'])->name('customer.account');
     Route::post('tai-khoan/cap-nhat', [CustomerController::class, 'updateProfile'])->name('customer.profile.update');
+    Route::post('tai-khoan/thong-tin', [CustomerController::class, 'updateInfo'])->name('customer.info.update');
     Route::post('tai-khoan/hop-thu/doc', [CustomerInboxController::class, 'markRead'])->name('customer.inbox.read');
+    Route::post('tai-khoan/vi/nap', [CustomerWalletController::class, 'deposit'])->name('customer.wallet.deposit');
 });
 Route::middleware(['auth', 'role:customer'])->group(function () {
     Route::get('dat-xe/bat-dau', fn () => redirect()->route('home'))->name('booking.start');
@@ -122,6 +127,8 @@ Route::get('bookings', fn () => redirect()->route('home'));
 Route::get('geocode/reverse', [GeocodeController::class, 'reverse'])->name('geocode.reverse');
 Route::get('geocode/search', [GeocodeController::class, 'search'])->name('geocode.search');
 Route::get('geocode/resolve', [GeocodeController::class, 'resolve'])->name('geocode.resolve');
+Route::get('geocode/direction', [GeocodeController::class, 'direction'])->name('geocode.direction');
+Route::get('geocode/nearby', [GeocodeController::class, 'nearby'])->name('geocode.nearby');
 Route::get('cancellation-reasons', [CancellationReasonController::class, 'index'])->name('cancellationReasons.index');
 
 Route::permanentRedirect('dat-xe', '/');
@@ -168,6 +175,16 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::post('admin/booking-page-settings', [AdminSettingsController::class, 'updateBookingPageSettings'])->name('admin.bookingPageSettings.update');
     Route::post('admin/branding-settings', [AdminSettingsController::class, 'updateBrandingSettings'])->name('admin.brandingSettings.update');
     Route::post('admin/push-settings', [AdminSettingsController::class, 'updatePushSettings'])->name('admin.pushSettings.update');
+    Route::post('admin/pricing-settings', [AdminPricingController::class, 'updateSettings'])->name('admin.pricingSettings.update');
+    Route::post('admin/vehicle-types', [AdminPricingController::class, 'storeVehicleType'])->name('admin.vehicleTypes.store');
+    Route::patch('admin/vehicle-types/{vehicleType}', [AdminPricingController::class, 'updateVehicleType'])->name('admin.vehicleTypes.update');
+    Route::delete('admin/vehicle-types/{vehicleType}', [AdminPricingController::class, 'destroyVehicleType'])->name('admin.vehicleTypes.destroy');
+    Route::post('admin/pricing-surcharges', [AdminPricingController::class, 'storeSurcharge'])->name('admin.pricingSurcharges.store');
+    Route::patch('admin/pricing-surcharges/{surcharge}', [AdminPricingController::class, 'updateSurcharge'])->name('admin.pricingSurcharges.update');
+    Route::delete('admin/pricing-surcharges/{surcharge}', [AdminPricingController::class, 'destroySurcharge'])->name('admin.pricingSurcharges.destroy');
+    Route::post('admin/pricing-tolls', [AdminPricingController::class, 'storeToll'])->name('admin.pricingTolls.store');
+    Route::patch('admin/pricing-tolls/{toll}', [AdminPricingController::class, 'updateToll'])->name('admin.pricingTolls.update');
+    Route::delete('admin/pricing-tolls/{toll}', [AdminPricingController::class, 'destroyToll'])->name('admin.pricingTolls.destroy');
     Route::post('admin/route-distances',      [AdminSettingsController::class, 'updateRouteDistances'])->name('admin.routeDistances.update');
     Route::post('admin/destinations',         [AdminSettingsController::class, 'storeDestination'])->name('admin.destinations.store');
     Route::post('admin/destinations/{tripRoute}/show', [AdminSettingsController::class, 'showDestination'])->name('admin.destinations.show');
@@ -183,9 +200,13 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::get('admin/revenue', [AdminRevenueController::class, 'revenueReport'])->name('admin.revenue');
 
     Route::get('admin/users', [AdminUserController::class, 'index'])->name('admin.users');
+    Route::get('admin/users/{user}/edit', [AdminUserController::class, 'edit'])->name('admin.users.edit');
+    Route::patch('admin/users/{user}', [AdminUserController::class, 'update'])->name('admin.users.update');
+    Route::post('admin/users/{user}/photos', [AdminUserController::class, 'uploadPhotos'])->name('admin.users.photos');
     Route::post('admin/users/{user}/deactivate', [AdminUserController::class, 'deactivate'])->name('admin.users.deactivate');
     Route::post('admin/users/{user}/activate', [AdminUserController::class, 'activate'])->name('admin.users.activate');
     Route::post('admin/users/{user}/reject', [AdminUserController::class, 'reject'])->name('admin.users.reject');
+    Route::delete('admin/users/{user}/rejection-note', [AdminUserController::class, 'clearRejectionNote'])->name('admin.users.rejection-note.destroy');
     Route::post('admin/users/{user}/reset-password', [AdminUserController::class, 'resetPassword'])->name('admin.users.resetPassword');
     Route::post('admin/users/changes/{change}/approve', [AdminUserController::class, 'approveChange'])->name('admin.users.changes.approve');
     Route::post('admin/users/changes/{change}/reject', [AdminUserController::class, 'rejectChange'])->name('admin.users.changes.reject');
@@ -222,4 +243,8 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::post('admin/wallet-transactions/{transaction}/approve', [AdminWalletController::class, 'approveDeposit'])->name('admin.walletTransactions.approve');
     Route::post('admin/wallet-transactions/{transaction}/reject', [AdminWalletController::class, 'rejectDeposit'])->name('admin.walletTransactions.reject');
     Route::post('admin/wallet-transactions/approve-bulk', [AdminWalletController::class, 'approveDepositsBulk'])->name('admin.walletTransactions.approveBulk');
+
+    Route::get('admin/customer-wallet', [AdminWalletController::class, 'customerWallet'])->name('admin.customerWallet');
+    Route::post('admin/customer-wallet-transactions/{transaction}/approve', [AdminWalletController::class, 'approveCustomerDeposit'])->name('admin.customerWallet.approve');
+    Route::post('admin/customer-wallet-transactions/{transaction}/reject', [AdminWalletController::class, 'rejectCustomerDeposit'])->name('admin.customerWallet.reject');
 });

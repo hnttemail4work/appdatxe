@@ -15,6 +15,9 @@ $completedTrips = $completedTrips ?? collect();
                     <th>Chuyến</th>
                     <th>Mã TX</th>
                     <th>Doanh thu</th>
+                    <th>Trước giảm</th>
+                    <th>Giảm giá</th>
+                    <th>Phụ phí</th>
                     <th>Phí app</th>
                     <th>Mã GT</th>
                     <th>Hoa hồng GT</th>
@@ -50,6 +53,29 @@ $completedTrips = $completedTrips ?? collect();
                         @endif
                     </td>
                     <td class="fw-semibold">{{ number_format($booking->tripRevenueAmount(), 0, ',', '.') }} đ</td>
+                    <td class="small cell-muted">
+                        @if($booking->price_subtotal)
+                            {{ number_format((int) $booking->price_subtotal, 0, ',', '.') }} đ
+                        @else
+                            —
+                        @endif
+                    </td>
+                    <td class="small cell-muted">
+                        @if((int) ($booking->referral_discount_amount ?? 0) > 0)
+                            −{{ number_format((int) $booking->referral_discount_amount, 0, ',', '.') }} đ
+                        @else
+                            —
+                        @endif
+                    </td>
+                    <td class="small cell-muted">
+                        @php
+                            $surchargeTotal = (int) ($booking->surcharge_holiday ?? 0)
+                                + (int) ($booking->surcharge_peak ?? 0)
+                                + (int) ($booking->surcharge_rain ?? 0)
+                                + (int) ($booking->toll_amount ?? 0);
+                        @endphp
+                        {{ $surchargeTotal > 0 ? number_format($surchargeTotal, 0, ',', '.').' đ' : '—' }}
+                    </td>
                     <td class="small">
                         {{ number_format($booking->platformFeeAmount(), 0, ',', '.') }} đ
                     </td>

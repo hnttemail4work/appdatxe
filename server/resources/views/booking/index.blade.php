@@ -39,12 +39,6 @@ $platformHotlinePhone = (string) config('app.contact_phone');
     @include('partials.booking-active-session')
 
     <div id="booking-home-surface">
-        <section class="be-home-topbar grab-home-topbar" aria-label="Trang đặt xe">
-            <div>
-                <p class="grab-home-topbar__eyebrow">Gọi xe</p>
-            </div>
-        </section>
-
         @if(($appliedReferral ?? null) || ($prefillReferral ?? '') !== '')
         <div class="grab-home-referral @if(($prefillReferral ?? '') !== '' && ! ($appliedReferral ?? null)) grab-home-referral--warning @endif mb-3">
             @if($appliedReferral ?? null)

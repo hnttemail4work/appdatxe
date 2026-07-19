@@ -5,17 +5,22 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Controller;
 use App\Models\CustomerProfileChangeRequest;
 use App\Models\User;
+use App\Services\CustomerDocumentService;
 use App\Services\CustomerProfileChangeService;
+use App\Support\AdminIdentityApproval;
 use App\Support\DriverDefaultPassword;
 use App\Support\PageList;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
-/** Quản lý tài khoản khách hàng (duyệt đăng ký / vô hiệu hóa / duyệt cập nhật hồ sơ). */
+/** Quản lý tài khoản khách hàng (duyệt đăng ký / chỉnh hồ sơ / duyệt cập nhật). */
 class AdminUserController extends Controller
 {
     public function __construct(
         private readonly CustomerProfileChangeService $profileChanges,
+        private readonly CustomerDocumentService $documents,
     ) {
     }
 
@@ -33,8 +38,14 @@ class AdminUserController extends Controller
 
         if ($status === 'pending') {
             $query->where('approval_status', User::APPROVAL_PENDING);
-        } elseif (in_array($status, ['active', 'inactive', 'suspended'], true)) {
-            $query->where('status', $status);
+        } elseif ($status === 'rejected') {
+            $query->where('approval_status', User::APPROVAL_REJECTED);
+        } elseif ($status === 'active') {
+            $query->where('approval_status', User::APPROVAL_APPROVED)
+                ->where('status', 'active');
+        } elseif ($status === 'suspended') {
+            $query->where('approval_status', User::APPROVAL_APPROVED)
+                ->whereIn('status', ['suspended', 'inactive']);
         }
 
         if ($q !== '') {
@@ -54,41 +65,172 @@ class AdminUserController extends Controller
         ]);
     }
 
+    public function edit(User $user)
+    {
+        $this->assertManagedCustomer($user);
+
+        $pendingChange = $this->profileChanges->pendingFor($user);
+
+        return view('admin.users.edit', [
+            'user'          => $user,
+            'pendingChange' => $pendingChange,
+        ]);
+    }
+
+    public function update(Request $request, User $user)
+    {
+        $this->assertManagedCustomer($user);
+
+        if ($user->isCustomerApprovalPending() || $user->approval_status === User::APPROVAL_REJECTED) {
+            return back()->withErrors(['user' => 'Hồ sơ đang chờ duyệt hoặc đã bị từ chối — chưa thể chỉnh sửa.']);
+        }
+
+        $validated = $request->validate([
+            'name'          => ['required', 'string', 'max:255'],
+            'email'         => [
+                'nullable',
+                'email',
+                'max:255',
+                Rule::unique('users', 'email')->ignore($user->id),
+            ],
+            'gender'        => ['nullable', 'in:male,female'],
+            'date_of_birth' => ['nullable', 'date', 'before:today', 'after:1900-01-01'],
+            'address'       => ['nullable', 'string', 'max:500'],
+            'id_number'     => ['nullable', 'string', 'max:20'],
+        ]);
+
+        $email = trim((string) ($validated['email'] ?? ''));
+        $user->fill([
+            'name'          => trim((string) $validated['name']),
+            'email'         => $email !== '' ? $email : null,
+            'gender'        => $validated['gender'] ?? null,
+            'date_of_birth' => $validated['date_of_birth'] ?? null,
+            'address'       => filled($validated['address'] ?? null) ? trim((string) $validated['address']) : null,
+            'id_number'     => filled($validated['id_number'] ?? null) ? trim((string) $validated['id_number']) : null,
+        ])->save();
+
+        return redirect()
+            ->route('admin.users.edit', $user)
+            ->with('success', 'Đã cập nhật thông tin khách hàng.');
+    }
+
+    public function uploadPhotos(Request $request, User $user)
+    {
+        $this->assertManagedCustomer($user);
+
+        if ($user->isCustomerApprovalPending() || $user->approval_status === User::APPROVAL_REJECTED) {
+            return back()->withErrors(['user' => 'Hồ sơ đang chờ duyệt hoặc đã bị từ chối — chưa thể cập nhật ảnh.']);
+        }
+
+        try {
+            $updates = $this->documents->storeIdCardFiles($user, $request, required: false);
+        } catch (ValidationException $e) {
+            return back()->withErrors($e->errors());
+        }
+
+        if ($updates === []) {
+            return back()->withErrors(['photos' => 'Chọn ít nhất một ảnh CCCD để lưu.']);
+        }
+
+        $user->forceFill($updates)->save();
+
+        return redirect()
+            ->route('admin.users.edit', ['user' => $user, 'tab' => 'photos'])
+            ->with('success', 'Đã cập nhật ảnh CCCD.');
+    }
+
     public function deactivate(User $user)
     {
         $this->assertManagedCustomer($user);
 
-        if ($user->status === 'inactive' && $user->approval_status !== User::APPROVAL_PENDING) {
-            return back()->with('success', 'Tài khoản đã ở trạng thái vô hiệu hóa.');
+        if ($user->approval_status !== User::APPROVAL_APPROVED) {
+            return back()->withErrors(['user' => 'Chỉ tạm ngưng khách đã được duyệt.']);
         }
 
-        $user->update(['status' => 'inactive']);
+        if (! $user->isAccountRunning()) {
+            return back()->with('success', 'Tài khoản đang tạm ngưng.');
+        }
 
-        return back()->with('success', 'Đã vô hiệu hóa tài khoản khách. Họ sẽ không đăng nhập được.');
+        $user->update(['status' => 'suspended']);
+
+        return back()->with('success', 'Đã tạm ngưng tài khoản khách.');
     }
 
-    public function activate(User $user)
+    public function activate(Request $request, User $user)
     {
         $this->assertManagedCustomer($user);
+
+        // Duyệt đăng ký lần đầu: bắt buộc họ tên / ngày sinh / giới tính (scan CCCD hoặc nhập tay).
+        if ($user->approval_status === User::APPROVAL_PENDING) {
+            $validated = $request->validate(
+                AdminIdentityApproval::rules(),
+                AdminIdentityApproval::messages(),
+            );
+            $user->update(array_merge(
+                AdminIdentityApproval::userAttributes($validated),
+                [
+                    'status'              => 'active',
+                    'approval_status'     => User::APPROVAL_APPROVED,
+                    'rejection_reason'    => null,
+                    'rejection_reason_at' => null,
+                ],
+            ));
+
+            return redirect()
+                ->route('admin.users.edit', $user)
+                ->with('success', 'Đã duyệt khách và lưu thông tin từ CCCD.');
+        }
+
+        if ($user->approval_status !== User::APPROVAL_APPROVED) {
+            return back()->withErrors(['user' => 'Chỉ mở lại khách đã được duyệt.']);
+        }
 
         $user->update([
             'status'          => 'active',
             'approval_status' => User::APPROVAL_APPROVED,
         ]);
 
-        return back()->with('success', 'Đã duyệt / kích hoạt tài khoản khách.');
+        return back()->with('success', 'Đã mở lại tài khoản khách.');
     }
 
-    public function reject(User $user)
+    public function reject(Request $request, User $user)
     {
         $this->assertManagedCustomer($user);
 
-        $user->update([
-            'status'          => 'inactive',
-            'approval_status' => User::APPROVAL_REJECTED,
+        if (! $user->isCustomerApprovalPending()) {
+            return back()->withErrors(['user' => 'Khách này không còn ở trạng thái chờ duyệt.']);
+        }
+
+        $validated = $request->validate([
+            'rejection_reason' => ['required', 'string', 'min:5', 'max:1000'],
         ]);
 
-        return back()->with('success', 'Đã từ chối hồ sơ đăng ký khách.');
+        $user->update([
+            'status'              => 'inactive',
+            'approval_status'     => User::APPROVAL_REJECTED,
+            'rejection_reason'    => trim($validated['rejection_reason']),
+            'rejection_reason_at' => now(),
+        ]);
+
+        return redirect()
+            ->route('admin.users.edit', $user)
+            ->with('success', 'Đã từ chối hồ sơ đăng ký khách.');
+    }
+
+    public function clearRejectionNote(User $user)
+    {
+        $this->assertManagedCustomer($user);
+
+        if (! $user->hasRejectionNote()) {
+            return back()->withErrors(['user' => 'Không có ghi chú từ chối để xóa.']);
+        }
+
+        $user->update([
+            'rejection_reason'    => null,
+            'rejection_reason_at' => null,
+        ]);
+
+        return back()->with('success', 'Đã xóa ghi chú từ chối.');
     }
 
     public function approveChange(CustomerProfileChangeRequest $change)
@@ -97,7 +239,9 @@ class AdminUserController extends Controller
 
         $this->profileChanges->approve($change, Auth::user());
 
-        return back()->with('success', 'Đã duyệt cập nhật thông tin khách.');
+        return redirect()
+            ->route('admin.users.edit', $change->user_id)
+            ->with('success', 'Đã duyệt cập nhật thông tin khách.');
     }
 
     public function rejectChange(Request $request, CustomerProfileChangeRequest $change)
@@ -107,7 +251,9 @@ class AdminUserController extends Controller
         $note = trim((string) $request->input('admin_note', ''));
         $this->profileChanges->reject($change, Auth::user(), $note !== '' ? $note : null);
 
-        return back()->with('success', 'Đã từ chối yêu cầu cập nhật thông tin.');
+        return redirect()
+            ->route('admin.users.edit', $change->user_id)
+            ->with('success', 'Đã từ chối yêu cầu cập nhật thông tin.');
     }
 
     public function resetPassword(User $user)

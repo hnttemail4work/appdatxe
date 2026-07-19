@@ -20,6 +20,10 @@ class AdminRevenueService
      * @return array{
      *   trips: int,
      *   revenue: int,
+     *   revenue_before_discount: int,
+     *   referral_discount: int,
+     *   surcharges: int,
+     *   tolls: int,
      *   app_fee: int,
      *   referral_commission: int,
      *   app_percent: float,
@@ -30,15 +34,34 @@ class AdminRevenueService
     {
         $trips = 0;
         $revenue = 0;
+        $revenueBeforeDiscount = 0;
+        $referralDiscount = 0;
+        $surcharges = 0;
+        $tolls = 0;
         $appFee = 0;
         $referralCommission = 0;
 
         $this->completedTripsQuery()
             ->with('appliedReferralCode')
-            ->chunkById(200, function ($bookings) use (&$trips, &$revenue, &$appFee, &$referralCommission): void {
+            ->chunkById(200, function ($bookings) use (
+                &$trips,
+                &$revenue,
+                &$revenueBeforeDiscount,
+                &$referralDiscount,
+                &$surcharges,
+                &$tolls,
+                &$appFee,
+                &$referralCommission,
+            ): void {
                 foreach ($bookings as $booking) {
                     $trips++;
                     $revenue += $booking->tripRevenueAmount();
+                    $revenueBeforeDiscount += (int) ($booking->price_subtotal ?? $booking->tripRevenueAmount());
+                    $referralDiscount += (int) ($booking->referral_discount_amount ?? 0);
+                    $surcharges += (int) ($booking->surcharge_holiday ?? 0)
+                        + (int) ($booking->surcharge_peak ?? 0)
+                        + (int) ($booking->surcharge_rain ?? 0);
+                    $tolls += (int) ($booking->toll_amount ?? 0);
                     $appFee += $booking->projectedPlatformFeeAmount();
                     $referralCommission += $booking->referrerCommissionAmount();
                 }
@@ -47,6 +70,10 @@ class AdminRevenueService
         return [
             'trips'                    => $trips,
             'revenue'                  => $revenue,
+            'revenue_before_discount'  => $revenueBeforeDiscount,
+            'referral_discount'        => $referralDiscount,
+            'surcharges'               => $surcharges,
+            'tolls'                    => $tolls,
             'app_fee'                  => $appFee,
             'referral_commission'      => $referralCommission,
             'app_percent'              => PlatformFees::appCommissionPercent(),

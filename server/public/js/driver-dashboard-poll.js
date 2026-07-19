@@ -79,6 +79,12 @@
                     window.DriverLocationSave.setPickupProximityLine(data.pickup_proximity_line || '');
                 }
 
+                if (window.DriverLocationGps && window.DriverLocationGps.setTripTracking) {
+                    window.DriverLocationGps.setTripTracking(
+                        !!(data.driver_trip_active || data.driver_trip_upcoming || data.availability_status === 'on_trip')
+                    );
+                }
+
                 if ((data.availability_status === 'available' || data.availability_status === 'on_trip')
                     && window.DriverLocationGps
                     && window.DriverLocationGps.ensureFreshLocation) {

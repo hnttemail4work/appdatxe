@@ -12,16 +12,15 @@
             <div class="auth-field-error" role="alert">{{ $message }}</div>
         @enderror
 
-        <form method="POST" action="{{ route('auth.register.otp.verify') }}" id="register-otp-form">
+        <form method="POST" action="{{ route('auth.register.otp.verify') }}" id="register-otp-form" data-pin-autosubmit="1">
             @csrf
             @include('partials.auth-pin-row', [
                 'pinName' => 'code',
                 'pinId' => 'register-otp',
                 'pinLabel' => 'Mã OTP',
                 'pinErrorBag' => 'code',
-                'nextType' => 'submit',
-                'nextAttr' => '',
-                'nextAria' => 'Xác minh',
+                'hideNext' => true,
+                'pinAutoSubmit' => true,
             ])
         </form>
 

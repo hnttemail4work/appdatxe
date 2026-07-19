@@ -22,6 +22,7 @@
 @if(in_array('account', $sections, true) || in_array('contact', $sections, true))
 <div class="register-section" data-field-section="account">
     <div class="row g-2">
+        @if(($context ?? '') !== 'register')
         <div class="col-12">
             <label class="form-label">Họ tên {!! $star('name') !!}</label>
             <input type="text" name="name" value="{{ old('name', $user->name ?? '') }}"
@@ -30,6 +31,7 @@
                    placeholder="Nguyễn Văn A">
             <div class="invalid-feedback" data-client-feedback="name">@error('name'){{ $message }}@enderror</div>
         </div>
+        @endif
         <div class="col-12">
             <label class="form-label">SĐT {!! $star('phone') !!}</label>
             <input type="tel" name="phone" value="{{ old('phone', $user->phone ?? '') }}"

@@ -17,6 +17,7 @@ class UpdateLocationRequest extends FormRequest
         return [
             'lat'     => ['required', 'numeric', 'between:-90,90'],
             'lng'     => ['required', 'numeric', 'between:-180,180'],
+            'heading' => ['nullable', 'numeric', 'between:0,360'],
             'address' => ['nullable', 'string', 'max:500'],
         ];
     }

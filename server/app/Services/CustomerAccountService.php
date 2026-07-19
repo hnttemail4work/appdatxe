@@ -18,9 +18,14 @@ class CustomerAccountService
     {
         $phone = AuthIdentifier::normalizePhone((string) ($user->phone ?? ''));
 
+        $rawName = trim((string) ($user->name ?? ''));
+        $nameLooksLikePhone = $rawName === ''
+            || $rawName === $phone
+            || (bool) preg_match('/^[\d\s.+()-]+$/', $rawName);
+
         return [
             'id'                   => $user->id,
-            'name'                 => $user->preferredDisplayName(),
+            'name'                 => $nameLooksLikePhone ? '' : $rawName,
             'phone'                => $phone,
             'email'                => $user->emailForForm(),
             'gender'               => $user->gender,
@@ -53,14 +58,17 @@ class CustomerAccountService
         }
 
         $name = trim((string) $user->name);
-        if ($name === '' || $name === $phone) {
-            $name = $phone;
-        }
+        $phoneDigits = preg_replace('/\D+/', '', $phone) ?: '';
+        $nameDigits = preg_replace('/\D+/', '', $name) ?: '';
+        $nameLooksLikePhone = $name === ''
+            || $name === $phone
+            || ($phoneDigits !== '' && $nameDigits === $phoneDigits)
+            || (bool) preg_match('/^[\d\s.+()-]+$/', $name);
 
         return [
-            'passenger_name'   => $name,
+            'passenger_name'   => $nameLooksLikePhone ? '' : $name,
             'contact_phone'    => $phone,
-            'passenger_gender' => in_array($user->gender, ['male', 'female'], true) ? $user->gender : 'male',
+            'passenger_gender' => in_array($user->gender, ['male', 'female'], true) ? $user->gender : '',
             'passenger_age'    => $user->age(),
         ];
     }

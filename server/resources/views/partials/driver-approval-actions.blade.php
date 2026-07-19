@@ -1,22 +1,30 @@
 @php
     $compact = $compact ?? false;
     $rejectFormId = 'driver-reject-form-' . $driver->id;
+    $frontUrl = $driver->photoUrl('photo_id_card');
 @endphp
 
 @if($driver->isPendingApproval() && auth()->user()->role === 'admin')
 
 <div class="driver-approval-actions {{ $compact ? 'driver-approval-actions--compact' : '' }}">
-    <form method="POST" action="{{ route('admin.drivers.approve', $driver) }}" class="d-inline">
+    <form method="POST" action="{{ route('admin.drivers.approve', $driver) }}" class="admin-approve-form">
         @csrf
-        <button class="btn btn-sm btn-primary">Duyệt</button>
+        @include('partials.admin-identity-scan', [
+            'prefix' => 'driver-approve-'.$driver->id,
+            'user' => $driver->user,
+            'frontUrl' => $frontUrl,
+        ])
+        <div class="d-flex flex-wrap gap-2 mt-2">
+            <button class="btn btn-sm btn-primary">Duyệt</button>
+            <button type="button"
+                    class="btn btn-sm btn-outline-danger"
+                    data-driver-reject-toggle
+                    data-target="{{ $rejectFormId }}"
+                    aria-expanded="false">
+                Từ chối
+            </button>
+        </div>
     </form>
-    <button type="button"
-            class="btn btn-sm btn-outline-danger"
-            data-driver-reject-toggle
-            data-target="{{ $rejectFormId }}"
-            aria-expanded="false">
-        Từ chối
-    </button>
 
     <form method="POST"
           action="{{ route('admin.drivers.reject', $driver) }}"

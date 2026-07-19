@@ -2,15 +2,31 @@
 
 namespace App\Support;
 
+use App\Models\VehicleType;
+use Illuminate\Support\Facades\Schema;
+
 /**
- * Hệ số % giá cả xe theo loại xe — chuẩn {@see BASELINE_TYPE} = 100%.
- * Không còn cấu hình admin; dùng mặc định (fallback số chỗ qua {@see VehicleCapacityPricing}).
+ * Hệ số % giá theo loại xe — đọc từ bảng vehicle_types (fallback const cũ).
  */
 class VehicleTypePricing
 {
     public const BASELINE_TYPE = 'sedan_4';
 
     public const DEFAULT_STEP_PERCENT = 1.5;
+
+    public static function normalizeTypeKey(?string $type): ?string
+    {
+        if ($type === null || $type === '') {
+            return null;
+        }
+
+        return match ($type) {
+            'sedan' => 'sedan_4',
+            'suv' => 'suv_7',
+            'limousine' => 'limousine_7',
+            default => $type,
+        };
+    }
 
     /** @return list<string> */
     public static function priceableKeys(): array
@@ -24,57 +40,28 @@ class VehicleTypePricing
     /** @return array<string, string> */
     public static function labels(): array
     {
-        $out = [];
-        foreach (self::priceableKeys() as $key) {
-            $out[$key] = DriverVehicleOptions::label($key);
+        return DriverVehicleOptions::labels();
+    }
+
+    public static function percentForType(?string $type): float
+    {
+        $type = self::normalizeTypeKey($type);
+
+        if ($type === null || $type === '' || $type === 'other') {
+            return 100.0;
         }
 
-        return $out;
-    }
-
-    public static function stepPercent(): float
-    {
-        return self::DEFAULT_STEP_PERCENT;
-    }
-
-    public static function tierIndex(string $type): int
-    {
-        $keys = self::priceableKeys();
-        $typeIdx = array_search($type, $keys, true);
-        $baseIdx = array_search(self::BASELINE_TYPE, $keys, true);
-
-        if ($typeIdx === false) {
-            return 0;
+        $row = self::findType($type);
+        if ($row) {
+            return max(0.0, (float) $row->price_percent);
         }
 
-        return max(0, $typeIdx - ($baseIdx !== false ? $baseIdx : 0));
-    }
-
-    public static function defaultPercentForType(string $type): float
-    {
         $seats = DriverVehicleOptions::seatsFor($type);
         if ($seats !== null) {
             return VehicleCapacityPricing::percentForCapacity($seats);
         }
 
-        return round(100.0 + self::tierIndex($type) * self::stepPercent(), 2);
-    }
-
-    public static function percentForType(?string $type): float
-    {
-        if ($type === null || $type === '' || $type === 'other') {
-            return 100.0;
-        }
-
-        // Legacy family trên catalog cũ — map sang loại chuẩn cùng family.
-        $type = match ($type) {
-            'sedan' => 'sedan_4',
-            'suv' => 'suv_7',
-            'limousine' => 'limousine_7',
-            default => $type,
-        };
-
-        return self::defaultPercentForType($type);
+        return 100.0;
     }
 
     public static function multiplierForType(?string $type): float
@@ -82,9 +69,10 @@ class VehicleTypePricing
         return self::percentForType($type) / 100.0;
     }
 
-    /** Ưu tiên loại xe; không có thì fallback số chỗ. */
     public static function multiplierFor(?string $vehicleType, ?int $capacity = null): float
     {
+        $vehicleType = self::normalizeTypeKey($vehicleType);
+
         if (filled($vehicleType) && $vehicleType !== 'other') {
             return self::multiplierForType($vehicleType);
         }
@@ -105,5 +93,33 @@ class VehicleTypePricing
         }
 
         return $out;
+    }
+
+    private static function findType(string $key): ?VehicleType
+    {
+        if (! self::tableReady()) {
+            return null;
+        }
+
+        try {
+            return VehicleType::activeCached()->firstWhere('key', $key)
+                ?? VehicleType::allCached()->firstWhere('key', $key);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private static function tableReady(): bool
+    {
+        static $ready = null;
+        if ($ready !== null) {
+            return $ready;
+        }
+
+        try {
+            return $ready = Schema::hasTable('vehicle_types');
+        } catch (\Throwable) {
+            return $ready = false;
+        }
     }
 }

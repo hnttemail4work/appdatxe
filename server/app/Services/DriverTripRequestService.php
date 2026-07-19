@@ -901,10 +901,10 @@ class DriverTripRequestService
         return false;
     }
 
-    /** Treo đơn tìm TX quá 15 phút — báo admin, không hủy; ngừng đẩy cuốc cho tài xế. */
+    /** Hủy đơn Đặt ngay tìm TX quá 10 phút — không còn treo admin. */
     public function hangOverdueDriverSearches(): int
     {
-        $flagged = 0;
+        $cancelled = 0;
 
         Booking::query()
             ->whereNotIn('booking_status', ['cancelled', 'rejected'])
@@ -912,30 +912,20 @@ class DriverTripRequestService
             ->whereHas('schedule', fn ($q) => $q->whereNull('driver_id'))
             ->with('schedule')
             ->orderBy('id')
-            ->chunkById(50, function ($bookings) use (&$flagged): void {
+            ->chunkById(50, function ($bookings) use (&$cancelled): void {
                 foreach ($bookings as $booking) {
-                    if ($this->hangDriverSearchIfOverdue($booking->fresh(['schedule']))) {
-                        $flagged++;
+                    if ($this->cancelCustomerSearchIfOverdue($booking->fresh(['schedule']))) {
+                        $cancelled++;
                     }
                 }
             });
 
-        return $flagged;
+        return $cancelled;
     }
 
     public function hangDriverSearchIfOverdue(Booking $booking): bool
     {
-        if (! $this->hasExceededCustomerSearchDeadline($booking)) {
-            return false;
-        }
-
-        if ($booking->needs_operator_help_at) {
-            return false;
-        }
-
-        app(BookingWorkflowService::class)->flagOperatorHelpNeeded($booking, 'driver_search_timeout');
-
-        return true;
+        return $this->cancelCustomerSearchIfOverdue($booking);
     }
 
     public function customerSearchStartedAt(Booking $booking): \Carbon\Carbon
@@ -956,7 +946,7 @@ class DriverTripRequestService
             return false;
         }
 
-        // TODO (Fix Flow): Chỉ Đặt Ngay — treo admin sau 10 phút; Đặt Lịch dùng T-30.
+        // Đặt ngay: tự hủy sau 10 phút; Đặt lịch dùng T-30 (cancelScheduledSearchTimeout).
         if (! $booking->isOnDemandPickup()) {
             return false;
         }
@@ -967,7 +957,21 @@ class DriverTripRequestService
 
     public function cancelCustomerSearchIfOverdue(Booking $booking): bool
     {
-        return $this->hangDriverSearchIfOverdue($booking);
+        if (! $this->hasExceededCustomerSearchDeadline($booking)) {
+            return false;
+        }
+
+        if (in_array($booking->booking_status, ['cancelled', 'rejected'], true)
+            || $booking->trip_status === 'cancelled'
+            || $booking->hasDriverAccepted()) {
+            return false;
+        }
+
+        $workflow = app(BookingWorkflowService::class);
+        $workflow->cancelSearchTimeout($booking);
+        $workflow->notifyCustomerDriverSearchTimeout($booking->fresh());
+
+        return true;
     }
 
     /** Chưa có tài xế nào bật GPS — chờ share vị trí. */

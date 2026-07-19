@@ -30,7 +30,6 @@
                             <circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5" stroke-linecap="round"/>
                         </svg>
                         <input type="text" class="address-map-search-input" id="address-map-search"
-                               placeholder="Số nhà, tên đường, phường, quận…"
                                autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
                                inputmode="search" enterkeyhint="search">
                         <button type="button" class="address-map-search-clear d-none" id="address-map-search-clear" aria-label="Xóa từ khóa">×</button>

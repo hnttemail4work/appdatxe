@@ -274,6 +274,7 @@ class GuestBookingController extends Controller
     public function checkDuplicateBooking(CheckDuplicateBookingRequest $request)
     {
         $this->workflow->expirePastPickupWithoutDriver();
+        app(\App\Services\DriverTripRequestService::class)->hangOverdueDriverSearches();
 
         $validated = $request->validated();
 
@@ -331,14 +332,8 @@ class GuestBookingController extends Controller
     {
         $validated = $request->validated();
 
-        $template = $this->tripListing->resolveTemplateForCapacity(
-            (int) $validated['capacity'],
-            $validated['vehicle_type'] ?? null,
-        );
-
-        if (! $template || ! $template->vehicle) {
-            return response()->json(['message' => 'Loại xe không khả dụng.'], 422);
-        }
+        $capacity = (int) $validated['capacity'];
+        $vehicleType = $validated['vehicle_type'] ?? null;
 
         $pickupLat = (float) $validated['pickup_lat'];
         $pickupLng = (float) $validated['pickup_lng'];
@@ -346,38 +341,46 @@ class GuestBookingController extends Controller
         $dropoffLng = (float) $validated['dropoff_lng'];
         $addresses = $this->resolveRouteAddresses($validated, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
 
-        $quote = $this->pricing->quote(
-            $template,
+        $at = null;
+        if (! empty($validated['pickup_time'])) {
+            try {
+                $at = \Carbon\Carbon::parse(
+                    \App\Support\DepartureTimeDisplay::storageValue((string) $validated['pickup_time']),
+                    config('app.timezone', 'Asia/Ho_Chi_Minh'),
+                );
+            } catch (\Throwable) {
+                $at = now();
+            }
+        }
+
+        $priceQuote = $this->pricing->quoteForVehicleType(
             $addresses['pickup_address'],
             $addresses['dropoff_address'],
+            $capacity,
+            $vehicleType,
             $pickupLat,
             $pickupLng,
             $dropoffLat,
             $dropoffLng,
+            $at,
         );
 
-        $subtotal = (int) $quote['whole_car_price'];
         $referral = $this->referralCodes->resolveUsableCode(session('guest_referral_code'));
         $discountMeta = $this->referralCodes->discountMeta(
             $referral,
             $validated['contact_phone'] ?? null,
         );
         $discountPercent = $discountMeta['eligible'] ? $discountMeta['percent'] : 0.0;
-        $total = $this->referralCodes->applyDiscount((float) $subtotal, $discountPercent);
-        $discountAmount = max(0, $subtotal - (int) $total);
+        $priced = $priceQuote->withReferral($discountPercent);
 
-        return response()->json(array_merge($quote, [
-            'subtotal'                  => $subtotal,
+        return response()->json(array_merge($priced->toApiArray(), [
             'referral_code'             => $discountMeta['code'],
-            'referral_discount_percent' => $discountPercent,
-            'referral_discount_amount'  => $discountAmount,
             'referral_discount_label'   => $discountMeta['source_label'],
             'referral_eligible'         => $discountMeta['eligible'] && $discountPercent > 0,
             'referral_attribution_only' => $discountMeta['attribution_only'] ?? false,
             'referral_ineligible_reason'=> $discountMeta['reason'],
-            'total_after_discount'      => (int) $total,
-            'capacity_label'            => VehicleCapacityOptions::label((int) $template->vehicle->capacity),
-            'type_label'                => \App\Support\VehicleDisplay::typeLabel($template->vehicle->type),
+            'capacity_label'            => VehicleCapacityOptions::label($capacity),
+            'type_label'                => \App\Support\VehicleDisplay::typeLabel($vehicleType),
         ]));
     }
 
@@ -400,6 +403,13 @@ class GuestBookingController extends Controller
         $pickupLng = (float) $validated['pickup_lng'];
         $dropoffLat = (float) $validated['dropoff_lat'];
         $dropoffLng = (float) $validated['dropoff_lng'];
+
+        if ($this->haversineMeters($pickupLat, $pickupLng, $dropoffLat, $dropoffLng) < 200) {
+            return $this->bookingFormRedirect()
+                ->withErrors(['booking' => 'Không được đặt xe: điểm đi quá gần điểm trả (dưới 200m).'])
+                ->withInput();
+        }
+
         $addresses = $this->resolveRouteAddresses($validated, $pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
         $validated['pickup_address'] = $addresses['pickup_address'];
         $validated['dropoff_address'] = $addresses['dropoff_address'];
@@ -487,9 +497,27 @@ class GuestBookingController extends Controller
         }
 
         $authUser = auth()->user();
+        $paymentUpdates = [
+            'payment_method' => ($validated['payment_method'] ?? 'cash') === 'bank_transfer'
+                ? 'bank_transfer'
+                : 'cash',
+        ];
         if ($authUser && $authUser->role === 'customer') {
-            $booking->update(['customer_id' => $authUser->id]);
+            $paymentUpdates['customer_id'] = $authUser->id;
         }
+        if (($validated['payment_method'] ?? '') === 'bank_transfer' && $request->hasFile('payment_proof')) {
+            try {
+                $paymentUpdates['payment_proof_path'] = app(\App\Services\ImageCompressService::class)->storeOptimized(
+                    $request->file('payment_proof'),
+                    'booking-payment-proofs/' . $booking->id,
+                    'proof',
+                    1280,
+                );
+            } catch (\Throwable) {
+                // Không chặn đặt xe nếu nén ảnh lỗi — vẫn lưu method.
+            }
+        }
+        $booking->update($paymentUpdates);
 
         session()->forget('guest_referral_code');
 
@@ -541,6 +569,18 @@ class GuestBookingController extends Controller
             'pickup_address'  => $pickup,
             'dropoff_address' => $dropoff,
         ];
+    }
+
+    private function haversineMeters(float $lat1, float $lng1, float $lat2, float $lng2): float
+    {
+        $toRad = static fn (float $deg): float => $deg * M_PI / 180;
+        $earth = 6371000.0;
+        $dLat = $toRad($lat2 - $lat1);
+        $dLng = $toRad($lng2 - $lng1);
+        $a = sin($dLat / 2) ** 2
+            + cos($toRad($lat1)) * cos($toRad($lat2)) * sin($dLng / 2) ** 2;
+
+        return $earth * 2 * atan2(sqrt($a), sqrt(1 - $a));
     }
 
     private function bookingFormRedirect(): \Illuminate\Http\RedirectResponse

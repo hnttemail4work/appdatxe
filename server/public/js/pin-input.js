@@ -38,6 +38,31 @@
     if (first) first.focus();
   }
 
+  function maybeAutoSubmit(root, value) {
+    if (!/^\d{6}$/.test(value || '')) return;
+    var form = root.closest('form');
+    if (!form) return;
+    if (form.getAttribute('data-pin-autosubmit') !== '1' && root.getAttribute('data-pin-autosubmit') !== '1') {
+      return;
+    }
+    if (form.dataset.pinSubmitting === '1') return;
+    form.dataset.pinSubmitting = '1';
+    window.setTimeout(function () {
+      try {
+        if (typeof form.requestSubmit === 'function') {
+          form.requestSubmit();
+        } else {
+          form.submit();
+        }
+      } catch (e) {
+        form.submit();
+      }
+      window.setTimeout(function () {
+        form.dataset.pinSubmitting = '0';
+      }, 1500);
+    }, 40);
+  }
+
   function bind(root) {
     if (!root || root.dataset.pinBound === '1') return;
     root.dataset.pinBound = '1';
@@ -51,9 +76,11 @@
         if (digit && boxes[index + 1]) {
           boxes[index + 1].focus();
         }
+        var value = (root.querySelector('[data-pin-value]') || {}).value || '';
         root.dispatchEvent(new CustomEvent('pin:change', {
-          detail: { value: (root.querySelector('[data-pin-value]') || {}).value || '' },
+          detail: { value: value },
         }));
+        maybeAutoSubmit(root, value);
       });
 
       box.addEventListener('keydown', function (e) {
@@ -82,6 +109,7 @@
         root.dispatchEvent(new CustomEvent('pin:change', {
           detail: { value: d },
         }));
+        maybeAutoSubmit(root, d);
       });
 
       box.addEventListener('focus', function () {

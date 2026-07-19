@@ -30,19 +30,73 @@ class AuthController extends Controller
         return view('auth.login');
     }
 
+    /** JSON: missing | inactive | active — dùng trước bước nhập PIN. */
+    public function checkPhone(Request $request)
+    {
+        $raw = (string) $request->input('phone', '');
+        $phone = AuthIdentifier::normalizePhone($raw);
+
+        if ($phone === '' || ! preg_match('/^0\d{8,10}$/', preg_replace('/\D/', '', $raw))) {
+            return response()->json([
+                'status'  => 'invalid',
+                'message' => 'Số điện thoại không hợp lệ.',
+            ], 422);
+        }
+
+        $user = AuthIdentifier::findUserByPhone($phone);
+
+        if (! $user) {
+            return response()->json([
+                'status'       => 'missing',
+                'register_url' => route('customer.register', ['phone' => $phone]),
+            ]);
+        }
+
+        if ($user->role === 'admin') {
+            return response()->json([
+                'status'  => 'inactive',
+                'message' => 'Tài khoản quản trị vui lòng đăng nhập tại /admin/login.',
+            ]);
+        }
+
+        if ($block = $user->loginBlockMessage()) {
+            return response()->json([
+                'status'  => 'inactive',
+                'message' => $block,
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'active',
+            'role'   => $user->role,
+        ]);
+    }
+
     public function login(LoginRequest $request)
     {
         $validated = $request->validated();
         $phone = AuthIdentifier::normalizePhone($validated['phone']);
         $user = AuthIdentifier::findUserByPhone($phone);
 
-        if ($user && $user->role === 'admin') {
+        if (! $user) {
+            return redirect()
+                ->route('customer.register', ['phone' => $phone])
+                ->with('info', 'Số điện thoại chưa có tài khoản. Vui lòng đăng ký.');
+        }
+
+        if ($user->role === 'admin') {
             return back()
                 ->withErrors(['login' => 'Tài khoản quản trị vui lòng đăng nhập tại /admin/login.'])
                 ->withInput($request->only('phone'));
         }
 
-        if ($user && $this->loginGuard->isLocked($user)) {
+        if ($block = $user->loginBlockMessage()) {
+            return back()
+                ->withErrors(['login' => $block])
+                ->withInput($request->only('phone'));
+        }
+
+        if ($this->loginGuard->isLocked($user)) {
             return back()
                 ->withErrors(['login' => $this->loginGuard->lockMessage($user)])
                 ->withInput($request->only('phone'));
@@ -51,27 +105,21 @@ class AuthController extends Controller
         $authenticated = WebAuth::attemptPhone($phone, $validated['password']);
 
         if (! $authenticated) {
-            if ($user) {
-                $this->loginGuard->recordFailure($user);
-                $user->refresh();
+            $this->loginGuard->recordFailure($user);
+            $user->refresh();
 
-                if ($this->loginGuard->isLocked($user)) {
-                    return back()
-                        ->withErrors(['login' => $this->loginGuard->lockMessage($user)])
-                        ->withInput($request->only('phone'));
-                }
-
-                $left = $this->loginGuard->remainingAttempts($user);
-
+            if ($this->loginGuard->isLocked($user)) {
                 return back()
-                    ->withErrors([
-                        'login' => 'PIN không đúng. Còn '.$left.' lần thử trước khi tạm khóa.',
-                    ])
+                    ->withErrors(['login' => $this->loginGuard->lockMessage($user)])
                     ->withInput($request->only('phone'));
             }
 
+            $left = $this->loginGuard->remainingAttempts($user);
+
             return back()
-                ->withErrors(['login' => 'Số điện thoại hoặc PIN không đúng'])
+                ->withErrors([
+                    'login' => 'PIN không đúng. Còn '.$left.' lần thử trước khi tạm khóa.',
+                ])
                 ->withInput($request->only('phone'));
         }
 

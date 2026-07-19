@@ -12,7 +12,7 @@ class RoleDashboard
         return match ($role) {
             'admin' => route('admin.bookings'),
             'driver'   => route('driver.dashboard'),
-            'customer' => route('customer.account'),
+            'customer' => route('customer.account', ['tab' => 'account']),
             default    => route('home'),
         };
     }

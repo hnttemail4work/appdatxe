@@ -2,18 +2,18 @@
 
 @section('console')
 @php
-$allowedAdminTabs = ['settings', 'account', 'appearance'];
+$allowedAdminTabs = ['fees', 'settings', 'account', 'appearance'];
 $tabFromRequest = request('tab');
-if ($tabFromRequest === 'bank' || $tabFromRequest === 'fees') {
+if ($tabFromRequest === 'bank') {
     $tabFromRequest = 'settings';
 }
 $tabFromCookie = request()->cookie('admin-main_tab');
-if ($tabFromCookie === 'bank' || $tabFromCookie === 'fees') {
+if ($tabFromCookie === 'bank') {
     $tabFromCookie = 'settings';
 }
 $adminDefaultTab = in_array($tabFromRequest, $allowedAdminTabs, true)
     ? $tabFromRequest
-    : (in_array($tabFromCookie, $allowedAdminTabs, true) ? $tabFromCookie : 'settings');
+    : (in_array($tabFromCookie, $allowedAdminTabs, true) ? $tabFromCookie : 'fees');
 if ($errors->hasAny(['current_password', 'password', 'password_confirmation'])) {
     $adminDefaultTab = 'account';
 }
@@ -32,11 +32,16 @@ if ($errors->hasAny(['current_password', 'password', 'password_confirmation'])) 
                     'prefix' => 'admin-main',
                     'activeKey' => $adminDefaultTab,
                     'tabs' => [
+                        ['key' => 'fees', 'label' => 'Tính tiền'],
                         ['key' => 'settings', 'label' => 'Ngân hàng'],
                         ['key' => 'account', 'label' => 'Tài khoản'],
                         ['key' => 'appearance', 'label' => 'Hiển thị'],
                     ],
                 ])
+
+                @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'fees', 'active' => $adminDefaultTab === 'fees'])
+                @include('partials.admin-pricing-panel')
+                @include('partials.screen-tab-pane-end')
 
                 @include('partials.screen-tab-pane', ['prefix' => 'admin-main', 'key' => 'settings', 'active' => $adminDefaultTab === 'settings'])
 

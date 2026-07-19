@@ -93,6 +93,12 @@ class DuplicateBookingService
             'driver_location_shared' => (bool) ($driver['location_shared'] ?? false),
             'driver_movement_confirmed' => (bool) ($booking->schedule?->driverHasConfirmedMovement() ?? false),
             'driver'            => $driver,
+            'wait_progress'     => \App\Support\GuestWaitProgress::forBooking($booking),
+            'booking_status'    => $booking->booking_status,
+            'trip_status'       => $booking->trip_status,
+            'can_cancel'        => ! in_array($booking->booking_status, ['cancelled', 'rejected'], true)
+                && ! in_array($booking->trip_status, ['completed', 'cancelled'], true)
+                && ! $booking->passengerPickedUp(),
         ];
     }
 

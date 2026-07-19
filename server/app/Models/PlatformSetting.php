@@ -21,9 +21,13 @@ class PlatformSetting extends Model
 
     public static function getValue(string $key, mixed $default = null): mixed
     {
-        $setting = static::query()->where('setting_key', $key)->first();
+        try {
+            $setting = static::query()->where('setting_key', $key)->first();
 
-        return $setting?->setting_value ?? $default;
+            return $setting?->setting_value ?? $default;
+        } catch (\Throwable) {
+            return $default;
+        }
     }
 
     public static function setValue(string $key, mixed $value, ?string $group = null): self

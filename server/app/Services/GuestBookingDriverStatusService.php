@@ -26,28 +26,24 @@ class GuestBookingDriverStatusService
         $booking->loadMissing('schedule.route', 'schedule.template', 'schedule.vehicle');
         $schedule = $booking->schedule;
         $acceptance = $booking->driverAcceptanceState();
+
+        // Chỉ hiện thông tin tài xế sau khi TX xác nhận nhận cuốc.
+        if ($acceptance !== 'accepted' || ! $schedule?->driver_id) {
+            return null;
+        }
+
         $profile = $this->resolveGuestDriverProfile($booking);
-
-        if (! $schedule || ! $profile) {
+        if (! $profile) {
             return null;
         }
 
-        if ($acceptance === 'none' && ! $booking->catalogChosenDriverProfile()) {
-            return null;
-        }
-
-        $stage = $schedule->driver_id
-            ? $schedule->resolvedDriverStage()
-            : Schedule::DRIVER_STAGE_ASSIGNED;
+        $stage = $schedule->resolvedDriverStage();
         $hasLiveLocation = $profile->hasFreshLocation();
-        $movementConfirmed = $acceptance === 'accepted' && $schedule->driverHasConfirmedMovement();
+        $movementConfirmed = $schedule->driverHasConfirmedMovement();
 
-        $distanceKm = null;
-        if ($acceptance === 'accepted' && $schedule->driver_id) {
-            $distanceKm = $this->latePickup->pickupDistanceKmForProfile($profile, $booking);
-            if ($distanceKm !== null && $hasLiveLocation) {
-                $distanceKm = $this->resolveLiveDistanceKm($booking, $profile) ?? $distanceKm;
-            }
+        $distanceKm = $this->latePickup->pickupDistanceKmForProfile($profile, $booking);
+        if ($distanceKm !== null && $hasLiveLocation) {
+            $distanceKm = $this->resolveLiveDistanceKm($booking, $profile) ?? $distanceKm;
         }
 
         $distanceLabel = $distanceKm !== null
@@ -66,16 +62,12 @@ class GuestBookingDriverStatusService
         $distanceLine = null;
         $etaLine = null;
 
-        if ($acceptance === 'pending') {
-            $statusLine = 'Chờ tài xế';
-        } elseif ($acceptance === 'none' && $booking->catalogChosenDriverProfile()) {
-            $statusLine = 'Chờ tài xế';
-        } elseif ($stage === Schedule::DRIVER_STAGE_AT_PICKUP) {
+        if ($stage === Schedule::DRIVER_STAGE_AT_PICKUP) {
             $statusLine = 'Tài xế đã đến điểm đón';
         } elseif (in_array($stage, [Schedule::DRIVER_STAGE_PICKED_UP, Schedule::DRIVER_STAGE_RUNNING], true)) {
-            $statusLine = 'Tài xế đang chở bạn trên chuyến';
+            $statusLine = 'Đang trong chuyến';
         } elseif ($stage === Schedule::DRIVER_STAGE_ASSIGNED) {
-            $statusLine = $movementConfirmed ? 'Tài xế đang đi đón' : 'Đã nhận';
+            $statusLine = $movementConfirmed ? 'Tài xế đang đi đón' : 'Đã nhận chuyến';
 
             if ($distanceLabel) {
                 $distanceLine = 'Tài xế cách bạn ' . $distanceLabel;
@@ -96,6 +88,12 @@ class GuestBookingDriverStatusService
 
         $proximityHint = implode("\n", array_filter([$statusLine, $distanceLine, $etaLine])) ?: null;
 
+        $lat = $hasLiveLocation ? $profile->last_lat : null;
+        $lng = $hasLiveLocation ? $profile->last_lng : null;
+        $heading = $hasLiveLocation && $profile->last_heading !== null
+            ? (float) $profile->last_heading
+            : null;
+
         return [
             'name'                 => $profile->user->name ?? $schedule->driver_name,
             'code'                 => $profile->driver_code,
@@ -111,6 +109,9 @@ class GuestBookingDriverStatusService
             'stage_label'          => $schedule->driverStageLabel(),
             'location_shared'      => $hasLiveLocation,
             'movement_confirmed'   => $movementConfirmed,
+            'lat'                  => $lat !== null ? (float) $lat : null,
+            'lng'                  => $lng !== null ? (float) $lng : null,
+            'heading'              => $heading,
             'distance_km'          => $distanceKm,
             'distance_label'       => $distanceLabel,
             'eta_label'            => $etaLabel,

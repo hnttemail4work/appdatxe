@@ -4,8 +4,11 @@ namespace App\Services;
 
 use App\Models\DriverProfile;
 use App\Models\ScheduleTemplate;
+use App\Support\DriverVehicleOptions;
 use App\Support\VehicleCapacityOptions;
 use App\Support\VehicleDisplay;
+use App\Support\VehicleTypeIcons;
+use App\Support\VehicleTypePricing;
 use Illuminate\Support\Collection;
 
 class TripListingService
@@ -26,53 +29,42 @@ class TripListingService
     }
 
     /**
-     * Danh sách loại xe khách có thể đặt — nhóm theo số chỗ + loại, KHÔNG gắn với một tài xế cụ thể.
-     * Khách chọn loại xe, hệ thống tự ghép tài xế gần nhất khi tạo cuốc (auto-assign).
+     * Catalog loại xe cố định (icon + số chỗ) — không gắn ảnh/tài xế thật.
+     * Giá tính theo tuyến ở client; tìm TX gần sau khi đặt.
      *
      * @return Collection<int, array<string, mixed>>
      */
     public function vehicleTypeCatalog(): Collection
     {
-        $drivers = DriverProfile::query()
-            ->operational()
-            ->where('approval_status', 'approved')
-            ->whereNotNull('vehicle_license_plate')
-            ->where('vehicle_license_plate', '!=', '')
-            ->whereNotNull('vehicle_type')
-            ->where('vehicle_seats', '>', 0)
-            ->with('user')
-            ->orderBy('id')
-            ->get();
+        $rows = [];
 
-        $this->driverAvailability->syncCatalogDriverStates($drivers);
-        $drivers = $drivers->map(fn (DriverProfile $profile) => $profile->fresh(['user']))->values();
-        $drivers->each(fn (DriverProfile $profile) => $this->driverCatalog->syncCatalogForDriver($profile));
+        foreach (VehicleTypePricing::priceableKeys() as $type) {
+            $capacity = (int) (DriverVehicleOptions::seatsFor($type) ?: 0);
+            if ($capacity < 1) {
+                continue;
+            }
 
-        return $drivers
-            ->filter(fn (DriverProfile $profile) => $this->activeTemplateForDriver($profile) !== null)
-            ->groupBy(fn (DriverProfile $profile) => ((int) $profile->vehicle_seats) . '|' . $profile->vehicle_type)
-            ->map(function (Collection $group) {
-                $bookableProfiles = $group->filter(fn (DriverProfile $p) => $this->driverAvailability->isBookableNow($p));
-                /** @var DriverProfile $sample */
-                $sample = $bookableProfiles->first() ?? $group->first();
-                $capacity = (int) $sample->vehicle_seats;
-                $bookableCount = $bookableProfiles->count();
+            $typeLabel = VehicleDisplay::typeLabel($type);
+            $capacityLabel = VehicleCapacityOptions::label($capacity);
+            $offerLabel = collect([$typeLabel, $capacityLabel])
+                ->filter(fn ($p) => filled($p) && $p !== '—')
+                ->implode(' · ');
 
-                return [
-                    'capacity'             => $capacity,
-                    'capacity_label'       => VehicleCapacityOptions::label($capacity),
-                    'vehicle_type'         => $sample->vehicle_type,
-                    'type_label'           => VehicleDisplay::typeLabel($sample->vehicle_type),
-                    'sample_photo'         => $sample->firstVehiclePhotoUrl(),
-                    'available_count'      => $group->count(),
-                    'bookable_now_count'   => $bookableCount,
-                    'booking_action_label' => $bookableCount > 0 ? 'Đặt ngay' : 'Đặt sau',
-                    'booking_action_tone'  => $bookableCount > 0 ? 'now' : 'later',
-                ];
-            })
-            ->sortBy(fn (array $row) => ($row['bookable_now_count'] > 0 ? '0' : '1')
-                . '-' . str_pad((string) $row['capacity'], 3, '0', STR_PAD_LEFT)
-                . '-' . (string) ($row['vehicle_type'] ?? ''))
+            $rows[] = [
+                'capacity'       => $capacity,
+                'capacity_label' => $capacityLabel,
+                'vehicle_type'   => $type,
+                'type_label'     => $typeLabel,
+                'icon_key'       => VehicleTypeIcons::keyFor($type),
+                'hint'           => VehicleTypeIcons::hintFor($type),
+                'sample_photo'   => null,
+                'offer_label'    => $offerLabel,
+            ];
+        }
+
+        return collect($rows)
+            ->sortBy(fn (array $row) => str_pad((string) $row['capacity'], 3, '0', STR_PAD_LEFT)
+                .'-'.(string) ($row['vehicle_type'] ?? ''))
             ->values();
     }
 

@@ -4075,6 +4075,68 @@ body.driver-drawer-open {
     font-weight: 600;
 }
 
+.swipe-action {
+    width: 100%;
+    touch-action: none;
+    user-select: none;
+}
+.swipe-action__track {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-height: 2.6rem;
+    padding: .2rem;
+    border-radius: .7rem;
+    background: rgba(255, 255, 255, .06);
+    border: 1px solid rgba(255, 255, 255, .12);
+    overflow: hidden;
+}
+.swipe-action__hint {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-left: 2.4rem;
+    font-size: .8rem;
+    font-weight: 700;
+    color: rgba(245, 245, 245, .65);
+    pointer-events: none;
+}
+.swipe-action__fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    background: rgba(212, 175, 55, .22);
+    border-radius: inherit;
+    pointer-events: none;
+}
+.swipe-action__thumb {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.2rem;
+    height: 2.2rem;
+    border-radius: .55rem;
+    background: #d4af37;
+    color: #111;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .35);
+    cursor: grab;
+}
+.swipe-action.is-dragging .swipe-action__thumb { cursor: grabbing; }
+.swipe-action.is-complete .swipe-action__track {
+    border-color: rgba(212, 175, 55, .55);
+    background: rgba(212, 175, 55, .18);
+}
+.swipe-action.is-complete .swipe-action__hint { color: #fde68a; }
+form[data-swipe-action].driver-workflow-compact-action {
+    grid-column: 1 / -1;
+}
+
 
 
 .driver-wallet-history {

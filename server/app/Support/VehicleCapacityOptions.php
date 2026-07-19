@@ -20,7 +20,11 @@ class VehicleCapacityOptions
     /** @return list<int> */
     public static function enabled(): array
     {
-        $raw = PlatformSetting::getValue(self::SETTING_KEY, null);
+        try {
+            $raw = PlatformSetting::getValue(self::SETTING_KEY, null);
+        } catch (\Throwable) {
+            return self::DEFAULT_STANDARD;
+        }
 
         if (! is_array($raw) || $raw === []) {
             return self::DEFAULT_STANDARD;

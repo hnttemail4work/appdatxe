@@ -1,14 +1,15 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="auth-screen" data-auth-screen data-login-pin>
+<div class="auth-screen" data-auth-screen data-login-pin
+     data-check-phone-url="{{ route('login.checkPhone') }}">
     @include('partials.auth-screen-header', [
         'authTitle' => ($errors->has('login') || old('password')) ? 'Nhập PIN' : 'Đăng nhập',
         'authBackUrl' => route('home'),
     ])
 
     <div class="auth-screen-body">
-        <form method="POST" action="/login" autocomplete="on" id="login-pin-form">
+        <form method="POST" action="/login" autocomplete="on" id="login-pin-form" data-pin-autosubmit="1">
             @csrf
 
             <div class="auth-step-panel" data-login-step="phone" @if($errors->has('login') || old('password')) hidden @endif>
@@ -18,8 +19,7 @@
                     'fieldId' => 'login-phone',
                     'fieldType' => 'tel',
                     'fieldValue' => old('phone'),
-                    'fieldPlaceholder' => '0901234567',
-                    'fieldAutocomplete' => 'username',
+                    'fieldAutocomplete' => 'off',
                     'fieldInputmode' => 'tel',
                     'nextType' => 'button',
                     'nextAttr' => 'data-login-continue',
@@ -33,9 +33,8 @@
                     'pinId' => 'login-pin',
                     'pinLabel' => 'PIN',
                     'pinErrorBag' => 'login',
-                    'nextType' => 'submit',
-                    'nextAttr' => '',
-                    'nextAria' => 'Đăng nhập',
+                    'hideNext' => true,
+                    'pinAutoSubmit' => true,
                 ])
             </div>
         </form>
