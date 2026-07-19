@@ -14,7 +14,7 @@
         <div class="pwa-install-banner__actions">
             <button type="button" class="btn btn-sm btn-outline-light" data-pwa-dismiss>Để sau</button>
             <button type="button" class="btn btn-sm btn-warning fw-semibold" data-pwa-install>Cài đặt</button>
-            <button type="button" class="btn btn-sm btn-outline-warning d-none" data-pwa-enable-push>Bật TB</button>
+            <button type="button" class="btn btn-sm btn-outline-warning" data-pwa-enable-push>Bật TB</button>
         </div>
     </div>
     </div>

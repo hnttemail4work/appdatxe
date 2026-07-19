@@ -301,12 +301,14 @@ class PushNotificationService
             'driver.new_trip_request',
             'Cuốc mới chờ nhận',
             $routeLabel !== '' ? $routeLabel : 'Có chuyến mới cần xác nhận.',
-            '/driver/dashboard',
+            '/driver/dashboard?tab=trips',
             $dedupKey,
             [
-                'client_event'      => 'driver_trip_request_created',
-                'driver_request_id' => (int) $request->id,
-                'request_status'    => (string) $request->status,
+                'client_event'         => 'driver_trip_request_created',
+                'event_key'            => 'driver.new_trip_request',
+                'driver_request_id'    => (int) $request->id,
+                'request_status'       => (string) $request->status,
+                'require_interaction'  => true,
             ],
         );
 
@@ -576,14 +578,17 @@ class PushNotificationService
                 : null;
 
             $payload = json_encode(array_filter([
-                'title'        => $title,
-                'body'         => $body,
-                'url'          => url($url),
-                'tag'          => $dedupKey,
-                'icon'         => asset('favicon.svg'),
-                'unread_total' => $unreadTotal,
-                'data'         => array_merge($extraData, [
-                    'url' => url($url),
+                'title'         => $title,
+                'body'          => $body,
+                'url'           => url($url),
+                'tag'           => $dedupKey,
+                'icon'          => asset('favicon.svg'),
+                'unread_total'  => $unreadTotal,
+                'client_event'  => $extraData['client_event'] ?? null,
+                'event_key'     => $eventKey,
+                'data'          => array_merge($extraData, [
+                    'url'       => url($url),
+                    'event_key' => $eventKey,
                 ]),
             ], static fn ($v) => $v !== null), JSON_UNESCAPED_UNICODE);
 

@@ -3,112 +3,121 @@
 /** @var \App\Models\Schedule $schedule */
 /** @var \Illuminate\Support\Collection<int, \App\Models\Booking> $passengers */
 
-use App\Support\MapNavigation;
-
 $schedule = $schedule ?? $tripRequest->schedule;
 $passengers = $passengers ?? $schedule->driverRelevantBookings();
 $tripTotal = (float) $passengers->sum(fn (\App\Models\Booking $b) => (float) $b->total_price);
 $expiresLabel = $tripRequest->acceptTimeRemainingLabel();
 $waitProgress = \App\Support\DriverWaitProgress::forTripRequest($tripRequest);
 $primaryBooking = $passengers->first();
-$mapNav = $primaryBooking ? MapNavigation::driverPickupTarget($primaryBooking) : null;
+
+$tripDistanceKm = $primaryBooking && $primaryBooking->distance_km
+    ? (int) $primaryBooking->distance_km
+    : null;
+$scheduleChip = null;
+if ($primaryBooking) {
+    if ($primaryBooking->isScheduledPickup()) {
+        $parts = array_filter([
+            $primaryBooking->pickupTimeLabel(),
+            $primaryBooking->driverPickupDateLabel(),
+        ]);
+        $scheduleChip = $parts ? implode(' · ', $parts) : 'Đặt lịch';
+    } else {
+        $scheduleChip = $primaryBooking->pickupModeLabel() ?: 'Đón ngay';
+    }
+}
+
+$fromLabel = $primaryBooking?->driverPickupDetailLabel() ?: $schedule->routeDepartureLabel();
+$toLabel = $primaryBooking?->driverDropoffDetailLabel() ?: $schedule->routeDestinationLabel();
+$tripCode = $schedule->shortTripCode();
 @endphp
 
-<article class="driver-request-card driver-action-card driver-trip-request-card driver-request-card--incoming"
+<article class="driver-request-card driver-action-card driver-trip-request-card driver-request-card--incoming driver-offer"
          data-trip-request-id="{{ $tripRequest->id }}"
          @if($tripRequest->expires_at) data-trip-request-expires="{{ $tripRequest->expires_at->toIso8601String() }}" @endif>
-    <div class="driver-request-card__accent" aria-hidden="true"></div>
-
-    <header class="driver-request-card__header">
-        <div class="driver-request-card__header-copy">
-            <div class="driver-request-card__eyebrow-row">
-                <span class="driver-request-card__eyebrow">Cuốc mới — chờ nhận</span>
-                @if($schedule->shortTripCode())
-                    <span class="driver-request-card__code">Mã {{ $schedule->shortTripCode() }}</span>
-                @endif
-            </div>
-            <div class="driver-request-card__schedule">
-                @if($passengers->count() > 0)
-                    {{ $passengers->count() }} khách
-                @endif
-            </div>
-        </div>
-        <div class="driver-request-card__aside">
-            @if($expiresLabel && ! $waitProgress)
-                <span class="driver-request-card__countdown">{{ $expiresLabel }}</span>
+    <header class="driver-offer-head">
+        <h2 class="driver-offer-head__title">Cuốc mới — chờ nhận</h2>
+        <div class="driver-offer-head__meta">
+            @if($tripCode)
+                <span>Mã cuốc xe: <strong>{{ $tripCode }}</strong></span>
             @endif
-            <div class="driver-request-card__fare">
-                <span class="driver-request-card__fare-label">Thu khách</span>
-                <strong class="driver-request-card__fare-value">{{ number_format($tripTotal, 0, ',', '.') }} đ</strong>
-                @if($primaryBooking && ($primaryBooking->price_subtotal || $primaryBooking->price_breakdown))
-                    <div class="driver-request-card__fare-breakdown mt-1">
-                        @include('partials.booking-price-breakdown', ['booking' => $primaryBooking, 'compact' => true])
-                    </div>
-                @endif
-            </div>
+            @if($primaryBooking?->passenger_name)
+                <span>Hành khách: <strong>{{ $primaryBooking->passenger_name }}</strong></span>
+            @endif
         </div>
+        @if($passengers->count() > 0)
+            <div class="driver-offer-head__count">{{ $passengers->count() }} khách</div>
+        @endif
     </header>
 
-    <div class="driver-request-card__route">
-        @include('partials.driver-route-head', [
-            'from' => $primaryBooking?->driverPickupDetailLabel() ?: $schedule->routeDepartureLabel(),
-            'to' => $primaryBooking?->driverDropoffDetailLabel() ?: $schedule->routeDestinationLabel(),
-        ])
-    </div>
-
-    @if($primaryBooking)
-        <div class="driver-request-card__pickup">
-            @if($primaryBooking->isScheduledPickup())
-                <div class="driver-request-card__pickup-schedule">
-                    @if($primaryBooking->pickupTimeLabel())
-                        <span><span class="driver-request-card__pickup-label">Giờ đón</span> {{ $primaryBooking->pickupTimeLabel() }}</span>
-                    @endif
-                    @if($primaryBooking->driverPickupDateLabel())
-                        <span><span class="driver-request-card__pickup-label">Ngày đi</span> {{ $primaryBooking->driverPickupDateLabel() }}</span>
-                    @endif
-                </div>
-            @else
-                <div class="driver-request-card__pickup-schedule">
-                    <span><span class="driver-request-card__pickup-label">Lịch đón</span> {{ $primaryBooking->pickupModeLabel() }}</span>
-                </div>
-            @endif
-            <div class="driver-request-card__pickup-address">
-                <span class="driver-request-card__pickup-label">Điểm đón</span>
-                <span class="driver-request-card__pickup-value">{{ $primaryBooking->driverPickupDetailLabel() }}</span>
-            </div>
-            @if($primaryBooking->passenger_name)
-                <div class="driver-request-card__pickup-address">
-                    <span class="driver-request-card__pickup-label">Khách</span>
-                    <span class="driver-request-card__pickup-value">{{ $primaryBooking->passenger_name }}</span>
-                </div>
-            @endif
-            <div class="driver-request-card__pickup-address">
-                <span class="driver-request-card__pickup-label">Điểm trả</span>
-                <span class="driver-request-card__pickup-value">{{ $primaryBooking->driverDropoffDetailLabel() }}</span>
-            </div>
-            @if($primaryBooking->notes)
-                <div class="driver-request-card__pickup-address">
-                    <span class="driver-request-card__pickup-label">Ghi chú</span>
-                    <span class="driver-request-card__pickup-value">{{ $primaryBooking->notes }}</span>
-                </div>
-            @endif
+    <div class="driver-offer-card">
+        <div class="driver-offer-card__row">
+            <span class="driver-offer-card__label">Tổng thu nhập</span>
+            <strong class="driver-offer-card__fare">{{ number_format($tripTotal, 0, ',', '.') }} đ</strong>
         </div>
-    @endif
+        @if($tripDistanceKm)
+            <div class="driver-offer-card__row">
+                <span class="driver-offer-card__label">Quãng đường</span>
+                <strong class="driver-offer-card__distance">{{ $tripDistanceKm }} km</strong>
+            </div>
+        @endif
 
-    @include('partials.driver-trip-quick-actions', [
-        'booking' => $primaryBooking,
-        'mapNav' => $mapNav,
-    ])
+        <div class="driver-offer-route">
+            <div class="driver-offer-route__rail" aria-hidden="true">
+                <span class="driver-offer-route__pin driver-offer-route__pin--pickup">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M5 11h14l-1.5-4.5h-11L5 11zm1.5 6a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm11 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM7 8.5l.8-2.5h8.4l.8 2.5H7z"/>
+                    </svg>
+                </span>
+                <span class="driver-offer-route__line"></span>
+                <span class="driver-offer-route__pin driver-offer-route__pin--dropoff">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M12 2C8.1 2 5 5.1 5 9c0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z"/>
+                    </svg>
+                </span>
+            </div>
+            <div class="driver-offer-route__stops">
+                <div class="driver-offer-route__stop">
+                    <span class="driver-offer-route__tag">Đón</span>
+                    <strong class="driver-offer-route__addr">{{ $fromLabel }}</strong>
+                    @if($scheduleChip)
+                        <span class="driver-offer-route__sub">{{ $scheduleChip }}</span>
+                    @endif
+                </div>
+                <div class="driver-offer-route__stop">
+                    <span class="driver-offer-route__tag">Trả</span>
+                    <strong class="driver-offer-route__addr">{{ $toLabel }}</strong>
+                </div>
+            </div>
+        </div>
+
+        @if($primaryBooking?->notes)
+            <p class="driver-offer-card__note mb-0">{{ $primaryBooking->notes }}</p>
+        @endif
+    </div>
 
     @if($waitProgress)
         @include('partials.wait-progress', [
-            'waitProgress' => $waitProgress,
+            'waitProgress' => array_merge($waitProgress, [
+                'label' => 'Khách đang chờ bạn',
+                'hint' => null,
+            ]),
             'variant' => 'driver',
-            'layout' => 'embedded',
+            'layout' => 'ring',
         ])
+    @elseif($expiresLabel)
+        <div class="driver-wait driver-wait--trip_accept driver-wait--ring" role="status">
+            <div class="driver-wait-ring" aria-hidden="true">
+                <svg viewBox="0 0 96 96">
+                    <circle class="driver-wait-ring__track" cx="48" cy="48" r="40"/>
+                    <circle class="driver-wait-ring__fill" cx="48" cy="48" r="40"/>
+                </svg>
+                <span class="driver-wait-ring__time">{{ $expiresLabel }}</span>
+            </div>
+            <div class="driver-wait-ring__label">Khách đang chờ bạn</div>
+        </div>
     @endif
 
-    <div class="driver-card-actions driver-card-actions--job driver-request-card__actions">
+    <div class="driver-card-actions driver-card-actions--job driver-request-card__actions driver-offer-actions">
         <div class="driver-workflow-compact-actions">
             <form method="POST" action="{{ route('driver.tripRequests.reject', $tripRequest) }}"
                   class="driver-workflow-compact-action driver-reject-form"
@@ -116,15 +125,26 @@ $mapNav = $primaryBooking ? MapNavigation::driverPickupTarget($primaryBooking) :
                   data-reason-title="Lý do từ chối"
                   data-reason-hint="Chọn lý do để quản lý nắm thông tin và hỗ trợ khách.">
                 @csrf
-                <button type="submit" class="btn btn-driver-reject-ghost">Từ chối</button>
+                <button type="submit" class="btn driver-offer-btn driver-offer-btn--reject">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                    <span>Hủy chuyến</span>
+                </button>
             </form>
-            <form method="POST" action="{{ route('driver.tripRequests.accept', $tripRequest) }}" class="driver-workflow-compact-action driver-accept-form driver-request-card__accept-form"
+            <form method="POST" action="{{ route('driver.tripRequests.accept', $tripRequest) }}"
+                  class="driver-workflow-compact-action driver-accept-form driver-request-card__accept-form"
                   data-confirm="Nhận chuyến này?"
                   data-confirm-title="Nhận chuyến"
                   data-confirm-ok="Nhận chuyến"
                   data-confirm-variant="success">
                 @csrf
-                <button type="submit" class="btn btn-success driver-btn-accept driver-request-card__accept-btn">Nhận chuyến</button>
+                <button type="submit" class="btn driver-offer-btn driver-offer-btn--accept driver-btn-accept driver-request-card__accept-btn">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M20 6L9 17l-5-5"/>
+                    </svg>
+                    <span>Nhận chuyến</span>
+                </button>
             </form>
         </div>
     </div>

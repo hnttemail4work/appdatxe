@@ -29,6 +29,20 @@
         return 'Còn ~' + hours + ' giờ' + (mins > 0 ? ' ' + mins + ' phút' : '');
     }
 
+    /** Countdown ngắn cho vòng tròn offer: 45s / 2p */
+    function formatRingRemaining(seconds) {
+        if (seconds <= 0) {
+            return '0s';
+        }
+        if (seconds < 60) {
+            return seconds + 's';
+        }
+        return Math.ceil(seconds / 60) + 'p';
+    }
+
+    var RING_RADIUS = 40;
+    var RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
     function formatElapsed(startedMs, kind) {
         var minutes = Math.max(1, Math.floor((Date.now() - startedMs) / 60000));
         if (kind === 'driver_search' || kind === 'driver_search_extended') {
@@ -48,10 +62,14 @@
             return;
         }
 
+        var isRing = block.getAttribute('data-wait-layout') === 'ring'
+            || block.classList.contains('driver-wait--ring')
+            || block.classList.contains('guest-trip-wait--ring');
         var labelEl = block.querySelector('[data-field="wait_label"]');
         var timeEl = block.querySelector('[data-field="wait_time"]');
         var hintEl = block.querySelector('[data-field="wait_hint"]');
         var barEl = block.querySelector('[data-field="wait_bar"]');
+        var ringEl = block.querySelector('[data-field="wait_ring"]');
 
         block.classList.remove('is-indeterminate', 'is-review', 'is-overdue');
         if (wait.kind === 'review') {
@@ -75,10 +93,14 @@
         if (wait.indeterminate) {
             block.classList.add('is-indeterminate');
             if (timeEl) {
-                timeEl.textContent = formatElapsed(startedMs, wait.kind);
+                timeEl.textContent = isRing ? '…' : formatElapsed(startedMs, wait.kind);
             }
             if (barEl) {
                 barEl.style.width = '';
+            }
+            if (ringEl) {
+                ringEl.style.strokeDasharray = String(RING_CIRCUMFERENCE);
+                ringEl.style.strokeDashoffset = '0';
             }
             return;
         }
@@ -90,12 +112,25 @@
         var pct = deadlineMs
             ? Math.min(100, Math.max(0, Math.round((elapsedMs / totalMs) * 100)))
             : 0;
+        var remainingRatio = deadlineMs && totalMs
+            ? Math.min(1, Math.max(0, (deadlineMs - now) / totalMs))
+            : 0;
 
         if (timeEl) {
-            timeEl.textContent = deadlineMs ? formatWaitRemaining(remainingSec) : '';
+            if (!deadlineMs) {
+                timeEl.textContent = '';
+            } else if (isRing) {
+                timeEl.textContent = formatRingRemaining(remainingSec);
+            } else {
+                timeEl.textContent = formatWaitRemaining(remainingSec);
+            }
         }
         if (barEl) {
             barEl.style.width = pct + '%';
+        }
+        if (ringEl) {
+            ringEl.style.strokeDasharray = String(RING_CIRCUMFERENCE);
+            ringEl.style.strokeDashoffset = String(RING_CIRCUMFERENCE * (1 - remainingRatio));
         }
     }
 

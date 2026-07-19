@@ -48,6 +48,7 @@
 
     $driverMapTripPins = $driverMapTripPins ?? [];
     $driverActiveMapNav = $driverActiveMapNav ?? null;
+    $driverOfferPending = (bool) ($driverOfferPending ?? false);
     $driverMapLat = $driverLocationReady ? ($profile->last_lat ?? null) : null;
     $driverMapLng = $driverLocationReady ? ($profile->last_lng ?? null) : null;
     $pendingChangeRequest = $profile
@@ -56,7 +57,7 @@
 @endphp
 
 @php $inboxUnreadBoot = (int) (($inboxUnread['total'] ?? 0)); @endphp
-<div class="driver-page driver-page--map {{ $driverPaused ? 'is-duty-off' : 'is-duty-on' }}"
+<div class="driver-page driver-page--map {{ $driverPaused ? 'is-duty-off' : 'is-duty-on' }}{{ $driverOfferPending ? ' is-offer-pending' : '' }}"
      data-driver-tabs
      data-driver-tabs-active="{{ $driverDefaultTab }}"
      data-driver-tabs-base="{{ route('driver.dashboard') }}"

@@ -545,6 +545,11 @@
         if (window.GuestTripSheet && window.GuestTripSheet.sync) {
             window.GuestTripSheet.sync();
         }
+        if (window.GuestTripSheet && window.GuestTripSheet.syncLocateFabLift) {
+            window.requestAnimationFrame(function () {
+                window.GuestTripSheet.syncLocateFabLift();
+            });
+        }
 
         var scheduledPickup = isScheduledPickup(booking);
         setDetailRow(

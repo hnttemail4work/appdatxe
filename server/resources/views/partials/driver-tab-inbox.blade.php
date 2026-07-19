@@ -10,26 +10,9 @@
     $unreadChat = (int) ($inboxUnread['chat'] ?? 0);
 @endphp
 <section class="driver-inbox-panel" aria-label="Hộp thư" data-driver-inbox-panel data-inbox-mark-url="{{ route('driver.inbox.read') }}">
-    <div class="driver-inbox-head mb-3">
-        <div class="driver-inbox-head__main" data-inbox-head-main>
-            <h2 class="driver-panel-title mb-0">Hộp thư</h2>
-            <button type="button"
-                    class="driver-inbox-chat-btn"
-                    data-inbox-open-chats
-                    aria-label="Tin nhắn với khách">
-                <span class="driver-inbox-chat-btn__label">Trò chuyện</span>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                </svg>
-                <span class="driver-inbox-chat-btn__badge {{ $unreadChat > 0 ? '' : 'd-none' }}" data-inbox-chat-badge>
-                    {{ $unreadChat > 99 ? '99+' : $unreadChat }}
-                </span>
-            </button>
-        </div>
-        <div class="driver-inbox-head__chat d-none" data-inbox-head-chat hidden>
-            <button type="button" class="driver-inbox-back" data-inbox-chat-back aria-label="Quay lại">←</button>
-            <strong class="driver-inbox-head__chat-title" data-inbox-chat-title>Tin nhắn</strong>
-        </div>
+    <div class="driver-inbox-head mb-3 d-none" data-inbox-head-chat hidden>
+        <button type="button" class="driver-inbox-back" data-inbox-chat-back aria-label="Quay lại">←</button>
+        <strong class="driver-inbox-head__chat-title" data-inbox-chat-title>Tin nhắn</strong>
     </div>
 
     @if($profile?->isMissedTripLocked())
@@ -163,4 +146,17 @@
             'embed' => true,
         ])
     </div>
+
+    <button type="button"
+            class="driver-inbox-chat-fab"
+            data-inbox-open-chats
+            aria-label="Trò chuyện"
+            title="Trò chuyện">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+        <span class="driver-inbox-chat-fab__badge {{ $unreadChat > 0 ? '' : 'd-none' }}" data-inbox-chat-badge>
+            {{ $unreadChat > 99 ? '99+' : $unreadChat }}
+        </span>
+    </button>
 </section>

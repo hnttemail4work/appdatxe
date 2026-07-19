@@ -28,6 +28,17 @@
         </div>
 
         <div class="driver-settings-card mb-3">
+            <h3 class="driver-settings-card__title">Thông báo đẩy (Chrome nền)</h3>
+            <p class="driver-account-hint mb-2">
+                Chuông trong tab chỉ kêu khi đang mở trang. Bật thông báo đẩy để nghe khi đang dùng app khác hoặc Chrome đang nền.
+            </p>
+            <p class="driver-account-hint mb-2" data-pwa-push-status>Đang kiểm tra…</p>
+            <button type="button" class="btn btn-outline-warning w-100 fw-semibold" data-pwa-enable-push>
+                Bật thông báo đẩy
+            </button>
+        </div>
+
+        <div class="driver-settings-card mb-3">
             <h3 class="driver-settings-card__title" data-i18n="settings_sound">Âm thanh thông báo</h3>
             <p class="driver-account-hint mb-2" data-i18n="settings_sound_hint">
                 Âm thanh khi có cuốc mới hoặc tin hộp thư (Tin tức / Thông báo). Đồng bộ với mặc định admin; bạn có thể đổi tone riêng.

@@ -353,7 +353,6 @@
         var banner = document.getElementById('pwa-install-banner');
         var installBtn = banner ? banner.querySelector('[data-pwa-install]') : null;
         var dismissBtn = banner ? banner.querySelector('[data-pwa-dismiss]') : null;
-        var pushBtn = banner ? banner.querySelector('[data-pwa-enable-push]') : null;
 
         if (installBtn) {
             if (isIos()) {
@@ -385,18 +384,39 @@
             });
         }
 
-        if (pushBtn) {
-            pushBtn.addEventListener('click', function () {
+        document.querySelectorAll('[data-pwa-enable-push]').forEach(function (btn) {
+            if (btn.getAttribute('data-pwa-push-bound') === '1') {
+                return;
+            }
+            btn.setAttribute('data-pwa-push-bound', '1');
+            btn.addEventListener('click', function () {
+                btn.disabled = true;
                 subscribePush().then(function (ok) {
-                    if (ok && window.AppDialog) {
-                        window.AppDialog.alert('Đã bật thông báo cho ' + (cfg.audienceLabel || 'ứng dụng') + '.', {
-                            variant: 'success',
-                            title: 'Thông báo',
-                        });
+                    btn.disabled = false;
+                    syncPushUi();
+                    if (ok) {
+                        if (window.AppFlash && window.AppFlash.show) {
+                            window.AppFlash.show('Đã bật thông báo đẩy. Bạn sẽ nghe chuông cuốc mới cả khi Chrome đang nền.', {
+                                variant: 'success',
+                                title: 'Thông báo',
+                            });
+                        } else if (window.AppDialog && window.AppDialog.alert) {
+                            window.AppDialog.alert('Đã bật thông báo đẩy.', {
+                                variant: 'success',
+                                title: 'Thông báo',
+                            });
+                        }
+                    } else if (window.Notification && Notification.permission === 'denied') {
+                        if (window.AppFlash && window.AppFlash.show) {
+                            window.AppFlash.show('Chrome đang chặn thông báo. Mở ổ khóa URL → Thông báo → Cho phép.', {
+                                variant: 'warning',
+                                title: 'Thông báo bị chặn',
+                            });
+                        }
                     }
                 });
             });
-        }
+        });
 
         var iosClose = document.querySelector('[data-pwa-ios-dismiss]');
         if (iosClose) {
@@ -435,8 +455,82 @@
         }
     }
 
+    /** Tài xế: đăng ký lại nếu đã cho phép; hỏi 1 lần nếu chưa — để nghe cuốc khi Chrome đang nền. */
+    function ensureDriverPush() {
+        if (audience !== 'driver' || !window.Notification || !window.PushManager) {
+            return Promise.resolve(false);
+        }
+
+        if (Notification.permission === 'granted') {
+            return subscribePush();
+        }
+
+        if (Notification.permission === 'denied' || isDismissed(storagePushKey)) {
+            return Promise.resolve(false);
+        }
+
+        dismiss(storagePushKey);
+
+        var ask = function () {
+            if (window.AppDialog && window.AppDialog.confirm) {
+                return window.AppDialog.confirm({
+                    title: 'Bật thông báo cuốc mới',
+                    message: 'Để nghe chuông khi đang dùng app khác hoặc Chrome đang nền, hãy bật thông báo đẩy.',
+                    confirmText: 'Bật thông báo',
+                    cancelText: 'Để sau',
+                });
+            }
+            return Promise.resolve(window.confirm(
+                'Bật thông báo cuốc mới để nghe chuông khi Chrome đang nền?'
+            ));
+        };
+
+        return ask().then(function (ok) {
+            if (!ok) {
+                return false;
+            }
+            return subscribePush();
+        });
+    }
+
+    function syncPushUi() {
+        var granted = window.Notification && Notification.permission === 'granted';
+        document.querySelectorAll('[data-pwa-push-status]').forEach(function (el) {
+            el.textContent = granted
+                ? 'Đã bật thông báo đẩy (nghe được khi Chrome nền)'
+                : (window.Notification && Notification.permission === 'denied'
+                    ? 'Thông báo bị chặn — mở quyền site trong Chrome'
+                    : 'Chưa bật — không nghe được khi đang ngoài tab');
+        });
+        document.querySelectorAll('[data-pwa-enable-push]').forEach(function (btn) {
+            btn.classList.toggle('d-none', !!granted);
+            btn.disabled = false;
+        });
+    }
+
+    function onPushMessage(event) {
+        var msg = event.data || {};
+        if (msg.type !== 'push-event') {
+            return;
+        }
+        var payload = msg.payload || {};
+        var data = payload.data && typeof payload.data === 'object' ? payload.data : {};
+        var clientEvent = data.client_event || payload.client_event || '';
+        var eventKey = data.event_key || payload.event_key || '';
+        var isTrip = clientEvent === 'driver_trip_request_created'
+            || eventKey === 'driver.new_trip_request';
+
+        if (isTrip && window.DriverSounds && window.DriverSounds.playTrip) {
+            window.DriverSounds.playTrip();
+        } else if (window.AppSounds && window.AppSounds.play) {
+            window.AppSounds.play();
+        }
+    }
+
     window.PwaClient = {
         subscribePush: subscribePush,
+        ensureDriverPush: ensureDriverPush,
+        syncPushUi: syncPushUi,
         isStandalone: isStandalone,
         promptInstall: promptInstall,
         syncInstallTriggers: syncInstallTriggers,
@@ -488,7 +582,19 @@
         }
 
         bindInstallUi();
+        syncPushUi();
+
+        if (navigator.serviceWorker) {
+            navigator.serviceWorker.addEventListener('message', onPushMessage);
+        }
+
         registerServiceWorker().then(function () {
+            if (audience === 'driver') {
+                window.setTimeout(function () {
+                    ensureDriverPush().finally(syncPushUi);
+                }, 1200);
+            }
+
             if (isStandalone()) {
                 return;
             }

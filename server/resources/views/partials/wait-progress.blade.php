@@ -9,7 +9,29 @@ $prefix = $variant === 'driver' ? 'driver-wait' : 'guest-trip-wait';
 $kind = $waitProgress['kind'] ?? 'default';
 @endphp
 @if($waitProgress)
-@if($layout === 'embedded' && $variant === 'driver')
+@if($layout === 'ring' && $variant === 'driver')
+@php
+    $ringCircumference = 2 * M_PI * 40;
+@endphp
+<div class="{{ $prefix }} {{ $prefix }}--{{ $kind }} {{ $prefix }}--ring"
+     data-wait-progress
+     data-wait-layout="ring"
+     data-wait-state="{{ json_encode($waitProgress, JSON_UNESCAPED_UNICODE) }}"
+     role="status"
+     aria-live="polite">
+    <div class="{{ $prefix }}-ring" aria-hidden="true">
+        <svg viewBox="0 0 96 96">
+            <circle class="{{ $prefix }}-ring__track" cx="48" cy="48" r="40"/>
+            <circle class="{{ $prefix }}-ring__fill"
+                    data-field="wait_ring"
+                    cx="48" cy="48" r="40"
+                    style="stroke-dasharray: {{ $ringCircumference }}; stroke-dashoffset: 0;"/>
+        </svg>
+        <span class="{{ $prefix }}-ring__time" data-field="wait_time"></span>
+    </div>
+    <div class="{{ $prefix }}-ring__label" data-field="wait_label">{{ $waitProgress['label'] ?? 'Khách đang chờ bạn' }}</div>
+</div>
+@elseif($layout === 'embedded' && $variant === 'driver')
 <div class="{{ $prefix }} {{ $prefix }}--{{ $kind }} {{ $prefix }}--embedded"
      data-wait-progress
      data-wait-state="{{ json_encode($waitProgress, JSON_UNESCAPED_UNICODE) }}"

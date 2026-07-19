@@ -91,7 +91,7 @@ class DriverWaitProgress
 
         return [
             'kind'          => 'trip_accept',
-            'label'         => 'Cuốc chờ bạn nhận',
+            'label'         => 'Khách đang chờ bạn',
             'hint'          => 'Bấm «Nhận chuyến» trước khi hết giờ để tránh bị gỡ.',
             'started_at'    => $started->toIso8601String(),
             'deadline_at'   => $deadline->toIso8601String(),

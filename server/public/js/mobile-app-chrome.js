@@ -55,6 +55,15 @@
         });
 
         document.querySelectorAll(FAB_SELECTOR).forEach(function (el) {
+            // Locate khi đang tìm chuyến: neo theo sheet thông tin (guest-trip-sheet.js).
+            if (el.classList.contains('trip-locate-fab')
+                && document.body.classList.contains('guest-trip-searching')) {
+                if (window.GuestTripSheet && window.GuestTripSheet.syncLocateFabLift) {
+                    window.GuestTripSheet.syncLocateFabLift();
+                }
+                return;
+            }
+
             if (lift <= 0) {
                 el.style.bottom = '';
                 return;

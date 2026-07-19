@@ -21,6 +21,8 @@
     var lastPickup = null;
     var lastUserPos = null;
     var searchingActive = false;
+    /** Chỉ auto-center khi mới vào tìm chuyến; sau đó để user kéo/zoom tự do. */
+    var searchCameraSettled = false;
 
     function ensureAssets() {
         if (window.goongjs && window.__goongMaptilesKey) {
@@ -282,6 +284,7 @@
     function updateFromBooking(booking) {
         if (!booking || booking.trip_status === 'completed' || booking.trip_status === 'cancelled') {
             searchingActive = false;
+            searchCameraSettled = false;
             showMapShell(false);
             setLiveStatus('');
             clearCar();
@@ -294,6 +297,9 @@
         var dropLat = booking.dropoff_lat;
         var dropLng = booking.dropoff_lng;
         var searching = !booking.has_driver;
+        if (!searching) {
+            searchCameraSettled = false;
+        }
         searchingActive = searching;
         var driver = booking.driver || null;
         var stage = driver ? String(driver.stage || '') : '';
@@ -357,8 +363,14 @@
             } else {
                 clearCar();
                 if (searching) {
-                    var focus = activeLocateTarget();
-                    fitOrFly([[focus.lng, focus.lat]], 16);
+                    // Chỉ căn giữa lần đầu; poll sau không kéo camera về giữa.
+                    if (!searchCameraSettled) {
+                        var focus = activeLocateTarget();
+                        if (focus) {
+                            fitOrFly([[focus.lng, focus.lat]], 16);
+                        }
+                        searchCameraSettled = true;
+                    }
                 } else if (dropLat != null && dropLng != null) {
                     fitOrFly([center, [Number(dropLng), Number(dropLat)]], 13);
                 } else {

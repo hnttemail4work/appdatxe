@@ -188,26 +188,8 @@ class DriverController extends Controller
             }
         }
 
-        // Cuốc chờ nhận — hiện nút điều hướng (thiếu lat/lng → fallback trung tâm tỉnh trên tuyến).
-        if ($driverActiveMapNav === null && $pendingTripRequestGroups->isNotEmpty()) {
-            $pendingGroup = $pendingTripRequestGroups->first();
-            $pendingBooking = $pendingGroup['passengers']->first() ?? null;
-            $pendingSchedule = $pendingGroup['schedule'] ?? null;
-            if ($pendingBooking instanceof \App\Models\Booking) {
-                $driverActiveMapNav = \App\Support\MapNavigation::driverPickupTarget($pendingBooking, $pendingSchedule);
-                if ($driverActiveMapNav
-                    && $driverActiveMapNav['dest_lat'] !== null
-                    && $driverActiveMapNav['dest_lng'] !== null
-                    && $driverMapTripPins === []) {
-                    $driverMapTripPins[] = [
-                        'type'  => 'pickup',
-                        'lat'   => (float) $driverActiveMapNav['dest_lat'],
-                        'lng'   => (float) $driverActiveMapNav['dest_lng'],
-                        'label' => $pendingBooking->pickupLabel(),
-                    ];
-                }
-            }
-        }
+        // Offer-only: không gắn pin/nav map — màn hình nhận cuốc riêng (không map).
+        $driverOfferPending = $pendingTripRequestGroups->isNotEmpty() && $tripSchedulesAll->isEmpty();
 
         $showTopUpBanner = $walletNotice !== null;
         $revenueStats = $profile
@@ -266,6 +248,7 @@ class DriverController extends Controller
             'driverTripUpcoming',
             'tripHistory',
             'pendingTripRequestGroups',
+            'driverOfferPending',
             'driverPickupProximityLine',
             'mustChangePassword',
             'driverMapTripPins',

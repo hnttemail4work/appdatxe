@@ -11,13 +11,13 @@
     var csrf = document.querySelector('meta[name="csrf-token"]');
     var csrfToken = csrf ? csrf.getAttribute('content') : '';
     var view = 'system';
-    var headMain = panel.querySelector('[data-inbox-head-main]');
     var headChat = panel.querySelector('[data-inbox-head-chat]');
     var systemWrap = panel.querySelector('[data-inbox-system]');
     var chatsWrap = panel.querySelector('[data-inbox-chats]');
     var threadWrap = panel.querySelector('[data-inbox-thread]');
     var chatTitle = panel.querySelector('[data-inbox-chat-title]');
     var chatBadge = panel.querySelector('[data-inbox-chat-badge]');
+    var openChatsBtn = panel.querySelector('[data-inbox-open-chats]');
 
     function setHidden(el, hidden) {
         if (!el) return;
@@ -109,20 +109,20 @@
 
     function showSystemView() {
         view = 'system';
-        setHidden(headMain, false);
         setHidden(headChat, true);
         setHidden(systemWrap, false);
         setHidden(chatsWrap, true);
         setHidden(threadWrap, true);
+        setHidden(openChatsBtn, false);
     }
 
     function showChatsView() {
         view = 'chats';
-        setHidden(headMain, true);
         setHidden(headChat, false);
         setHidden(systemWrap, true);
         setHidden(chatsWrap, false);
         setHidden(threadWrap, true);
+        setHidden(openChatsBtn, true);
         if (chatTitle) {
             chatTitle.textContent = 'Tin nhắn';
         }
@@ -154,11 +154,11 @@
         }
 
         view = 'thread';
-        setHidden(headMain, true);
         setHidden(headChat, false);
         setHidden(systemWrap, true);
         setHidden(chatsWrap, true);
         setHidden(threadWrap, false);
+        setHidden(openChatsBtn, true);
         if (chatTitle) {
             chatTitle.textContent = peer;
         }
@@ -220,7 +220,6 @@
         });
     });
 
-    var openChatsBtn = panel.querySelector('[data-inbox-open-chats]');
     if (openChatsBtn) {
         openChatsBtn.addEventListener('click', function () {
             showChatsView();
