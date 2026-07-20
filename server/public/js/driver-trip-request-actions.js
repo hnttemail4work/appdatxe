@@ -56,6 +56,13 @@
             el.disabled = true;
         });
 
+        // Thoát offer-pending ngay (map + nút Bật/Tắt sát dock) — không chờ reload poll.
+        if (window.DriverBottomPanel && window.DriverBottomPanel.refresh) {
+            window.DriverBottomPanel.refresh();
+        } else if (window.__driverUpdateTripDockBadge) {
+            window.__driverUpdateTripDockBadge();
+        }
+
         card.classList.add('driver-trip-request-card--expired');
         window.setTimeout(function () {
             card.remove();

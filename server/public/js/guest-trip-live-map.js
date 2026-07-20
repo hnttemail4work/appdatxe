@@ -1,5 +1,5 @@
 /**
- * Map chuyến khách: radar quanh vị trí hiện tại khi tìm TX; icon ô tô sau khi nhận.
+ * Map chuyến khách: khi tìm TX — radar + mũi tên ở điểm đón; camera căn một lần sát sheet.
  */
 (function () {
     'use strict';
@@ -23,6 +23,15 @@
     var searchingActive = false;
     /** Chỉ auto-center khi mới vào tìm chuyến; sau đó để user kéo/zoom tự do. */
     var searchCameraSettled = false;
+
+    var ROUTE_SOURCE_ID = 'guest-trip-route';
+    var ROUTE_LAYER_ID = 'guest-trip-route-line';
+    var ROUTE_REFETCH_MS = 25000;
+    var lastRouteCoords = null;
+    var lastRouteFetchKey = '';
+    var lastRouteFetchAt = 0;
+    var routeFetchInFlight = false;
+    var lastRouteContext = '';
 
     function ensureAssets() {
         if (window.goongjs && window.__goongMaptilesKey) {
@@ -176,6 +185,10 @@
     }
 
     function activeLocateTarget() {
+        // Đang tìm: luôn điểm đón (radar không nhảy sang GPS rồi mất khỏi khung hình).
+        if (searchingActive && lastPickup) {
+            return lastPickup;
+        }
         if (lastUserPos) {
             return lastUserPos;
         }
@@ -183,6 +196,21 @@
             return lastPickup;
         }
         return null;
+    }
+
+    /** Padding: đặt radar/mũi tên giữa mép trên màn hình và mép trên sheet. */
+    function searchCameraPadding() {
+        var sheet = document.getElementById('guest-trip-info-sheet');
+        var mapH = (mapEl.getBoundingClientRect().height) || window.innerHeight || 600;
+        var sheetH = sheet ? sheet.getBoundingClientRect().height : 0;
+        if (sheetH < 8) {
+            sheetH = Math.round(mapH * 0.42);
+        }
+        // Luôn chừa tối thiểu ~160px map để radar không bị đẩy khỏi viewport.
+        var minVisible = 160;
+        var bottom = Math.min(Math.round(sheetH), Math.max(0, Math.round(mapH - minVisible)));
+        // top nhỏ → tâm camera nằm giữa vùng map còn lộ (trên sheet ↔ cạnh trên).
+        return { top: 24, bottom: bottom, left: 20, right: 20 };
     }
 
     function placeCar(lat, lng, heading) {
@@ -210,17 +238,148 @@
         }
     }
 
-    function fitOrFly(points, zoom) {
+    function emptyRouteGeo() {
+        return { type: 'FeatureCollection', features: [] };
+    }
+
+    function lineFeature(coords) {
+        return {
+            type: 'FeatureCollection',
+            features: [{
+                type: 'Feature',
+                properties: {},
+                geometry: { type: 'LineString', coordinates: coords },
+            }],
+        };
+    }
+
+    function ensureRouteLayer() {
+        if (!mapInstance || !mapInstance.getStyle) {
+            return;
+        }
+        if (!mapInstance.getSource(ROUTE_SOURCE_ID)) {
+            mapInstance.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data: emptyRouteGeo() });
+        }
+        if (!mapInstance.getLayer(ROUTE_LAYER_ID)) {
+            mapInstance.addLayer({
+                id: ROUTE_LAYER_ID,
+                type: 'line',
+                source: ROUTE_SOURCE_ID,
+                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                paint: {
+                    'line-color': '#facc15',
+                    'line-width': 4,
+                    'line-opacity': 0.85,
+                },
+            });
+        }
+    }
+
+    function setRouteCoords(coords) {
+        lastRouteCoords = coords && coords.length >= 2 ? coords : null;
+        if (!mapInstance || !mapInstance.getSource) {
+            return;
+        }
+        ensureRouteLayer();
+        var source = mapInstance.getSource(ROUTE_SOURCE_ID);
+        if (!source) {
+            return;
+        }
+        source.setData(lastRouteCoords ? lineFeature(lastRouteCoords) : emptyRouteGeo());
+    }
+
+    function clearRoute() {
+        lastRouteFetchKey = '';
+        lastRouteContext = '';
+        setRouteCoords(null);
+    }
+
+    /** Vẽ tuyến TX→điểm đón (đang đến đón) hoặc điểm đón→điểm trả (đang chạy), theo đường thật qua Goong Direction. */
+    function syncRouteLine(fromPos, toPos, context) {
+        if (!fromPos || !toPos) {
+            clearRoute();
+            return;
+        }
+
+        if (context && context !== lastRouteContext) {
+            // Đổi giai đoạn (đến đón ↔ đang chạy) — bỏ polyline cũ, vẽ lại từ đường thẳng tạm.
+            lastRouteContext = context;
+            lastRouteCoords = null;
+            lastRouteFetchKey = '';
+        }
+
+        var straight = [[fromPos.lng, fromPos.lat], [toPos.lng, toPos.lat]];
+        var key = [fromPos.lat, fromPos.lng, toPos.lat, toPos.lng].map(function (n) {
+            return Math.round(Number(n) * 2000) / 2000;
+        }).join(',');
+
+        if (!lastRouteCoords) {
+            setRouteCoords(straight);
+        }
+
+        if (!window.__geocodeDirectionUrl || routeFetchInFlight) {
+            return;
+        }
+        var now = Date.now();
+        if (key === lastRouteFetchKey && (now - lastRouteFetchAt) < ROUTE_REFETCH_MS) {
+            return;
+        }
+
+        routeFetchInFlight = true;
+        lastRouteFetchKey = key;
+        lastRouteFetchAt = now;
+
+        var params = new URLSearchParams({
+            origin_lat: String(fromPos.lat),
+            origin_lng: String(fromPos.lng),
+            dest_lat: String(toPos.lat),
+            dest_lng: String(toPos.lng),
+        });
+        fetch(window.__geocodeDirectionUrl + '?' + params.toString(), {
+            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin',
+        })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+                var coords = data && Array.isArray(data.coordinates) ? data.coordinates : null;
+                if (coords && coords.length >= 2) {
+                    setRouteCoords(coords);
+                }
+            })
+            .catch(function () { /* giữ đường thẳng đã vẽ tạm */ })
+            .finally(function () {
+                routeFetchInFlight = false;
+            });
+    }
+
+    function fitOrFly(points, zoom, options) {
         if (!mapInstance || !points.length) {
             return;
         }
+        options = options || {};
+        var padding = options.padding;
         if (points.length === 1) {
-            mapInstance.easeTo({ center: points[0], zoom: zoom || 15, duration: 500 });
+            var ease = { center: points[0], zoom: zoom || 15, duration: 500 };
+            if (padding) {
+                ease.padding = padding;
+            }
+            mapInstance.easeTo(ease);
             return;
         }
         var bounds = new window.goongjs.LngLatBounds(points[0], points[0]);
         points.forEach(function (p) { bounds.extend(p); });
-        mapInstance.fitBounds(bounds, { padding: 48, maxZoom: 15, duration: 500 });
+        mapInstance.fitBounds(bounds, {
+            padding: padding || 48,
+            maxZoom: 15,
+            duration: 500,
+        });
+    }
+
+    function refitSearchCamera() {
+        if (!searchingActive || !mapInstance || !lastPickup) {
+            return;
+        }
+        fitOrFly([[lastPickup.lng, lastPickup.lat]], 16, { padding: searchCameraPadding() });
     }
 
     function readGps(options) {
@@ -263,6 +422,18 @@
     }
 
     function locateMe(fly) {
+        // Đang tìm: radar giữ ở điểm đón; nút định vị chỉ kéo camera về đó.
+        if (searchingActive && lastPickup) {
+            syncRadarAroundLocation();
+            if (fly !== false && mapInstance) {
+                refitSearchCamera();
+            }
+            readGps({ highAccuracy: true, timeout: 12000, maximumAge: 5000 })
+                .then(function (pos) { lastUserPos = pos; })
+                .catch(function () { /* ignore */ });
+            return Promise.resolve(lastPickup);
+        }
+
         return readGps({ highAccuracy: true, timeout: 12000, maximumAge: 5000 })
             .then(function (pos) {
                 lastUserPos = pos;
@@ -289,6 +460,7 @@
             setLiveStatus('');
             clearCar();
             clearRadarPin();
+            clearRoute();
             return;
         }
 
@@ -330,16 +502,12 @@
             });
 
             if (searching) {
-                // Đang tìm: vòng xanh + mũi tên quanh vị trí (GPS nếu có, không thì điểm đón).
+                // Đang tìm: luôn hiện radar + mũi tên tại điểm đón.
                 if (pickupMarker) {
                     pickupMarker.remove();
                     pickupMarker = null;
                 }
-                syncRadarAroundLocation();
-                if (!lastUserPos) {
-                    placeRadarPin(lastPickup.lat, lastPickup.lng);
-                    locateMe(false);
-                }
+                placeRadarPin(lastPickup.lat, lastPickup.lng);
             } else {
                 clearRadarPin();
                 placePin('pickup', pickupLat, pickupLng, '#22c55e');
@@ -360,16 +528,29 @@
                     pts.push([Number(dropLng), Number(dropLat)]);
                 }
                 fitOrFly(pts, 14);
+
+                if (enRoute) {
+                    syncRouteLine({ lat: dLat, lng: dLng }, lastPickup, 'to_pickup');
+                } else if (inTrip && dropLat != null && dropLng != null) {
+                    syncRouteLine(lastPickup, { lat: Number(dropLat), lng: Number(dropLng) }, 'to_dropoff');
+                } else {
+                    clearRoute();
+                }
             } else {
                 clearCar();
+                clearRoute();
                 if (searching) {
-                    // Chỉ căn giữa lần đầu; poll sau không kéo camera về giữa.
+                    // Chỉ căn lần đầu theo điểm đón (sát sheet); poll sau không kéo camera.
                     if (!searchCameraSettled) {
-                        var focus = activeLocateTarget();
-                        if (focus) {
-                            fitOrFly([[focus.lng, focus.lat]], 16);
-                        }
                         searchCameraSettled = true;
+                        window.requestAnimationFrame(function () {
+                            refitSearchCamera();
+                            window.setTimeout(function () {
+                                if (searchingActive) {
+                                    refitSearchCamera();
+                                }
+                            }, 320);
+                        });
                     }
                 } else if (dropLat != null && dropLng != null) {
                     fitOrFly([center, [Number(dropLng), Number(dropLat)]], 13);
@@ -406,5 +587,6 @@
         updateFromBooking: updateFromBooking,
         resize: resize,
         locateMe: locateMe,
+        refitSearchCamera: refitSearchCamera,
     };
 })();

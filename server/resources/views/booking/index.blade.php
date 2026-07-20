@@ -28,7 +28,7 @@ $platformHotlinePhone = (string) config('app.contact_phone');
      data-pending-approval-deadline="{{ $pendingApprovalDeadline->toIso8601String() }}"
      data-pending-approval-login-url="{{ route('login') }}"
      @endif>
-    <div id="booking-browser-guard-banner" class="booking-flash booking-flash-warning mb-3 @if(($browserCancelCount ?? 0) < \App\Services\BookingBrowserGuardService::CANCEL_BLOCK_LIMIT) d-none @endif" role="alert">
+    <div id="booking-browser-guard-banner" class="booking-flash booking-flash-warning mb-3 @if(!\App\Services\BookingBrowserGuardService::ENFORCE_CANCEL_BLOCK || ($browserCancelCount ?? 0) < \App\Services\BookingBrowserGuardService::CANCEL_BLOCK_LIMIT) d-none @endif" role="alert">
         <div class="booking-flash-icon" aria-hidden="true">!</div>
         <div class="booking-flash-body">
             <strong class="booking-flash-title">Chưa thể đặt cuốc mới</strong>

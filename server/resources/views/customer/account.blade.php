@@ -10,9 +10,10 @@
         'update' => 'Cập nhật CCCD',
         'password' => 'Đổi PIN',
         'wallet' => 'Ví',
+        'trips' => 'Lịch sử chuyến',
     ];
     $pageTitle = $tabTitles[$activeTab] ?? 'Tài khoản';
-    $backUrl = in_array($activeTab, ['profile', 'info', 'update', 'password', 'wallet'], true)
+    $backUrl = in_array($activeTab, ['profile', 'info', 'update', 'password', 'wallet', 'trips'], true)
         ? route('customer.account', ['tab' => 'account'])
         : route('home');
 @endphp
@@ -56,6 +57,11 @@
             'wallet' => $wallet ?? null,
             'pendingDeposits' => $pendingDeposits ?? collect(),
             'walletHistory' => $walletHistory ?? collect(),
+        ])
+    @elseif($activeTab === 'trips')
+        @include('partials.customer-tab-trips', [
+            'completedTrips' => $completedTrips ?? null,
+            'completedTripRows' => $completedTripRows ?? [],
         ])
     @endif
 </div>

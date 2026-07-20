@@ -2,15 +2,21 @@
 /** @var \App\Models\Schedule $schedule */
 $bookings = $schedule->driverRelevantBookings();
 $phase = $schedule->driverWorkflowPhase();
+$stage = $schedule->resolvedDriverStage();
 $showActions = $showActions ?? true;
 $needsAction = $showActions && in_array($phase, ['upcoming', 'active'], true);
 $isRunning = in_array($phase, ['upcoming', 'active'], true);
+$isAssigned = $stage === \App\Models\Schedule::DRIVER_STAGE_ASSIGNED;
 $primaryBooking = $bookings->first();
-$mapNav = ($primaryBooking && $isRunning)
+$mapNav = ($primaryBooking && $isRunning && ! $isAssigned)
     ? \App\Support\MapNavigation::driverTargetForSchedule($schedule, $primaryBooking)
     : null;
 @endphp
 
+@if($isAssigned)
+    {{-- Đang đi đón: sheet peek/full riêng + map nav turn-by-turn — không dùng layout card chung (tránh lặp). --}}
+    @include('partials.driver-pickup-sheet', ['schedule' => $schedule])
+@else
 <article class="driver-trip-card driver-trip-card--compact {{ $needsAction ? 'is-action' : '' }} {{ $isRunning ? 'is-running' : '' }}" data-schedule-id="{{ $schedule->id }}">
     <div class="driver-card-top">
         <div class="driver-card-top-main">
@@ -55,15 +61,13 @@ $mapNav = ($primaryBooking && $isRunning)
         ])
     </div>
 
+    {{-- ASSIGNED dùng partials.driver-pickup-sheet ở nhánh trên — đến đây luôn là các stage sau đón. --}}
     @if($isRunning)
         @include('partials.driver-trip-quick-actions', [
             'booking' => $primaryBooking,
             'mapNav' => $mapNav,
+            'inAppNavOnly' => true,
         ])
-    @elseif($mapNav)
-        <div class="driver-card-map-nav">
-            @include('partials.driver-map-nav-button', ['mapNav' => $mapNav])
-        </div>
     @endif
 
     @if($showActions && $phase !== 'settled')
@@ -72,3 +76,4 @@ $mapNav = ($primaryBooking && $isRunning)
     </div>
     @endif
 </article>
+@endif

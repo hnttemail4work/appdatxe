@@ -276,7 +276,7 @@ class User extends Authenticatable
         }
 
         if (! \App\Support\AdminAccountStatus::isRunning($this->status)) {
-            return 'Tài khoản của bạn bị tạm ngưng.';
+            return 'Tài khoản đang bị khóa.';
         }
 
         return 'Tài khoản chưa được phép đặt xe.';
@@ -326,7 +326,7 @@ class User extends Authenticatable
     public function loginBlockMessage(): ?string
     {
         if ($this->status === 'suspended') {
-            return 'Tài khoản của bạn bị tạm ngưng.';
+            return 'Tài khoản đang bị khóa.';
         }
 
         if ($this->role === 'driver') {
@@ -347,7 +347,7 @@ class User extends Authenticatable
                 return null;
             }
 
-            return 'Tài khoản của bạn bị tạm ngưng.';
+            return 'Tài khoản đang bị khóa.';
         }
 
         if ($this->isCustomer()) {
@@ -364,14 +364,14 @@ class User extends Authenticatable
                 return null;
             }
 
-            return 'Tài khoản của bạn bị tạm ngưng.';
+            return 'Tài khoản đang bị khóa.';
         }
 
         if ($this->isActive()) {
             return null;
         }
 
-        return 'Tài khoản của bạn bị tạm ngưng.';
+        return 'Tài khoản đang bị khóa.';
     }
 
     /** Nhãn hiển thị: ưu tiên họ tên đã cập nhật, không thì số điện thoại. */

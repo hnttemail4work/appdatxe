@@ -56,28 +56,18 @@ $bookingKey = $booking?->booking_reference ?: (string) ($booking?->id ?? '');
         </span>
     @endif
 
-    @if(! empty($mapNav['google_url']) || ! empty($mapNav['url']))
-        <a href="{{ $mapNav['google_url'] ?? $mapNav['url'] }}"
-           class="driver-trip-quick-action"
-           data-driver-map-nav
-           data-map-nav-provider="google"
-           @if(! empty($mapNav['use_current_origin'])) data-map-nav-use-current-origin="1" @endif
-           @if(! empty($mapNav['dest_lat']) && ! empty($mapNav['dest_lng']))
-               data-dest-lat="{{ $mapNav['dest_lat'] }}"
-               data-dest-lng="{{ $mapNav['dest_lng'] }}"
-           @endif
-           @if(! empty($mapNav['origin_lat']) && ! empty($mapNav['origin_lng']))
-               data-origin-lat="{{ $mapNav['origin_lat'] }}"
-               data-origin-lng="{{ $mapNav['origin_lng'] }}"
-           @endif
-           target="_blank"
-           rel="noopener noreferrer"
-           aria-label="{{ $mapNav['label'] ?? 'Điều hướng' }}">
+    @if(! empty($mapNav['dest_lat']) && ! empty($mapNav['dest_lng']))
+        <button type="button"
+                class="driver-trip-quick-action"
+                data-driver-map-nav-inapp
+                data-dest-lat="{{ $mapNav['dest_lat'] }}"
+                data-dest-lng="{{ $mapNav['dest_lng'] }}"
+                aria-label="{{ $mapNav['label'] ?? 'Điều hướng' }}">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <polygon points="3 11 22 2 13 21 11 13 3 11"/>
             </svg>
             <span>Điều hướng</span>
-        </a>
+        </button>
     @else
         <span class="driver-trip-quick-action is-disabled" aria-disabled="true">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

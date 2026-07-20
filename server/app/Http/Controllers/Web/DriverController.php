@@ -188,6 +188,10 @@ class DriverController extends Controller
             }
         }
 
+        // Turn-by-turn chỉ chạy khi đang đi đón (assigned) — chỉ đường TX → điểm đón.
+        $driverAssignedStageActive = $driverActiveSchedule?->resolvedDriverStage() === Schedule::DRIVER_STAGE_ASSIGNED;
+        $driverPickupNavTarget = ($driverAssignedStageActive && $driverActiveMapNav) ? $driverActiveMapNav : null;
+
         // Offer-only: không gắn pin/nav map — màn hình nhận cuốc riêng (không map).
         $driverOfferPending = $pendingTripRequestGroups->isNotEmpty() && $tripSchedulesAll->isEmpty();
 
@@ -253,6 +257,8 @@ class DriverController extends Controller
             'mustChangePassword',
             'driverMapTripPins',
             'driverActiveMapNav',
+            'driverPickupNavTarget',
+            'driverAssignedStageActive',
             'driverInviteReferral',
             'driverInviteUrl',
             'driverInviteDiscountPercent',

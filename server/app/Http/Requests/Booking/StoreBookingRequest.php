@@ -74,8 +74,7 @@ class StoreBookingRequest extends FormRequest
             'notes'            => ['nullable', 'string', 'max:500'],
             'referral_code'    => ['nullable', 'string', 'max:32'],
             'booking_browser_id' => ['nullable', 'string', 'max:128'],
-            'payment_method'   => ['required', 'in:cash,bank_transfer'],
-            'payment_proof'    => ['nullable', 'required_if:payment_method,bank_transfer', 'image', 'mimes:jpeg,jpg,png,webp,gif', 'max:5120'],
+            'payment_method'   => ['required', 'in:cash,wallet'],
         ];
     }
 
@@ -94,8 +93,7 @@ class StoreBookingRequest extends FormRequest
             'pickup_detail.required'      => 'Vui lòng chọn điểm đón trên bản đồ.',
             'dropoff_detail.required'     => 'Vui lòng chọn điểm trả trên bản đồ.',
             'payment_method.required'     => 'Vui lòng chọn hình thức thanh toán.',
-            'payment_proof.required_if'   => 'Vui lòng đính kèm ảnh chuyển khoản.',
-            'payment_proof.image'         => 'Ảnh chuyển khoản phải là file ảnh.',
+            'payment_method.in'           => 'Hình thức thanh toán không hợp lệ.',
             'contact_phone.required'      => 'Tài khoản chưa có số điện thoại.',
         ];
     }

@@ -28,10 +28,10 @@ class CustomerController extends Controller
         $user = $request->user();
         $tab = $request->query('tab', 'account');
 
-        if (in_array($tab, ['trips', 'reviews'], true)) {
-            return redirect()->route('booking.trips');
+        if ($tab === 'reviews') {
+            return redirect()->route('customer.account', ['tab' => 'trips']);
         }
-        if (! in_array($tab, ['account', 'profile', 'info', 'update', 'password', 'inbox', 'wallet'], true)) {
+        if (! in_array($tab, ['account', 'profile', 'info', 'update', 'password', 'inbox', 'wallet', 'trips'], true)) {
             $tab = 'account';
         }
 
@@ -65,6 +65,17 @@ class CustomerController extends Controller
                 ->get();
         }
 
+        $completedTrips = null;
+        $completedTripRows = [];
+        if ($tab === 'trips') {
+            $completedTrips = $this->accounts->completedTripHistory(
+                $user,
+                max(1, (int) $request->query('completed_page', 1)),
+                10,
+            );
+            $completedTripRows = $this->accounts->serializeTripPage($completedTrips);
+        }
+
         return view('customer.account', [
             'user'           => $user,
             'profile'        => $this->accounts->profileSummary($user),
@@ -84,6 +95,8 @@ class CustomerController extends Controller
             'wallet' => $wallet,
             'pendingDeposits' => $pendingDeposits,
             'walletHistory' => $walletHistory,
+            'completedTrips' => $completedTrips,
+            'completedTripRows' => $completedTripRows,
         ]);
     }
 

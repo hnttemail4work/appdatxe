@@ -38,13 +38,21 @@
         </div>
         @endif
         @if($phoneLocked)
-            <input type="hidden" name="phone" value="{{ $lockedPhone }}" data-wizard-skip-validity="1">
+            {{-- Hiện SĐT chỉ đọc (không ẩn) để trình duyệt gắn số vào đúng ô phone, không đổ sang email. --}}
+            <div class="col-12">
+                <label class="form-label">SĐT</label>
+                <input type="tel" value="{{ $lockedPhone }}" class="form-control" readonly tabindex="-1"
+                       inputmode="tel" autocomplete="tel" data-lpignore="true" data-1p-ignore="true"
+                       data-form-type="other" data-wizard-skip-validity="1">
+                <input type="hidden" name="phone" value="{{ $lockedPhone }}" data-wizard-skip-validity="1">
+            </div>
         @else
         <div class="col-12">
             <label class="form-label">SĐT {!! $star('phone') !!}</label>
             <input type="tel" name="phone" value="{{ old('phone', $user->phone ?? '') }}"
                    class="form-control @error('phone') is-invalid @enderror" {{ $req('phone') }}
-                   inputmode="tel" autocomplete="off" data-lpignore="true" data-1p-ignore="true"
+                   inputmode="tel" autocomplete="tel" data-lpignore="true" data-1p-ignore="true"
+                   data-form-type="other"
                    placeholder="09xxxxxxxx">
             <div class="invalid-feedback" data-client-feedback="phone">@error('phone'){{ $message }}@enderror</div>
         </div>
@@ -70,11 +78,16 @@
         </div>
         @endif
         <div class="col-12">
-            <label class="form-label">Email</label>
+            <label class="form-label">Email <span class="text-muted fw-normal">(không bắt buộc)</span></label>
+            {{-- readonly tới khi focus: chặn Chrome/Safari autofill nhầm SĐT vào ô email. --}}
             <input type="email" name="email" value="{{ $profileEmail }}"
                    class="form-control @error('email') is-invalid @enderror"
-                   autocomplete="off" data-lpignore="true" data-1p-ignore="true"
+                   autocomplete="email" data-lpignore="true" data-1p-ignore="true"
+                   data-form-type="other"
                    data-wizard-skip-validity="1"
+                   data-block-phone-autofill="1"
+                   readonly
+                   onfocus="this.removeAttribute('readonly')"
                    placeholder="email@example.com">
             <div class="invalid-feedback" data-client-feedback="email">@error('email'){{ $message }}@enderror</div>
         </div>

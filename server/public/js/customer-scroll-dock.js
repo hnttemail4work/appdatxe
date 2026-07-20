@@ -15,6 +15,18 @@
         return link && link.href ? link.href : null;
     }
 
+    function getHomeUrl() {
+        var link = document.querySelector('.customer-scroll-dock a.customer-scroll-dock-item');
+        if (link && link.href) {
+            return link.href;
+        }
+        var back = document.querySelector('.app-navbar a[href="/"], a.app-nav-back');
+        if (back && back.href) {
+            return back.href;
+        }
+        return '/';
+    }
+
     function focusTripsContent() {
         var target = document.getElementById('guest-trip-page')
             || document.getElementById('guest-trip-page-panel');
@@ -31,7 +43,7 @@
         });
     }
 
-    /** Chỉ gọi sau hủy chuyến hoặc chuyến vừa kết thúc — không tự redirect khi mở trang. */
+    /** Chỉ gọi sau chuyến vừa kết thúc — không tự redirect khi mở trang. */
     function focusTripsPage() {
         if (isTripsPage()) {
             focusTripsContent();
@@ -44,8 +56,18 @@
         }
     }
 
+    /** Sau hủy chuyến — về trang chủ đặt xe (“Bạn muốn đi đâu?”). */
+    function focusHomePage() {
+        if (isBookingHomePage()) {
+            window.scrollTo(0, 0);
+            return;
+        }
+        window.location.href = getHomeUrl();
+    }
+
     window.CustomerScrollDock = {
         focusTripsPage: focusTripsPage,
         focusTripsContent: focusTripsContent,
+        focusHomePage: focusHomePage,
     };
 })();

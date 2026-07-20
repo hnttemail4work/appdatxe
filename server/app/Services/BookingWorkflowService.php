@@ -124,11 +124,11 @@ class BookingWorkflowService
         }
 
         $reason = null;
-        if ($this->phoneGuard->requiresCancelReason($contactPhone)) {
+        if ($booking->hasDriverAccepted()) {
             if (! $cancellationReasonId) {
                 throw new InvalidArgumentException('Vui lòng chọn lý do hủy chuyến.');
             }
-            $reason = $this->cancellationReasons->resolveForCancel($cancellationReasonId, 'customer');
+            $reason = $this->cancellationReasons->resolveForCancel($cancellationReasonId, 'driver');
         }
 
         DB::transaction(function () use ($booking, $reason): void {
@@ -219,11 +219,13 @@ class BookingWorkflowService
         $reason = null;
         $reasonLabel = 'Khách hủy chuyến';
 
-        if ($phone !== '' && $this->phoneGuard->requiresCancelReason($phone, $locationKey)) {
+        // TX đã nhận: bắt buộc lý do — dùng chung danh sách với tài xế.
+        // Chưa có TX: hủy thoải mái, không cần lý do.
+        if ($booking->hasDriverAccepted()) {
             if (! $cancellationReasonId) {
                 throw new InvalidArgumentException('Vui lòng chọn lý do hủy chuyến.');
             }
-            $reason = $this->cancellationReasons->resolveForCancel($cancellationReasonId, 'customer');
+            $reason = $this->cancellationReasons->resolveForCancel($cancellationReasonId, 'driver');
             $reasonLabel = $reason->label;
         }
 

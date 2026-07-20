@@ -4,7 +4,7 @@
     $walletBalanceLabel = $driverWallet
         ? number_format($driverWallet->balance, 0, ',', '.') . ' đ'
         : '—';
-    $driverRatingLabel = $profile->starRatingLabel();
+    $driverLikeCount = $profile->likeCount();
     $registerUrl = route('register', ['from' => 'driver']);
     $statusKey = $heroStatus['key'] ?? 'offline';
     $statusLabel = $heroStatus['label'] ?? 'Tạm nghỉ';
@@ -32,11 +32,12 @@
             <div class="driver-drawer__meta">
                 <strong class="driver-drawer__name">{{ $user->preferredDisplayName() }}</strong>
                 <div class="driver-drawer__chips">
-                    <span class="driver-drawer__rating" aria-label="Đánh giá {{ $driverRatingLabel }} sao">
-                        <svg class="driver-drawer__rating-star" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
-                            <path fill="currentColor" d="M12 2.5l2.9 5.88 6.49.94-4.7 4.58 1.11 6.47L12 17.77l-5.8 3.05 1.11-6.47-4.7-4.58 6.49-.94L12 2.5z"/>
+                    <span class="driver-drawer__likes" aria-label="{{ $driverLikeCount }} lượt thích">
+                        <svg class="driver-drawer__likes-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/>
+                            <path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
                         </svg>
-                        <span class="driver-drawer__rating-value">{{ $driverRatingLabel }}</span>
+                        <span class="driver-drawer__likes-value">{{ number_format($driverLikeCount) }}</span>
                     </span>
                 </div>
             </div>
@@ -65,26 +66,6 @@
 
     <nav class="driver-drawer__nav" aria-label="Chức năng">
         <p class="driver-drawer__nav-label">Chức năng</p>
-
-        <button type="button"
-                class="driver-drawer__link"
-                id="driver-drawer-pwa-install"
-                data-pwa-install-trigger
-                data-driver-drawer-close>
-            <span class="driver-drawer__link-icon" aria-hidden="true">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="5" y="2" width="14" height="20" rx="2.5"/>
-                    <path d="M12 7v7"/>
-                    <path d="m9 11 3 3 3-3"/>
-                    <path d="M9 18h6"/>
-                </svg>
-            </span>
-            <span class="driver-drawer__link-text-wrap">
-                <span class="driver-drawer__link-text">Ghim vào màn hình chính</span>
-                <span class="driver-drawer__link-meta" data-pwa-install-meta>Lối tắt mở màn sẵn sàng nhận cuốc</span>
-            </span>
-            <span class="driver-drawer__chevron" aria-hidden="true">›</span>
-        </button>
 
         <button type="button" class="driver-drawer__link" data-driver-tab="invite" data-driver-drawer-close>
             <span class="driver-drawer__link-icon" aria-hidden="true">

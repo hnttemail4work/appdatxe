@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Booking;
 use App\Models\CustomerWallet;
 use App\Models\CustomerWalletTransaction;
 use App\Models\User;
@@ -19,6 +20,106 @@ class CustomerWalletService
             ['user_id' => $user->id],
             ['balance' => 0],
         );
+    }
+
+    public function balanceFor(User $user): int
+    {
+        return (int) $this->walletFor($user)->balance;
+    }
+
+    /** Kiểm tra số dư trước khi đặt chuyến (trừ ví khi hoàn thành). */
+    public function assertCanCoverTrip(User $user, int $amount): void
+    {
+        if ($user->role !== 'customer') {
+            throw new InvalidArgumentException('Chỉ tài khoản khách mới thanh toán bằng ví.');
+        }
+
+        if ($amount <= 0) {
+            return;
+        }
+
+        $balance = $this->balanceFor($user);
+        if ($balance < $amount) {
+            throw new InvalidArgumentException(
+                'Số dư ví không đủ (cần '.number_format($amount, 0, ',', '.').' đ, hiện có '
+                .number_format($balance, 0, ',', '.').' đ).'
+            );
+        }
+    }
+
+    /** Trừ ví sau khi chuyến hoàn thành — idempotent theo booking_id. */
+    public function chargeForCompletedBooking(Booking $booking): void
+    {
+        if (($booking->payment_method ?? '') !== 'wallet') {
+            return;
+        }
+
+        if ($booking->payment_status === 'paid') {
+            return;
+        }
+
+        $amount = $booking->tripRevenueAmount();
+        $customerId = (int) ($booking->customer_id ?? 0);
+        if ($customerId <= 0) {
+            return;
+        }
+
+        $user = User::query()->find($customerId);
+        if (! $user || $user->role !== 'customer') {
+            return;
+        }
+
+        if ($amount <= 0) {
+            $booking->update(['payment_status' => 'paid']);
+
+            return;
+        }
+
+        DB::transaction(function () use ($booking, $user, $amount): void {
+            $existing = CustomerWalletTransaction::query()
+                ->where('booking_id', $booking->id)
+                ->where('type', 'trip_fare')
+                ->lockForUpdate()
+                ->first();
+
+            if ($existing) {
+                if ($booking->payment_status !== 'paid') {
+                    $booking->update(['payment_status' => 'paid']);
+                }
+
+                return;
+            }
+
+            $wallet = CustomerWallet::query()
+                ->where('user_id', $user->id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $wallet) {
+                $wallet = $this->walletFor($user);
+                $wallet = CustomerWallet::query()->lockForUpdate()->findOrFail($wallet->id);
+            }
+
+            if ((int) $wallet->balance < $amount) {
+                return;
+            }
+
+            $wallet->update([
+                'balance' => (int) $wallet->balance - $amount,
+            ]);
+
+            CustomerWalletTransaction::query()->create([
+                'customer_wallet_id' => $wallet->id,
+                'booking_id'         => $booking->id,
+                'type'               => 'trip_fare',
+                'amount'             => $amount,
+                'status'             => 'approved',
+                'approved_at'        => now(),
+                'notes'              => 'Trừ ví chuyến '.$booking->booking_reference,
+            ]);
+
+            $booking->update(['payment_status' => 'paid']);
+        });
     }
 
     public function requestDeposit(User $user, int $amount, ?UploadedFile $proofImage = null): CustomerWalletTransaction

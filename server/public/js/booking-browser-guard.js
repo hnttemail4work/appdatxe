@@ -12,6 +12,9 @@
 
     var BLOCK_LIMIT = Number(window.__guestBrowserCancelBlockLimit) || 3;
 
+    // Chỉ chặn khi server bật rõ (false/undefined = không chặn — đang test).
+    var ENFORCE_CANCEL_BLOCK = window.__guestBrowserEnforceCancelBlock === true;
+
 
 
     var blockState = {
@@ -138,7 +141,7 @@
 
     function refreshBlockStateFromLocal() {
 
-        blockState.cancelBlocked = getCancelCount() >= BLOCK_LIMIT;
+        blockState.cancelBlocked = ENFORCE_CANCEL_BLOCK && getCancelCount() >= BLOCK_LIMIT;
 
         if (blockState.cancelBlocked) {
 
@@ -182,9 +185,13 @@
 
         if (data.reason === 'browser_cancel') {
 
-            blockState.cancelBlocked = true;
+            if (ENFORCE_CANCEL_BLOCK) {
 
-            blockState.message = data.message || cancelBlockMessage();
+                blockState.cancelBlocked = true;
+
+                blockState.message = data.message || cancelBlockMessage();
+
+            }
 
         } else if (data.reason === 'browser' || data.reason === 'phone') {
 

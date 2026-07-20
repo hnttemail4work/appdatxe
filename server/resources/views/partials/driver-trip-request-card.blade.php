@@ -133,11 +133,7 @@ $tripCode = $schedule->shortTripCode();
                 </button>
             </form>
             <form method="POST" action="{{ route('driver.tripRequests.accept', $tripRequest) }}"
-                  class="driver-workflow-compact-action driver-accept-form driver-request-card__accept-form"
-                  data-confirm="Nhận chuyến này?"
-                  data-confirm-title="Nhận chuyến"
-                  data-confirm-ok="Nhận chuyến"
-                  data-confirm-variant="success">
+                  class="driver-workflow-compact-action driver-accept-form driver-request-card__accept-form">
                 @csrf
                 <button type="submit" class="btn driver-offer-btn driver-offer-btn--accept driver-btn-accept driver-request-card__accept-btn">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

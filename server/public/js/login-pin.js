@@ -122,7 +122,7 @@
         }
         if (data.status === 'inactive') {
           if (V) {
-            V.showError(phoneInput, data.message || 'Tài khoản đã bị vô hiệu hoá.');
+            V.showError(phoneInput, data.message || 'Tài khoản đang bị khóa.');
           }
           phoneInput.focus();
           return;

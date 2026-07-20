@@ -15,7 +15,9 @@ window.__bookingSuccess = @json(session('booking_success'));
 window.__appContactPhone = @json(config('app.contact_phone'));
 window.__guestBrowserCancelCount = @json((int) ($browserCancelCount ?? session('guest_browser_cancel_count', 0)));
 window.__guestBrowserCancelBlockLimit = @json(\App\Services\BookingBrowserGuardService::CANCEL_BLOCK_LIMIT);
+window.__guestBrowserEnforceCancelBlock = @json(\App\Services\BookingBrowserGuardService::ENFORCE_CANCEL_BLOCK);
 window.__customerBookingPrefill = @json($customerBookingPrefill ?? null);
+window.__customerWalletBalance = @json($customerWalletBalance);
 </script>
 <script src="{{ asset('js/booking-browser-guard.js') }}?v={{ filemtime(public_path('js/booking-browser-guard.js')) }}"></script>
 <script src="{{ asset('js/idle-poll.js') }}?v={{ filemtime(public_path('js/idle-poll.js')) }}"></script>

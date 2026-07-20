@@ -97,9 +97,28 @@ class CustomerAccountService
     public function tripHistory(User $user, int $page = 1, int $perPage = 10): LengthAwarePaginator
     {
         return $this->bookingsQuery($user)
-            ->with(['schedule.route', 'tripReview'])
+            ->with(['schedule.route', 'schedule.assignedDriverProfile', 'tripReview'])
             ->orderByDesc('created_at')
             ->paginate($perPage, ['*'], 'page', $page);
+    }
+
+    /** @return LengthAwarePaginator<int, Booking> */
+    public function completedTripHistory(User $user, int $page = 1, int $perPage = 10): LengthAwarePaginator
+    {
+        return $this->bookingsQuery($user)
+            ->where('trip_status', 'completed')
+            ->with(['schedule.route', 'schedule.assignedDriverProfile', 'tripReview'])
+            ->orderByDesc(DB::raw('COALESCE(completed_at, created_at)'))
+            ->paginate($perPage, ['*'], 'completed_page', $page);
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function serializeTripPage(LengthAwarePaginator $paginator): array
+    {
+        return $paginator->getCollection()
+            ->map(fn (Booking $booking): array => $this->serializeTrip($booking))
+            ->values()
+            ->all();
     }
 
     /** @return LengthAwarePaginator<int, TripReview> */
@@ -124,7 +143,9 @@ class CustomerAccountService
     /** @return array<string, mixed> */
     public function serializeTrip(Booking $booking): array
     {
-        $booking->loadMissing('schedule.route', 'tripReview');
+        $booking->loadMissing('schedule.route', 'schedule.assignedDriverProfile', 'tripReview');
+        $driverCode = $booking->schedule?->assignedDriverProfile?->driver_code
+            ?: $booking->guestDriverProfile()?->driver_code;
 
         return [
             'booking_reference'   => $booking->booking_reference,
@@ -135,11 +156,14 @@ class CustomerAccountService
             'trip_status'         => $booking->trip_status,
             'booking_status'      => $booking->booking_status,
             'guest_status_label'  => $booking->primaryStatusLabel(),
+            'driver_code'         => $driverCode,
             'total_price_label'   => Money::vnd((float) $booking->total_price),
             'service_date_label'  => $booking->isScheduledPickup()
                 ? $booking->guestPickupAt()?->format('d/m/Y H:i')
                 : $booking->pickupModeLabel(),
             'created_at_label'    => $booking->created_at?->format('d/m/Y H:i'),
+            'completed_at_label'  => $booking->completed_at?->format('d/m/Y H:i')
+                ?: $booking->created_at?->format('d/m/Y H:i'),
             'can_review'          => $booking->trip_status === 'completed' && ! $booking->tripReview,
             'review'              => $booking->tripReview ? [
                 'sentiment' => $booking->tripReview->sentiment,

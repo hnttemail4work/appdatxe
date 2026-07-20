@@ -14,6 +14,7 @@ use App\Models\ReferralCode;
 use App\Services\BookingBrowserGuardService;
 use App\Services\BookingPhoneGuardService;
 use App\Services\BookingWorkflowService;
+use App\Services\CustomerWalletService;
 use App\Services\DriverAvailabilityService;
 use App\Services\DuplicateBookingService;
 use App\Services\GuestTripStatusService;
@@ -43,6 +44,7 @@ class GuestBookingController extends Controller
         private readonly BookingBrowserGuardService $browserGuard,
         private readonly GuestTripStatusService $guestTrips,
         private readonly DriverAvailabilityService $driverAvailability,
+        private readonly CustomerWalletService $customerWallets,
     ) {
     }
 
@@ -243,11 +245,13 @@ class GuestBookingController extends Controller
         $browserCancelCount = (int) $request->session()->get('guest_browser_cancel_count', 0);
         $bookingPageBannerUrl = BookingPageSettings::bannerUrl();
         $customerBookingPrefill = null;
+        $customerWalletBalance = null;
         $authUser = auth()->user();
 
         if ($authUser && $authUser->role === 'customer') {
             $customerBookingPrefill = app(\App\Services\CustomerAccountService::class)
                 ->bookingPrefill($authUser);
+            $customerWalletBalance = $this->customerWallets->balanceFor($authUser);
         }
 
         return compact(
@@ -261,6 +265,7 @@ class GuestBookingController extends Controller
             'browserCancelCount',
             'bookingPageBannerUrl',
             'customerBookingPrefill',
+            'customerWalletBalance',
         );
     }
 
@@ -453,7 +458,8 @@ class GuestBookingController extends Controller
             return $this->bookingFormError($e);
         }
 
-        if ((int) $request->session()->get('guest_browser_cancel_count', 0) >= BookingBrowserGuardService::CANCEL_BLOCK_LIMIT) {
+        if (BookingBrowserGuardService::ENFORCE_CANCEL_BLOCK
+            && (int) $request->session()->get('guest_browser_cancel_count', 0) >= BookingBrowserGuardService::CANCEL_BLOCK_LIMIT) {
             return $this->bookingFormRedirect()
                 ->withErrors(['booking' => $this->browserGuard->blockMessage()])
                 ->withInput();
@@ -469,6 +475,16 @@ class GuestBookingController extends Controller
             $this->phoneGuard->assertCanBook($validated['contact_phone']);
         } catch (InvalidArgumentException $e) {
             return $this->bookingFormError($e);
+        }
+
+        $authUser = auth()->user();
+        $paymentMethod = ($validated['payment_method'] ?? 'cash') === 'wallet' ? 'wallet' : 'cash';
+        if ($paymentMethod === 'wallet') {
+            if (! $authUser || $authUser->role !== 'customer') {
+                return $this->bookingFormRedirect()
+                    ->withErrors(['booking' => 'Đăng nhập tài khoản khách để thanh toán bằng ví.'])
+                    ->withInput();
+            }
         }
 
         try {
@@ -496,28 +512,36 @@ class GuestBookingController extends Controller
             return $this->bookingFormError($e);
         }
 
-        $authUser = auth()->user();
         $paymentUpdates = [
-            'payment_method' => ($validated['payment_method'] ?? 'cash') === 'bank_transfer'
-                ? 'bank_transfer'
-                : 'cash',
+            'payment_method' => $paymentMethod,
         ];
         if ($authUser && $authUser->role === 'customer') {
             $paymentUpdates['customer_id'] = $authUser->id;
         }
-        if (($validated['payment_method'] ?? '') === 'bank_transfer' && $request->hasFile('payment_proof')) {
+        $booking->update($paymentUpdates);
+
+        if ($paymentMethod === 'wallet' && $authUser) {
             try {
-                $paymentUpdates['payment_proof_path'] = app(\App\Services\ImageCompressService::class)->storeOptimized(
-                    $request->file('payment_proof'),
-                    'booking-payment-proofs/' . $booking->id,
-                    'proof',
-                    1280,
-                );
-            } catch (\Throwable) {
-                // Không chặn đặt xe nếu nén ảnh lỗi — vẫn lưu method.
+                $this->customerWallets->assertCanCoverTrip($authUser, $booking->tripRevenueAmount());
+            } catch (InvalidArgumentException $e) {
+                try {
+                    $booking->update([
+                        'booking_status'            => 'cancelled',
+                        'trip_status'               => 'cancelled',
+                        'payment_status'            => 'unpaid',
+                        'cancelled_at'              => now(),
+                        'cancelled_by'              => 'system',
+                        'cancellation_reason_label' => 'Số dư ví không đủ khi đặt',
+                    ]);
+                    if ($booking->schedule) {
+                        $this->workflow->syncScheduleAvailability($booking->schedule);
+                    }
+                } catch (\Throwable) {
+                }
+
+                return $this->bookingFormError($e);
             }
         }
-        $booking->update($paymentUpdates);
 
         session()->forget('guest_referral_code');
 

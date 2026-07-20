@@ -25,55 +25,9 @@ class DriverWaitProgress
             ];
         }
 
-        if ($schedule->needsDriverMovementConfirm()) {
-            if (! $schedule->driverMovementConfirmAvailable()) {
-                return [
-                    'kind'          => 'movement_waiting',
-                    'label'         => 'Đã nhận chuyến',
-                    'hint'          => 'Trước giờ đón 1 tiếng sẽ hiện nút «Xác nhận». Bạn vẫn có thể hủy cuốc.',
-                    'started_at'    => ($schedule->driver_assigned_at ?? now())->toIso8601String(),
-                    'deadline_at'   => null,
-                    'total_seconds' => 0,
-                    'indeterminate' => true,
-                ];
-            }
-
-            $deadline = $schedule->driver_movement_deadline_at;
-            $assignedAt = $schedule->driver_assigned_at ?? now();
-
-            if ($deadline?->isFuture()) {
-                return [
-                    'kind'          => 'movement_confirm',
-                    'label'         => 'Bấm «Xác nhận» để đi đón khách',
-                    'hint'          => 'Bạn vẫn có thể hủy cuốc. Hết giờ hệ thống có thể gán tài xế khác.',
-                    'started_at'    => $assignedAt->toIso8601String(),
-                    'deadline_at'   => $deadline->toIso8601String(),
-                    'total_seconds' => max(30, (int) $assignedAt->diffInSeconds($deadline)),
-                    'indeterminate' => false,
-                ];
-            }
-
-            if ($deadline?->isPast()) {
-                return [
-                    'kind'          => 'movement_confirm',
-                    'label'         => 'Đã quá hạn — bấm «Xác nhận» ngay',
-                    'hint'          => 'Xác nhận đi đón để tránh bị gỡ cuốc. Bạn vẫn có thể hủy cuốc.',
-                    'started_at'    => $deadline->toIso8601String(),
-                    'deadline_at'   => null,
-                    'total_seconds' => 0,
-                    'indeterminate' => true,
-                ];
-            }
-
-            return [
-                'kind'          => 'movement_confirm',
-                'label'         => 'Bấm «Xác nhận» để đi đón khách',
-                'hint'          => 'Bạn vẫn có thể hủy cuốc.',
-                'started_at'    => $assignedAt->toIso8601String(),
-                'deadline_at'   => null,
-                'total_seconds' => 0,
-                'indeterminate' => true,
-            ];
+        // Sau nhận cuốc: không còn countdown «Xác nhận» / tự hủy.
+        if ($schedule->resolvedDriverStage() === Schedule::DRIVER_STAGE_ASSIGNED) {
+            return null;
         }
 
         return null;

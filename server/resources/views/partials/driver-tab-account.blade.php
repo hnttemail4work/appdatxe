@@ -1,5 +1,4 @@
 @php
-    $mustChangePassword = (bool) ($mustChangePassword ?? false);
     $pendingDocs = $pendingChangeRequest ?? null;
     $user = $user ?? auth()->user();
     $profile = $profile ?? null;
@@ -11,7 +10,7 @@
     $walletBalanceLabel = $driverWallet
         ? number_format($driverWallet->balance, 0, ',', '.') . ' đ'
         : '—';
-    $driverRatingLabel = $profile?->starRatingLabel() ?? '—';
+    $driverLikeCount = $profile?->likeCount() ?? 0;
     $registerUrl = route('register', ['from' => 'driver']);
     $statusKey = $heroStatus['key'] ?? 'offline';
     $statusLabel = $heroStatus['label'] ?? 'Tạm nghỉ';
@@ -36,21 +35,15 @@
         </div>
         <div class="driver-account-identity__meta">
             <strong class="driver-account-identity__name">{{ $user?->preferredDisplayName() ?? '—' }}</strong>
-            <span class="driver-account-identity__rating" aria-label="Đánh giá {{ $driverRatingLabel }} sao">
-                <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
-                    <path fill="currentColor" d="M12 2.5l2.9 5.88 6.49.94-4.7 4.58 1.11 6.47L12 17.77l-5.8 3.05 1.11-6.47-4.7-4.58 6.49-.94L12 2.5z"/>
+            <span class="driver-account-identity__likes" aria-label="{{ $driverLikeCount }} lượt thích">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/>
+                    <path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
                 </svg>
-                {{ $driverRatingLabel }}
+                {{ number_format($driverLikeCount) }}
             </span>
         </div>
     </div>
-
-    @if($mustChangePassword)
-        <div class="driver-notice driver-notice-warning mb-3" role="alert">
-            <strong data-i18n="account_password_required_title">Đổi mật khẩu</strong>
-            <p class="mb-0 small" data-i18n="account_password_required_hint">Bạn đang dùng mật khẩu mặc định. Vui lòng đặt mật khẩu mới để bảo mật tài khoản.</p>
-        </div>
-    @endif
 
     <nav class="driver-account-menu" aria-label="Mục tài khoản">
         <button type="button" class="driver-account-menu__item" data-driver-tab="wallet">
@@ -61,42 +54,15 @@
             <span class="driver-account-menu__chevron" aria-hidden="true">›</span>
         </button>
 
-        <button type="button" class="driver-account-menu__item" data-driver-tab="account-profile">
-            <span class="driver-account-menu__copy">
-                <strong data-i18n="account_profile">Hồ sơ</strong>
-                <span class="driver-account-menu__hint" data-i18n="account_profile_menu_hint">Xem họ tên, SĐT, mã tài xế, xe</span>
-            </span>
-            <span class="driver-account-menu__chevron" aria-hidden="true">›</span>
-        </button>
-
         <button type="button" class="driver-account-menu__item" data-driver-tab="account-update">
             <span class="driver-account-menu__copy">
                 <strong data-i18n="account_update">Cập nhật thông tin</strong>
                 <span class="driver-account-menu__hint">
-                    <span data-i18n="account_update_menu_hint">Biển số, loại xe, ngân hàng, ảnh giấy tờ</span>
+                    <span data-i18n="account_update_menu_hint">Hồ sơ, giấy tờ xe & CCCD</span>
                     @if($pendingDocs)
                         · Đang chờ duyệt
                     @endif
                 </span>
-            </span>
-            <span class="driver-account-menu__chevron" aria-hidden="true">›</span>
-        </button>
-
-        <button type="button" class="driver-account-menu__item {{ $mustChangePassword ? 'is-alert' : '' }}" data-driver-tab="account-password">
-            <span class="driver-account-menu__copy">
-                <strong data-i18n="account_password">Đổi mật khẩu</strong>
-                <span class="driver-account-menu__hint" data-i18n="account_password_menu_hint">Bảo mật tài khoản đăng nhập</span>
-            </span>
-            <span class="driver-account-menu__chevron" aria-hidden="true">›</span>
-        </button>
-
-        <button type="button"
-                class="driver-account-menu__item"
-                id="driver-account-pwa-install"
-                data-pwa-install-trigger>
-            <span class="driver-account-menu__copy">
-                <strong data-pwa-install-label>Ghim vào màn hình chính</strong>
-                <span class="driver-account-menu__hint" data-pwa-install-meta>Lối tắt mở màn sẵn sàng nhận cuốc</span>
             </span>
             <span class="driver-account-menu__chevron" aria-hidden="true">›</span>
         </button>
@@ -128,7 +94,7 @@
         <button type="button" class="driver-account-menu__item" data-driver-tab="settings">
             <span class="driver-account-menu__copy">
                 <strong data-i18n="settings_title">Cài đặt</strong>
-                <span class="driver-account-menu__hint">Ngôn ngữ, âm thanh thông báo</span>
+                <span class="driver-account-menu__hint">Ngôn ngữ, âm thanh, ghim màn hình</span>
             </span>
             <span class="driver-account-menu__chevron" aria-hidden="true">›</span>
         </button>

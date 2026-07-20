@@ -4,7 +4,9 @@ namespace App\Http\Requests\Auth;
 
 use App\Services\RegistrationService;
 use App\Support\AuthMessages;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Http\Exceptions\HttpResponseException;
 
 class RegisterCustomerRequest extends FormRequest
 {
@@ -17,6 +19,16 @@ class RegisterCustomerRequest extends FormRequest
     public function rules(): array
     {
         return app(RegistrationService::class)->customerRules();
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function () {
+            $redirect = app(RegistrationService::class)->redirectIfPhoneBlocksRegister($this, false);
+            if ($redirect) {
+                throw new HttpResponseException($redirect);
+            }
+        });
     }
 
     /** @return array<string, string> */

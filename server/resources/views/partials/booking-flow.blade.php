@@ -14,8 +14,16 @@
                 <button type="button" class="be-step__map-back" data-modal-back aria-label="Quay lại">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </button>
-                <button type="button" class="be-step__map-locate" id="booking-pickup-recenter" aria-label="Về vị trí điểm đón" title="Định vị">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>
+                <button type="button"
+                        class="trip-locate-fab be-step__map-locate"
+                        id="booking-pickup-recenter"
+                        aria-label="Về vị trí hiện tại"
+                        title="Vị trí hiện tại">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+                        <circle cx="12" cy="12" r="8"/>
+                    </svg>
                 </button>
                 <div class="be-step__map-canvas" id="booking-pickup-map-canvas" aria-label="Bản đồ điểm đón"></div>
             </div>
@@ -108,26 +116,9 @@
                             </button>
                             <div class="be-pay-dropdown__menu" id="booking-pay-method-menu" role="listbox" hidden>
                                 <button type="button" class="be-pay-dropdown__option is-active" role="option" data-pay-value="cash" aria-selected="true">Tiền mặt</button>
-                                <button type="button" class="be-pay-dropdown__option" role="option" data-pay-value="bank_transfer" aria-selected="false">Chuyển khoản</button>
+                                <button type="button" class="be-pay-dropdown__option" role="option" data-pay-value="wallet" aria-selected="false">Trừ ví</button>
                             </div>
                             <input type="hidden" name="payment_method" id="booking-payment-method" value="cash">
-                        </div>
-                        <div id="booking-pay-transfer" class="booking-pay-transfer d-none mt-2">
-                            @include('partials.company-bank-transfer', [
-                                'amount' => 0,
-                                'dynamicAmount' => true,
-                                'qrElementId' => 'booking-transfer-qr',
-                                'addInfo' => \App\Support\PlatformPaymentInfo::driverTransferContent(auth()->user()?->phone),
-                                'hideBankDetails' => false,
-                            ])
-                            <label class="form-label mt-2 mb-1" for="booking-payment-proof">Ảnh chuyển khoản <span class="text-danger">*</span></label>
-                            <input type="file" name="payment_proof" id="booking-payment-proof"
-                                   class="form-control form-control-sm"
-                                   accept="image/jpeg,image/png,image/webp,image/gif"
-                                   capture="environment">
-                            <div class="booking-pay-proof-preview d-none mt-2" id="booking-pay-proof-preview" hidden>
-                                <img src="" alt="Xem trước" id="booking-pay-proof-preview-img" class="booking-pay-proof-preview__img">
-                            </div>
                         </div>
                     </div>
 

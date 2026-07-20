@@ -41,93 +41,21 @@ class AuthController extends Controller
         ]);
     }
 
-    /** JSON: missing | inactive | active — dùng trước bước nhập PIN. */
+    /** JSON: missing | needs_otp | inactive | active — login PIN + chặn sớm đăng ký. */
     public function checkPhone(Request $request)
     {
-        $raw = (string) $request->input('phone', '');
-        $phone = AuthIdentifier::normalizePhone($raw);
         $forDriver = $this->isDriverAuthAudience($request);
         AuthAudience::rememberDriver($request, $forDriver);
-        $role = $forDriver ? 'driver' : 'customer';
-        $registerRoute = $forDriver ? 'driver.register' : 'customer.register';
 
-        if ($phone === '' || ! preg_match('/^0\d{8,10}$/', preg_replace('/\D/', '', $raw))) {
-            return response()->json([
-                'status'  => 'invalid',
-                'message' => 'Số điện thoại không hợp lệ.',
-            ], 422);
-        }
+        $result = $this->registration->resolvePhoneAuthStatus(
+            $request,
+            (string) $request->input('phone', ''),
+            $forDriver,
+        );
 
-        // KH chỉ dò user customer; TX chỉ dò user driver (có hồ sơ TX).
-        $user = AuthIdentifier::findUserByPhoneAndRole($phone, $role);
+        $statusCode = ($result['status'] ?? '') === 'invalid' ? 422 : 200;
 
-        if (! $user) {
-            return response()->json([
-                'status'       => 'missing',
-                'register_url' => route($registerRoute, ['phone' => $phone]),
-            ]);
-        }
-
-        // Hết hạn chờ duyệt → chuyển "Đã từ chối" (admin vẫn thấy), rồi mở đăng ký lại.
-        if ($user->isCustomer() && $user->isCustomerApprovalPending() && $user->isCustomerPendingApprovalExpired()) {
-            app(\App\Services\PendingApprovalExpiryService::class)->expireCustomer($user);
-            $user->refresh();
-        }
-        if ($user->isCustomer() && $user->isCustomerApprovalRejected()) {
-            return response()->json([
-                'status'       => 'missing',
-                'register_url' => route($registerRoute, ['phone' => $phone]),
-                'message'      => \App\Support\AuthOtp::pendingExpiredLoginMessage(),
-            ]);
-        }
-
-        // Chờ duyệt — giữ trang OTP (không đẩy về login).
-        if ($user->isAwaitingApprovalForRegisterOtp()) {
-            return response()->json([
-                'status'  => 'needs_otp',
-                'otp_url' => $this->registration->openRegisterOtpPage($request, $user),
-            ]);
-        }
-        if ($user->role === 'driver') {
-            $profile = DriverProfile::query()->where('user_id', $user->id)->first();
-            if (! $profile) {
-                return response()->json([
-                    'status'       => 'missing',
-                    'register_url' => route('driver.register', ['phone' => $phone]),
-                ]);
-            }
-            if ($profile->isPendingApproval() && $profile->isPendingApprovalExpired()) {
-                app(\App\Services\PendingApprovalExpiryService::class)->expireDriver($profile);
-                $profile->refresh();
-            }
-            if ($profile->isRejected()) {
-                return response()->json([
-                    'status'       => 'missing',
-                    'register_url' => route('driver.register', ['phone' => $phone]),
-                    'message'      => \App\Support\AuthOtp::pendingExpiredLoginMessage(),
-                ]);
-            }
-        }
-
-        // Đã duyệt → OTP lần đầu (admin lấy mã ở tab OTP / Reset).
-        if ($this->registration->shouldResumeRegisterOtp($user)) {
-            return response()->json([
-                'status'  => 'needs_otp',
-                'otp_url' => $this->registration->beginRegisterOtpResume($request, $user),
-            ]);
-        }
-
-        if ($block = $user->loginBlockMessage()) {
-            return response()->json([
-                'status'  => 'inactive',
-                'message' => $block,
-            ]);
-        }
-
-        return response()->json([
-            'status' => 'active',
-            'role'   => $user->role,
-        ]);
+        return response()->json($result, $statusCode);
     }
 
     public function login(LoginRequest $request)

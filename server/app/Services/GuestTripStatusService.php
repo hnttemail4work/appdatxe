@@ -134,6 +134,7 @@ class GuestTripStatusService
             'guest_status_label' => $booking->primaryStatusLabel(),
             'is_active'         => $booking->blocksGuestRebooking(),
             'can_cancel'        => $this->guestCanCancel($booking),
+            'cancel_requires_reason' => $this->guestCanCancel($booking) && $booking->hasDriverAccepted(),
             'can_review'        => $booking->trip_status === 'completed' && ! $booking->tripReview,
             'chat'              => [
                 'open'    => app(TripChatService::class)->isOpen($booking),

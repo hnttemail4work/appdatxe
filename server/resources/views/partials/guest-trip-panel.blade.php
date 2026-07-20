@@ -14,8 +14,6 @@
 
         <h2 class="guest-trip-empty__title">Chưa có chuyến nào</h2>
 
-        <p class="guest-trip-empty__text">Sau khi đặt xe, thông tin chuyến và đánh giá sẽ hiển thị tại đây.</p>
-
     </div>
 
 
@@ -39,6 +37,41 @@
                 <span class="guest-trip-info-sheet__hint" id="guest-trip-info-sheet-hint">Đang tìm tài xế gần bạn…</span>
             </button>
             <div class="guest-trip-info-sheet__body" id="guest-trip-info-sheet-body">
+
+        <div class="guest-trip-wait d-none" id="guest-trip-wait-block" data-wait-progress role="status" aria-live="polite">
+            <div class="guest-trip-wait-head">
+                <div class="guest-trip-wait-copy">
+                    <div class="guest-trip-wait-label" data-field="wait_label"></div>
+                    <div class="guest-trip-wait-time" data-field="wait_time"></div>
+                </div>
+            </div>
+            <div class="guest-trip-wait-bar" aria-hidden="true">
+                <div class="guest-trip-wait-bar-fill" data-field="wait_bar"></div>
+            </div>
+            <p class="guest-trip-wait-hint mb-0 d-none" data-field="wait_hint"></p>
+        </div>
+
+        <div class="guest-trip-stepper d-none" id="guest-trip-stepper" data-field="stepper_wrap" aria-label="Tiến trình chuyến đi">
+            <div class="guest-trip-stepper__step" data-step="1">
+                <span class="guest-trip-stepper__dot" aria-hidden="true"></span>
+                <span class="guest-trip-stepper__label">Đã nhận chuyến</span>
+            </div>
+            <div class="guest-trip-stepper__line" aria-hidden="true"></div>
+            <div class="guest-trip-stepper__step" data-step="2">
+                <span class="guest-trip-stepper__dot" aria-hidden="true"></span>
+                <span class="guest-trip-stepper__label">Đang đến đón</span>
+            </div>
+            <div class="guest-trip-stepper__line" aria-hidden="true"></div>
+            <div class="guest-trip-stepper__step" data-step="3">
+                <span class="guest-trip-stepper__dot" aria-hidden="true"></span>
+                <span class="guest-trip-stepper__label">Đã đón khách</span>
+            </div>
+            <div class="guest-trip-stepper__line" aria-hidden="true"></div>
+            <div class="guest-trip-stepper__step" data-step="4">
+                <span class="guest-trip-stepper__dot" aria-hidden="true"></span>
+                <span class="guest-trip-stepper__label">Hoàn tất</span>
+            </div>
+        </div>
 
         <div class="guest-trip-stops">
 
@@ -80,6 +113,11 @@
 
             <div id="guest-trip-driver-panel" class="guest-trip-driver d-none" data-field="driver_panel">
 
+            <div class="guest-trip-driver__eta-hero d-none" data-field="driver_eta_hero_wrap">
+                <strong class="guest-trip-driver__eta-hero-value" data-field="driver_eta_hero_value"></strong>
+                <span class="guest-trip-driver__eta-hero-unit">phút nữa</span>
+            </div>
+
             <div class="guest-trip-driver__media">
 
                 <div class="guest-trip-driver__photo-wrap d-none" data-field="driver_photo_wrap">
@@ -102,6 +140,11 @@
 
                         <strong class="guest-trip-driver__name" data-field="driver_name">—</strong>
 
+                        <span class="guest-trip-driver__rating d-none" data-field="driver_rating" aria-label="Đánh giá tài xế">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.95 6.4 6.9.72-5.2 4.75 1.5 6.83L12 17.9l-6.15 3.3 1.5-6.83-5.2-4.75 6.9-.72z"/></svg>
+                            <span data-field="driver_rating_value"></span>
+                        </span>
+
                         <span class="guest-trip-driver__code d-none" data-field="driver_code"></span>
 
                     </div>
@@ -113,8 +156,6 @@
                         <span class="guest-trip-driver__seats d-none" data-field="driver_seats"></span>
 
                     </div>
-
-                    <div class="guest-trip-driver__status d-none" data-field="driver_status"></div>
 
                 </div>
 

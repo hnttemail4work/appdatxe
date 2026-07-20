@@ -15,11 +15,24 @@
     var readyLabel = readyCta ? readyCta.querySelector('[data-ready-label]') : null;
     var page = document.querySelector('.driver-page--map');
 
+    function countLiveTrips() {
+        var pending = document.querySelectorAll('[data-trip-request-id]:not([data-removing="1"])').length;
+        var schedules = document.querySelectorAll('#driver-trips-list [data-schedule-id]').length;
+        return pending + schedules;
+    }
+
     function hasLiveTrips() {
-        if (panel.dataset.hasLiveTrips === '1') {
-            return true;
+        return countLiveTrips() > 0;
+    }
+
+    /** Thoát màn nhận cuốc full-screen ngay khi hết offer — tránh nút Bật/Tắt bị đẩy lên và map biến mất ~1s. */
+    function syncOfferPending() {
+        if (!page) {
+            return;
         }
-        return !!(liveEl && liveEl.querySelector('[data-trip-request-id], [data-schedule-id]'));
+        var pending = document.querySelectorAll('[data-trip-request-id]:not([data-removing="1"])').length;
+        var schedules = document.querySelectorAll('#driver-trips-list [data-schedule-id]').length;
+        page.classList.toggle('is-offer-pending', pending > 0 && schedules === 0);
     }
 
     function syncReadyCta() {
@@ -79,6 +92,7 @@
     }
 
     function refreshPanelMode() {
+        syncOfferPending();
         setExpanded(hasLiveTrips());
     }
 
@@ -116,6 +130,7 @@
         refresh: refreshPanelMode,
         syncReadyCta: syncReadyCta,
         syncMapFabLift: syncMapFabLift,
+        syncOfferPending: syncOfferPending,
     };
 
     if (typeof ResizeObserver !== 'undefined') {

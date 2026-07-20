@@ -24,6 +24,8 @@
     var draftPin = '';
     var current = 1;
     var total = panels.length;
+    var checkPhoneUrl = (root && root.dataset.checkPhoneUrl) || '';
+    var phoneGateBusy = false;
 
     function pinWrap(step) {
         var panel = wizard.querySelector('[data-wizard-step="' + step + '"]');
@@ -255,8 +257,58 @@
         return true;
     }
 
+    function phoneInputEl() {
+        return form.querySelector('#customer-register-phone') || form.querySelector('input[name="phone"]');
+    }
+
+    function showPhoneGateError(message) {
+        var phoneEl = phoneInputEl();
+        if (!phoneEl) return;
+        if (V && V.showError) {
+            V.showError(phoneEl, message);
+        } else {
+            markInvalid(phoneEl, message);
+        }
+        phoneEl.focus();
+    }
+
+    function gatePhoneThen(onMissing) {
+        var phoneEl = phoneInputEl();
+        if (!phoneEl || !window.AuthPhoneGate || !checkPhoneUrl) {
+            onMissing();
+            return;
+        }
+        if (phoneGateBusy) return;
+        phoneGateBusy = true;
+        window.AuthPhoneGate.check({
+            phone: phoneEl.value || '',
+            checkUrl: checkPhoneUrl,
+            forDriver: false,
+            onMissing: function () {
+                phoneGateBusy = false;
+                onMissing();
+            },
+            onInactive: function (message) {
+                phoneGateBusy = false;
+                showPhoneGateError(message);
+            },
+            onError: function (message) {
+                phoneGateBusy = false;
+                showPhoneGateError(message);
+            },
+        }).finally(function () {
+            phoneGateBusy = false;
+        });
+    }
+
     function goNext() {
         if (!validateStep(current)) return;
+        if (current === 1) {
+            gatePhoneThen(function () {
+                if (current < total) showStep(current + 1);
+            });
+            return;
+        }
         if (current < total) showStep(current + 1);
     }
 
@@ -331,16 +383,21 @@
         }
     });
 
-    // Start: nếu SĐT đã có từ login (query/old) thì bỏ qua bước nhập lại.
-    var startStep = 1;
-    var phoneElInit = form.querySelector('#customer-register-phone');
+    // Start: SĐT từ login/query → kiểm tra gate trước; chỉ skip bước 1 khi SĐT thật sự còn trống slot.
+    var phoneElInit = phoneInputEl();
     if (phoneElInit) {
         var phoneMsg = V ? V.validatePhone(phoneElInit.value) : '';
         var digits = String(phoneElInit.value || '').replace(/\D/g, '');
         var phoneOk = V ? !phoneMsg : /^0\d{8,10}$/.test(digits);
         if (phoneOk) {
-            startStep = 2;
+            showStep(1);
+            gatePhoneThen(function () {
+                showStep(2);
+            });
+        } else {
+            showStep(1);
         }
+    } else {
+        showStep(1);
     }
-    showStep(startStep);
 })();

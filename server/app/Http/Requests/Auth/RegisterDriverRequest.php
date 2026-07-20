@@ -4,7 +4,9 @@ namespace App\Http\Requests\Auth;
 
 use App\Services\RegistrationService;
 use App\Support\AuthMessages;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Validation\Rule;
 
 class RegisterDriverRequest extends FormRequest
@@ -21,6 +23,16 @@ class RegisterDriverRequest extends FormRequest
             app(RegistrationService::class)->driverRules(),
             ['register_mode' => ['required', Rule::in(['driver'])]],
         );
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function () {
+            $redirect = app(RegistrationService::class)->redirectIfPhoneBlocksRegister($this, true);
+            if ($redirect) {
+                throw new HttpResponseException($redirect);
+            }
+        });
     }
 
     /** @return array<string, string> */

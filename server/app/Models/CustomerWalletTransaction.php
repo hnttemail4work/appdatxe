@@ -9,6 +9,7 @@ class CustomerWalletTransaction extends Model
 {
     protected $fillable = [
         'customer_wallet_id',
+        'booking_id',
         'type',
         'amount',
         'status',
@@ -32,6 +33,11 @@ class CustomerWalletTransaction extends Model
         return $this->belongsTo(CustomerWallet::class, 'customer_wallet_id');
     }
 
+    public function booking()
+    {
+        return $this->belongsTo(Booking::class);
+    }
+
     public function approver()
     {
         return $this->belongsTo(User::class, 'approved_by');
@@ -39,6 +45,14 @@ class CustomerWalletTransaction extends Model
 
     public function statusLabel(): string
     {
+        if ($this->type === 'trip_fare') {
+            return match ($this->status) {
+                'approved' => 'Đã trừ ví',
+                'rejected' => 'Không thành công',
+                default    => 'Chờ trừ ví',
+            };
+        }
+
         return match ($this->status) {
             'approved' => 'Đã cộng ví',
             'rejected' => 'Không thành công',

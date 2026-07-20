@@ -55,7 +55,7 @@ class DriverSettingsController extends Controller
         $this->profileChanges->submit($profile, $request);
 
         return redirect()
-            ->route('driver.dashboard', ['tab' => 'account-update'])
+            ->route('driver.dashboard', ['tab' => 'account-update', 'update_tab' => 'docs'])
             ->with('success', 'Đã gửi cập nhật. Chờ quản trị duyệt trước khi áp dụng.');
     }
 

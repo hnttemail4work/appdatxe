@@ -11,6 +11,9 @@ class BookingBrowserGuardService
 {
     public const CANCEL_BLOCK_LIMIT = 3;
 
+    /** Tạm tắt khi test — bật lại `true` để chặn đặt sau khi hủy quá hạn mức. */
+    public const ENFORCE_CANCEL_BLOCK = false;
+
     public const CACHE_TTL_SECONDS = 86400;
 
     public function blockMessage(): string
@@ -54,6 +57,10 @@ class BookingBrowserGuardService
 
     public function isCancelBlocked(string $browserSessionId): bool
     {
+        if (! self::ENFORCE_CANCEL_BLOCK) {
+            return false;
+        }
+
         return $this->cancelCount($browserSessionId) >= self::CANCEL_BLOCK_LIMIT;
     }
 

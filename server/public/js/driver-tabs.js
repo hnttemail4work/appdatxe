@@ -10,27 +10,21 @@
     var baseUrl = root.dataset.driverTabsBase || window.location.pathname;
     var validTabs = [
         'trips', 'history', 'earnings', 'wallet',
-        'account', 'account-profile', 'account-update', 'account-password',
+        'account', 'account-update',
         'invite', 'customers', 'inbox', 'settings',
     ];
     var activeTab = root.dataset.driverTabsActive || 'trips';
-    var mustChangePassword = root.dataset.mustChangePassword === '1';
 
     function isValidTab(tab) {
-        if (tab === 'requests' || tab === 'deposit' || tab === 'settings-docs') {
+        if (tab === 'requests' || tab === 'deposit' || tab === 'settings-docs' || tab === 'account-password') {
             return true;
         }
 
         return validTabs.indexOf(tab) !== -1;
     }
 
-    function canOpenTab(tab) {
-        tab = normalizeTab(tab);
-        if (!mustChangePassword) {
-            return true;
-        }
-
-        return tab === 'account' || tab === 'account-password';
+    function canOpenTab() {
+        return true;
     }
 
     function normalizeTab(tab) {
@@ -40,8 +34,11 @@
         if (tab === 'deposit') {
             return 'earnings';
         }
-        if (tab === 'settings-docs') {
+        if (tab === 'settings-docs' || tab === 'account-profile') {
             return 'account-update';
+        }
+        if (tab === 'account-password') {
+            return 'account';
         }
         return tab;
     }
@@ -93,12 +90,6 @@
         }
 
         if (!canOpenTab(tab)) {
-            if (window.AppFlash && window.AppFlash.show) {
-                window.AppFlash.show('Vui lòng đổi mật khẩu trước khi tiếp tục.', {
-                    variant: 'warning',
-                    title: 'Cần đổi mật khẩu',
-                });
-            }
             return;
         }
 
@@ -217,4 +208,42 @@
 
     window.__driverUpdateTripDockBadge = updateTripDockBadge;
     updateTripDockBadge();
+
+    /** Sub-tab Hồ sơ / Giấy tờ trong «Cập nhật thông tin». */
+    (function initDriverUpdateTabs() {
+        var panel = document.querySelector('[data-driver-update-panel]');
+        if (!panel) {
+            return;
+        }
+
+        function showUpdateTab(key) {
+            key = key === 'docs' ? 'docs' : 'profile';
+            panel.querySelectorAll('[data-driver-update-tab]').forEach(function (btn) {
+                var on = btn.getAttribute('data-driver-update-tab') === key;
+                btn.classList.toggle('is-active', on);
+                btn.setAttribute('aria-selected', on ? 'true' : 'false');
+            });
+            panel.querySelectorAll('[data-driver-update-pane]').forEach(function (pane) {
+                var on = pane.getAttribute('data-driver-update-pane') === key;
+                pane.classList.toggle('is-active', on);
+                pane.hidden = !on;
+            });
+
+            var params = new URLSearchParams(window.location.search);
+            if (key === 'profile') {
+                params.delete('update_tab');
+            } else {
+                params.set('update_tab', 'docs');
+            }
+            var query = params.toString();
+            var url = (baseUrl || window.location.pathname) + (query ? ('?' + query) : '');
+            window.history.replaceState(window.history.state || { driverTab: 'account-update' }, '', url);
+        }
+
+        panel.querySelectorAll('[data-driver-update-tab]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                showUpdateTab(btn.getAttribute('data-driver-update-tab') || 'profile');
+            });
+        });
+    })();
 })();

@@ -1228,11 +1228,11 @@ body.route-sheet-picker-open {
 .be-step__map-canvas a[href*="goong.io"] {
     display: none !important;
 }
-.be-step__map-back,
-.be-step__map-locate {
+.be-step__map-back {
     position: absolute;
     z-index: 2;
     top: calc(.65rem + env(safe-area-inset-top, 0px));
+    left: .75rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1245,8 +1245,15 @@ body.route-sheet-picker-open {
     box-shadow: 0 2px 10px rgba(0, 0, 0, .25);
     cursor: pointer;
 }
-.be-step__map-back { left: .75rem; }
-.be-step__map-locate { right: .75rem; }
+/* Cùng kiểu trip-locate-fab (tròn tối / viền xanh); neo trong map thay vì fixed. */
+.be-step__map .trip-locate-fab.be-step__map-locate {
+    position: absolute;
+    top: auto;
+    left: auto;
+    right: .7rem;
+    bottom: .7rem;
+    z-index: 2;
+}
 .be-step__route-chip {
     position: absolute;
     z-index: 2;
@@ -1511,9 +1518,14 @@ body.route-sheet-picker-open {
     flex: 0 0 auto;
     max-height: 58vh;
     overflow: hidden;
-    padding: .15rem .85rem 0;
+    padding: .15rem 0 0;
     padding-bottom: 0;
     transition: max-height .22s ease;
+}
+.be-step__sheet--vehicle .be-pay-bar,
+.be-step__sheet--vehicle .be-step__sheet-foot {
+    padding-left: .85rem;
+    padding-right: .85rem;
 }
 /* Thu gọn list: sheet ôm nội dung, nhường chỗ map */
 .be-step__sheet--vehicle.is-collapsed {
@@ -1569,8 +1581,8 @@ body.route-sheet-picker-open {
 }
 .be-step__sheet-foot {
     flex: 0 0 auto;
-    padding: .65rem 0 calc(.75rem + env(safe-area-inset-bottom, 0px));
-    background: linear-gradient(180deg, rgba(18, 18, 18, 0), #121212 28%);
+    padding: .55rem 0 calc(.65rem + env(safe-area-inset-bottom, 0px));
+    background: transparent;
 }
 body.be-booking-flow-open {
     overflow: hidden;
@@ -1711,22 +1723,39 @@ body.be-booking-flow-open {
 }
 .be-vehicle-list {
     display: flex;
-    flex-direction: column;
-    gap: .35rem;
+    flex-direction: row;
+    align-items: stretch;
+    gap: .55rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: .1rem .85rem .35rem;
+    margin: 0;
+    width: 100%;
+    box-sizing: border-box;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+.be-vehicle-list::-webkit-scrollbar {
+    display: none;
 }
 .be-vehicle-row {
-    display: grid;
-    grid-template-columns: 2.7rem 1fr auto;
+    display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: .6rem;
-    width: 100%;
-    padding: .65rem .7rem;
+    justify-content: flex-start;
+    gap: .35rem;
+    flex: 0 0 auto;
+    width: 6.85rem;
+    min-height: 7.1rem;
+    padding: .7rem .5rem .6rem;
     border: 1px solid rgba(255, 255, 255, .1);
-    border-radius: .8rem;
+    border-radius: .9rem;
     background: rgba(255, 255, 255, .03);
     color: #f5f5f5;
-    text-align: left;
+    text-align: center;
     cursor: pointer;
+    scroll-snap-align: start;
 }
 .be-vehicle-row[hidden] {
     display: none !important;
@@ -1737,46 +1766,18 @@ body.be-booking-flow-open {
     box-shadow: inset 0 0 0 1px rgba(234, 179, 8, .25);
 }
 .be-vehicle-more {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: .4rem;
-    width: 100%;
-    margin-top: .45rem;
-    padding: .65rem .75rem;
-    border: 1px dashed rgba(255, 255, 255, .16);
-    border-radius: .85rem;
-    background: transparent;
-    color: #e5e7eb;
-    font-size: .86rem;
-    font-weight: 700;
-    cursor: pointer;
-}
-.be-vehicle-more:hover,
-.be-vehicle-more:focus-visible {
-    border-color: rgba(212, 175, 55, .45);
-    color: #fde68a;
-    outline: none;
-}
-.be-vehicle-more__chevron {
-    display: inline-flex;
-    transition: transform .18s ease;
-}
-.be-vehicle-more[aria-expanded="true"] .be-vehicle-more__chevron {
-    transform: rotate(180deg);
-}
-.be-vehicle-more[aria-expanded="true"] .be-vehicle-more__label::after {
-    content: none;
+    display: none;
 }
 .be-vehicle-row__media {
-    width: 2.55rem;
-    height: 2.55rem;
-    border-radius: .55rem;
+    width: 2.85rem;
+    height: 2.85rem;
+    border-radius: .7rem;
     overflow: hidden;
     background: rgba(255, 255, 255, .06);
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
 }
 .be-vehicle-row__media--icon {
     color: #fde68a;
@@ -1798,19 +1799,23 @@ body.be-booking-flow-open {
 .be-vehicle-row__body {
     display: flex;
     flex-direction: column;
-    gap: .15rem;
+    align-items: center;
+    gap: .1rem;
     min-width: 0;
+    width: 100%;
 }
 .be-vehicle-row__title {
-    font-size: .9rem;
+    font-size: .78rem;
     font-weight: 800;
-}
-.be-vehicle-row__hint {
-    font-size: .7rem;
-    color: var(--tl-text-muted);
+    line-height: 1.25;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 .be-vehicle-row__price {
-    font-size: .92rem;
+    margin-top: auto;
+    font-size: .82rem;
     font-weight: 800;
     color: #fde68a;
     white-space: nowrap;
@@ -3635,7 +3640,7 @@ body.booking-active-referral-qr-open {
 
 /* Đang tìm TX: map + sheet cố định full màn, đáy sát menu dock. */
 .guest-trip-card.is-searching {
-    --guest-trip-sheet-peek: 3.35rem;
+    --guest-trip-sheet-peek: 3.85rem;
     position: fixed;
     top: 0;
     left: 0;
@@ -3698,14 +3703,24 @@ body.guest-trip-searching .app-main > .container {
     padding-bottom: .65rem;
     min-height: 0;
 }
-/* Thu xuống: chỉ còn thanh trạng thái — ẩn hẳn điểm đón/trả. */
+/* Thu xuống: chỉ còn grip + thanh tiến trình tìm TX. */
 .guest-trip-card.is-searching .guest-trip-info-sheet.is-collapsed {
-    height: var(--guest-trip-sheet-peek);
-    max-height: var(--guest-trip-sheet-peek);
+    height: auto;
+    max-height: none;
+    min-height: var(--guest-trip-sheet-peek);
     transform: none;
 }
 .guest-trip-card.is-searching .guest-trip-info-sheet.is-collapsed .guest-trip-info-sheet__body {
-    display: none;
+    display: block;
+    overflow: hidden;
+    padding: 0 .85rem .55rem;
+    min-height: 0;
+}
+.guest-trip-card.is-searching .guest-trip-info-sheet.is-collapsed .guest-trip-info-sheet__body > *:not(#guest-trip-wait-block) {
+    display: none !important;
+}
+.guest-trip-card.is-searching .guest-trip-info-sheet__hint.d-none {
+    display: none !important;
 }
 .guest-trip-card.is-searching .guest-trip-info-sheet.is-expanded {
     transform: translateY(0);
@@ -3922,6 +3937,64 @@ body.guest-trip-searching .app-main > .container {
     color: #86efac;
     font-size: 1rem;
 }
+/* Stepper tiến trình chuyến: Đã nhận → Đang đến đón → Đã đón khách → Hoàn tất */
+.guest-trip-stepper {
+    display: flex;
+    align-items: flex-start;
+    margin: 0.35rem 0.85rem 0.9rem;
+    padding: 0.75rem 0.4rem 0.65rem;
+    border-radius: 0.9rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.guest-trip-stepper__step {
+    flex: 0 0 auto;
+    width: 4.4rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.32rem;
+    text-align: center;
+}
+.guest-trip-stepper__dot {
+    width: 0.62rem;
+    height: 0.62rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+    border: 2px solid rgba(255, 255, 255, 0.22);
+    transition: background 0.25s, border-color 0.25s, box-shadow 0.25s;
+}
+.guest-trip-stepper__step.is-done .guest-trip-stepper__dot {
+    background: #22c55e;
+    border-color: #22c55e;
+}
+.guest-trip-stepper__step.is-active .guest-trip-stepper__dot {
+    background: #facc15;
+    border-color: #facc15;
+    box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.22);
+}
+.guest-trip-stepper__label {
+    font-size: 0.64rem;
+    font-weight: 700;
+    line-height: 1.25;
+    color: rgba(255, 255, 255, 0.48);
+}
+.guest-trip-stepper__step.is-done .guest-trip-stepper__label,
+.guest-trip-stepper__step.is-active .guest-trip-stepper__label {
+    color: #f3f4f6;
+}
+.guest-trip-stepper__line {
+    flex: 1 1 auto;
+    height: 2px;
+    margin-top: 0.29rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.14);
+    transition: background 0.25s;
+}
+.guest-trip-stepper__line.is-done {
+    background: #22c55e;
+}
+
 .guest-trip-stops {
     position: relative;
     padding: 0.35rem 1rem 0.85rem;
@@ -3980,6 +4053,7 @@ body.guest-trip-searching .app-main > .container {
 }
 
 .guest-trip-driver {
+    position: relative;
     display: flex;
     align-items: flex-start;
     gap: 0.85rem;
@@ -3988,6 +4062,53 @@ body.guest-trip-searching .app-main > .container {
     border-radius: 0.9rem;
     background: linear-gradient(135deg, rgba(212, 175, 55, 0.09) 0%, rgba(255, 255, 255, 0.03) 100%);
     border: 1px solid rgba(212, 175, 55, 0.22);
+}
+.guest-trip-driver--has-eta .guest-trip-driver__info {
+    padding-right: 3.5rem;
+}
+.guest-trip-driver__eta-hero {
+    position: absolute;
+    top: 0.65rem;
+    right: 0.65rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 3.05rem;
+    padding: 0.32rem 0.45rem;
+    border-radius: 0.7rem;
+    background: linear-gradient(160deg, rgba(250, 204, 21, 0.24), rgba(250, 204, 21, 0.08));
+    border: 1px solid rgba(250, 204, 21, 0.4);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+    text-align: center;
+}
+.guest-trip-driver__eta-hero-value {
+    font-size: 1.3rem;
+    font-weight: 900;
+    line-height: 1;
+    color: #fde68a;
+}
+.guest-trip-driver__eta-hero-unit {
+    font-size: 0.58rem;
+    font-weight: 700;
+    color: rgba(253, 230, 138, 0.78);
+    white-space: nowrap;
+}
+.guest-trip-driver__rating {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.12rem 0.42rem;
+    border-radius: 0.4rem;
+    font-size: 0.76rem;
+    font-weight: 800;
+    color: #fde68a;
+    background: rgba(250, 204, 21, 0.14);
+    border: 1px solid rgba(250, 204, 21, 0.32);
+}
+.guest-trip-driver__rating svg {
+    color: #facc15;
+    flex-shrink: 0;
 }
 .guest-trip-driver__media {
     position: relative;
@@ -4084,21 +4205,6 @@ body.guest-trip-searching .app-main > .container {
     background: rgba(212, 175, 55, 0.14);
     border: 1px solid rgba(212, 175, 55, 0.28);
     flex: 0 0 auto;
-}
-.guest-trip-driver__status {
-    display: inline-flex;
-    align-items: center;
-    align-self: flex-start;
-    flex-shrink: 0;
-    max-width: 100%;
-    padding: 0.28rem 0.6rem;
-    border-radius: 0.45rem;
-    font-size: 0.76rem;
-    font-weight: 700;
-    line-height: 1.35;
-    color: #6ee7b7;
-    background: rgba(16, 185, 129, 0.12);
-    border: 1px solid rgba(16, 185, 129, 0.24);
 }
 .guest-trip-driver__live {
     display: flex;
@@ -4217,6 +4323,32 @@ body.guest-trip-vehicle-photo-open {
     .guest-trip-driver__seats {
         font-size: 0.76rem;
     }
+
+    .guest-trip-driver--has-eta .guest-trip-driver__info {
+        padding-right: 3rem;
+    }
+
+    .guest-trip-driver__eta-hero {
+        min-width: 2.6rem;
+        padding: 0.26rem 0.36rem;
+    }
+
+    .guest-trip-driver__eta-hero-value {
+        font-size: 1.05rem;
+    }
+
+    .guest-trip-stepper {
+        margin: 0.3rem 0.6rem 0.75rem;
+        padding: 0.65rem 0.2rem 0.55rem;
+    }
+
+    .guest-trip-stepper__step {
+        width: 3.6rem;
+    }
+
+    .guest-trip-stepper__label {
+        font-size: 0.6rem;
+    }
 }
 
 .guest-trip-review {
@@ -4333,6 +4465,12 @@ body.guest-trip-vehicle-photo-open {
 }
 
 /* Wait progress (đặt xe / theo dõi) */
+#guest-trip-wait-block {
+    margin: 0.35rem 0.85rem 0.85rem;
+}
+.guest-trip-card.is-searching .guest-trip-info-sheet.is-collapsed #guest-trip-wait-block {
+    margin: 0;
+}
 .guest-trip-wait {
     margin-bottom: 0.85rem;
     padding: 0.9rem 1rem;
@@ -4340,6 +4478,17 @@ body.guest-trip-vehicle-photo-open {
     background: linear-gradient(135deg, rgba(56, 189, 248, 0.07) 0%, rgba(212, 175, 55, 0.08) 100%);
     border: 1px solid rgba(212, 175, 55, 0.28);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+/* Đang tìm TX: chỉ hiện thanh tiến trình, bỏ chữ / phút. */
+.guest-trip-wait--bar-only {
+    padding: 0.55rem 0.75rem;
+}
+.guest-trip-wait--bar-only .guest-trip-wait-head,
+.guest-trip-wait--bar-only .guest-trip-wait-hint {
+    display: none !important;
+}
+.guest-trip-wait--bar-only .guest-trip-wait-bar {
+    margin-bottom: 0;
 }
 .guest-trip-wait-head {
     margin-bottom: 0.65rem;
@@ -4867,6 +5016,42 @@ body.guest-trip-vehicle-photo-open {
     margin: 0;
     font-weight: 600;
 }
+.customer-completed-trips {
+    margin-top: 0;
+    padding: 0 0 1.25rem;
+}
+.customer-account-page .customer-completed-trips__head {
+    padding: 0 .15rem;
+}
+.customer-completed-trips__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: .75rem;
+    margin-bottom: .75rem;
+}
+.customer-completed-trips__title {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 800;
+    letter-spacing: .01em;
+}
+.customer-completed-trips__count {
+    font-size: .78rem;
+    font-weight: 700;
+    color: var(--tl-text-muted);
+}
+.customer-completed-trips__empty {
+    font-size: .88rem;
+    color: var(--tl-text-muted);
+    line-height: 1.45;
+}
+.customer-completed-trips__list {
+    display: flex;
+    flex-direction: column;
+    gap: .15rem;
+}
+
 .customer-trip-card,
 .customer-review-card {
     border: 1px solid rgba(255, 255, 255, .06);
@@ -4908,14 +5093,28 @@ body.guest-trip-vehicle-photo-open {
     align-items: center;
     gap: .75rem;
 }
+.customer-trip-card__left {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .45rem .65rem;
+    min-width: 0;
+}
+.customer-trip-card__driver-code {
+    font-size: .78rem;
+    font-weight: 700;
+    letter-spacing: .03em;
+    color: rgba(255, 255, 255, .72);
+}
 .customer-trip-card__price {
+    flex-shrink: 0;
     font-weight: 800;
     color: var(--tl-primary-light);
+    text-align: right;
 }
-.customer-trip-card__actions {
-    display: flex;
-    align-items: center;
-    gap: .5rem;
+.customer-trip-card__review {
+    font-size: .78rem;
+    color: rgba(255, 255, 255, .68);
 }
 .customer-review-card__sentiment {
     font-weight: 800;
@@ -5142,7 +5341,11 @@ body.guest-trip-searching .app-navbar {
 @media (min-width: 768px) {
     .trip-sos-fab { right: 1rem; }
     .trip-chat-fab { left: 1rem; bottom: 2rem; }
-    .trip-locate-fab { right: 1rem; bottom: 2rem; }
+    .trip-locate-fab:not(.be-step__map-locate) { right: 1rem; bottom: 2rem; }
+    .be-step__map .trip-locate-fab.be-step__map-locate {
+        right: .7rem;
+        bottom: .7rem;
+    }
 }
 
 .customer-page,

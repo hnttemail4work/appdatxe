@@ -16,6 +16,9 @@ class BookingPhoneGuardService
 
     public const BLOCK_MINUTES = 30;
 
+    /** Tạm tắt khi test — bật lại `true` để chặn đặt sau khi hủy quá hạn mức. */
+    public const ENFORCE_CANCEL_BLOCK = false;
+
     public function customerCancelCount(string $contactPhone, ?string $locationKey = null): int
     {
         return (int) Cache::get($this->cancelKey($this->normalize($contactPhone), $locationKey), 0);
@@ -31,6 +34,10 @@ class BookingPhoneGuardService
         string $contactPhone,
         ?string $locationKey = null,
     ): void {
+        if (! self::ENFORCE_CANCEL_BLOCK) {
+            return;
+        }
+
         if ($this->blockedUntil($contactPhone, $locationKey)?->isFuture()) {
             throw new InvalidArgumentException(
                 'Đặt xe quá nhiều lần, vui lòng thử lại sau ' . self::BLOCK_MINUTES . ' phút.',
@@ -44,7 +51,7 @@ class BookingPhoneGuardService
         $count = (int) Cache::get($this->cancelKey($norm, $locationKey), 0) + 1;
         Cache::put($this->cancelKey($norm, $locationKey), $count, now()->addHours(24));
 
-        if ($count >= self::MAX_CANCEL_CYCLES) {
+        if (self::ENFORCE_CANCEL_BLOCK && $count >= self::MAX_CANCEL_CYCLES) {
             Cache::put(
                 $this->blockKey($norm, $locationKey),
                 now()->addMinutes(self::BLOCK_MINUTES),
@@ -57,6 +64,10 @@ class BookingPhoneGuardService
 
     public function isBlocked(string $contactPhone, ?string $locationKey = null): bool
     {
+        if (! self::ENFORCE_CANCEL_BLOCK) {
+            return false;
+        }
+
         return $this->blockedUntil($contactPhone, $locationKey)?->isFuture() ?? false;
     }
 

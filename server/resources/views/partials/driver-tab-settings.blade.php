@@ -9,6 +9,17 @@
 <section class="driver-settings-panel" aria-label="Cài đặt">
     <h2 class="driver-panel-title mb-3" data-i18n="settings_title">Cài đặt</h2>
 
+    <div class="driver-settings-card mb-3">
+        <h3 class="driver-settings-card__title">Ghim vào màn hình chính</h3>
+        <button type="button"
+                class="btn btn-outline-warning w-100 fw-semibold driver-settings-pwa-btn"
+                id="driver-settings-pwa-install"
+                data-pwa-install-trigger>
+            <span class="driver-settings-pwa-btn__label" data-pwa-install-label>Ghim vào màn hình chính</span>
+            <span class="driver-settings-pwa-btn__meta" data-pwa-install-meta>Lối tắt mở màn sẵn sàng nhận cuốc</span>
+        </button>
+    </div>
+
     <form method="POST" action="{{ route('driver.settings.update') }}" class="driver-settings-form" id="driver-settings-form">
         @csrf
         @method('PATCH')

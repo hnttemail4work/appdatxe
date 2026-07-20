@@ -22,6 +22,7 @@ class DriverTripProgressionService
         private readonly TripLedgerService $tripLedger,
         private readonly BookingBrowserGuardService $browserGuard,
         private readonly DriverAvailabilityService $driverAvailability,
+        private readonly CustomerWalletService $customerWallets,
     ) {
     }
 
@@ -29,6 +30,7 @@ class DriverTripProgressionService
      * Tài xế nhận cuốc — khách trả trực tiếp với TX, không cần QL xác nhận thanh toán.
      * `payment_status=paid` nghĩa là cổng thanh toán nền tảng đã xong (không chờ duyệt),
      * không phải đã thu tiền mặt vào ví hệ thống.
+     * Thanh toán ví: giữ unpaid đến khi hoàn thành chuyến rồi mới trừ ví.
      */
     public function confirmForDriverAccept(Booking $booking): void
     {
@@ -42,11 +44,12 @@ class DriverTripProgressionService
 
         DB::transaction(function () use ($booking): void {
             $before = $booking->toArray();
+            $isWallet = ($booking->payment_method ?? '') === 'wallet';
 
             $booking->update([
                 'booking_status' => 'confirmed',
                 'trip_status'    => 'confirmed',
-                'payment_status' => 'paid',
+                'payment_status' => $isWallet ? 'unpaid' : 'paid',
                 'confirmed_at'   => now(),
             ]);
 
@@ -78,10 +81,6 @@ class DriverTripProgressionService
             throw new InvalidArgumentException('Không thể chuyển bước tiếp theo.');
         }
 
-        if ($next === Schedule::DRIVER_STAGE_AT_PICKUP && $schedule->needsDriverMovementConfirm()) {
-            throw new InvalidArgumentException('Bấm «Xác nhận» trước khi đến điểm đón.');
-        }
-
         DB::transaction(function () use ($schedule, $next): void {
             $schedule = Schedule::query()->lockForUpdate()->findOrFail($schedule->id);
             $bookings = Booking::query()
@@ -103,6 +102,10 @@ class DriverTripProgressionService
             $payload = ['driver_stage' => $next];
 
             if ($next === Schedule::DRIVER_STAGE_AT_PICKUP) {
+                // Bấm «Đã đến» — bỏ cửa sổ «Xác nhận» đi đón.
+                if (! $schedule->driver_movement_confirmed_at) {
+                    $payload['driver_movement_confirmed_at'] = now();
+                }
                 app(DriverMovementConfirmService::class)->clearDeadline($schedule);
             }
 
@@ -179,9 +182,15 @@ class DriverTripProgressionService
             'completed_at' => now(),
         ]);
 
-        $this->audit($booking, $driverUserId, 'driver_trip_completed', $before, $booking->fresh()->toArray());
-        if ($booking->tripReview) {
-            $this->browserGuard->clearActiveBookingForBooking($booking->fresh());
+        $fresh = $booking->fresh();
+        try {
+            $this->customerWallets->chargeForCompletedBooking($fresh);
+        } catch (\Throwable) {
+        }
+
+        $this->audit($booking, $driverUserId, 'driver_trip_completed', $before, $fresh->fresh()->toArray());
+        if ($fresh->tripReview) {
+            $this->browserGuard->clearActiveBookingForBooking($fresh->fresh());
         }
     }
 

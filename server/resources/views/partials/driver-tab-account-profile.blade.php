@@ -4,11 +4,15 @@
     $user = $user ?? auth()->user();
     $profile = $profile ?? ($user?->driverProfile);
     $vehicleTypes = DriverVehicleOptions::labels();
+    $embedded = (bool) ($embedded ?? false);
 @endphp
+@if($embedded)
+    <div class="driver-settings-card" aria-label="Hồ sơ">
+@else
 <section class="driver-account-panel" aria-label="Hồ sơ">
     <h2 class="driver-panel-title mb-3" data-i18n="account_profile">Hồ sơ</h2>
-
     <div class="driver-settings-card">
+@endif
         <div class="driver-account-profile-rows">
             <div class="driver-account-profile-row">
                 <span class="driver-account-profile-row__label" data-i18n="account_name">Họ tên</span>
@@ -49,5 +53,9 @@
                 </div>
             @endif
         </div>
+@if($embedded)
+    </div>
+@else
     </div>
 </section>
+@endif

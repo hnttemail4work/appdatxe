@@ -748,11 +748,21 @@
                         return;
                     }
                     var total = data.total_after_discount != null ? data.total_after_discount : data.whole_car_price;
-                    priceEl.textContent = total > 0 ? formatMoney(total) : '—';
+                    var amount = Number(total) || 0;
+                    priceEl.textContent = amount > 0 ? formatMoney(amount) : '—';
+                    if (amount > 0) {
+                        priceEl.setAttribute('data-price-amount', String(amount));
+                        card.setAttribute('data-price-amount', String(amount));
+                    } else {
+                        priceEl.removeAttribute('data-price-amount');
+                        card.removeAttribute('data-price-amount');
+                    }
                 })
                 .catch(function () {
                     if (String(requestId) === card.getAttribute('data-price-req')) {
                         priceEl.textContent = '—';
+                        priceEl.removeAttribute('data-price-amount');
+                        card.removeAttribute('data-price-amount');
                     }
                 });
         });
@@ -971,8 +981,6 @@
         }
     }
 
-    var VEHICLE_COLLAPSED_VISIBLE = 3;
-
     function vehicleListRows() {
         var list = $('trips-list');
         if (!list) {
@@ -987,12 +995,12 @@
     }
 
     function vehicleExtraCount() {
-        return Math.max(0, vehicleListRows().length - VEHICLE_COLLAPSED_VISIBLE);
+        // Danh sách xe ngang kéo — luôn hiện hết, không còn “xem thêm”.
+        return 0;
     }
 
     function isVehicleListExpanded() {
-        var sheet = vehicleSheetEl();
-        return !!(sheet && sheet.getAttribute('data-vehicle-expanded') === 'true');
+        return true;
     }
 
     function resizeFlowMapSoon() {
@@ -1007,54 +1015,36 @@
         });
     }
 
-    /** Gắn lại --extra theo thứ tự DOM; thu gọn chỉ hiện N xe đầu (xe chọn đã promote lên đầu). */
-    function syncVehicleListVisibility(expanded) {
-        var rows = vehicleListRows();
-        var nextOpen = !!expanded;
-        var extraCount = Math.max(0, rows.length - VEHICLE_COLLAPSED_VISIBLE);
-        if (extraCount < 1) {
-            nextOpen = false;
-        }
-
-        rows.forEach(function (row, index) {
-            var isExtra = index >= VEHICLE_COLLAPSED_VISIBLE;
-            row.classList.toggle('be-vehicle-row--extra', isExtra);
-            if (!nextOpen && isExtra) {
-                row.setAttribute('hidden', '');
-            } else {
-                row.removeAttribute('hidden');
-            }
+    /** Hàng xe ngang: luôn hiện toàn bộ card (kéo trái–phải). */
+    function syncVehicleListVisibility() {
+        vehicleListRows().forEach(function (row) {
+            row.classList.remove('be-vehicle-row--extra');
+            row.removeAttribute('hidden');
         });
 
         var sheet = vehicleSheetEl();
         if (sheet) {
-            sheet.classList.toggle('is-collapsed', !nextOpen);
-            sheet.setAttribute('data-vehicle-expanded', nextOpen ? 'true' : 'false');
-            sheet.classList.toggle('has-vehicle-extra', extraCount > 0);
+            sheet.classList.remove('is-collapsed');
+            sheet.setAttribute('data-vehicle-expanded', 'true');
+            sheet.classList.remove('has-vehicle-extra');
         }
 
         var handle = $('booking-vehicle-sheet-handle');
         if (handle) {
-            handle.hidden = extraCount < 1;
-            handle.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
-            handle.setAttribute(
-                'aria-label',
-                nextOpen
-                    ? 'Vuốt xuống để thu gọn danh sách xe'
-                    : 'Vuốt lên để xem thêm loại xe'
-            );
+            handle.hidden = true;
+            handle.setAttribute('aria-expanded', 'true');
         }
 
         var countEl = $('booking-vehicle-extra-count');
         if (countEl) {
-            countEl.setAttribute('data-extra-count', String(extraCount));
+            countEl.setAttribute('data-extra-count', '0');
         }
 
         resizeFlowMapSoon();
     }
 
-    function setVehicleListExpanded(open) {
-        syncVehicleListVisibility(!!open);
+    function setVehicleListExpanded() {
+        syncVehicleListVisibility();
     }
 
     function bindVehicleSheetHandle() {
@@ -1190,7 +1180,6 @@
             submitBtn.textContent = 'Đặt chuyến';
         }
         refreshQuote();
-        syncBookingTransferQr();
     }
 
     function openBookingModal(btn) {
@@ -1843,22 +1832,33 @@
         return checked ? String(checked.value) : 'cash';
     }
 
+    function selectedTripAmount() {
+        var selected = document.querySelector('#trips-list [data-select-vehicle].is-selected');
+        if (!selected) {
+            return 0;
+        }
+        var slot = selected.querySelector('[data-price-slot]');
+        var raw = selected.getAttribute('data-price-amount')
+            || (slot ? slot.getAttribute('data-price-amount') : null);
+        var amount = Number(raw);
+        return Number.isFinite(amount) && amount > 0 ? amount : 0;
+    }
+
     function setPaymentMethod(value) {
-        var next = value === 'bank_transfer' ? 'bank_transfer' : 'cash';
+        var next = value === 'wallet' ? 'wallet' : 'cash';
         var hidden = $('booking-payment-method');
         if (hidden) {
             hidden.value = next;
         }
         var label = document.querySelector('[data-pay-label]');
         if (label) {
-            label.textContent = next === 'bank_transfer' ? 'Chuyển khoản' : 'Tiền mặt';
+            label.textContent = next === 'wallet' ? 'Trừ ví' : 'Tiền mặt';
         }
         document.querySelectorAll('[data-pay-value]').forEach(function (opt) {
             var active = opt.getAttribute('data-pay-value') === next;
             opt.classList.toggle('is-active', active);
             opt.setAttribute('aria-selected', active ? 'true' : 'false');
         });
-        syncBookingTransferQr();
     }
 
     function setPayDropdownOpen(open) {
@@ -1874,60 +1874,21 @@
         menu.hidden = !next;
     }
 
-    function syncBookingTransferQr() {
-        var panel = $('booking-pay-transfer');
-        var isTransfer = currentPaymentMethod() === 'bank_transfer';
-        if (panel) {
-            panel.classList.toggle('d-none', !isTransfer);
-        }
-        var proof = $('booking-payment-proof');
-        if (proof) {
-            proof.required = !!isTransfer;
-        }
-        if (!isTransfer) {
-            return;
-        }
-        var img = $('booking-transfer-qr');
-        if (!img) {
-            return;
-        }
-        var amount = 0;
-        var selected = document.querySelector('#trips-list [data-select-vehicle].is-selected [data-price-slot]');
-        // amount from quote if available via data attribute later; QR works with 0 + addInfo
-        var bin = img.getAttribute('data-bank-bin') || '';
-        var account = img.getAttribute('data-account') || '';
-        var addInfo = img.getAttribute('data-add-info') || '';
-        var accountName = img.getAttribute('data-account-name') || '';
-        if (!bin || !account) {
-            return;
-        }
-        var params = [];
-        if (amount > 0) params.push('amount=' + encodeURIComponent(String(amount)));
-        if (addInfo) params.push('addInfo=' + encodeURIComponent(addInfo));
-        if (accountName) params.push('accountName=' + encodeURIComponent(accountName));
-        var url = 'https://img.vietqr.io/image/' + bin + '-' + account + '-compact2.jpg'
-            + (params.length ? ('?' + params.join('&')) : '');
-        img.src = url;
-        img.hidden = false;
-        img.classList.remove('is-hidden');
-        var ph = panel.querySelector('[data-deposit-qr-placeholder]');
-        if (ph) {
-            ph.hidden = true;
-            ph.classList.add('is-hidden');
-        }
-    }
-
     function validateStep2() {
         // SĐT / họ tên / tuổi / giới tính lấy từ hồ sơ khách khi submit (server).
         if (!ctx.capacity) {
             notify('Vui lòng chọn loại xe.');
             return false;
         }
-        if (currentPaymentMethod() === 'bank_transfer') {
-            var proof = $('booking-payment-proof');
-            if (!proof || !proof.files || !proof.files.length) {
-                notify('Vui lòng đính kèm ảnh chuyển khoản.');
-                if (proof) proof.focus();
+        if (currentPaymentMethod() === 'wallet') {
+            if (window.__customerWalletBalance == null) {
+                notify('Đăng nhập tài khoản khách để thanh toán bằng ví.');
+                return false;
+            }
+            var fare = selectedTripAmount();
+            var balance = Number(window.__customerWalletBalance) || 0;
+            if (fare > 0 && balance < fare) {
+                notify('Số dư ví không đủ để đặt chuyến này.');
                 return false;
             }
         }
@@ -2061,31 +2022,6 @@
         });
         setPaymentMethod(currentPaymentMethod());
     })();
-
-    var payProof = $('booking-payment-proof');
-    if (payProof) {
-        payProof.addEventListener('change', function () {
-            var wrap = $('booking-pay-proof-preview');
-            var img = $('booking-pay-proof-preview-img');
-            var file = payProof.files && payProof.files[0];
-            if (!wrap || !img) return;
-            if (wrap.dataset.objectUrl) {
-                URL.revokeObjectURL(wrap.dataset.objectUrl);
-                delete wrap.dataset.objectUrl;
-            }
-            if (file && file.type.indexOf('image/') === 0) {
-                var url = URL.createObjectURL(file);
-                wrap.dataset.objectUrl = url;
-                img.src = url;
-                wrap.hidden = false;
-                wrap.classList.remove('d-none');
-            } else {
-                img.removeAttribute('src');
-                wrap.hidden = true;
-                wrap.classList.add('d-none');
-            }
-        });
-    }
 
     function handleModalBack() {
         if (currentStep() === 'vehicle') {

@@ -25,6 +25,9 @@
     var draftPin = '';
     var passwordInput = form.querySelector('[data-register-password]');
     var passwordConfirmInput = form.querySelector('[data-register-password-confirm]');
+    var checkPhoneUrl = (root && root.dataset.checkPhoneUrl) || '';
+    var phoneGateBusy = false;
+    var phoneGatedOk = false;
 
     function pinWrap(step) {
         var panel = wizard.querySelector('[data-wizard-step="' + step + '"]');
@@ -70,6 +73,14 @@
                 PinInput.clear(wrap);
                 var first = wrap.querySelector('.pin-box');
                 if (first) setTimeout(function () { first.focus(); }, 50);
+            }
+        }
+        // Bước tài khoản + SĐT đã có (prefill/khóa): gate ngay — tránh đi tiếp khi đã có TK.
+        if (current === 2 && !phoneGatedOk) {
+            var phoneEl = phoneInputEl();
+            var digits = phoneEl ? String(phoneEl.value || '').replace(/\D/g, '') : '';
+            if (/^0\d{8,10}$/.test(digits)) {
+                gatePhoneThen(function () { /* cho ở lại bước 2 */ });
             }
         }
     }
@@ -283,8 +294,60 @@
         return true;
     }
 
+    function phoneInputEl() {
+        return form.querySelector('input[name="phone"]');
+    }
+
+    function showPhoneGateError(message) {
+        var phoneEl = phoneInputEl();
+        // SĐT khóa (readonly + hidden name=phone): hiện lỗi trên ô readonly hiển thị.
+        var visiblePhone = form.querySelector('[data-field-section="account"] input[type="tel"]') || phoneEl;
+        if (!visiblePhone) return;
+        markInvalid(visiblePhone, message);
+        try { visiblePhone.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
+    }
+
+    function gatePhoneThen(onMissing) {
+        var phoneEl = phoneInputEl();
+        if (!phoneEl || !window.AuthPhoneGate || !checkPhoneUrl) {
+            phoneGatedOk = true;
+            onMissing();
+            return;
+        }
+        if (phoneGateBusy) return;
+        phoneGateBusy = true;
+        window.AuthPhoneGate.check({
+            phone: phoneEl.value || '',
+            checkUrl: checkPhoneUrl,
+            forDriver: true,
+            onMissing: function () {
+                phoneGateBusy = false;
+                phoneGatedOk = true;
+                onMissing();
+            },
+            onInactive: function (message) {
+                phoneGateBusy = false;
+                phoneGatedOk = false;
+                showPhoneGateError(message);
+            },
+            onError: function (message) {
+                phoneGateBusy = false;
+                phoneGatedOk = false;
+                showPhoneGateError(message);
+            },
+        }).finally(function () {
+            phoneGateBusy = false;
+        });
+    }
+
     function goNext() {
         if (!validateStep(current)) return;
+        if (current === 2) {
+            gatePhoneThen(function () {
+                if (current < total) showStep(current + 1);
+            });
+            return;
+        }
         if (current < total) showStep(current + 1);
     }
 
@@ -443,6 +506,25 @@
             fb.classList.add('d-block');
         }
     });
+
+    // Trình duyệt hay autofill nhầm SĐT vào ô email (đặc biệt khi SĐT đã khóa từ bước login).
+    function scrubPhoneAutofillFromEmail() {
+        var emailEl = form.querySelector('[data-block-phone-autofill="1"]');
+        if (!emailEl) return;
+        var phoneEl = form.querySelector('input[name="phone"]');
+        var phoneDigits = String((phoneEl && phoneEl.value) || '').replace(/\D/g, '');
+        var emailRaw = String(emailEl.value || '').trim();
+        var emailDigits = emailRaw.replace(/\D/g, '');
+        var looksLikePhone = emailRaw !== '' && emailRaw.indexOf('@') < 0
+            && /^0\d{8,10}$/.test(emailDigits);
+        var matchesPhone = phoneDigits !== '' && emailDigits === phoneDigits;
+        if (looksLikePhone || matchesPhone) {
+            emailEl.value = '';
+        }
+    }
+    scrubPhoneAutofillFromEmail();
+    window.setTimeout(scrubPhoneAutofillFromEmail, 200);
+    window.setTimeout(scrubPhoneAutofillFromEmail, 800);
 
     var errorField = form.querySelector('.is-invalid');
     if (!errorField) {

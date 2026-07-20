@@ -1176,15 +1176,6 @@ class DriverTripRequestService
         );
 
         $this->availability->syncAfterTripAssigned($driverUserId);
-
-        try {
-            $notifyBooking = $schedule->driverRelevantBookings()->first();
-            if ($notifyBooking) {
-                app(\App\Services\AdminOperatorAlertService::class)
-                    ->recordDriverAccepted($notifyBooking->fresh(['schedule.route']));
-            }
-        } catch (\Throwable) {
-        }
     }
 
     private function anchorBookingForDriverAccept(

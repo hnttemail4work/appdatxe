@@ -31,6 +31,121 @@ class RegistrationService
     }
 
     /**
+     * Phân nhánh SĐT cho login checkPhone + chặn sớm đăng ký.
+     *
+     * @return array{
+     *   status: 'invalid'|'missing'|'needs_otp'|'inactive'|'active',
+     *   message?: string,
+     *   register_url?: string,
+     *   otp_url?: string,
+     *   login_url?: string,
+     *   role?: string
+     * }
+     */
+    public function resolvePhoneAuthStatus(Request $request, string $rawPhone, bool $forDriver): array
+    {
+        $phone = AuthIdentifier::normalizePhone($rawPhone);
+        $role = $forDriver ? 'driver' : 'customer';
+        $registerRoute = $forDriver ? 'driver.register' : 'customer.register';
+        $loginRoute = $forDriver ? 'driver.login' : 'login';
+
+        if ($phone === '' || ! preg_match('/^0\d{8,10}$/', preg_replace('/\D/', '', $rawPhone))) {
+            return [
+                'status'  => 'invalid',
+                'message' => 'Số điện thoại không hợp lệ.',
+            ];
+        }
+
+        $user = AuthIdentifier::findUserByPhoneAndRole($phone, $role);
+
+        if (! $user) {
+            return [
+                'status'       => 'missing',
+                'register_url' => route($registerRoute, ['phone' => $phone]),
+            ];
+        }
+
+        if ($user->isCustomer() && $user->isCustomerApprovalPending() && $user->isCustomerPendingApprovalExpired()) {
+            app(PendingApprovalExpiryService::class)->expireCustomer($user);
+            $user->refresh();
+        }
+        if ($user->isCustomer() && $user->isCustomerApprovalRejected()) {
+            return [
+                'status'       => 'missing',
+                'register_url' => route($registerRoute, ['phone' => $phone]),
+                'message'      => AuthOtp::pendingExpiredLoginMessage(),
+            ];
+        }
+
+        if ($user->isAwaitingApprovalForRegisterOtp()) {
+            return [
+                'status'  => 'needs_otp',
+                'otp_url' => $this->openRegisterOtpPage($request, $user),
+            ];
+        }
+
+        if ($user->role === 'driver') {
+            $profile = DriverProfile::query()->where('user_id', $user->id)->first();
+            if (! $profile) {
+                return [
+                    'status'       => 'missing',
+                    'register_url' => route('driver.register', ['phone' => $phone]),
+                ];
+            }
+            if ($profile->isPendingApproval() && $profile->isPendingApprovalExpired()) {
+                app(PendingApprovalExpiryService::class)->expireDriver($profile);
+                $profile->refresh();
+            }
+            if ($profile->isRejected()) {
+                return [
+                    'status'       => 'missing',
+                    'register_url' => route('driver.register', ['phone' => $phone]),
+                    'message'      => AuthOtp::pendingExpiredLoginMessage(),
+                ];
+            }
+        }
+
+        if ($this->shouldResumeRegisterOtp($user)) {
+            return [
+                'status'  => 'needs_otp',
+                'otp_url' => $this->beginRegisterOtpResume($request, $user),
+            ];
+        }
+
+        if ($block = $user->loginBlockMessage()) {
+            return [
+                'status'  => 'inactive',
+                'message' => $block,
+            ];
+        }
+
+        return [
+            'status'    => 'active',
+            'role'      => $user->role,
+            'login_url' => route($loginRoute, ['phone' => $phone]),
+        ];
+    }
+
+    /**
+     * Đăng ký: SĐT đã có TK → redirect login/OTP hoặc báo khóa (không để tới lỗi “đã đăng ký”).
+     */
+    public function redirectIfPhoneBlocksRegister(Request $request, bool $forDriver): ?\Illuminate\Http\RedirectResponse
+    {
+        $raw = (string) $request->input('phone', '');
+        $result = $this->resolvePhoneAuthStatus($request, $raw, $forDriver);
+
+        return match ($result['status']) {
+            'active' => redirect((string) $result['login_url'])
+                ->with('info', 'Số điện thoại đã có tài khoản. Vui lòng đăng nhập.'),
+            'needs_otp' => redirect((string) $result['otp_url']),
+            'inactive' => back()
+                ->withErrors(['phone' => (string) ($result['message'] ?? 'Tài khoản đang bị khóa.')])
+                ->withInput($request->except(['password', 'password_confirmation', 'pin_draft', 'pin_confirm_draft'])),
+            default => null,
+        };
+    }
+
+    /**
      * Xóa slot đăng ký cũ (đã từ chối) để SĐT đăng ký lại.
      * Hết hạn chờ duyệt → đánh dấu từ chối trước (giữ record cho admin), rồi mới xóa khi đăng ký lại.
      */

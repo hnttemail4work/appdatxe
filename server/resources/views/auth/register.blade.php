@@ -15,6 +15,7 @@
 @endphp
 <div class="auth-screen" data-auth-screen data-driver-wizard-root
      data-home-url="{{ route('home') }}"
+     data-check-phone-url="{{ route('login.checkPhone') }}"
      data-step-titles='@json($stepTitles)'>
     @include('partials.auth-screen-header', [
         'authTitle' => $stepTitles[1],
@@ -44,5 +45,6 @@
 @push('scripts')
 <script src="{{ asset('js/pin-input.js') }}?v={{ filemtime(public_path('js/pin-input.js')) }}"></script>
 <script src="{{ asset('js/auth-field-validation.js') }}?v={{ filemtime(public_path('js/auth-field-validation.js')) }}"></script>
+<script src="{{ asset('js/auth-phone-gate.js') }}?v={{ filemtime(public_path('js/auth-phone-gate.js')) }}"></script>
 <script src="{{ asset('js/driver-register-wizard.js') }}?v={{ filemtime(public_path('js/driver-register-wizard.js')) }}"></script>
 @endpush

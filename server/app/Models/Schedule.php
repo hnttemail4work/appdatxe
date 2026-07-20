@@ -468,7 +468,7 @@ class Schedule extends Model
     public function driverNextStageActionLabel(): ?string
     {
         return match ($this->driverNextStage()) {
-            self::DRIVER_STAGE_AT_PICKUP => 'Đến điểm đón',
+            self::DRIVER_STAGE_AT_PICKUP => 'Đã đến',
             self::DRIVER_STAGE_PICKED_UP => 'Đón khách',
             self::DRIVER_STAGE_RUNNING   => 'Bắt đầu chạy',
             self::DRIVER_STAGE_COMPLETED => 'Hoàn thành chuyến',

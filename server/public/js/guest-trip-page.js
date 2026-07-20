@@ -5,6 +5,27 @@
     var selectedSentiment = '';
     var currentBooking = null;
     var COMPLETION_SHOWN_PREFIX = 'guest_trip_completion_shown:';
+    var etaHeroDeadlineMs = null;
+    var etaHeroTickTimer = null;
+
+    /** Đồng hồ ETA đếm lùi giữa các lần poll — mượt hơn là chỉ đợi label cập nhật mỗi 3-5s. */
+    function startEtaHeroTick() {
+        if (etaHeroTickTimer) {
+            return;
+        }
+        etaHeroTickTimer = window.setInterval(function () {
+            if (etaHeroDeadlineMs == null) {
+                return;
+            }
+            var panel = document.getElementById('guest-trip-driver-panel');
+            var etaHeroValue = panel ? qs('[data-field="driver_eta_hero_value"]', panel) : null;
+            if (!etaHeroValue) {
+                return;
+            }
+            var remain = Math.max(0, Math.ceil((etaHeroDeadlineMs - Date.now()) / 60000));
+            etaHeroValue.textContent = String(remain);
+        }, 20000);
+    }
 
     function qs(sel, root) {
         return (root || document).querySelector(sel);
@@ -351,11 +372,27 @@
         setText(qs('[data-field="driver_name"]', panel), driver.name || '—', true);
         setText(qs('[data-field="driver_code"]', panel), driver.code ? driver.code : '', !!driver.code);
 
+        var ratingWrap = qs('[data-field="driver_rating"]', panel);
+        var ratingValueEl = qs('[data-field="driver_rating_value"]', panel);
+        var rating = Number(driver.rating || 0);
+        if (ratingWrap && ratingValueEl) {
+            if (rating > 0) {
+                ratingValueEl.textContent = driver.rating_label || rating.toFixed(1);
+                ratingWrap.classList.remove('d-none');
+            } else {
+                ratingValueEl.textContent = '';
+                ratingWrap.classList.add('d-none');
+            }
+        }
+
         var vehicleParts = [];
         if (driver.vehicle_type_label) {
             vehicleParts.push(driver.vehicle_type_label);
         } else if (driver.vehicle_name) {
             vehicleParts.push(driver.vehicle_name);
+        }
+        if (driver.vehicle_color) {
+            vehicleParts.push(driver.vehicle_color);
         }
         setText(qs('[data-field="driver_vehicle"]', panel), vehicleParts.join(' · '), vehicleParts.length > 0);
 
@@ -382,9 +419,6 @@
                 delete photoWrap.dataset.vehiclePhotoUrl;
             }
         }
-
-        var statusLine = booking.driver_status_line || driver.status_line || '';
-        setText(qs('[data-field="driver_status"]', panel), statusLine, !!statusLine);
 
         var liveWrap = qs('[data-field="driver_live_wrap"]', panel);
         var distanceEl = qs('[data-field="driver_distance_line"]', panel);
@@ -430,6 +464,24 @@
             liveWrap.classList.toggle('d-none', !distanceLine && !etaLine);
         }
 
+        var etaHeroWrap = qs('[data-field="driver_eta_hero_wrap"]', panel);
+        var etaHeroValue = qs('[data-field="driver_eta_hero_value"]', panel);
+        var etaMinutes = Number(driver.eta_minutes || 0);
+        if (etaHeroWrap && etaHeroValue) {
+            var showHero = showGuestDriverEta(booking) && etaMinutes > 0;
+            panel.classList.toggle('guest-trip-driver--has-eta', showHero);
+            if (showHero) {
+                etaHeroValue.textContent = String(etaMinutes);
+                etaHeroWrap.classList.remove('d-none');
+                etaHeroDeadlineMs = Date.now() + etaMinutes * 60000;
+                startEtaHeroTick();
+            } else {
+                etaHeroValue.textContent = '';
+                etaHeroWrap.classList.add('d-none');
+                etaHeroDeadlineMs = null;
+            }
+        }
+
         panel.classList.remove('d-none');
     }
 
@@ -441,6 +493,37 @@
 
         var hasVisibleDetail = !!section.querySelector('.guest-trip-detail:not(.d-none)');
         section.classList.toggle('d-none', !hasVisibleDetail);
+    }
+
+    /** Stepper 4 bước: Đã nhận chuyến → Đang đến đón → Đã đón khách → Hoàn tất. */
+    function renderTripStepper(booking) {
+        var wrap = document.getElementById('guest-trip-stepper');
+        if (!wrap) {
+            return;
+        }
+        if (!booking || !booking.has_driver || booking.trip_status === 'cancelled') {
+            wrap.classList.add('d-none');
+            return;
+        }
+
+        var step = 1;
+        if (booking.trip_status === 'completed') {
+            step = 4;
+        } else if (booking.driver && booking.driver.stage_step) {
+            step = Number(booking.driver.stage_step) || 1;
+        }
+
+        wrap.classList.remove('d-none');
+        var steps = wrap.querySelectorAll('.guest-trip-stepper__step');
+        for (var i = 0; i < steps.length; i++) {
+            var n = Number(steps[i].getAttribute('data-step'));
+            steps[i].classList.toggle('is-done', n < step);
+            steps[i].classList.toggle('is-active', n === step);
+        }
+        var lines = wrap.querySelectorAll('.guest-trip-stepper__line');
+        for (var j = 0; j < lines.length; j++) {
+            lines[j].classList.toggle('is-done', j + 1 < step);
+        }
     }
 
     function syncVehicleSection(card) {
@@ -535,13 +618,33 @@
         }
         var sheetHint = document.getElementById('guest-trip-info-sheet-hint');
         if (sheetHint) {
-            var waitLabel = booking.wait_progress && booking.wait_progress.label
-                ? String(booking.wait_progress.label)
-                : '';
-            sheetHint.textContent = searching
-                ? (waitLabel || 'Đang tìm tài xế gần bạn…')
-                : 'Thông tin chuyến';
+            // Đang tìm TX: không hiện chữ trên handle — chỉ còn thanh tiến trình trong body.
+            sheetHint.textContent = searching ? '' : 'Thông tin chuyến';
+            sheetHint.classList.toggle('d-none', searching);
         }
+
+        // Thanh tiến trình chờ TX / nhắc đánh giá — chỉ hiện khi đang tìm TX hoặc chuyến vừa hoàn tất chưa đánh giá.
+        var waitBlock = document.getElementById('guest-trip-wait-block');
+        if (waitBlock) {
+            var waitKind = booking.wait_progress ? booking.wait_progress.kind : '';
+            var showWaitBlock = waitKind === 'driver_search' || waitKind === 'review';
+            waitBlock.classList.toggle('guest-trip-wait--driver_search', waitKind === 'driver_search');
+            waitBlock.classList.toggle('guest-trip-wait--review', waitKind === 'review');
+            waitBlock.classList.toggle('guest-trip-wait--bar-only', waitKind === 'driver_search');
+            if (showWaitBlock && window.WaitProgress) {
+                window.WaitProgress.mount(waitBlock, booking.wait_progress);
+                var hintEl = qs('[data-field="wait_hint"]', waitBlock);
+                if (hintEl) {
+                    hintEl.classList.toggle('d-none', !booking.wait_progress.hint || waitKind === 'driver_search');
+                }
+            } else {
+                waitBlock.classList.add('d-none');
+                waitBlock.classList.remove('guest-trip-wait--bar-only', 'guest-trip-wait--driver_search', 'guest-trip-wait--review');
+            }
+        }
+
+        renderTripStepper(booking);
+
         if (window.GuestTripSheet && window.GuestTripSheet.sync) {
             window.GuestTripSheet.sync();
         }
@@ -552,36 +655,53 @@
         }
 
         var scheduledPickup = isScheduledPickup(booking);
+        // Đã có TX nhận chuyến: bỏ Lịch đón / Quãng đường / Giá chuyến — ưu tiên thông tin TX + map.
+        var showTripMeta = !booking.has_driver;
         setDetailRow(
             card,
             'pickup_mode_wrap',
             'pickup_mode_label',
-            scheduledPickup ? '' : (booking.pickup_mode_label || 'Đón ngay'),
+            showTripMeta && !scheduledPickup ? (booking.pickup_mode_label || 'Đón ngay') : '',
         );
-        setDetailRow(card, 'pickup_time_wrap', 'pickup_time_label', scheduledPickup ? (booking.pickup_time_label || '') : '');
-        setDetailRow(card, 'service_date_wrap', 'service_date_label', scheduledPickup ? serviceDateLabel(booking) : '');
+        setDetailRow(
+            card,
+            'pickup_time_wrap',
+            'pickup_time_label',
+            showTripMeta && scheduledPickup ? (booking.pickup_time_label || '') : '',
+        );
+        setDetailRow(
+            card,
+            'service_date_wrap',
+            'service_date_label',
+            showTripMeta && scheduledPickup ? serviceDateLabel(booking) : '',
+        );
 
         var distanceKm = Number(booking.distance_km || 0);
         setDetailRow(
             card,
             'trip_distance_wrap',
             'trip_distance_km',
-            distanceKm > 0 ? distanceKm + ' km' : '',
+            showTripMeta && distanceKm > 0 ? distanceKm + ' km' : '',
         );
 
-        var priceLabel = booking.total_price_label || '';
-        if (!priceLabel && booking.total_price > 0) {
-            priceLabel = Number(booking.total_price).toLocaleString('vi-VN') + ' đ';
+        var priceLabel = '';
+        if (showTripMeta) {
+            priceLabel = booking.total_price_label || '';
+            if (!priceLabel && booking.total_price > 0) {
+                priceLabel = Number(booking.total_price).toLocaleString('vi-VN') + ' đ';
+            }
         }
         setDetailRow(card, 'total_price_wrap', 'total_price', priceLabel);
         var extrasEl = qs('[data-field="price_extras"]', card);
         if (extrasEl) {
             var bits = [];
-            if (Number(booking.surcharge_holiday || 0) > 0) bits.push('Lễ/tết');
-            if (Number(booking.surcharge_peak || 0) > 0) bits.push('Cao điểm');
-            if (Number(booking.surcharge_rain || 0) > 0) bits.push('Mưa');
-            if (Number(booking.toll_amount || 0) > 0) bits.push('Thu phí');
-            if (Number(booking.referral_discount_amount || 0) > 0) bits.push('Đã giảm giá QR');
+            if (showTripMeta) {
+                if (Number(booking.surcharge_holiday || 0) > 0) bits.push('Lễ/tết');
+                if (Number(booking.surcharge_peak || 0) > 0) bits.push('Cao điểm');
+                if (Number(booking.surcharge_rain || 0) > 0) bits.push('Mưa');
+                if (Number(booking.toll_amount || 0) > 0) bits.push('Thu phí');
+                if (Number(booking.referral_discount_amount || 0) > 0) bits.push('Đã giảm giá QR');
+            }
             if (bits.length) {
                 extrasEl.textContent = bits.join(' · ');
                 extrasEl.classList.remove('d-none');
@@ -789,13 +909,14 @@
 
     function pickCancelReason() {
         if (!window.CancellationReasonModal || !window.CancellationReasonModal.pick) {
-            return Promise.resolve({ skipped: true, reasonId: null });
+            return Promise.reject(new Error('Không tải được lý do hủy.'));
         }
+        // Dùng chung danh sách lý do với tài xế.
         return window.CancellationReasonModal.pick({
-            audience: 'customer',
-            contactPhone: getContactPhone(),
+            audience: 'driver',
             title: 'Chọn lý do hủy',
-            hint: 'Vui lòng chọn một lý do trước khi hủy chuyến.',
+            hint: 'Tài xế đã nhận chuyến — vui lòng chọn lý do trước khi hủy.',
+            requireReason: true,
         });
     }
 
@@ -846,16 +967,34 @@
                 if (window.BookingActiveSession && window.BookingActiveSession.clear) {
                     window.BookingActiveSession.clear();
                 }
+                if (window.BookingRouteDraft && window.BookingRouteDraft.clear) {
+                    window.BookingRouteDraft.clear();
+                } else {
+                    try {
+                        sessionStorage.removeItem('appdatxe:bookingRouteDraft');
+                    } catch (e) { /* ignore */ }
+                }
                 currentBooking = null;
                 renderBooking(null);
-                if (window.CustomerScrollDock && window.CustomerScrollDock.focusTripsPage) {
-                    window.CustomerScrollDock.focusTripsPage();
-                }
+
+                var msg = data.cancel_blocked && data.block_message
+                    ? data.block_message
+                    : (data.message || 'Hủy chuyến thành công.');
+                var goHome = function () {
+                    if (window.CustomerScrollDock && window.CustomerScrollDock.focusHomePage) {
+                        window.CustomerScrollDock.focusHomePage();
+                    } else {
+                        window.location.href = '/';
+                    }
+                };
+
                 if (window.AppDialog && window.AppDialog.alert) {
-                    var msg = data.cancel_blocked && data.block_message
-                        ? data.block_message
-                        : (data.message || 'Hủy chuyến thành công.');
-                    window.AppDialog.alert(msg, { variant: 'success', title: 'Hủy chuyến thành công.' });
+                    window.AppDialog.alert(msg, {
+                        variant: data.cancel_blocked ? 'warning' : 'success',
+                        title: 'Hủy chuyến thành công.',
+                    }).then(goHome);
+                } else {
+                    goHome();
                 }
             })
             .catch(function (err) {
@@ -877,12 +1016,16 @@
             if (!ok) {
                 return;
             }
-            return pickCancelReason();
-        }).then(function (pick) {
-            if (!pick) {
-                return;
+            // Chưa có TX nhận: hủy thẳng. Đã nhận: chọn lý do (chung với TX).
+            if (!currentBooking.cancel_requires_reason) {
+                return submitCancel(null);
             }
-            return submitCancel(pick.reasonId || null);
+            return pickCancelReason().then(function (pick) {
+                if (!pick || !pick.reasonId) {
+                    return;
+                }
+                return submitCancel(pick.reasonId);
+            });
         }).catch(function (err) {
             if (err && err.message) {
                 if (window.AppDialog && window.AppDialog.alert) {

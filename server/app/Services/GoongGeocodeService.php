@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Support\ProvinceCenters;
 use App\Support\ProvinceResolver;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 class GoongGeocodeService
@@ -275,12 +276,31 @@ class GoongGeocodeService
      *
      * @return array{coordinates: list<array{0: float, 1: float}>, distance_m: int|null, duration_s: int|null}|null
      */
+    /**
+     * @return array{coordinates: list<array{0: float, 1: float}>, distance_m: int|null, duration_s: int|null, steps: list<array<string, mixed>>}|null
+     */
     public function direction(float $originLat, float $originLng, float $destLat, float $destLng): ?array
     {
         if (! $this->isConfigured()) {
             return null;
         }
 
+        // Bám tick GPS liên tục nhưng phía gọi (turn-by-turn) chỉ fetch lại khi lệch tuyến —
+        // cache ngắn hạn thêm 1 lớp chống gọi trùng (retry mạng, nhiều tab…) mà không tốn thêm phí.
+        $cacheKey = 'goong_direction:v1:'
+            .round($originLat, 3).','.round($originLng, 3).'|'
+            .round($destLat, 4).','.round($destLng, 4);
+
+        return Cache::remember($cacheKey, 45, function () use ($originLat, $originLng, $destLat, $destLng): ?array {
+            return $this->fetchDirection($originLat, $originLng, $destLat, $destLng);
+        });
+    }
+
+    /**
+     * @return array{coordinates: list<array{0: float, 1: float}>, distance_m: int|null, duration_s: int|null, steps: list<array<string, mixed>>}|null
+     */
+    private function fetchDirection(float $originLat, float $originLng, float $destLat, float $destLng): ?array
+    {
         $payload = $this->get('/Direction', [
             'origin' => $originLat.','.$originLng,
             'destination' => $destLat.','.$destLng,
@@ -319,7 +339,60 @@ class GoongGeocodeService
             'coordinates' => $coordinates,
             'distance_m' => is_numeric($distanceM) ? (int) $distanceM : null,
             'duration_s' => is_numeric($durationS) ? (int) $durationS : null,
+            'steps' => $this->extractSteps($route),
         ];
+    }
+
+    /**
+     * Turn-by-turn steps từ legs.0.steps — dùng cho banner chỉ đường phía tài xế.
+     *
+     * @return list<array{instruction: string, maneuver: string, distance_m: int|null, duration_s: int|null, start: array{lat: float, lng: float}|null, end: array{lat: float, lng: float}|null}>
+     */
+    private function extractSteps(array $route): array
+    {
+        $rawSteps = data_get($route, 'legs.0.steps');
+        if (! is_array($rawSteps)) {
+            return [];
+        }
+
+        $steps = [];
+        foreach ($rawSteps as $rawStep) {
+            if (! is_array($rawStep)) {
+                continue;
+            }
+
+            $instruction = trim(strip_tags((string) data_get($rawStep, 'html_instructions', '')));
+            $end = $this->extractLatLng(data_get($rawStep, 'end_location'));
+            if ($instruction === '' || $end === null) {
+                // Không có điểm cuối thì không dùng được để bám tuyến — bỏ qua.
+                continue;
+            }
+
+            $distanceM = data_get($rawStep, 'distance.value');
+            $durationS = data_get($rawStep, 'duration.value');
+
+            $steps[] = [
+                'instruction' => $instruction,
+                'maneuver' => (string) data_get($rawStep, 'maneuver', ''),
+                'distance_m' => is_numeric($distanceM) ? (int) $distanceM : null,
+                'duration_s' => is_numeric($durationS) ? (int) $durationS : null,
+                'start' => $this->extractLatLng(data_get($rawStep, 'start_location')),
+                'end' => $end,
+            ];
+        }
+
+        return $steps;
+    }
+
+    /** @return array{lat: float, lng: float}|null */
+    private function extractLatLng(mixed $location): ?array
+    {
+        if (! is_array($location) || ! isset($location['lat'], $location['lng'])
+            || ! is_numeric($location['lat']) || ! is_numeric($location['lng'])) {
+            return null;
+        }
+
+        return ['lat' => (float) $location['lat'], 'lng' => (float) $location['lng']];
     }
 
     /**

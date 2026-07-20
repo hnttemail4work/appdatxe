@@ -103,6 +103,15 @@ class DriverProfile extends Model
             : number_format($rating, 1, '.', '');
     }
 
+    /** Số lượt thích từ đánh giá chuyến. */
+    public function likeCount(): int
+    {
+        return (int) TripReview::query()
+            ->where('driver_id', $this->user_id)
+            ->where('sentiment', TripReview::SENTIMENT_LIKE)
+            ->count();
+    }
+
     /** Trạng thái pill trên hero tài xế — đồng bộ với availability + vị trí + chuyến đang phục vụ. */
     public function heroStatusMeta(bool $onActiveTrip = false, bool $hasUpcomingTrip = false): array
     {

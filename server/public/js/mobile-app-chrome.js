@@ -55,6 +55,12 @@
         });
 
         document.querySelectorAll(FAB_SELECTOR).forEach(function (el) {
+            // Nút locate neo trong map booking — không đẩy theo dock/keyboard.
+            if (el.classList.contains('be-step__map-locate')) {
+                el.style.bottom = '';
+                return;
+            }
+
             // Locate khi đang tìm chuyến: neo theo sheet thông tin (guest-trip-sheet.js).
             if (el.classList.contains('trip-locate-fab')
                 && document.body.classList.contains('guest-trip-searching')) {

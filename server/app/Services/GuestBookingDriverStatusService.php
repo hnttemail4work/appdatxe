@@ -7,6 +7,7 @@ use App\Models\DriverProfile;
 use App\Models\Schedule;
 use App\Support\VehicleCapacityOptions;
 use App\Support\VehicleDisplay;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Thông tin tài xế + khoảng cách/ETA cho khách theo dõi.
@@ -94,6 +95,12 @@ class GuestBookingDriverStatusService
             ? (float) $profile->last_heading
             : null;
 
+        $etaMinutes = ($stage === Schedule::DRIVER_STAGE_ASSIGNED && $movementConfirmed && $hasLiveLocation && $distanceKm !== null)
+            ? $this->latePickup->pickupEtaMinutes($schedule, $booking)
+            : null;
+
+        [$rating, $ratingLabel] = $this->cachedRating($profile);
+
         return [
             'name'                 => $profile->user->name ?? $schedule->driver_name,
             'code'                 => $profile->driver_code,
@@ -103,10 +110,12 @@ class GuestBookingDriverStatusService
             'vehicle_seats'        => $vehicleSeats,
             'vehicle_seats_label'  => $vehicleSeats > 0 ? VehicleCapacityOptions::label($vehicleSeats) : null,
             'vehicle_name'         => $vehicleName !== '' ? $vehicleName : null,
+            'vehicle_color'        => $profile->vehicle_color,
             'vehicle_photo_url'    => $vehiclePhotoUrl,
             'vehicle_label'        => DriverTripRequestService::vehicleLabel($profile),
             'stage'                => $stage,
             'stage_label'          => $schedule->driverStageLabel(),
+            'stage_step'           => $this->stageStep($stage),
             'location_shared'      => $hasLiveLocation,
             'movement_confirmed'   => $movementConfirmed,
             'lat'                  => $lat !== null ? (float) $lat : null,
@@ -115,11 +124,34 @@ class GuestBookingDriverStatusService
             'distance_km'          => $distanceKm,
             'distance_label'       => $distanceLabel,
             'eta_label'            => $etaLabel,
+            'eta_minutes'          => $etaMinutes,
+            'rating'               => $rating,
+            'rating_label'         => $ratingLabel,
             'status_line'          => $statusLine,
             'distance_line'        => $distanceLine,
             'eta_line'             => $etaLine,
             'proximity_hint'       => $proximityHint,
         ];
+    }
+
+    /** 1=đã nhận, 2=đến điểm đón, 3=đang chạy — dùng cho stepper phía khách. */
+    private function stageStep(string $stage): int
+    {
+        return match ($stage) {
+            Schedule::DRIVER_STAGE_AT_PICKUP => 2,
+            Schedule::DRIVER_STAGE_PICKED_UP, Schedule::DRIVER_STAGE_RUNNING, Schedule::DRIVER_STAGE_COMPLETED => 3,
+            default => 1,
+        };
+    }
+
+    /** Rating tài xế đổi chậm — cache ngắn để tránh query TripReview mỗi lần khách poll. */
+    private function cachedRating(DriverProfile $profile): array
+    {
+        $key = 'guest_driver_rating_' . $profile->user_id;
+
+        return Cache::remember($key, 60, function () use ($profile) {
+            return [$profile->starRating(), $profile->starRatingLabel()];
+        });
     }
 
     private function resolveLiveDistanceKm(Booking $booking, DriverProfile $profile): ?float

@@ -61,13 +61,13 @@ class DriverMovementConfirmService
         }
 
         $assignedAt = now();
-        $deadline = $this->computeDeadline($schedule, $booking, $assignedAt);
 
+        // Nhận cuốc = đang đi đón — không còn cửa sổ «Xác nhận» / tự hủy theo deadline.
         $schedule->update([
-            'driver_assigned_at'          => $assignedAt,
-            'driver_movement_deadline_at' => $deadline,
-            'driver_movement_confirmed_at' => null,
-            'driver_stage'                => $schedule->driver_stage ?: Schedule::DRIVER_STAGE_ASSIGNED,
+            'driver_assigned_at'            => $assignedAt,
+            'driver_movement_deadline_at'   => null,
+            'driver_movement_confirmed_at'  => $assignedAt,
+            'driver_stage'                  => $schedule->driver_stage ?: Schedule::DRIVER_STAGE_ASSIGNED,
             'driver_depart_reminder_sent_at' => null,
         ]);
     }

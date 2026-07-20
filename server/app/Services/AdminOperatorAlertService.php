@@ -17,34 +17,10 @@ class AdminOperatorAlertService
 
     private const MAX_ALERTS = 40;
 
+    /** Đã tắt: nhận cuốc không còn bắn thông báo cho admin. */
     public function recordDriverAccepted(Booking $booking): void
     {
-        $booking->loadMissing(['schedule.route']);
-
-        $driverName = trim((string) ($booking->schedule?->driver_name ?? ''));
-        if ($driverName === '') {
-            $driverName = 'Tài xế';
-        }
-
-        $passenger = trim((string) ($booking->passenger_name ?: $booking->contact_phone ?: 'Khách'));
-        $reference = $booking->booking_reference ?? ('#' . $booking->id);
-        $routeLabel = trim($booking->routeDetailLabel());
-
-        $message = $driverName . ' nhận chuyến ' . $reference . ' · ' . $passenger;
-        if ($routeLabel !== '' && $routeLabel !== '—') {
-            $message .= ' · ' . $routeLabel;
-        }
-
-        $this->push([
-            'id'         => 'driver_accepted:' . $booking->id . ':' . now()->timestamp,
-            'type'       => 'driver_accepted',
-            'booking_id' => (int) $booking->id,
-            'title'      => 'Tài xế đã nhận cuốc',
-            'message'    => $message,
-            'variant'    => 'success',
-            'url'        => route('admin.bookings'),
-            'at'         => now()->toIso8601String(),
-        ]);
+        // no-op
     }
 
     public function recordCustomerRegistrationPending(User $user): void

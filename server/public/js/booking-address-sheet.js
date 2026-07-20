@@ -163,7 +163,7 @@
                 dropoff: Object.assign({}, state.dropoff),
             },
         }));
-        closeSheet();
+        closeSheet({ skipResume: true });
         window.setTimeout(function () {
             advancing = false;
         }, 400);
@@ -193,7 +193,7 @@
             );
         }
         if (!options.skipAdvance) {
-            tryAdvance();
+            afterFieldApplied(field, options);
         }
     }
 
@@ -385,8 +385,23 @@
         locateCurrent(true);
     }
 
-    function afterFieldApplied(field) {
+    /**
+     * Sau khi chọn 1 điểm:
+     * - Đủ 2 điểm nhờ chọn điểm đến / GPS bổ sung → sang đặt chuyến.
+     * - Đủ 2 điểm nhờ vừa chọn điểm đi lần đầu → sang đặt chuyến.
+     * - Đang sửa điểm đi (trước đó đã đủ 2 điểm) → ở lại form.
+     */
+    function afterFieldApplied(field, options) {
+        options = options || {};
         if (bothReady()) {
+            if (field === 'dropoff' || options.advanceIfReady) {
+                tryAdvance();
+                return;
+            }
+            if (field === 'pickup' && options.keepSheetOpen) {
+                focusField('dropoff');
+                return;
+            }
             tryAdvance();
             return;
         }
@@ -402,6 +417,15 @@
         }
         // Thiếu tọa độ ô vừa chọn — giữ field hiện tại, không đổi list sang field kia.
         showSuggestPending('Đang lấy tọa độ…');
+    }
+
+    function applyFieldAndContinue(field, address, lat, lng, options) {
+        options = options || {};
+        var wasBothReady = bothReady();
+        setFieldValue(field, address, lat, lng, Object.assign({}, options, { skipAdvance: true }));
+        afterFieldApplied(field, Object.assign({}, options, {
+            keepSheetOpen: wasBothReady && field === 'pickup',
+        }));
     }
 
     function applySuggest(item) {
@@ -424,12 +448,9 @@
             if (!address) {
                 return;
             }
-            // Luôn ghi vào ô đang chọn trước; đủ 2 điểm mới advance.
-            setFieldValue(field, address, lat, lng, {
-                skipAdvance: true,
+            applyFieldAndContinue(field, address, lat, lng, {
                 place_id: item.place_id || resolved.place_id || '',
             });
-            afterFieldApplied(field);
         };
 
         if (item.kind === 'current') {
@@ -438,30 +459,35 @@
         }
 
         if (window.GeocodeResolve && window.GeocodeResolve.resolvePlace && item.place_id) {
-            // Điền text (+ tọa độ nếu đã có) ngay; đủ 2 điểm thì sang bước sau liền, không chờ resolve.
+            var wasBothReady = bothReady();
+            // Điền text (+ tọa độ nếu đã có) ngay.
             setFieldValue(field, item.title || item.address || '', item.lat, item.lng != null ? item.lng : item.lon, {
                 skipAdvance: true,
                 place_id: item.place_id,
             });
             if (bothReady()) {
-                tryAdvance();
-                // Resolve nền để làm giàu cache / địa chỉ đầy đủ — không đụng UI nữa.
-                window.GeocodeResolve.resolvePlace(item).then(function (resolved) {
-                    if (!resolved || advancing || sheet.hidden) {
-                        return;
-                    }
-                    var lat = resolved.lat != null ? resolved.lat : state[field].lat;
-                    var lng = resolved.lon != null ? resolved.lon
-                        : (resolved.lng != null ? resolved.lng : state[field].lng);
-                    var address = String(resolved.address || state[field].address || '').trim();
-                    if (!address || lat == null || lng == null) {
-                        return;
-                    }
-                    setFieldValue(field, address, lat, lng, {
-                        skipAdvance: true,
-                        place_id: item.place_id || resolved.place_id || '',
-                    });
+                afterFieldApplied(field, {
+                    keepSheetOpen: wasBothReady && field === 'pickup',
                 });
+                if (field === 'dropoff' || (field === 'pickup' && !wasBothReady)) {
+                    // Resolve nền — không đụng UI nữa khi đã sang bước đặt.
+                    window.GeocodeResolve.resolvePlace(item).then(function (resolved) {
+                        if (!resolved || advancing || sheet.hidden) {
+                            return;
+                        }
+                        var lat = resolved.lat != null ? resolved.lat : state[field].lat;
+                        var lng = resolved.lon != null ? resolved.lon
+                            : (resolved.lng != null ? resolved.lng : state[field].lng);
+                        var address = String(resolved.address || state[field].address || '').trim();
+                        if (!address || lat == null || lng == null) {
+                            return;
+                        }
+                        setFieldValue(field, address, lat, lng, {
+                            skipAdvance: true,
+                            place_id: item.place_id || resolved.place_id || '',
+                        });
+                    });
+                }
                 return;
             }
             showSuggestPending('Đang lấy tọa độ…');
@@ -611,12 +637,25 @@
         if (!navigator.geolocation) {
             return;
         }
+        function applyPickup(address, lat, lng, province) {
+            // GPS điểm đi: không tự nhảy màn hình; chỉ advance khi force (sau khi đã chọn điểm đến).
+            setFieldValue('pickup', address, lat, lng, { skipAdvance: true });
+            if (province) {
+                var pickupAddr = $('modal-pickup-address');
+                if (pickupAddr) {
+                    pickupAddr.value = province;
+                }
+            }
+            if (forceApply) {
+                afterFieldApplied('pickup', { advanceIfReady: true });
+            }
+        }
         navigator.geolocation.getCurrentPosition(function (pos) {
             var lat = pos.coords.latitude;
             var lng = pos.coords.longitude;
             gpsOrigin = { lat: lat, lng: lng };
             if (!reverseUrl) {
-                setFieldValue('pickup', 'Vị trí hiện tại', lat, lng, { skipAdvance: !forceApply && !state.dropoff.address });
+                applyPickup('Vị trí hiện tại', lat, lng, null);
                 return;
             }
             fetch(reverseUrl + '?lat=' + encodeURIComponent(lat) + '&lon=' + encodeURIComponent(lng), {
@@ -625,20 +664,10 @@
                 .then(function (r) { return r.ok ? r.json() : null; })
                 .then(function (data) {
                     var address = data && data.address ? String(data.address).trim() : 'Vị trí hiện tại';
-                    setFieldValue('pickup', address, lat, lng, {
-                        skipAdvance: !(forceApply || state.dropoff.address),
-                    });
-                    if (data && data.province) {
-                        var pickupAddr = $('modal-pickup-address');
-                        if (pickupAddr) {
-                            pickupAddr.value = data.province;
-                        }
-                    }
+                    applyPickup(address, lat, lng, data && data.province ? data.province : null);
                 })
                 .catch(function () {
-                    setFieldValue('pickup', 'Vị trí hiện tại', lat, lng, {
-                        skipAdvance: !(forceApply || state.dropoff.address),
-                    });
+                    applyPickup('Vị trí hiện tại', lat, lng, null);
                 });
         }, function () {}, { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
     }
@@ -699,12 +728,18 @@
         focusField(focus || (state.dropoff.address ? 'pickup' : 'dropoff'));
     }
 
-    function closeSheet() {
+    function closeSheet(options) {
+        options = options || {};
+        var wasOpen = !sheet.hidden;
         sheet.hidden = true;
         sheet.setAttribute('aria-hidden', 'true');
         document.body.classList.remove('booking-addr-sheet-open');
         if (searchAbort) {
             searchAbort.abort();
+        }
+        // Đủ 2 điểm rồi đóng sheet (sau khi đổi đón/trả / bấm back) → mở lại flow đặt chuyến.
+        if (!options.skipResume && wasOpen && bothReady() && !bookingFlowIsOpen() && !advancing) {
+            tryAdvance();
         }
     }
 
@@ -803,18 +838,15 @@
     document.addEventListener('addressmap:applied', function (e) {
         var detail = e.detail || {};
         var target = detail.targetInputId || '';
+        if (bookingFlowIsOpen()) {
+            return;
+        }
         if (target === 'modal-pickup-detail' && detail.address) {
-            setFieldValue('pickup', detail.address, detail.lat, detail.lng, { skipAdvance: true });
-            if (!bookingFlowIsOpen()) {
-                tryAdvance();
-            }
+            applyFieldAndContinue('pickup', detail.address, detail.lat, detail.lng);
             return;
         }
         if (target === 'modal-dropoff-detail' && detail.address) {
-            setFieldValue('dropoff', detail.address, detail.lat, detail.lng, { skipAdvance: true });
-            if (!bookingFlowIsOpen()) {
-                tryAdvance();
-            }
+            applyFieldAndContinue('dropoff', detail.address, detail.lat, detail.lng);
         }
     });
 
@@ -832,8 +864,17 @@
             state.dropoff = tmp;
             if (pickupInput) pickupInput.value = state.pickup.address || '';
             if (dropoffInput) dropoffInput.value = state.dropoff.address || '';
+            // Đảo cả tỉnh/thành (hidden) — syncHiddenForm chỉ ghi detail/lat/lng.
+            var pAddr = $('modal-pickup-address');
+            var dAddr = $('modal-dropoff-address');
+            if (pAddr && dAddr) {
+                var addrTmp = pAddr.value;
+                pAddr.value = dAddr.value;
+                dAddr.value = addrTmp;
+            }
             updateClearButtons();
             syncHiddenForm();
+            // Đảo xong vẫn ở form đón/trả — không nhảy màn hình.
             focusField(activeField === 'pickup' ? 'dropoff' : 'pickup');
         });
     }

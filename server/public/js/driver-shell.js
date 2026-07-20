@@ -49,9 +49,7 @@
         customers: 'Khách của tôi',
         inbox: 'Hộp thư',
         account: 'Thông tin cá nhân',
-        'account-profile': 'Hồ sơ',
         'account-update': 'Cập nhật thông tin',
-        'account-password': 'Đổi PIN',
         settings: 'Cài đặt',
     };
 

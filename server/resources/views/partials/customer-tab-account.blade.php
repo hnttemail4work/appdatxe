@@ -47,6 +47,14 @@
             </span>
             <span class="customer-account-menu__chevron" aria-hidden="true">›</span>
         </a>
+
+        <a href="{{ route('customer.account', ['tab' => 'trips']) }}" class="customer-account-menu__item">
+            <span class="customer-account-menu__copy">
+                <strong>Lịch sử chuyến</strong>
+                <span class="customer-account-menu__hint">Các chuyến đã hoàn thành</span>
+            </span>
+            <span class="customer-account-menu__chevron" aria-hidden="true">›</span>
+        </a>
     </nav>
 
     <div class="customer-account-card mt-3">

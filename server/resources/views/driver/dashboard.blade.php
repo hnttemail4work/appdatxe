@@ -19,16 +19,12 @@
     if ($driverDefaultTab === 'deposit') {
         $driverDefaultTab = 'earnings';
     }
-    $accountTabs = ['account', 'account-profile', 'account-update', 'account-password'];
-    if (! in_array($driverDefaultTab, array_merge(['trips', 'history', 'earnings', 'wallet', 'invite', 'customers', 'inbox', 'settings'], $accountTabs), true)) {
-        if ($driverDefaultTab === 'settings-docs') {
-            $driverDefaultTab = 'account-update';
-        } else {
-            $driverDefaultTab = ($mustChangePassword ?? false) ? 'account-password' : 'trips';
-        }
+    $accountTabs = ['account', 'account-update'];
+    if ($driverDefaultTab === 'account-profile' || $driverDefaultTab === 'settings-docs' || $driverDefaultTab === 'account-password') {
+        $driverDefaultTab = $driverDefaultTab === 'account-password' ? 'account' : 'account-update';
     }
-    if (($mustChangePassword ?? false) && $driverDefaultTab === 'account') {
-        $driverDefaultTab = 'account-password';
+    if (! in_array($driverDefaultTab, array_merge(['trips', 'history', 'earnings', 'wallet', 'invite', 'customers', 'inbox', 'settings'], $accountTabs), true)) {
+        $driverDefaultTab = 'trips';
     }
 
     $tripHistory = $tripHistory ?? collect();
@@ -48,6 +44,8 @@
 
     $driverMapTripPins = $driverMapTripPins ?? [];
     $driverActiveMapNav = $driverActiveMapNav ?? null;
+    $driverPickupNavTarget = $driverPickupNavTarget ?? null;
+    $driverAssignedStageActive = $driverAssignedStageActive ?? false;
     $driverOfferPending = (bool) ($driverOfferPending ?? false);
     $driverMapLat = $driverLocationReady ? ($profile->last_lat ?? null) : null;
     $driverMapLng = $driverLocationReady ? ($profile->last_lng ?? null) : null;
@@ -79,28 +77,20 @@
                 </svg>
             </button>
 
-            @if(! empty($driverActiveMapNav['google_url']) || ! empty($driverActiveMapNav['url']))
-                <a href="{{ $driverActiveMapNav['google_url'] ?? $driverActiveMapNav['url'] }}"
-                   class="driver-map-hero__nav-fab"
-                   data-driver-map-nav
-                   data-map-nav-provider="google"
-                   @if(! empty($driverActiveMapNav['use_current_origin'])) data-map-nav-use-current-origin="1" @endif
-                   @if(! empty($driverActiveMapNav['dest_lat']) && ! empty($driverActiveMapNav['dest_lng']))
-                       data-dest-lat="{{ $driverActiveMapNav['dest_lat'] }}"
-                       data-dest-lng="{{ $driverActiveMapNav['dest_lng'] }}"
-                   @endif
-                   @if(! empty($driverActiveMapNav['origin_lat']) && ! empty($driverActiveMapNav['origin_lng']))
-                       data-origin-lat="{{ $driverActiveMapNav['origin_lat'] }}"
-                       data-origin-lng="{{ $driverActiveMapNav['origin_lng'] }}"
-                   @endif
-                   target="_blank"
-                   rel="noopener noreferrer"
-                   aria-label="Điều hướng Google Maps"
-                   title="Điều hướng Google Maps">
+            {{-- Đang đón (assigned): camera đã tự bám hướng chỉ đường — ẩn nút thủ công (tránh trùng). --}}
+            @if(! $driverPickupNavTarget && ! empty($driverActiveMapNav['dest_lat']) && ! empty($driverActiveMapNav['dest_lng']))
+                <button type="button"
+                        class="driver-map-hero__nav-fab"
+                        id="driver-map-nav-btn"
+                        data-driver-map-nav-inapp
+                        data-dest-lat="{{ $driverActiveMapNav['dest_lat'] }}"
+                        data-dest-lng="{{ $driverActiveMapNav['dest_lng'] }}"
+                        aria-label="Xem đường đến điểm đón"
+                        title="Xem đường đến điểm đón">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <polygon points="3 11 22 2 13 21 11 13 3 11"/>
                     </svg>
-                </a>
+                </button>
             @endif
         </div>
     </section>
@@ -154,13 +144,18 @@
         </div>
     </section>
 
-    <section class="driver-pickup-proximity-sheet @if(empty($driverPickupProximityLine ?? null)) d-none @endif"
+    {{-- Banner chỉ đường trên cùng (turn-by-turn khi assigned; fallback khoảng cách/ETA khi chưa có steps). --}}
+    <section class="driver-pickup-proximity-sheet @if(empty($driverPickupProximityLine ?? null) && ! $driverPickupNavTarget) d-none @endif"
              id="driver-pickup-proximity-sheet"
-             aria-label="Khoảng cách đến khách"
-             @if(empty($driverPickupProximityLine ?? null)) hidden @endif>
-        <p class="driver-pickup-proximity-sheet__text mb-0"
-           id="driver-pickup-proximity-line"
-           role="status">{{ $driverPickupProximityLine ?? '' }}</p>
+             aria-label="Chỉ đường đến điểm đón"
+             @if(empty($driverPickupProximityLine ?? null) && ! $driverPickupNavTarget) hidden @endif>
+        <span class="driver-nav-banner__icon" id="driver-nav-banner-icon" aria-hidden="true"></span>
+        <span class="driver-nav-banner__text">
+            <strong class="driver-nav-banner__instruction" id="driver-nav-banner-instruction">Đang đến điểm đón</strong>
+            <span class="driver-pickup-proximity-sheet__text"
+                  id="driver-pickup-proximity-line"
+                  role="status">{{ $driverPickupProximityLine ?? '' }}</span>
+        </span>
     </section>
 
     @include('partials.driver-bottom-panel', [
@@ -270,7 +265,6 @@
             <section class="driver-section driver-tab-pane {{ $driverDefaultTab === 'account' ? 'is-active' : '' }}"
                      id="driver-section-account" data-driver-tab="account" @if($driverDefaultTab !== 'account') hidden @endif>
                 @include('partials.driver-tab-account', [
-                    'mustChangePassword' => $mustChangePassword ?? false,
                     'pendingChangeRequest' => $pendingChangeRequest,
                     'user' => $user ?? auth()->user(),
                     'profile' => $profile,
@@ -279,26 +273,12 @@
                 ])
             </section>
 
-            <section class="driver-section driver-tab-pane {{ $driverDefaultTab === 'account-profile' ? 'is-active' : '' }}"
-                     id="driver-section-account-profile" data-driver-tab="account-profile" @if($driverDefaultTab !== 'account-profile') hidden @endif>
-                @include('partials.driver-tab-account-profile', [
-                    'user' => $user ?? auth()->user(),
-                    'profile' => $profile,
-                ])
-            </section>
-
             <section class="driver-section driver-tab-pane {{ $driverDefaultTab === 'account-update' ? 'is-active' : '' }}"
                      id="driver-section-account-update" data-driver-tab="account-update" @if($driverDefaultTab !== 'account-update') hidden @endif>
                 @include('partials.driver-tab-account-update', [
+                    'user' => $user ?? auth()->user(),
                     'profile' => $profile,
                     'pendingChangeRequest' => $pendingChangeRequest,
-                ])
-            </section>
-
-            <section class="driver-section driver-tab-pane {{ $driverDefaultTab === 'account-password' ? 'is-active' : '' }}"
-                     id="driver-section-account-password" data-driver-tab="account-password" @if($driverDefaultTab !== 'account-password') hidden @endif>
-                @include('partials.driver-tab-account-password', [
-                    'mustChangePassword' => $mustChangePassword ?? false,
                 ])
             </section>
 
@@ -337,7 +317,12 @@ window.__driverAvailabilityUrl = @json(route('driver.availability.update'));
 window.__driverDashboardUrl = @json(route('driver.dashboard', ['tab' => 'trips']));
 window.__driverDashboardPollUrl = @json(route('driver.dashboard.poll'));
 window.__driverMapTripPins = @json($driverMapTripPins ?? []);
+window.__driverPickupNavTarget = @json($driverPickupNavTarget);
 window.__driverAppSettings = @json($driverAppSettings);
+window.__driverAccountNotices = @json([
+    'must_change_password' => (bool) ($mustChangePassword ?? false),
+    'pending_docs' => (bool) ($pendingChangeRequest ?? null),
+]);
 </script>
 <script src="{{ asset('js/geocode-search-ui.js') }}?v={{ filemtime(public_path('js/geocode-search-ui.js')) }}"></script>
 <script src="{{ asset('js/geocode-resolve.js') }}?v={{ filemtime(public_path('js/geocode-resolve.js')) }}"></script>
@@ -348,6 +333,8 @@ window.__driverAppSettings = @json($driverAppSettings);
 <script src="{{ asset('js/driver-map-nav.js') }}?v={{ filemtime(public_path('js/driver-map-nav.js')) }}"></script>
 <script src="{{ asset('js/driver-call-reveal.js') }}?v={{ filemtime(public_path('js/driver-call-reveal.js')) }}"></script>
 <script src="{{ asset('js/driver-live-map.js') }}?v={{ filemtime(public_path('js/driver-live-map.js')) }}"></script>
+<script src="{{ asset('js/driver-turn-by-turn.js') }}?v={{ filemtime(public_path('js/driver-turn-by-turn.js')) }}"></script>
+<script src="{{ asset('js/driver-trip-sheet-swipe.js') }}?v={{ filemtime(public_path('js/driver-trip-sheet-swipe.js')) }}"></script>
 <script src="{{ asset('js/driver-availability-toggle.js') }}?v={{ filemtime(public_path('js/driver-availability-toggle.js')) }}"></script>
 <script src="{{ asset('js/trip-chat.js') }}?v={{ filemtime(public_path('js/trip-chat.js')) }}"></script>
 <script src="{{ asset('js/trip-action-fabs.js') }}?v={{ filemtime(public_path('js/trip-action-fabs.js')) }}"></script>
@@ -371,6 +358,29 @@ window.__driverAppSettings = @json($driverAppSettings);
 <script src="{{ asset('js/photo-upload-slots.js') }}?v={{ filemtime(public_path('js/photo-upload-slots.js')) }}"></script>
 <script src="{{ asset('js/driver-shell.js') }}?v={{ filemtime(public_path('js/driver-shell.js')) }}"></script>
 <script src="{{ asset('js/driver-tabs.js') }}?v={{ filemtime(public_path('js/driver-tabs.js')) }}"></script>
+<script>
+(function () {
+    var notices = window.__driverAccountNotices || {};
+    if (!window.AppFlash || !window.AppFlash.show) {
+        return;
+    }
+    if (notices.must_change_password) {
+        window.AppFlash.show('Bạn đang dùng PIN tạm. Vui lòng đặt PIN 6 số mới để bảo mật tài khoản (liên hệ admin nếu cần hỗ trợ).', {
+            title: 'Thông báo',
+            variant: 'warning',
+            autoDismiss: 12000,
+        });
+    }
+    if (notices.pending_docs) {
+        window.AppFlash.show('Đã có yêu cầu cập nhật giấy tờ đang chờ duyệt — gửi lại sẽ thay thế yêu cầu cũ.', {
+            title: 'Thông báo',
+            variant: 'warning',
+            autoDismiss: 10000,
+            clear: !notices.must_change_password,
+        });
+    }
+})();
+</script>
 <script src="{{ asset('js/driver-inbox.js') }}?v={{ filemtime(public_path('js/driver-inbox.js')) }}"></script>
 <script src="{{ asset('js/driver-bottom-panel.js') }}?v={{ filemtime(public_path('js/driver-bottom-panel.js')) }}"></script>
 <script src="{{ asset('js/driver-i18n.js') }}?v={{ filemtime(public_path('js/driver-i18n.js')) }}"></script>

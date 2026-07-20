@@ -23,17 +23,11 @@ class CancellationReasonController extends Controller
             'reasons' => $this->reasons->serializeForAudience($validated['audience']),
         ];
 
-        if ($validated['audience'] === 'customer') {
-            $payload['requires_reason'] = filled($validated['contact_phone'] ?? null)
-                ? $this->phoneGuard->requiresCancelReason($validated['contact_phone'])
-                : true;
-            if (filled($validated['contact_phone'] ?? null)) {
-                $payload['cancel_count'] = $this->phoneGuard->customerCancelCount($validated['contact_phone']);
-            }
-        }
+        // Lý do hủy chuyến (khách sau khi TX nhận / tài xế) — luôn bắt buộc khi mở modal.
+        $payload['requires_reason'] = true;
 
-        if ($validated['audience'] === 'driver') {
-            $payload['requires_reason'] = true;
+        if ($validated['audience'] === 'customer' && filled($validated['contact_phone'] ?? null)) {
+            $payload['cancel_count'] = $this->phoneGuard->customerCancelCount($validated['contact_phone']);
         }
 
         return response()->json($payload);
