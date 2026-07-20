@@ -66,10 +66,15 @@
             @else
                 <ul class="driver-inbox-list">
                     @foreach($infoMessages as $msg)
+                        @php $imgUrl = is_array($msg->meta) ? ($msg->meta['image_url'] ?? null) : null; @endphp
                         <li class="driver-inbox-list__item {{ $msg->isRead() ? '' : 'is-unread' }}"
                             data-inbox-message-id="{{ $msg->id }}"
+                            @if($imgUrl) data-inbox-image="{{ $imgUrl }}" @endif
                             role="button"
                             tabindex="0">
+                            @if($imgUrl)
+                                <img src="{{ $imgUrl }}" alt="" class="driver-inbox-list__thumb" loading="lazy">
+                            @endif
                             <strong class="driver-inbox-list__title">{{ $msg->title }}</strong>
                             <p class="driver-inbox-list__body mb-1">{{ $msg->body }}</p>
                         </li>
@@ -86,10 +91,15 @@
             @else
                 <ul class="driver-inbox-list">
                     @foreach($noticeMessages as $msg)
+                        @php $imgUrl = is_array($msg->meta) ? ($msg->meta['image_url'] ?? null) : null; @endphp
                         <li class="driver-inbox-list__item {{ $msg->isRead() ? '' : 'is-unread' }}"
                             data-inbox-message-id="{{ $msg->id }}"
+                            @if($imgUrl) data-inbox-image="{{ $imgUrl }}" @endif
                             role="button"
                             tabindex="0">
+                            @if($imgUrl)
+                                <img src="{{ $imgUrl }}" alt="" class="driver-inbox-list__thumb" loading="lazy">
+                            @endif
                             <strong class="driver-inbox-list__title">{{ $msg->title }}</strong>
                             <p class="driver-inbox-list__body mb-1">{{ $msg->body }}</p>
                         </li>

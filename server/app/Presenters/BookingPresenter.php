@@ -68,15 +68,19 @@ class BookingPresenter
         return $detail !== '' ? $detail : ($city !== '' ? $city : '—');
     }
 
-    /** Chỉ chi tiết đón — không ghép tỉnh/thành phố. */
+    /** Chi tiết đón — ghép tỉnh/TP nếu chưa có trong chuỗi địa chỉ. */
     public function driverPickupDetailLabel(): string
     {
         $detail = trim((string) $this->booking->pickup_detail);
+        $city = trim((string) $this->booking->pickup_address);
+
+        if ($detail !== '' && $city !== '' && ! str_contains(mb_strtolower($detail), mb_strtolower($city))) {
+            return $detail.', '.$city;
+        }
+
         if ($detail !== '') {
             return $detail;
         }
-
-        $city = trim((string) $this->booking->pickup_address);
 
         return $city !== '' ? $city : 'liên hệ khách';
     }
@@ -126,11 +130,17 @@ class BookingPresenter
     public function driverDropoffDetailLabel(): string
     {
         $detail = trim((string) $this->booking->dropoff_detail);
+        $city = trim((string) $this->booking->dropoff_address);
+
+        if ($detail !== '' && $city !== '' && ! str_contains(mb_strtolower($detail), mb_strtolower($city))) {
+            return $detail.', '.$city;
+        }
+
         if ($detail !== '') {
             return $detail;
         }
 
-        return 'liên hệ khách';
+        return $city !== '' ? $city : 'liên hệ khách';
     }
 
     public function dropoffLabel(): string

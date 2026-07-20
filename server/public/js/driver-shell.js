@@ -76,6 +76,10 @@
 
         page.classList.toggle('is-panel-open', showOverlay);
 
+        if (showOverlay && window.TripChat && typeof window.TripChat.closeAllOpen === 'function') {
+            window.TripChat.closeAllOpen();
+        }
+
         if (window.DriverBottomPanel && window.DriverBottomPanel.refresh) {
             window.DriverBottomPanel.refresh();
             return;
@@ -149,16 +153,33 @@
             return;
         }
         event.preventDefault();
+        var ref = btn.getAttribute('data-driver-open-chat');
+        // Ưu tiên panel chat trên chuyến (full-screen giống khách).
+        var livePanel = null;
+        if (ref) {
+            document.querySelectorAll('.trip-chat-panel:not(.trip-chat-panel--embed)').forEach(function (el) {
+                if (el.getAttribute('data-booking-reference') === ref) {
+                    livePanel = el;
+                }
+            });
+        }
+        if (livePanel && window.TripChat && window.TripChat.setPanelOpen) {
+            window.TripChat.setPanelOpen(livePanel, true);
+            return;
+        }
         if (window.DriverInbox && window.DriverInbox.openChat) {
             window.DriverInbox.openChat(btn);
             return;
         }
-        var ref = btn.getAttribute('data-driver-open-chat');
         if (!ref) {
             return;
         }
         var panel = document.querySelector('.trip-chat-panel[data-booking-reference="' + ref + '"]');
         if (!panel) {
+            return;
+        }
+        if (window.TripChat && window.TripChat.setPanelOpen) {
+            window.TripChat.setPanelOpen(panel, true);
             return;
         }
         var toggle = panel.querySelector('[data-chat-toggle]');
@@ -180,6 +201,14 @@
         }
 
         var fallback = input.getAttribute('data-file-default') || 'Chưa có ảnh';
+        var isVehicleMulti = wrap.hasAttribute('data-vehicle-multi-field');
+        var vehicleFiles = [];
+        var vehicleObjectUrls = [];
+        var previewRow = wrap.parentElement
+            ? wrap.parentElement.querySelector('[data-vehicle-new-preview]')
+            : null;
+        var maxVehicles = Math.max(1, parseInt(wrap.getAttribute('data-max-vehicles') || '6', 10) || 6);
+        var existingCount = Math.max(0, parseInt(wrap.getAttribute('data-existing-count') || '0', 10) || 0);
 
         if (trigger) {
             trigger.addEventListener('click', function () {
@@ -187,17 +216,95 @@
             });
         }
 
+        function revokeVehicleUrls() {
+            vehicleObjectUrls.forEach(function (url) {
+                URL.revokeObjectURL(url);
+            });
+            vehicleObjectUrls = [];
+        }
+
+        function syncVehicleInputFiles() {
+            var dt = new DataTransfer();
+            vehicleFiles.forEach(function (file) {
+                dt.items.add(file);
+            });
+            input.files = dt.files;
+            if (vehicleFiles.length > 0) {
+                nameEl.textContent = 'Sẽ thêm ' + vehicleFiles.length + ' ảnh';
+            } else {
+                nameEl.textContent = fallback;
+            }
+        }
+
+        function renderVehiclePreview() {
+            if (!previewRow) {
+                syncVehicleInputFiles();
+                return;
+            }
+            revokeVehicleUrls();
+            previewRow.innerHTML = '';
+            if (!vehicleFiles.length) {
+                previewRow.classList.add('d-none');
+                syncVehicleInputFiles();
+                return;
+            }
+            previewRow.classList.remove('d-none');
+            vehicleFiles.forEach(function (file, index) {
+                var wrapThumb = document.createElement('div');
+                wrapThumb.className = 'driver-doc-thumb driver-doc-thumb--new';
+                var img = document.createElement('img');
+                var url = URL.createObjectURL(file);
+                vehicleObjectUrls.push(url);
+                img.src = url;
+                img.alt = file.name;
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'driver-doc-thumb__remove';
+                btn.setAttribute('aria-label', 'Bỏ ảnh này');
+                btn.textContent = '×';
+                btn.addEventListener('click', function () {
+                    vehicleFiles.splice(index, 1);
+                    syncVehicleInputFiles();
+                    renderVehiclePreview();
+                });
+                wrapThumb.appendChild(img);
+                wrapThumb.appendChild(btn);
+                previewRow.appendChild(wrapThumb);
+            });
+            syncVehicleInputFiles();
+        }
+
         input.addEventListener('change', function () {
-            var files = input.files;
-            if (files && files.length > 1) {
-                nameEl.textContent = files.length + ' ảnh';
+            if (!isVehicleMulti) {
+                var files = input.files;
+                if (files && files.length > 1) {
+                    nameEl.textContent = files.length + ' ảnh';
+                    return;
+                }
+                if (files && files[0]) {
+                    nameEl.textContent = files[0].name;
+                    return;
+                }
+                nameEl.textContent = fallback;
                 return;
             }
-            if (files && files[0]) {
-                nameEl.textContent = files[0].name;
-                return;
-            }
-            nameEl.textContent = fallback;
+
+            var room = Math.max(0, maxVehicles - existingCount - vehicleFiles.length);
+            Array.from(input.files || []).forEach(function (file) {
+                if (room <= 0) {
+                    return;
+                }
+                var dup = vehicleFiles.some(function (f) {
+                    return f.name === file.name && f.size === file.size && f.lastModified === file.lastModified;
+                });
+                if (dup) {
+                    return;
+                }
+                vehicleFiles.push(file);
+                room -= 1;
+            });
+            input.value = '';
+            renderVehiclePreview();
         });
     });
 

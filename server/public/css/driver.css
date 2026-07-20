@@ -121,6 +121,7 @@ body.driver-drawer-open {
 .driver-page--map .driver-map-hero__fabs {
     bottom: calc(var(--driver-dock-height) + var(--driver-map-fab-lift));
     right: .85rem;
+    transition: bottom .28s ease;
 }
 
 .driver-page--map.is-panel-open .driver-map-hero__fabs,
@@ -461,7 +462,9 @@ body.driver-drawer-open {
 }
 
 .driver-bottom-panel.is-expanded {
-    max-height: min(52vh, 30rem);
+    /* Đồng bộ popup user: 52dvh (bỏ cap 26rem làm TX nhỏ hơn) */
+    min-height: 52dvh;
+    max-height: 52dvh;
     padding-top: .45rem;
     overflow: auto;
     -webkit-overflow-scrolling: touch;
@@ -546,6 +549,11 @@ body.driver-drawer-open {
     margin: .15rem auto .7rem;
     border-radius: 999px;
     background: rgba(255, 255, 255, .22);
+}
+
+/* Sheet đón đã có grip riêng — ẩn gạch ngang panel ngoài (tránh cảm giác 2 popup). */
+.driver-trip-sheet:has([data-driver-pickup-sheet]) > .driver-trip-sheet__handle {
+    display: none;
 }
 
 .driver-trip-sheet__block + .driver-trip-sheet__block {
@@ -1185,6 +1193,29 @@ body.driver-drawer-open {
     aspect-ratio: 1;
 }
 
+.driver-doc-thumb--new {
+    border-color: rgba(212, 175, 55, .45);
+}
+
+.driver-doc-thumb__remove {
+    position: absolute;
+    top: .2rem;
+    right: .2rem;
+    z-index: 2;
+    width: 1.35rem;
+    height: 1.35rem;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, .72);
+    color: #fff;
+    font-size: .95rem;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
 .driver-file-field {
     display: flex;
     align-items: center;
@@ -1709,7 +1740,7 @@ body.driver-drawer-open {
 
 .driver-trip-quick-actions {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
     gap: .45rem;
     margin: .65rem 0 .35rem;
     align-items: start;
@@ -1904,7 +1935,9 @@ body.driver-drawer-open {
 }
 
 .driver-map-hero__locate-btn,
-.driver-map-hero__nav-fab {
+.driver-map-hero__gmaps-fab,
+.driver-map-hero__nav-fab,
+.driver-map-hero__sos-fab {
     width: 3.1rem;
     height: 3.1rem;
     display: flex;
@@ -1920,8 +1953,43 @@ body.driver-drawer-open {
     -webkit-tap-highlight-color: transparent;
 }
 
+/* SOS trong cùng cột FAB — đi cùng vị trí / GG Maps khi thu phóng popup */
+.driver-map-hero__sos-fab.trip-sos-fab {
+    position: static;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    z-index: auto;
+    width: 3.1rem;
+    height: 3.1rem;
+    border: 2px solid #ef4444;
+    color: #fca5a5;
+    background: rgba(16, 16, 16, .86);
+    transition: none;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, .35);
+}
+
+/* Khi đang hiện: đè Bootstrap d-none / [hidden] còn sót + rule ẩn SOS fixed cũ */
+.driver-map-hero__sos-fab.trip-sos-fab:not(.d-none):not([hidden]) {
+    display: flex !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+}
+
+.driver-map-hero__sos-fab.trip-sos-fab svg {
+    width: 1.35rem;
+    height: 1.35rem;
+    stroke: #f87171;
+}
+
+.driver-map-hero__sos-fab.trip-sos-fab:hover,
+.driver-map-hero__sos-fab.trip-sos-fab:focus-visible {
+    background: rgba(239, 68, 68, .14);
+    outline: none;
+}
+
 .driver-map-hero__locate-btn {
-    /* Kh?ng ??i m?u khi b?m ? ch? recenter camera/m?i t?n */
+    /* Không đổi màu khi bấm — chỉ recenter camera/mũi tên */
     transition: none;
 }
 
@@ -1938,10 +2006,25 @@ body.driver-drawer-open {
 }
 
 .driver-map-hero__locate-btn svg,
+.driver-map-hero__gmaps-fab svg,
 .driver-map-hero__nav-fab svg {
     width: 1.75rem;
     height: 1.75rem;
     display: block;
+}
+
+.driver-map-hero__gmaps-fab {
+    border-color: rgba(234, 179, 8, .5);
+    background: rgba(16, 16, 16, .86);
+    color: #fde68a;
+}
+
+.driver-map-hero__gmaps-fab:hover,
+.driver-map-hero__gmaps-fab:focus-visible {
+    background: rgba(234, 179, 8, .14);
+    border-color: rgba(234, 179, 8, .75);
+    color: #fef08a;
+    outline: none;
 }
 
 .driver-map-hero__nav-fab {
@@ -1976,7 +2059,7 @@ body.driver-drawer-open {
     justify-content: center;
     width: 4.25rem;
     height: 4.25rem;
-    color: #2563eb;
+    color: #3b82f6;
     filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .45));
     transform-origin: 50% 55%;
     transition: transform .2s ease;
@@ -2003,7 +2086,7 @@ body.driver-drawer-open {
     position: absolute;
     inset: 0;
     border-radius: 50%;
-    background: rgba(37, 99, 235, .28);
+    background: rgba(59, 130, 246, .28);
     animation: driver-map-marker-pulse 1.8s ease-out infinite;
 }
 
@@ -2036,11 +2119,11 @@ body.driver-drawer-open {
 }
 
 .driver-map-marker--pickup .driver-map-marker__pin {
-    background: #22c55e;
+    background: #3b82f6;
 }
 
 .driver-map-marker--dropoff .driver-map-marker__pin {
-    background: #ef4444;
+    background: #eab308;
 }
 
 
@@ -2428,15 +2511,18 @@ body.driver-drawer-open {
     -webkit-appearance: none;
     cursor: pointer;
 }
-.driver-page .trip-sos-fab {
+/* Bản SOS fixed cũ — chỉ còn nếu render ngoài cột map (khách / fallback) */
+.driver-page .trip-sos-fab:not(.driver-map-hero__sos-fab) {
     position: fixed;
-    top: calc(.7rem + env(safe-area-inset-top, 0px));
-    right: .85rem;
+    top: auto;
+    right: .65rem;
+    bottom: calc(var(--driver-dock-height, 3.85rem) + var(--driver-map-fab-lift, 5.1rem) + 3.65rem);
     z-index: 1035;
     border: 2px solid #ef4444;
     color: #fca5a5;
+    transition: bottom .28s ease;
 }
-.driver-page .trip-sos-fab svg {
+.driver-page .trip-sos-fab:not(.driver-map-hero__sos-fab) svg {
     width: 1.35rem;
     height: 1.35rem;
     stroke: #f87171;
@@ -2454,7 +2540,8 @@ body.driver-drawer-open {
     height: 1.35rem;
     stroke: currentColor;
 }
-.driver-page--map.is-panel-open .trip-sos-fab,
+/* Overlay tab: ẩn SOS fixed cũ + chat; SOS trong cột map đã theo .driver-map-hero__fabs */
+.driver-page--map.is-panel-open .trip-sos-fab:not(.driver-map-hero__sos-fab),
 .driver-page--map.is-panel-open .trip-chat-fab {
     visibility: hidden;
     pointer-events: none;
@@ -2721,23 +2808,23 @@ body.driver-drawer-open {
 
 .driver-pickup-proximity-sheet__text {
     display: block;
-    color: rgba(245, 245, 245, .68);
+    color: rgba(245, 245, 245, .78);
     font-size: .78rem;
     line-height: 1.4;
 }
 
 .driver-pickup-proximity-sheet.driver-nav-banner--arrived {
-    border-color: rgba(16, 185, 129, .4);
-    background: rgba(16, 185, 129, .12);
+    border-color: rgba(234, 179, 8, .45);
+    background: rgba(234, 179, 8, .12);
 }
 
 .driver-pickup-proximity-sheet.driver-nav-banner--arrived .driver-nav-banner__icon {
-    background: rgba(16, 185, 129, .2);
-    color: #6ee7b7;
+    background: rgba(234, 179, 8, .2);
+    color: #fde68a;
 }
 
 .driver-pickup-proximity-sheet.driver-nav-banner--arrived .driver-nav-banner__instruction {
-    color: #d1fae5;
+    color: #fef9c3;
 }
 
 .driver-account-card {
@@ -2926,6 +3013,7 @@ body.driver-drawer-open {
 .driver-trip-total {
     font-size: .9rem;
     color: var(--drv-primary);
+    text-align: right;
 }
 .driver-card-top-aside {
     flex-shrink: 0;
@@ -3207,6 +3295,18 @@ body.driver-drawer-open {
 .company-bank-transfer--qr-only .company-transfer-qr-frame {
     width: 168px;
     height: 168px;
+}
+
+.wallet-ptr-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 0;
+    overflow: hidden;
+    opacity: 0;
+    color: var(--app-muted, #64748b);
+    font-size: 0.8rem;
+    transition: opacity 0.15s ease;
 }
 
 .driver-wallet-page {
@@ -4710,7 +4810,7 @@ form[data-swipe-action].driver-workflow-compact-action {
     grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.driver-page.is-offer-pending .trip-sos-fab,
+.driver-page.is-offer-pending .trip-sos-fab:not(.driver-map-hero__sos-fab),
 .driver-page.is-offer-pending .trip-chat-fab {
     visibility: hidden;
     pointer-events: none;
@@ -4858,76 +4958,64 @@ form[data-swipe-action].driver-workflow-compact-action {
 }
 
 /* ============================================================
-   Sheet đón khách (assigned) — peek (mặc định, ưu tiên map) ↔ full (vuốt lên)
+   Sheet đón khách (assigned) — đồng bộ guest: grip + hint căn giữa
    ============================================================ */
 .driver-pickup-sheet {
     position: relative;
-    border-radius: 1rem;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border-radius: 0;
     overflow: hidden;
-    border: 1px solid rgba(212, 175, 55, .22);
-    background: linear-gradient(180deg, #1c1c1c 0%, #141414 100%);
+    border: 0;
+    background: transparent;
 }
 
 .driver-pickup-sheet__handle {
     display: flex;
     flex-direction: column;
     align-items: center;
+    flex: 0 0 auto;
     width: 100%;
     border: 0;
     background: transparent;
-    color: inherit;
-    text-align: left;
-    padding: .5rem .9rem 0;
-    cursor: pointer;
+    color: rgba(255, 255, 255, .78);
+    text-align: center;
+    padding: .35rem .75rem .3rem;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
     -webkit-tap-highlight-color: transparent;
 }
 
 .driver-pickup-sheet__grip {
-    width: 2.4rem;
-    height: .28rem;
-    margin-bottom: .55rem;
+    display: block;
+    width: 2.15rem;
+    height: .22rem;
+    margin: 0 auto .28rem;
     border-radius: 999px;
-    background: rgba(255, 255, 255, .22);
+    background: rgba(255, 255, 255, .38);
     flex-shrink: 0;
 }
 
-.driver-pickup-sheet__peek-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: .6rem;
-    width: 100%;
-    padding-bottom: .7rem;
-}
-
-.driver-pickup-sheet__peek-text {
-    display: flex;
-    flex-direction: column;
-    gap: .1rem;
-    min-width: 0;
-}
-
-.driver-pickup-sheet__peek-name {
-    font-size: .95rem;
-    color: #fff;
+.driver-pickup-sheet__hint {
+    display: block;
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .01em;
+    line-height: 1.25;
+    max-width: 100%;
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.driver-pickup-sheet__peek-addr {
-    font-size: .8rem;
-    color: rgba(245, 245, 245, .62);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    color: #fde68a;
 }
 
 .driver-pickup-sheet__peek-count {
-    flex-shrink: 0;
-    font-size: .72rem;
+    margin-top: .2rem;
+    font-size: .68rem;
     font-weight: 600;
-    padding: .2rem .55rem;
+    padding: .15rem .5rem;
     border-radius: 999px;
     background: rgba(212, 175, 55, .16);
     color: var(--drv-primary-light);
@@ -4935,38 +5023,358 @@ form[data-swipe-action].driver-workflow-compact-action {
 }
 
 .driver-pickup-sheet__body {
-    padding: 0 .9rem .2rem;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: .35rem .15rem .2rem;
 }
 
+/* Thu nhỏ popup: ẩn nội dung + nút; chỉ còn thanh ngang */
 .driver-pickup-sheet.is-peek .driver-pickup-sheet__body {
     display: none;
 }
 
-.driver-pickup-sheet__body .driver-trip-quick-actions {
-    margin-top: .75rem;
-}
-
-.driver-pickup-sheet__cancel {
-    margin-top: .75rem;
-}
-
-.driver-pickup-sheet__cancel .btn {
-    width: 100%;
-}
-
-.driver-pickup-sheet__cta {
-    padding: .6rem .9rem calc(env(safe-area-inset-bottom, 0px) * 0 + .85rem);
+/* Nút hành động nằm ngay dưới «Tổng chuyến» (trong body) */
+.driver-pickup-sheet__cta-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .55rem;
+    align-items: stretch;
+    margin: .75rem 0 0;
+    padding: .65rem 0 0;
     border-top: 1px solid rgba(255, 255, 255, .06);
 }
 
-.driver-pickup-sheet.is-peek .driver-pickup-sheet__cta {
-    border-top: 0;
+/* Bắt đầu chạy / Hoàn thành: vuốt full width, Hủy phía trên */
+.driver-pickup-sheet__cta-row.is-swipe-primary {
+    grid-template-columns: 1fr;
 }
 
-.driver-pickup-sheet__cta .btn {
+.driver-pickup-sheet__cta-row.is-swipe-primary .driver-pickup-sheet__cancel {
+    max-width: 100%;
+}
+
+.driver-pickup-sheet__cta-row.is-swipe-primary .driver-pickup-sheet__cta-spacer {
+    display: none;
+}
+
+form[data-swipe-action].driver-pickup-sheet__arrive {
+    grid-column: 1 / -1;
+    width: 100%;
+}
+
+.driver-pickup-sheet .swipe-action__track {
+    min-height: 3.1rem;
+    border-radius: .9rem;
+    border-color: rgba(212, 175, 55, .35);
+    background: rgba(212, 175, 55, .08);
+}
+
+.driver-pickup-sheet .swipe-action__thumb {
+    width: 2.7rem;
+    height: 2.7rem;
+    border-radius: .75rem;
+}
+
+.driver-pickup-sheet .swipe-action__hint {
+    font-size: .88rem;
+    padding-left: 2.8rem;
+}
+
+/* Peek: panel chỉ cao bằng thanh ngang */
+.driver-bottom-panel.is-expanded:has(.driver-pickup-sheet.is-peek) {
+    min-height: 0 !important;
+    max-height: none !important;
+    height: auto;
+    overflow: visible;
+}
+
+/*
+ * Full: kéo dài chuỗi flex từ panel → trip-sheet → list → pickup-sheet
+ * để CTA (margin-top:auto) sát đáy popup, không bị kẹt giữa.
+ */
+.driver-bottom-panel.is-expanded:has(.driver-pickup-sheet.is-full) {
+    min-height: 52dvh !important;
+    max-height: 52dvh !important;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden !important;
+    padding-bottom: .55rem;
+}
+
+.driver-bottom-panel.is-expanded:has(.driver-pickup-sheet.is-full) > .driver-trip-sheet {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto !important;
+    max-height: none;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.driver-bottom-panel.is-expanded:has(.driver-pickup-sheet.is-full) .driver-trip-sheet__live {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.driver-bottom-panel.is-expanded:has(.driver-pickup-sheet.is-full) #driver-trips-list,
+.driver-bottom-panel.is-expanded:has(.driver-pickup-sheet.is-full) .driver-trip-sheet__block:has([data-driver-pickup-sheet]) {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    height: 100%;
+    margin: 0;
+}
+
+.driver-bottom-panel.is-expanded:has(.driver-pickup-sheet.is-full) .driver-pickup-sheet.is-full {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.driver-bottom-panel.is-expanded:has(.driver-pickup-sheet.is-full) .driver-pickup-sheet.is-full .driver-pickup-sheet__body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+}
+
+.driver-pickup-sheet__cancel,
+.driver-pickup-sheet__arrive {
+    margin: 0;
+    min-width: 0;
+}
+
+.driver-pickup-sheet__cta-spacer {
+    display: block;
+}
+
+.driver-pickup-sheet__cancel .btn,
+.driver-pickup-sheet__arrive .btn {
     width: 100%;
     min-height: 3.1rem;
     border-radius: .9rem;
     font-weight: 800;
     letter-spacing: .01em;
+}
+
+.driver-pickup-sheet__arrive .btn {
+    font-size: 1rem;
+}
+
+/* Thông tin khách — đồng bộ layout màn khách (card + stops + chat góc phải) */
+.driver-pax-panel {
+    position: relative;
+    margin: 0 0 .75rem;
+}
+
+.driver-pax-panel + .driver-pax-panel {
+    padding-top: .75rem;
+    border-top: 1px solid rgba(255, 255, 255, .08);
+}
+
+.driver-pax-stops {
+    position: relative;
+    padding: .15rem .15rem .35rem;
+    margin: 0 0 .55rem;
+}
+
+.driver-pax-card {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: .75rem;
+    margin: 0;
+    padding: .85rem .9rem;
+    border-radius: .9rem;
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.09) 0%, rgba(255, 255, 255, 0.03) 100%);
+    border: 1px solid rgba(212, 175, 55, 0.22);
+}
+
+.driver-pax-panel--focusable {
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.driver-pax-panel--focusable:focus-visible {
+    outline: 2px solid rgba(212, 175, 55, .65);
+    outline-offset: 2px;
+    border-radius: .75rem;
+}
+
+.driver-pax-panel--focusable .driver-pax-card__actions {
+    cursor: default;
+}
+
+.driver-pax-panel--has-actions .driver-pax-card {
+    padding-right: 6.2rem;
+}
+
+.driver-pax-card__info {
+    min-width: 0;
+    flex: 1;
+}
+
+.driver-pax-card__profile {
+    font-size: .78rem;
+    font-weight: 650;
+    color: rgba(245, 245, 245, .72);
+    margin-top: .28rem;
+}
+
+.driver-pax-card__name {
+    display: block;
+    font-size: 1rem;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.25;
+}
+
+.driver-pax-card__actions {
+    position: absolute;
+    top: .55rem;
+    right: .55rem;
+    z-index: 3;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: .4rem;
+}
+
+.driver-pax-card__call {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.55rem;
+    height: 2.55rem;
+    border-radius: 50%;
+    border: 1px solid rgba(212, 175, 55, .45);
+    background: rgba(212, 175, 55, .16);
+    color: #e8c547;
+    text-decoration: none;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, .35);
+}
+
+.driver-pax-card__call:hover,
+.driver-pax-card__call:focus-visible {
+    background: rgba(212, 175, 55, .26);
+    color: #f5d76e;
+    outline: none;
+}
+
+.driver-pax-panel.is-call-revealed .driver-pax-card__call {
+    border-color: rgba(212, 175, 55, .65);
+    background: rgba(212, 175, 55, .22);
+}
+
+.driver-pax-stop {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1.1rem minmax(0, 1fr);
+    gap: .65rem;
+    padding-bottom: .85rem;
+}
+
+.driver-pax-stop:last-child {
+    padding-bottom: 0;
+}
+
+.driver-pax-stop__rail {
+    position: absolute;
+    left: .48rem;
+    top: 1.15rem;
+    bottom: -.15rem;
+    width: 2px;
+    background: linear-gradient(180deg, rgba(59, 130, 246, 0.65) 0%, rgba(234, 179, 8, 0.65) 100%);
+    border-radius: 999px;
+}
+
+.driver-pax-stop--dropoff .driver-pax-stop__rail {
+    display: none;
+}
+
+.driver-pax-stop__marker {
+    width: .72rem;
+    height: .72rem;
+    margin-top: .22rem;
+    border-radius: 999px;
+    border: 2px solid #111;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
+}
+
+.driver-pax-stop--pickup .driver-pax-stop__marker {
+    background: #3b82f6;
+}
+
+.driver-pax-stop--dropoff .driver-pax-stop__marker {
+    background: #eab308;
+}
+
+.driver-pax-stop__label {
+    display: block;
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: rgba(245, 245, 245, .5);
+    margin-bottom: .12rem;
+}
+
+.driver-pax-stop__address {
+    margin: 0;
+    font-size: .92rem;
+    font-weight: 650;
+    color: #f3f4f6;
+    word-break: break-word;
+    line-height: 1.35;
+}
+
+.driver-pax-note {
+    margin: .55rem .15rem 0;
+    padding: .55rem .7rem;
+    border-radius: .65rem;
+    font-size: .8rem;
+    color: rgba(245, 245, 245, .78);
+    background: rgba(255, 255, 255, .04);
+    border: 1px solid rgba(255, 255, 255, .08);
+}
+
+.driver-pax-panel .driver-trip-call__reveal {
+    margin-top: .55rem;
+}
+
+.driver-pax-total {
+    margin: .35rem 0 .15rem;
+    padding-top: .65rem;
+    border-top: 1px solid rgba(255, 255, 255, .08);
+    font-size: .88rem;
+    color: rgba(245, 245, 245, .78);
+    text-align: right;
+}
+
+.driver-pax-total strong {
+    color: #fde68a;
+}
+
+.driver-inbox-list__thumb {
+    display: block;
+    width: 100%;
+    max-height: 9rem;
+    object-fit: cover;
+    border-radius: 0.65rem;
+    margin-bottom: 0.45rem;
+}
+.app-flash-banner--has-image .app-flash-banner-media img {
+    width: 2.75rem;
+    height: 2.75rem;
+    object-fit: cover;
+    border-radius: 0.5rem;
 }

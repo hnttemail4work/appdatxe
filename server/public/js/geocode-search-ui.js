@@ -55,6 +55,48 @@
         }
     }
 
+    function haversineKm(lat1, lng1, lat2, lng2) {
+        var toRad = function (d) { return d * Math.PI / 180; };
+        var R = 6371;
+        var dLat = toRad(lat2 - lat1);
+        var dLng = toRad(lng2 - lng1);
+        var a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+            + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2))
+            * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    function formatDistanceKm(km) {
+        if (!(km >= 0) || isNaN(km)) {
+            return '';
+        }
+        if (km < 0.1) {
+            return 'Gần đây';
+        }
+        if (km < 1) {
+            return Math.round(km * 1000) + ' m';
+        }
+        return (Math.round(km * 10) / 10).toFixed(1).replace('.', ',') + ' km';
+    }
+
+    function distanceLabelForItem(item, origin) {
+        if (!origin || origin.lat == null || origin.lng == null) {
+            return '';
+        }
+        var lat = item.lat != null ? Number(item.lat) : NaN;
+        var lng = item.lng != null ? Number(item.lng)
+            : (item.lon != null ? Number(item.lon) : NaN);
+        if (isNaN(lat) || isNaN(lng)) {
+            return '';
+        }
+        return formatDistanceKm(haversineKm(
+            Number(origin.lat),
+            Number(origin.lng),
+            lat,
+            lng
+        ));
+    }
+
     function buildResultButton(item, query, options) {
         var opts = options || {};
         var btn = document.createElement('button');
@@ -70,6 +112,10 @@
 
         var kindLabel = item.kind_label || '';
         var icon = kindIcon(item.kind);
+        var kmLabel = typeof opts.distanceLabel === 'function'
+            ? opts.distanceLabel(item)
+            : distanceLabelForItem(item, opts.distanceOrigin);
+        var rightMeta = kmLabel || kindLabel;
 
         btn.innerHTML =
             '<span class="geocode-search-item__row">'
@@ -80,8 +126,10 @@
                 ? '<span class="geocode-search-item__subtitle">' + highlightQuery(subtitle, query) + '</span>'
                 : '')
             + '</span>'
-            + (kindLabel
-                ? '<span class="geocode-search-item__badge">' + escapeHtml(kindLabel) + '</span>'
+            + (rightMeta
+                ? '<span class="geocode-search-item__meta' + (kmLabel ? ' geocode-search-item__meta--km' : '') + '">'
+                + escapeHtml(rightMeta)
+                + '</span>'
                 : '')
             + '</span>';
 

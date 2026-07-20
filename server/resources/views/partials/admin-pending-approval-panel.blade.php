@@ -94,21 +94,46 @@
             'user' => $user,
             'frontUrl' => $frontUrl,
             'showPreviewLink' => false,
+            'readOnly' => true,
         ])
 
         <div id="{{ $rejectPanelId }}"
              class="admin-pending-review__reject {{ $showReject ? '' : 'd-none' }}"
              data-driver-reject-form>
-            <label class="form-label small mb-1" for="{{ $prefix }}-reject-reason">
+            <label class="form-label small mb-1">
                 Lý do từ chối <span class="text-danger">*</span>
             </label>
+            @php
+                $rejectPresets = [
+                    'CCCD bị mờ / không đọc được',
+                    'Bằng lái xe không nhìn rõ',
+                    'Ảnh giấy tờ không khớp thông tin',
+                    'Thiếu ảnh giấy tờ bắt buộc',
+                    'Khác',
+                ];
+                $oldReason = old('rejection_reason', '');
+                $matchedPreset = collect($rejectPresets)->first(fn ($p) => $p !== 'Khác' && $oldReason === $p);
+                $isOther = $oldReason !== '' && $matchedPreset === null;
+            @endphp
+            <div class="d-flex flex-column gap-1 mb-2">
+                @foreach($rejectPresets as $preset)
+                    <label class="form-check small mb-0">
+                        <input class="form-check-input" type="radio" name="rejection_reason_preset"
+                               value="{{ $preset }}"
+                               data-reject-preset
+                               @checked(($matchedPreset === $preset) || ($preset === 'Khác' && $isOther))>
+                        <span class="form-check-label">{{ $preset }}</span>
+                    </label>
+                @endforeach
+            </div>
             <textarea name="rejection_reason"
                       id="{{ $prefix }}-reject-reason"
                       class="form-control form-control-sm @error('rejection_reason') is-invalid @enderror"
                       rows="3"
                       minlength="5"
                       maxlength="1000"
-                      placeholder="Ví dụ: Ảnh CCCD không rõ, thông tin không khớp…">{{ old('rejection_reason') }}</textarea>
+                      data-reject-reason-text
+                      placeholder="Chọn lý do phía trên hoặc nhập chi tiết…">{{ $oldReason }}</textarea>
             @error('rejection_reason')
                 <div class="invalid-feedback d-block">{{ $message }}</div>
             @enderror

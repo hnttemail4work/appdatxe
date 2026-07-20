@@ -6,15 +6,18 @@ $stage = $schedule->resolvedDriverStage();
 $showActions = $showActions ?? true;
 $needsAction = $showActions && in_array($phase, ['upcoming', 'active'], true);
 $isRunning = in_array($phase, ['upcoming', 'active'], true);
-$isAssigned = $stage === \App\Models\Schedule::DRIVER_STAGE_ASSIGNED;
 $primaryBooking = $bookings->first();
-$mapNav = ($primaryBooking && $isRunning && ! $isAssigned)
-    ? \App\Support\MapNavigation::driverTargetForSchedule($schedule, $primaryBooking)
-    : null;
+
+$useLiveSheet = in_array($stage, [
+    \App\Models\Schedule::DRIVER_STAGE_ASSIGNED,
+    \App\Models\Schedule::DRIVER_STAGE_AT_PICKUP,
+    \App\Models\Schedule::DRIVER_STAGE_PICKED_UP,
+    \App\Models\Schedule::DRIVER_STAGE_RUNNING,
+], true) && $phase !== 'settled';
 @endphp
 
-@if($isAssigned)
-    {{-- Đang đi đón: sheet peek/full riêng + map nav turn-by-turn — không dùng layout card chung (tránh lặp). --}}
+@if($useLiveSheet)
+    {{-- Đi đón / đã đến / đang di chuyển: cùng sheet peek/full. --}}
     @include('partials.driver-pickup-sheet', ['schedule' => $schedule])
 @else
 <article class="driver-trip-card driver-trip-card--compact {{ $needsAction ? 'is-action' : '' }} {{ $isRunning ? 'is-running' : '' }}" data-schedule-id="{{ $schedule->id }}">
@@ -54,21 +57,21 @@ $mapNav = ($primaryBooking && $isRunning && ! $isAssigned)
     </div>
 
     <div class="driver-card-body driver-card-body--compact">
-        @include('partials.driver-schedule-passengers', [
-            'schedule' => $schedule,
-            'bookings' => $bookings,
-            'showTripTotal' => $showTripTotal ?? ($showActions ?? true),
-        ])
+        @foreach($bookings as $booking)
+            @include('partials.driver-passenger-info-panel', [
+                'booking' => $booking,
+                'showCall' => true,
+            ])
+        @endforeach
+        @if(($showTripTotal ?? ($showActions ?? true)) && $phase !== 'settled' && $bookings->isNotEmpty())
+            @php
+                $tripTotal = (float) $bookings->sum(fn (\App\Models\Booking $b) => (float) $b->total_price);
+            @endphp
+            <div class="driver-pax-total">
+                Tổng chuyến: <strong>{{ number_format($tripTotal, 0, ',', '.') }} đ</strong>
+            </div>
+        @endif
     </div>
-
-    {{-- ASSIGNED dùng partials.driver-pickup-sheet ở nhánh trên — đến đây luôn là các stage sau đón. --}}
-    @if($isRunning)
-        @include('partials.driver-trip-quick-actions', [
-            'booking' => $primaryBooking,
-            'mapNav' => $mapNav,
-            'inAppNavOnly' => true,
-        ])
-    @endif
 
     @if($showActions && $phase !== 'settled')
     <div class="driver-card-actions driver-card-actions--compact">

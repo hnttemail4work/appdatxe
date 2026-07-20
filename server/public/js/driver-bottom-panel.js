@@ -60,6 +60,7 @@
         var height = panel.getBoundingClientRect().height || 0;
         var gap = 10;
         page.style.setProperty('--driver-map-fab-lift', Math.round(height + gap) + 'px');
+        // SOS nằm trong .driver-map-hero__fabs — cùng bottom với vị trí / GG Maps, không set inline riêng.
     }
 
     function setExpanded(expanded) {
@@ -83,6 +84,10 @@
 
         if (liveEl) {
             liveEl.hidden = !hasLiveTrips();
+        }
+
+        if (!expanded && window.TripChat && typeof window.TripChat.closeAllOpen === 'function') {
+            window.TripChat.closeAllOpen();
         }
 
         requestAnimationFrame(function () {

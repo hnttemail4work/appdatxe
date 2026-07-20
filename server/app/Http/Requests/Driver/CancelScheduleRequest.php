@@ -15,7 +15,8 @@ class CancelScheduleRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'cancellation_reason_id' => ['required', 'integer', 'exists:cancellation_reasons,id'],
+            'cancellation_reason_id'   => ['required', 'integer', 'exists:cancellation_reasons,id'],
+            'cancellation_reason_note' => ['nullable', 'string', 'max:160'],
         ];
     }
 }

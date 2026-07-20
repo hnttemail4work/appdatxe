@@ -86,6 +86,7 @@
 @endif
 @if($activeTab === 'wallet')
 <script src="{{ asset('js/driver-wallet-deposit.js') }}?v={{ filemtime(public_path('js/driver-wallet-deposit.js')) }}"></script>
+<script src="{{ asset('js/wallet-pull-refresh.js') }}?v={{ filemtime(public_path('js/wallet-pull-refresh.js')) }}"></script>
 @endif
 @if($activeTab === 'update')
 <script src="{{ asset('js/photo-upload-slots.js') }}?v={{ filemtime(public_path('js/photo-upload-slots.js')) }}"></script>

@@ -24,6 +24,7 @@ $platformHotlinePhone = (string) config('app.contact_phone');
     @endif
 
     @include('partials.guest-trip-panel')
+    @include('partials.address-map-picker-modal')
 
     @include('partials.trip-action-fabs', [
         'hotlinePhone' => $platformHotlinePhone,
@@ -36,6 +37,7 @@ $platformHotlinePhone = (string) config('app.contact_phone');
 @push('styles')
 <link rel="stylesheet" href="{{ asset('css/customer.css') }}?v={{ filemtime(public_path('css/customer.css')) }}">
 <link rel="stylesheet" href="{{ asset('css/trip-chat.css') }}?v={{ filemtime(public_path('css/trip-chat.css')) }}">
+<link rel="stylesheet" href="{{ asset('css/address-map-picker.css') }}?v={{ filemtime(public_path('css/address-map-picker.css')) }}">
 @endpush
 
 @push('scripts')
@@ -43,6 +45,8 @@ $platformHotlinePhone = (string) config('app.contact_phone');
 window.__bookingTripStatusUrl = @json(route('booking.tripStatus'));
 window.__bookingTripReviewUrl = @json(route('booking.tripReview'));
 window.__bookingTripCancelUrl = @json(route('booking.tripCancel'));
+window.__bookingChangeDropoffUrl = @json(route('booking.changeDropoff'));
+window.__bookingPreviewChangeDropoffUrl = @json(route('booking.previewChangeDropoff'));
 window.__bookingSuccess = @json(session('booking_success'));
 window.__appContactPhone = @json(config('app.contact_phone'));
 window.__guestBrowserCancelCount = @json((int) ($browserCancelCount ?? 0));
@@ -54,8 +58,14 @@ window.__guestBrowserEnforceCancelBlock = @json(\App\Services\BookingBrowserGuar
 <script src="{{ asset('js/idle-poll.js') }}?v={{ filemtime(public_path('js/idle-poll.js')) }}"></script>
 <script src="{{ asset('js/booking-active-session.js') }}?v={{ filemtime(public_path('js/booking-active-session.js')) }}"></script>
 <script src="{{ asset('js/wait-progress.js') }}?v={{ filemtime(public_path('js/wait-progress.js')) }}"></script>
+<script src="{{ asset('js/address-query-normalize.js') }}?v={{ filemtime(public_path('js/address-query-normalize.js')) }}"></script>
+<script src="{{ asset('js/geocode-search-ui.js') }}?v={{ filemtime(public_path('js/geocode-search-ui.js')) }}"></script>
+<script src="{{ asset('js/geocode-resolve.js') }}?v={{ filemtime(public_path('js/geocode-resolve.js')) }}"></script>
+<script src="{{ asset('js/address-map-picker.js') }}?v={{ filemtime(public_path('js/address-map-picker.js')) }}"></script>
 <script src="{{ asset('js/trip-chat.js') }}?v={{ filemtime(public_path('js/trip-chat.js')) }}"></script>
+<script src="{{ asset('js/driver-call-reveal.js') }}?v={{ filemtime(public_path('js/driver-call-reveal.js')) }}"></script>
 <script src="{{ asset('js/trip-action-fabs.js') }}?v={{ filemtime(public_path('js/trip-action-fabs.js')) }}"></script>
+<script src="{{ asset('js/map-sheet-camera.js') }}?v={{ filemtime(public_path('js/map-sheet-camera.js')) }}"></script>
 <script src="{{ asset('js/guest-trip-live-map.js') }}?v={{ filemtime(public_path('js/guest-trip-live-map.js')) }}"></script>
 <script src="{{ asset('js/guest-trip-sheet.js') }}?v={{ filemtime(public_path('js/guest-trip-sheet.js')) }}"></script>
 <script src="{{ asset('js/guest-trip-page.js') }}?v={{ filemtime(public_path('js/guest-trip-page.js')) }}"></script>

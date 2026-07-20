@@ -14,7 +14,8 @@ $atPendingCap = $pendingDeposits->count() >= DriverWalletConfig::MAX_PENDING_DEP
 $minBalance = DriverWalletConfig::minBalanceFormatted();
 @endphp
 
-<section class="driver-wallet-page" aria-label="Ví tài xế">
+<section class="driver-wallet-page" aria-label="Ví tài xế"
+         data-wallet-ptr="{{ route('driver.dashboard', ['tab' => 'wallet']) }}">
     <header class="driver-wallet-hero mb-3">
         <p class="driver-wallet-hero__eyebrow mb-1">Ví tài xế</p>
         <span class="driver-wallet-hero__label">Số dư khả dụng</span>

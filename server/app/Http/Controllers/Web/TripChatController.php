@@ -37,7 +37,13 @@ class TripChatController extends Controller
         [$booking] = $this->resolveCustomerBooking($request);
 
         try {
-            $message = $this->chat->send($booking, 'customer', (string) $request->input('body'), auth()->user());
+            $message = $this->chat->send(
+                $booking,
+                'customer',
+                (string) $request->input('body', ''),
+                auth()->user(),
+                $request->file('image'),
+            );
         } catch (InvalidArgumentException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
@@ -61,13 +67,81 @@ class TripChatController extends Controller
         $validated = $request->validated();
 
         try {
-            $message = $this->chat->send($booking, 'driver', $validated['body'], auth()->user());
+            $message = $this->chat->send(
+                $booking,
+                'driver',
+                (string) ($validated['body'] ?? ''),
+                auth()->user(),
+                $request->file('image'),
+            );
         } catch (InvalidArgumentException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
         return response()->json([
             'message' => $this->chat->serialize($message),
+        ], 201);
+    }
+
+    public function driverLogCall(Request $request, Booking $booking): JsonResponse
+    {
+        $this->authorizeDriver($booking);
+
+        $outcome = (string) $request->input('outcome', '');
+        if (! in_array($outcome, ['missed', 'answered'], true)) {
+            return response()->json(['message' => 'Kết quả cuộc gọi không hợp lệ.'], 422);
+        }
+
+        try {
+            $message = $this->chat->logDriverCall($booking, auth()->user(), $outcome);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'message' => $this->chat->serialize($message),
+            'outcome' => $outcome,
+        ], 201);
+    }
+
+    public function customerLogCall(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'booking_reference' => ['required', 'string', 'max:64'],
+            'outcome'           => ['required', 'string', 'in:missed,answered'],
+        ]);
+
+        $user = $request->user();
+        if (! $user || $user->role !== 'customer') {
+            abort(403, 'Vui lòng đăng nhập tài khoản khách.');
+        }
+
+        $booking = Booking::query()
+            ->with('schedule')
+            ->where('booking_reference', $validated['booking_reference'])
+            ->firstOrFail();
+
+        $ownsBooking = (int) $booking->customer_id === (int) $user->id;
+        $matchesPhone = $user->phone && $booking->matchesContactPhone((string) $user->phone);
+
+        if (! $ownsBooking && ! $matchesPhone) {
+            abort(403, 'Không xác thực được chuyến đi.');
+        }
+
+        if (! $ownsBooking && $matchesPhone && ! $booking->customer_id) {
+            $booking->update(['customer_id' => $user->id]);
+            $booking->refresh();
+        }
+
+        try {
+            $message = $this->chat->logCustomerCall($booking, $user, $validated['outcome']);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'message' => $this->chat->serialize($message),
+            'outcome' => $validated['outcome'],
         ], 201);
     }
 

@@ -111,7 +111,7 @@ class BookingWorkflowService
         );
     }
 
-    public function cancelByPhone(Booking $booking, string $contactPhone, ?int $cancellationReasonId = null): void
+    public function cancelByPhone(Booking $booking, string $contactPhone, ?int $cancellationReasonId = null, ?string $cancellationReasonNote = null): void
     {
         $this->assertContactPhone($booking, $contactPhone);
 
@@ -124,14 +124,16 @@ class BookingWorkflowService
         }
 
         $reason = null;
+        $reasonLabel = null;
         if ($booking->hasDriverAccepted()) {
             if (! $cancellationReasonId) {
                 throw new InvalidArgumentException('Vui lòng chọn lý do hủy chuyến.');
             }
             $reason = $this->cancellationReasons->resolveForCancel($cancellationReasonId, 'driver');
+            $reasonLabel = $this->cancellationReasons->composeLabel($reason, $cancellationReasonNote);
         }
 
-        DB::transaction(function () use ($booking, $reason): void {
+        DB::transaction(function () use ($booking, $reason, $reasonLabel): void {
             $before = $booking->toArray();
             $schedule = $booking->schedule()->with(['vehicle', 'route'])->first();
 
@@ -156,7 +158,7 @@ class BookingWorkflowService
                 'cancelled_at'                => now(),
                 'cancelled_by'                => 'customer',
                 'cancellation_reason_id'      => $reason?->id,
-                'cancellation_reason_label'   => $reason?->label,
+                'cancellation_reason_label'   => $reasonLabel,
             ], $visibility, $assignment));
 
             $booking->paymentTransactions()->where('status', 'pending')->update(['status' => 'failed']);
@@ -180,7 +182,7 @@ class BookingWorkflowService
     }
 
     /** Ghi lý do TX từ chối / hủy cuốc — đơn vẫn tìm TX khác, không hủy vé. */
-    public function stampDriverReleaseReason(Booking $booking, CancellationReason $reason): void
+    public function stampDriverReleaseReason(Booking $booking, CancellationReason $reason, ?string $note = null): void
     {
         if (in_array($booking->booking_status, ['cancelled', 'rejected'], true)
             || $booking->trip_status === 'completed') {
@@ -189,7 +191,7 @@ class BookingWorkflowService
 
         $booking->update([
             'cancellation_reason_id'    => $reason->id,
-            'cancellation_reason_label' => $reason->label,
+            'cancellation_reason_label' => $this->cancellationReasons->composeLabel($reason, $note),
         ]);
     }
 
@@ -198,6 +200,7 @@ class BookingWorkflowService
         Booking $booking,
         ?string $contactPhone = null,
         ?int $cancellationReasonId = null,
+        ?string $cancellationReasonNote = null,
     ): void {
         if (in_array($booking->booking_status, ['cancelled', 'rejected'], true)) {
             throw new InvalidArgumentException('Chuyến đã được hủy.');
@@ -226,14 +229,18 @@ class BookingWorkflowService
                 throw new InvalidArgumentException('Vui lòng chọn lý do hủy chuyến.');
             }
             $reason = $this->cancellationReasons->resolveForCancel($cancellationReasonId, 'driver');
-            $reasonLabel = $reason->label;
+            $reasonLabel = $this->cancellationReasons->composeLabel($reason, $cancellationReasonNote);
         }
 
         $booking->loadMissing(['schedule.vehicle', 'schedule.route']);
         $schedule = $booking->schedule;
-        $formerDriverId = (int) ($schedule?->driver_id ?? 0);
+        $formerDriverId = (int) (
+            $booking->assigned_driver_id
+            ?: $schedule?->driver_id
+            ?: 0
+        );
 
-        DB::transaction(function () use ($booking, $schedule, $reason, $reasonLabel, $phone, $locationKey): void {
+        DB::transaction(function () use ($booking, $schedule, $reason, $reasonLabel, $phone, $locationKey, $formerDriverId): void {
             $before = $booking->toArray();
 
             if ($phone !== '') {
@@ -257,6 +264,11 @@ class BookingWorkflowService
 
             if (Booking::supportsOperatorDismiss()) {
                 $updates['operator_dismissed_at'] = null;
+            }
+
+            // Giữ id TX để observer / push hủy gửi đúng người (trước khi clear schedule.driver_id).
+            if ($formerDriverId > 0) {
+                $booking->cancelNotifyDriverId = $formerDriverId;
             }
 
             $booking->update($updates);
@@ -303,7 +315,11 @@ class BookingWorkflowService
         $this->driverRequests->revokePendingOffersForGuestBooking($freshBooking);
 
         try {
-            app(PushNotificationService::class)->onTripCancelled($freshBooking);
+            app(PushNotificationService::class)->onTripCancelled(
+                $freshBooking,
+                null,
+                $formerDriverId > 0 ? $formerDriverId : null,
+            );
         } catch (\Throwable) {
         }
 
@@ -477,7 +493,14 @@ class BookingWorkflowService
 
         $this->cancelScheduledSearchTimeoutBooking($booking);
 
-        $fresh = $booking->fresh();
+        $fresh = $booking->fresh(['schedule']);
+        if (! $fresh
+            || $fresh->booking_status !== 'cancelled'
+            || $fresh->hasDriverAccepted()
+            || $fresh->hadDriverEngagedForPickup()) {
+            return false;
+        }
+
         $this->notifyCustomerScheduledSearchTimeout($fresh);
 
         return true;
@@ -609,6 +632,15 @@ class BookingWorkflowService
     {
         $customerId = (int) ($booking->customer_id ?? 0);
         if ($customerId < 1) {
+            return;
+        }
+
+        // Đã có / từng có TX nhận → không gửi «Không tìm được tài xế».
+        if ($booking->hasDriverAccepted() || $booking->hadDriverEngagedForPickup()) {
+            return;
+        }
+
+        if ($booking->booking_status !== 'cancelled' || $booking->cancelled_by !== 'system') {
             return;
         }
 
@@ -1064,13 +1096,19 @@ class BookingWorkflowService
     }
 
     /** Tài xế hủy chuyến sau khi nhận — gỡ TX và tìm lại nếu còn thời gian. */
-    public function cancelScheduleByDriver(Schedule $schedule, int $driverUserId, int $cancellationReasonId): void
-    {
+    public function cancelScheduleByDriver(
+        Schedule $schedule,
+        int $driverUserId,
+        int $cancellationReasonId,
+        ?string $cancellationReasonNote = null,
+    ): void {
         if (! $schedule->driverCanCancelTrip()) {
             throw new InvalidArgumentException('Sau khi đón khách không thể hủy — liên hệ quản lý nếu cần hỗ trợ.');
         }
 
         $reason = $this->cancellationReasons->resolveForCancel($cancellationReasonId, 'driver');
+        // Validate note early (before locking).
+        $this->cancellationReasons->composeLabel($reason, $cancellationReasonNote);
 
         $schedule = Schedule::query()
             ->with(['route', 'vehicle', 'bookings'])
@@ -1106,7 +1144,7 @@ class BookingWorkflowService
         $driverLabel = $profile?->user?->name ?? $schedule->driver_name ?? 'Tài xế';
         $driverCode = $profile?->driver_code;
 
-        DB::transaction(function () use ($schedule, $activeBookings, $formerDriverId, $reason): void {
+        DB::transaction(function () use ($schedule, $activeBookings, $formerDriverId, $reason, $cancellationReasonNote): void {
             $locked = Schedule::query()->lockForUpdate()->findOrFail($schedule->id);
 
             if ((int) $locked->driver_id !== $formerDriverId) {
@@ -1126,7 +1164,7 @@ class BookingWorkflowService
             ]);
 
             foreach ($activeBookings as $booking) {
-                $this->stampDriverReleaseReason($booking, $reason);
+                $this->stampDriverReleaseReason($booking, $reason, $cancellationReasonNote);
 
                 $releasedRequests = DriverTripRequest::query()
                     ->where('schedule_id', $locked->id)

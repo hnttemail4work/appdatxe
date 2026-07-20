@@ -30,8 +30,12 @@
 
     function onTripCount(count) {
         var value = Number(count) || 0;
+        // Sau reload (vd. vừa nạp ví đủ điều kiện): nếu đã có cuốc chờ thì vẫn kêu chuông.
         if (lastTripCount === null) {
             lastTripCount = value;
+            if (value > 0) {
+                play();
+            }
             return;
         }
         if (value > lastTripCount) {

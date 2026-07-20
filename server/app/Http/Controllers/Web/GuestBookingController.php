@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Booking\CancelTripRequest;
+use App\Http\Requests\Booking\ChangeDropoffRequest;
 use App\Http\Requests\Booking\CheckDuplicateBookingRequest;
 use App\Http\Requests\Booking\QuotePriceRequest;
 use App\Http\Requests\Booking\StoreBookingRequest;
@@ -151,6 +152,81 @@ class GuestBookingController extends Controller
         ]);
     }
 
+    public function changeDropoff(ChangeDropoffRequest $request)
+    {
+        $validated = $request->validated();
+        $browserId = trim((string) ($validated['booking_browser_id'] ?? $request->header('X-Booking-Browser-Id', '')));
+        $phone = trim((string) ($validated['contact_phone'] ?? ''));
+
+        $booking = $this->guestTrips->resolve(
+            $browserId !== '' ? $browserId : null,
+            $phone !== '' ? $phone : null,
+            $validated['booking_reference'],
+        );
+
+        if (! $booking) {
+            return response()->json(['message' => 'Không tìm thấy chuyến đi.'], 404);
+        }
+
+        try {
+            $booking = $this->guestTrips->changeDropoff(
+                $booking,
+                (string) $validated['dropoff_detail'],
+                (float) $validated['dropoff_lat'],
+                (float) $validated['dropoff_lng'],
+                isset($validated['dropoff_address']) ? (string) $validated['dropoff_address'] : null,
+                $browserId !== '' ? $browserId : null,
+                $phone !== '' ? $phone : null,
+            );
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'message' => 'Đã cập nhật điểm đến và giá mới.',
+            'booking' => $this->guestTrips->serialize($booking),
+        ]);
+    }
+
+    public function previewChangeDropoff(ChangeDropoffRequest $request)
+    {
+        $validated = $request->validated();
+        $browserId = trim((string) ($validated['booking_browser_id'] ?? $request->header('X-Booking-Browser-Id', '')));
+        $phone = trim((string) ($validated['contact_phone'] ?? ''));
+
+        $booking = $this->guestTrips->resolve(
+            $browserId !== '' ? $browserId : null,
+            $phone !== '' ? $phone : null,
+            $validated['booking_reference'],
+        );
+
+        if (! $booking) {
+            return response()->json(['message' => 'Không tìm thấy chuyến đi.'], 404);
+        }
+
+        try {
+            $preview = $this->guestTrips->previewChangeDropoff(
+                $booking,
+                (string) $validated['dropoff_detail'],
+                (float) $validated['dropoff_lat'],
+                (float) $validated['dropoff_lng'],
+                isset($validated['dropoff_address']) ? (string) $validated['dropoff_address'] : null,
+                $browserId !== '' ? $browserId : null,
+                $phone !== '' ? $phone : null,
+            );
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'dropoff_detail'      => $preview['dropoff_detail'],
+            'current_price'       => $preview['current_price'],
+            'current_price_label' => $preview['current_price_label'],
+            'new_price'           => $preview['new_price'],
+            'new_price_label'     => $preview['new_price_label'],
+        ]);
+    }
+
     public function cancelTrip(CancelTripRequest $request)
     {
         $validated = $request->validated();
@@ -181,6 +257,7 @@ class GuestBookingController extends Controller
                 $booking,
                 $phone !== '' ? $phone : null,
                 $validated['cancellation_reason_id'] ?? null,
+                $validated['cancellation_reason_note'] ?? null,
             );
         } catch (InvalidArgumentException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
@@ -246,12 +323,26 @@ class GuestBookingController extends Controller
         $bookingPageBannerUrl = BookingPageSettings::bannerUrl();
         $customerBookingPrefill = null;
         $customerWalletBalance = null;
+        $homeNewsItems = collect();
         $authUser = auth()->user();
 
         if ($authUser && $authUser->role === 'customer') {
             $customerBookingPrefill = app(\App\Services\CustomerAccountService::class)
                 ->bookingPrefill($authUser);
             $customerWalletBalance = $this->customerWallets->balanceFor($authUser);
+            $homeNewsItems = app(\App\Services\CustomerInboxService::class)
+                ->listFor((int) $authUser->id, \App\Models\CustomerInboxMessage::CATEGORY_INFO, 5);
+        } else {
+            // Khách chưa đăng nhập: lấy tin tức gần nhất đã broadcast (mẫu theo tiêu đề).
+            $homeNewsItems = \App\Models\CustomerInboxMessage::query()
+                ->where('category', \App\Models\CustomerInboxMessage::CATEGORY_INFO)
+                ->where('meta->type', 'admin_broadcast')
+                ->latest('id')
+                ->limit(20)
+                ->get()
+                ->unique('title')
+                ->take(5)
+                ->values();
         }
 
         return compact(
@@ -266,6 +357,7 @@ class GuestBookingController extends Controller
             'bookingPageBannerUrl',
             'customerBookingPrefill',
             'customerWalletBalance',
+            'homeNewsItems',
         );
     }
 

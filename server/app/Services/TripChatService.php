@@ -7,8 +7,10 @@ use App\Models\Booking;
 use App\Models\Schedule;
 use App\Models\TripMessage;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 
 class TripChatService
@@ -16,6 +18,9 @@ class TripChatService
     public const DRIVER_THREAD_LIMIT = 10;
 
     public const CUSTOMER_THREAD_LIMIT = 10;
+
+    /** Số tin tối đa giữ lại trong mỗi chuyến (cũ hơn sẽ bị xóa). */
+    public const MESSAGE_LIMIT = 10;
 
     public function isOpen(Booking $booking): bool
     {
@@ -81,31 +86,116 @@ class TripChatService
     /** @return Collection<int, TripMessage> */
     public function messages(Booking $booking, int $afterId = 0): Collection
     {
-        return TripMessage::query()
+        $this->pruneOldMessages($booking);
+
+        $latest = TripMessage::query()
             ->where('booking_id', $booking->id)
-            ->when($afterId > 0, fn ($query) => $query->where('id', '>', $afterId))
-            ->orderBy('id')
-            ->limit(100)
-            ->get();
+            ->orderByDesc('id')
+            ->limit(self::MESSAGE_LIMIT)
+            ->get()
+            ->sortBy('id')
+            ->values();
+
+        if ($afterId > 0) {
+            return $latest->filter(fn (TripMessage $message): bool => (int) $message->id > $afterId)->values();
+        }
+
+        return $latest;
     }
 
-    public function send(Booking $booking, string $role, string $body, ?User $sender): TripMessage
-    {
+    public function send(
+        Booking $booking,
+        string $role,
+        string $body,
+        ?User $sender,
+        ?UploadedFile $image = null,
+    ): TripMessage {
         if (! $this->isOpen($booking)) {
             throw new InvalidArgumentException($this->statusMessage($booking));
         }
 
         $body = trim($body);
-        if ($body === '') {
-            throw new InvalidArgumentException('Vui lòng nhập nội dung tin nhắn.');
+        if ($body === '' && ! $image) {
+            throw new InvalidArgumentException('Vui lòng nhập nội dung tin nhắn hoặc đính kèm ảnh.');
         }
 
-        return TripMessage::query()->create([
-            'booking_id'    => $booking->id,
-            'sender_user_id'=> $sender?->id,
-            'sender_role'   => $role,
-            'body'          => $body,
+        $imagePath = null;
+        if ($image) {
+            $dir = 'trip-chat/'.$booking->id;
+            Storage::disk('public')->makeDirectory($dir);
+            $imagePath = $image->store($dir, 'public');
+        }
+
+        $message = TripMessage::query()->create([
+            'booking_id'     => $booking->id,
+            'sender_user_id' => $sender?->id,
+            'sender_role'    => $role,
+            'body'           => $body,
+            'image_path'     => $imagePath,
         ]);
+
+        $this->pruneOldMessages($booking);
+
+        return $message->fresh() ?? $message;
+    }
+
+    /**
+     * Lưu lịch sử gọi app vào tin nhắn chuyến (cuộc gọi nhỡ / đã nhận).
+     *
+     * @param  'missed'|'answered'  $outcome
+     */
+    public function logDriverCall(Booking $booking, User $driver, string $outcome): TripMessage
+    {
+        $body = match ($outcome) {
+            'answered' => '📞 Cuộc gọi app đã nhận',
+            'missed'   => '📞 Cuộc gọi nhỡ',
+            default    => throw new InvalidArgumentException('Kết quả cuộc gọi không hợp lệ.'),
+        };
+
+        return $this->send($booking, 'driver', $body, $driver);
+    }
+
+    /**
+     * Lịch sử gọi app phía khách → tin nhắn chuyến.
+     *
+     * @param  'missed'|'answered'  $outcome
+     */
+    public function logCustomerCall(Booking $booking, User $customer, string $outcome): TripMessage
+    {
+        $body = match ($outcome) {
+            'answered' => '📞 Cuộc gọi app đã nhận',
+            'missed'   => '📞 Cuộc gọi nhỡ',
+            default    => throw new InvalidArgumentException('Kết quả cuộc gọi không hợp lệ.'),
+        };
+
+        return $this->send($booking, 'customer', $body, $customer);
+    }
+
+    /** Giữ tối đa MESSAGE_LIMIT tin mới nhất; xóa tin cũ + file ảnh. */
+    public function pruneOldMessages(Booking $booking): void
+    {
+        $keepIds = TripMessage::query()
+            ->where('booking_id', $booking->id)
+            ->orderByDesc('id')
+            ->limit(self::MESSAGE_LIMIT)
+            ->pluck('id');
+
+        if ($keepIds->isEmpty()) {
+            return;
+        }
+
+        $oldMessages = TripMessage::query()
+            ->where('booking_id', $booking->id)
+            ->whereNotIn('id', $keepIds)
+            ->get();
+
+        foreach ($oldMessages as $old) {
+            $path = trim((string) ($old->image_path ?? ''));
+            if ($path !== '' && Storage::disk('public')->exists($path)) {
+                Storage::disk('public')->delete($path);
+            }
+            $old->delete();
+        }
     }
 
     /** @return array<string, mixed> */
@@ -286,7 +376,7 @@ class TripChatService
     private function mapThread(Booking $booking, int $unread): array
     {
         $last = $booking->latestTripMessage;
-        $preview = $last?->body ?? '';
+        $preview = $last?->previewText() ?? '';
         if (mb_strlen($preview) > 80) {
             $preview = mb_substr($preview, 0, 80).'…';
         }

@@ -8,6 +8,7 @@ use App\Models\DriverProfile;
 use App\Services\DriverInboxService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class AdminDriverInboxController extends Controller
@@ -44,6 +45,7 @@ class AdminDriverInboxController extends Controller
             'audience'   => ['required', 'string', Rule::in(['all', 'selected'])],
             'driver_ids' => ['nullable', 'array'],
             'driver_ids.*' => ['integer', 'exists:users,id'],
+            'image'      => ['nullable', 'image', 'max:4096'],
         ]);
 
         $userIds = null;
@@ -56,12 +58,20 @@ class AdminDriverInboxController extends Controller
             }
         }
 
+        $extraMeta = [];
+        if ($request->hasFile('image')) {
+            $path = $request->file('image')->store('inbox', 'public');
+            $extraMeta['image_path'] = $path;
+            $extraMeta['image_url'] = Storage::disk('public')->url($path);
+        }
+
         $count = $this->inbox->broadcast(
             $validated['category'],
             trim($validated['title']),
             trim($validated['body']),
             $userIds,
             (int) Auth::id(),
+            $extraMeta,
         );
 
         return redirect()

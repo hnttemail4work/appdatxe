@@ -35,11 +35,13 @@ class Booking extends Model
                 try {
                     $push = app(\App\Services\PushNotificationService::class);
                     $reason = (string) ($booking->cancellation_reason_label ?? '');
-                    $searchTimeout = $booking->cancelled_by === 'system' && (
-                        str_contains($reason, 'Không tìm được tài xế')
-                        || str_contains($reason, 'Hết thời gian tìm tài xế')
-                        || ! $booking->hadDriverEngagedForPickup()
-                    );
+                    // Chỉ «không tìm được TX» khi đúng lý do search-timeout và chưa từng có TX.
+                    $searchTimeout = $booking->cancelled_by === 'system'
+                        && (
+                            str_contains($reason, 'Không tìm được tài xế')
+                            || str_contains($reason, 'Hết thời gian tìm tài xế')
+                        )
+                        && ! $booking->hadDriverEngagedForPickup();
 
                     if ($searchTimeout) {
                         $push->onNoDriverFound($booking);

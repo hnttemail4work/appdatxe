@@ -9,6 +9,27 @@
     }
 
     var lastFingerprint = null;
+    var lastPendingTripRequests = null;
+
+    function tripsDashboardUrl() {
+        try {
+            var next = new URL(window.location.href);
+            next.searchParams.delete('tab');
+            return next.pathname + (next.search ? next.search : '');
+        } catch (e) {
+            return window.location.pathname;
+        }
+    }
+
+    /** Ưu tiên màn Nhận/Từ chối khi hệ thống gán cuốc. */
+    function focusOfferScreen() {
+        if (window.DriverTabs && window.DriverTabs.switchTab) {
+            window.DriverTabs.switchTab('trips', { force: true });
+        }
+        if (window.DriverBottomPanel && window.DriverBottomPanel.syncOfferPending) {
+            window.DriverBottomPanel.syncOfferPending();
+        }
+    }
 
     function updateDockBadge(count) {
         var dock = document.querySelector('.driver-app-dock');
@@ -52,6 +73,10 @@
                     return;
                 }
 
+                var pendingTripRequests = typeof data.pending_trip_requests === 'number'
+                    ? data.pending_trip_requests
+                    : 0;
+
                 if (typeof data.trip_action_count === 'number') {
                     updateDockBadge(data.trip_action_count);
                     if (window.DriverSounds && window.DriverSounds.onTripCount) {
@@ -68,6 +93,15 @@
                     if (window.DriverInbox && window.DriverInbox.updateBadges) {
                         window.DriverInbox.updateBadges(data.inbox_unread);
                     }
+                }
+
+                // Badge icon app ngoài màn hình: ưu tiên số cuốc chờ + unread hộp thư.
+                if (window.AppInboxBadge && window.AppInboxBadge.syncAppIconBadge) {
+                    var tripCount = typeof data.trip_action_count === 'number' ? data.trip_action_count : 0;
+                    var inboxTotal = data.inbox_unread && typeof data.inbox_unread.total === 'number'
+                        ? data.inbox_unread.total
+                        : 0;
+                    window.AppInboxBadge.syncAppIconBadge(Math.max(tripCount, inboxTotal));
                 }
 
                 // TODO (Fix Driver Toggle): Đồng bộ switch Hoạt động từ server — tránh UI lệch sau poll/reload.
@@ -94,7 +128,9 @@
 
                 if (window.TripActionFabs && window.TripActionFabs.setInTrip) {
                     window.TripActionFabs.setInTrip(
-                        !!(data.driver_trip_active || data.availability_status === 'on_trip')
+                        !!(data.driver_trip_active
+                            || data.driver_trip_upcoming
+                            || data.availability_status === 'on_trip')
                     );
                 }
 
@@ -104,17 +140,45 @@
                     window.DriverLocationGps.ensureFreshLocation();
                 }
 
+                // Có cuốc chờ nhận mà đang ở tab khác → kéo về màn chấp nhận / từ chối.
+                if (pendingTripRequests > 0
+                    && window.DriverTabs
+                    && window.DriverTabs.getActiveTab
+                    && window.DriverTabs.getActiveTab() !== 'trips') {
+                    focusOfferScreen();
+                }
+
                 if (lastFingerprint === null) {
                     lastFingerprint = data.fingerprint || null;
+                    lastPendingTripRequests = pendingTripRequests;
                     return;
                 }
 
                 if (data.fingerprint && data.fingerprint !== lastFingerprint && !window.IdlePoll.isBlocked()) {
+                    var pendingIncreased = lastPendingTripRequests !== null
+                        && pendingTripRequests > lastPendingTripRequests;
+                    lastFingerprint = data.fingerprint;
+                    lastPendingTripRequests = pendingTripRequests;
+
+                    // Cuốc mới gán: reload thẳng tab chuyến để hiện full màn Nhận/Từ chối.
+                    if (pendingIncreased || pendingTripRequests > 0) {
+                        var tripsUrl = tripsDashboardUrl();
+                        if (window.location.pathname + window.location.search !== tripsUrl) {
+                            window.location.assign(tripsUrl);
+                            return;
+                        }
+                    }
+
                     window.location.reload();
+                    return;
                 }
+
+                lastPendingTripRequests = pendingTripRequests;
             })
             .catch(function () {});
     }
 
+    // Poll ngay lần đầu — SOS / badge không chờ IdlePoll (idle 5s+).
+    pollDashboard();
     window.IdlePoll.create({ onPoll: pollDashboard }).start();
 })();

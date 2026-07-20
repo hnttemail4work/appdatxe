@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\CustomerInboxMessage;
 use App\Models\DriverInboxMessage;
 use App\Models\User;
+use App\Support\Money;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -53,6 +54,28 @@ class UserInboxService
         }
 
         return null;
+    }
+
+    public function notifyDepositResult(User $user, int $amount, bool $approved): void
+    {
+        $amountLabel = Money::vnd($amount);
+        $title = $approved ? 'Nạp ví thành công' : 'Nạp ví không thành công';
+        $body = $approved
+            ? 'Yêu cầu nạp '.$amountLabel.' đã được duyệt và cộng vào ví.'
+            : 'Yêu cầu nạp '.$amountLabel.' không được duyệt. Liên hệ hỗ trợ nếu cần.';
+        $isDriver = $user->role === 'driver';
+
+        $this->notify(
+            $user,
+            $isDriver ? DriverInboxMessage::CATEGORY_NOTICE : CustomerInboxMessage::CATEGORY_NOTICE,
+            $title,
+            $body,
+            [
+                'type'   => $approved ? 'wallet_deposit_approved' : 'wallet_deposit_rejected',
+                'amount' => $amount,
+            ],
+            push: true,
+        );
     }
 
     public function notifyRegistrationSuccess(User $user): void

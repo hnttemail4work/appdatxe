@@ -33,6 +33,14 @@ class CancellationReason extends Model
         });
     }
 
+    /** «Lý do khác» — cần nhập thêm nội dung. */
+    public function requiresNote(): bool
+    {
+        $normalized = mb_strtolower(trim(preg_replace('/\s+/u', ' ', (string) $this->label) ?? ''));
+
+        return $normalized === 'lý do khác' || $normalized === 'khác';
+    }
+
     public function bookings()
     {
         return $this->hasMany(Booking::class);

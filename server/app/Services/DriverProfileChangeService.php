@@ -118,13 +118,19 @@ class DriverProfileChangeService
                     $newVehicles[] = $this->promotePendingPath($path, $dir, 'vehicle_' . $idx);
                 }
                 if ($newVehicles !== []) {
-                    foreach ($profile->photo_vehicles ?? [] as $old) {
-                        if (is_string($old) && $old !== '') {
-                            Storage::disk('public')->delete($old);
+                    // «Thêm ảnh xe»: ghép vào ảnh hiện có, không thay thế cả bộ.
+                    $existing = array_values(array_filter(
+                        $profile->photo_vehicles ?? [],
+                        fn ($path) => is_string($path) && $path !== ''
+                    ));
+                    $room = max(0, 6 - count($existing));
+                    $newVehicles = array_slice($newVehicles, 0, $room);
+                    if ($newVehicles !== []) {
+                        $updates['photo_vehicles'] = array_values(array_merge($existing, $newVehicles));
+                        if ($profile->catalog_vehicle_photo_index === null) {
+                            $updates['catalog_vehicle_photo_index'] = 0;
                         }
                     }
-                    $updates['photo_vehicles'] = $newVehicles;
-                    $updates['catalog_vehicle_photo_index'] = 0;
                 }
             }
 
@@ -274,8 +280,13 @@ class DriverProfileChangeService
             }
         }
 
-        if (isset($incoming['photo_vehicles'])) {
-            $merged['photo_vehicles'] = $incoming['photo_vehicles'];
+        if (isset($incoming['photo_vehicles']) && is_array($incoming['photo_vehicles'])) {
+            $previousVehicles = is_array($merged['photo_vehicles'] ?? null) ? $merged['photo_vehicles'] : [];
+            $merged['photo_vehicles'] = array_values(array_slice(
+                array_merge($previousVehicles, $incoming['photo_vehicles']),
+                0,
+                6
+            ));
         }
 
         return array_filter(

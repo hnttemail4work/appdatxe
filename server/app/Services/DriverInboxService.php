@@ -138,6 +138,15 @@ class DriverInboxService
                 $userId,
             )['total'] ?? $this->unreadCount($userId);
 
+            $pushExtra = [
+                'inbox_id'       => $message->id,
+                'inbox_category' => $category,
+                'unread_total'   => (int) $unreadTotal,
+            ];
+            if (! empty($meta['image_url'])) {
+                $pushExtra['image_url'] = (string) $meta['image_url'];
+            }
+
             $this->push->notifyDriverUser(
                 $userId,
                 $eventKey,
@@ -145,11 +154,7 @@ class DriverInboxService
                 $body,
                 $url,
                 $dedupKey,
-                [
-                    'inbox_id'       => $message->id,
-                    'inbox_category' => $category,
-                    'unread_total'   => (int) $unreadTotal,
-                ],
+                $pushExtra,
             );
         }
 
@@ -362,12 +367,16 @@ class DriverInboxService
      * @param  list<int>|null  $userIds  null = tất cả tài xế đã duyệt
      * @return int số tin đã tạo
      */
+    /**
+     * @param  array<string, mixed>  $extraMeta
+     */
     public function broadcast(
         string $category,
         string $title,
         string $body,
         ?array $userIds,
         int $createdBy,
+        array $extraMeta = [],
     ): int {
         $category = $category === DriverInboxMessage::CATEGORY_INFO
             ? DriverInboxMessage::CATEGORY_INFO
@@ -389,15 +398,16 @@ class DriverInboxService
             return 0;
         }
 
+        $meta = array_merge(['type' => 'admin_broadcast'], $extraMeta);
         $count = 0;
-        DB::transaction(function () use ($ids, $category, $title, $body, $createdBy, &$count): void {
+        DB::transaction(function () use ($ids, $category, $title, $body, $createdBy, $meta, &$count): void {
             foreach ($ids as $userId) {
                 $this->notify(
                     $userId,
                     $category,
                     $title,
                     $body,
-                    ['type' => 'admin_broadcast'],
+                    $meta,
                     $createdBy,
                     true,
                 );

@@ -38,6 +38,24 @@
                         'nextType' => 'button',
                         'nextAttr' => 'data-wizard-next',
                     ])
+                    <div class="auth-field mt-3">
+                        <label class="auth-field-label" for="customer-emergency-name">
+                            Tên người thân <span class="text-muted fw-normal">(tuỳ chọn)</span>
+                        </label>
+                        <input type="text" name="emergency_contact_name" id="customer-emergency-name"
+                               class="form-control @error('emergency_contact_name') is-invalid @enderror"
+                               value="{{ old('emergency_contact_name') }}" maxlength="120" autocomplete="name">
+                        @error('emergency_contact_name')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
+                    <div class="auth-field mt-2">
+                        <label class="auth-field-label" for="customer-emergency-phone">
+                            SĐT người thân <span class="text-muted fw-normal">(tuỳ chọn)</span>
+                        </label>
+                        <input type="tel" name="emergency_contact_phone" id="customer-emergency-phone"
+                               class="form-control @error('emergency_contact_phone') is-invalid @enderror"
+                               value="{{ old('emergency_contact_phone') }}" maxlength="30" inputmode="tel" autocomplete="tel">
+                        @error('emergency_contact_phone')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
                 </div>
 
                 <div class="auth-step-panel" data-wizard-step="2" hidden>

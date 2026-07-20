@@ -29,9 +29,19 @@ $historyEmpty = $historyEmpty ?? 'Chưa có giao dịch ví.';
                     @endif
                     <div class="driver-wallet-history-amount">
                         @if($item['kind'] === 'deposit')
-                            {{ number_format($item['amount'], 0, ',', '.') }} đ
+                            @php
+                                $depositStatus = $item['status'] ?? null;
+                                $depositAmount = \App\Support\Money::vnd($item['amount']);
+                            @endphp
+                            @if($depositStatus === 'approved')
+                                +{{ $depositAmount }}
+                            @elseif($depositStatus === 'rejected')
+                                −{{ $depositAmount }}
+                            @else
+                                {{ $depositAmount }}
+                            @endif
                         @else
-                            −{{ number_format($item['amount'], 0, ',', '.') }} đ
+                            −{{ \App\Support\Money::vnd($item['amount']) }}
                         @endif
                     </div>
                     <div class="driver-wallet-history-meta">

@@ -122,6 +122,10 @@
     $isAuthChrome = \App\Support\AuthAudience::isAuthScreen();
 @endphp
 <body class="app-shell @if($isAuthChrome) app-shell--auth @endif @if($isAuthChrome || request()->routeIs('home', 'about', 'booking.trips', 'customer.account', 'driver.dashboard')) app-shell--mobile-app @endif">
+{{-- Splash: chỉ hiện GOZ. --}}
+<div id="app-splash" class="app-splash d-none" hidden aria-hidden="true">
+    <span class="app-splash__title">GOZ</span>
+</div>
 @unless($hideNavbar)
 <nav class="navbar navbar-expand-lg app-navbar navbar-dark @if($showUserBackHeader) app-navbar--back @endif">
     <div class="container app-navbar-inner">
@@ -280,7 +284,7 @@
 })();
 </script>
 <script>window.__cancellationReasonsUrl = @json(route('cancellationReasons.index'));</script>
-<script src="{{ asset('js/cancellation-reason-modal.js') }}"></script>
+<script src="{{ asset('js/cancellation-reason-modal.js') }}?v={{ filemtime(public_path('js/cancellation-reason-modal.js')) }}"></script>
 <script>
 (function () {
     function syncCsrfToken(token) {
@@ -302,6 +306,11 @@
             e.preventDefault();
 
             function submitLogout() {
+                if (window.AppSplash && window.AppSplash.resetForLogout) {
+                    window.AppSplash.resetForLogout();
+                } else {
+                    try { window.localStorage.removeItem('appdatxe:splashDay'); } catch (err) {}
+                }
                 fetch('/csrf-token', { credentials: 'same-origin' })
                     .then(function (r) { return r.json(); })
                     .then(function (data) {
@@ -393,6 +402,7 @@ window.__customerInboxPollUrl = @json(route('customer.inbox.poll'));
 @endif
 @endauth
 @stack('scripts')
+<script src="{{ asset('js/app-splash.js') }}?v={{ filemtime(public_path('js/app-splash.js')) }}"></script>
 @if($pwaEnabled)
 <script>
 window.__pwaConfig = {

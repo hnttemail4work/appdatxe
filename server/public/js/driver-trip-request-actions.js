@@ -104,6 +104,17 @@
         input.value = String(reasonId || '');
     }
 
+    function ensureReasonNoteInput(form, note) {
+        var input = form.querySelector('input[name="cancellation_reason_note"]');
+        if (!input) {
+            input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'cancellation_reason_note';
+            form.appendChild(input);
+        }
+        input.value = String(note || '');
+    }
+
     function pickCancelReason(form) {
         if (!window.CancellationReasonModal || !window.CancellationReasonModal.pick) {
             return Promise.reject(new Error('Không tải được lý do hủy.'));
@@ -118,6 +129,7 @@
                 return null;
             }
             ensureReasonInput(form, result.reasonId);
+            ensureReasonNoteInput(form, result.note || '');
             return result.reasonId;
         });
     }
@@ -201,6 +213,16 @@
                             ? 'Phiên đăng nhập hết hạn — tải lại trang rồi thử lại.'
                             : 'Không nhận được cuốc.');
                     throw new Error(message);
+                }
+
+                // Hiện SOS ngay trước khi reload — tránh chờ IdlePoll 5–10s.
+                if (window.TripActionFabs && window.TripActionFabs.setInTrip) {
+                    window.TripActionFabs.setInTrip(true);
+                }
+                var locationBar = document.getElementById('driver-location-bar');
+                if (locationBar) {
+                    locationBar.setAttribute('data-driver-on-trip', '1');
+                    locationBar.setAttribute('data-driver-trip-upcoming', '1');
                 }
 
                 var redirect = (result.data && result.data.redirect)

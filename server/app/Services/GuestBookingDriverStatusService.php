@@ -55,18 +55,26 @@ class GuestBookingDriverStatusService
             $profile->vehicle_brand,
             $profile->vehicle_model,
         ])));
-        $vehiclePhotoUrl = $profile->firstVehiclePhotoUrl()
-            ?: VehicleDisplay::photoFromVehicle($schedule->vehicle);
+        $vehiclePhotoUrls = $profile->vehiclePhotoUrls();
+        $fallbackVehiclePhoto = VehicleDisplay::photoFromVehicle($schedule->vehicle);
+        if ($vehiclePhotoUrls === [] && $fallbackVehiclePhoto) {
+            $vehiclePhotoUrls = [$fallbackVehiclePhoto];
+        }
+        $vehiclePhotoUrl = $vehiclePhotoUrls[0] ?? null;
 
         $etaLabel = null;
+        $etaDurationLabel = null;
         $statusLine = null;
         $distanceLine = null;
         $etaLine = null;
+        $proximitySummary = null;
 
         if ($stage === Schedule::DRIVER_STAGE_AT_PICKUP) {
             $statusLine = 'Tài xế đã đến điểm đón';
+            $proximitySummary = $statusLine;
         } elseif (in_array($stage, [Schedule::DRIVER_STAGE_PICKED_UP, Schedule::DRIVER_STAGE_RUNNING], true)) {
             $statusLine = 'Đang trong chuyến';
+            $proximitySummary = $statusLine;
         } elseif ($stage === Schedule::DRIVER_STAGE_ASSIGNED) {
             $statusLine = $movementConfirmed ? 'Tài xế đang đi đón' : 'Đã nhận chuyến';
 
@@ -75,11 +83,23 @@ class GuestBookingDriverStatusService
             }
 
             if ($movementConfirmed && $hasLiveLocation && $distanceKm !== null) {
-                $etaLabel = $this->latePickup->pickupEtaLabel($schedule, $booking);
-                if ($etaLabel) {
-                    $etaLine = 'Dự kiến ' . $etaLabel;
+                $etaMinutesRaw = $this->latePickup->pickupEtaMinutes($schedule, $booking);
+                if ($etaMinutesRaw !== null && $etaMinutesRaw > 0) {
+                    $etaDurationLabel = $this->latePickup->formatArrivalDurationLabel($etaMinutesRaw);
+                    $etaLabel = $etaDurationLabel;
+                    $etaLine = 'Dự kiến đến trong ' . $etaDurationLabel;
                 }
             }
+
+            if ($distanceLabel && $etaDurationLabel) {
+                $proximitySummary = 'Tài xế cách bạn ' . $distanceLabel . ' — dự kiến đến trong ' . $etaDurationLabel;
+            } elseif ($distanceLabel) {
+                $proximitySummary = $distanceLine;
+            } else {
+                $proximitySummary = $statusLine;
+            }
+        } else {
+            $proximitySummary = $statusLine;
         }
 
         $vehicleSeats = VehicleDisplay::capacityFromDriverProfile($profile);
@@ -101,8 +121,13 @@ class GuestBookingDriverStatusService
 
         [$rating, $ratingLabel] = $this->cachedRating($profile);
 
+        $phoneRaw = trim((string) ($profile->user?->phone ?? ''));
+        $phoneTel = $phoneRaw !== '' ? (string) preg_replace('/[^\d+]/', '', $phoneRaw) : '';
+
         return [
             'name'                 => $profile->user->name ?? $schedule->driver_name,
+            'phone'                => $phoneRaw !== '' ? $phoneRaw : null,
+            'phone_tel'            => $phoneTel !== '' ? $phoneTel : null,
             'code'                 => $profile->driver_code,
             'vehicle_type'         => $profile->vehicle_type,
             'vehicle_type_label'   => VehicleDisplay::typeLabel($profile->vehicle_type),
@@ -112,6 +137,7 @@ class GuestBookingDriverStatusService
             'vehicle_name'         => $vehicleName !== '' ? $vehicleName : null,
             'vehicle_color'        => $profile->vehicle_color,
             'vehicle_photo_url'    => $vehiclePhotoUrl,
+            'vehicle_photo_urls'   => array_values($vehiclePhotoUrls),
             'vehicle_label'        => DriverTripRequestService::vehicleLabel($profile),
             'stage'                => $stage,
             'stage_label'          => $schedule->driverStageLabel(),
@@ -124,6 +150,7 @@ class GuestBookingDriverStatusService
             'distance_km'          => $distanceKm,
             'distance_label'       => $distanceLabel,
             'eta_label'            => $etaLabel,
+            'eta_duration_label'   => $etaDurationLabel,
             'eta_minutes'          => $etaMinutes,
             'rating'               => $rating,
             'rating_label'         => $ratingLabel,
@@ -131,6 +158,7 @@ class GuestBookingDriverStatusService
             'distance_line'        => $distanceLine,
             'eta_line'             => $etaLine,
             'proximity_hint'       => $proximityHint,
+            'proximity_summary'    => $proximitySummary,
         ];
     }
 

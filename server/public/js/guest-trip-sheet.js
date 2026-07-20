@@ -1,5 +1,6 @@
 /**
- * Sheet thông tin chuyến — kéo xuống thu nhỏ, kéo lên xem chi tiết.
+ * Sheet thông tin chuyến — kéo xuống thu nhỏ, kéo lên xem chi tiết (tìm TX + theo dõi chuyến).
+ * Mỗi lần user vuốt/chạm: căn lại camera vào giữa mép trên map ↔ mép trên popup.
  */
 (function () {
     var sheet = document.getElementById('guest-trip-info-sheet');
@@ -13,36 +14,83 @@
     var dragging = false;
     var THRESHOLD = 36;
     var root = document.documentElement;
+    var refitTimers = [];
 
-    /** Nút định vị luôn nằm ngay trên mép sheet thông tin. */
+    function isSheetMode() {
+        return card.classList.contains('is-searching') || card.classList.contains('is-tracking');
+    }
+
+    /** Nút định vị sát mép trên sheet; chuông SOS xếp ngay phía trên — đồng nhất tìm TX / đang đi đón. */
     function syncLocateFabLift() {
         var locateBtn = document.getElementById('guest-trip-locate-btn');
-        if (!isSearching()) {
+        var sosFab = document.querySelector('[data-trip-sos-fab]');
+        var STACK_GAP = 10;
+
+        if (!isSheetMode()) {
             root.style.removeProperty('--guest-trip-sheet-lift');
+            root.style.removeProperty('--guest-trip-fab-bottom');
             if (locateBtn) {
                 locateBtn.style.bottom = '';
+            }
+            if (sosFab) {
+                sosFab.style.bottom = '';
             }
             return;
         }
 
-        var height = sheet.getBoundingClientRect().height || 0;
-        var gap = 10;
-        var lift = Math.max(0, Math.round(height + gap));
-        root.style.setProperty('--guest-trip-sheet-lift', lift + 'px');
+        var sheetRect = sheet.getBoundingClientRect();
+        var viewportH = window.innerHeight || document.documentElement.clientHeight || 0;
+        var locateBottom = Math.max(0, Math.round(viewportH - sheetRect.top + STACK_GAP));
+        var fabH = locateBtn && locateBtn.offsetHeight
+            ? locateBtn.offsetHeight
+            : 52;
+        var sosBottom = locateBottom + fabH + STACK_GAP;
 
-        if (locateBtn && window.innerWidth < 768) {
-            // Đáy sheet = trên dock; FAB cách mép sheet `gap`.
-            locateBtn.style.bottom = 'calc(var(--customer-dock-height, 3.85rem) + ' + lift + 'px)';
-        } else if (locateBtn) {
-            locateBtn.style.bottom = '';
+        root.style.setProperty('--guest-trip-fab-bottom', locateBottom + 'px');
+        root.style.setProperty('--guest-trip-sheet-lift', locateBottom + 'px');
+
+        if (locateBtn) {
+            locateBtn.style.bottom = locateBottom + 'px';
         }
+        if (sosFab) {
+            sosFab.style.bottom = sosBottom + 'px';
+        }
+    }
+
+    function clearRefitTimers() {
+        refitTimers.forEach(function (id) {
+            window.clearTimeout(id);
+        });
+        refitTimers = [];
+    }
+
+    function runSheetCameraRefit() {
+        syncLocateFabLift();
+        if (!window.GuestTripLiveMap) {
+            return;
+        }
+        if (window.GuestTripLiveMap.resize) {
+            window.GuestTripLiveMap.resize();
+        }
+        if (window.GuestTripLiveMap.refitSheetCamera) {
+            window.GuestTripLiveMap.refitSheetCamera();
+        }
+    }
+
+    /** Refit sau layout + sau transition (không chỉ dựa transitionend). */
+    function scheduleSheetCameraRefit() {
+        clearRefitTimers();
+        window.requestAnimationFrame(function () {
+            runSheetCameraRefit();
+            refitTimers.push(window.setTimeout(runSheetCameraRefit, 140));
+            refitTimers.push(window.setTimeout(runSheetCameraRefit, 320));
+        });
     }
 
     function setCollapsed(collapsed, options) {
         options = options || {};
         var nextCollapsed = !!collapsed;
         var wasCollapsed = sheet.classList.contains('is-collapsed');
-        // Poll/sync lặp lại cùng trạng thái — không resize/refit (tránh ghim camera).
         if (nextCollapsed === wasCollapsed && !options.force) {
             syncLocateFabLift();
             return;
@@ -51,49 +99,45 @@
         sheet.classList.toggle('is-collapsed', nextCollapsed);
         sheet.classList.toggle('is-expanded', !nextCollapsed);
         handle.setAttribute('aria-expanded', nextCollapsed ? 'false' : 'true');
+
+        if (nextCollapsed && window.TripChat && typeof window.TripChat.closeAllOpen === 'function') {
+            window.TripChat.closeAllOpen();
+        }
+
         window.requestAnimationFrame(function () {
             syncLocateFabLift();
             if (window.GuestTripLiveMap && window.GuestTripLiveMap.resize) {
                 window.GuestTripLiveMap.resize();
-                window.setTimeout(function () {
-                    window.GuestTripLiveMap.resize();
-                    syncLocateFabLift();
-                    // Chỉ căn lại khi sheet thật sự đổi cao (thu/mở), không phải mỗi poll.
-                    if (options.refitCamera && isSearching() && window.GuestTripLiveMap.refitSearchCamera) {
-                        window.GuestTripLiveMap.refitSearchCamera();
-                    }
-                }, 300);
             }
         });
-    }
 
-    function isSearching() {
-        return card.classList.contains('is-searching');
+        if (options.refitCamera && options.userGesture) {
+            scheduleSheetCameraRefit();
+        }
     }
 
     function syncForBookingMode() {
-        if (!isSearching()) {
+        if (!isSheetMode()) {
             setCollapsed(false, { refitCamera: false });
             return;
         }
-        // Đang tìm: mặc định mở sheet một lần; không refit camera trên mỗi poll.
-        if (!sheet.dataset.userToggled && sheet.classList.contains('is-collapsed')) {
-            setCollapsed(false, { refitCamera: true });
+        if (!sheet.dataset.userToggled) {
+            setCollapsed(true, { force: true, refitCamera: false });
         } else {
             syncLocateFabLift();
         }
     }
 
     handle.addEventListener('click', function () {
-        if (!isSearching()) {
+        if (!isSheetMode()) {
             return;
         }
         sheet.dataset.userToggled = '1';
-        setCollapsed(!sheet.classList.contains('is-collapsed'), { refitCamera: true });
+        setCollapsed(!sheet.classList.contains('is-collapsed'), { refitCamera: true, userGesture: true });
     });
 
     function onPointerDown(event) {
-        if (!isSearching()) {
+        if (!isSheetMode()) {
             return;
         }
         dragging = true;
@@ -101,7 +145,7 @@
     }
 
     function onPointerUp(event) {
-        if (!dragging || !isSearching()) {
+        if (!dragging || !isSheetMode()) {
             dragging = false;
             return;
         }
@@ -114,8 +158,7 @@
             return;
         }
         sheet.dataset.userToggled = '1';
-        // Kéo xuống → thu nhỏ; kéo lên → mở xem.
-        setCollapsed(delta > 0, { refitCamera: true });
+        setCollapsed(delta > 0, { refitCamera: true, userGesture: true });
     }
 
     handle.addEventListener('touchstart', onPointerDown, { passive: true });
@@ -133,8 +176,14 @@
     }
 
     sheet.addEventListener('transitionend', function (event) {
-        if (event.target === sheet) {
-            syncLocateFabLift();
+        if (event.target !== sheet) {
+            return;
+        }
+        syncLocateFabLift();
+        if (sheet.dataset.userToggled === '1'
+            && window.GuestTripLiveMap
+            && window.GuestTripLiveMap.refitSheetCamera) {
+            runSheetCameraRefit();
         }
     });
 
@@ -146,6 +195,7 @@
             delete sheet.dataset.userToggled;
         },
         syncLocateFabLift: syncLocateFabLift,
+        refitCamera: scheduleSheetCameraRefit,
     };
 
     syncForBookingMode();

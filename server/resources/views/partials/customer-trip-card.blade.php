@@ -14,7 +14,10 @@
             @if(! empty($trip['review']))
                 <span class="customer-trip-card__review">{{ $trip['review']['icon'] ?? '' }} {{ $trip['review']['label'] ?? '' }}</span>
             @elseif(! empty($trip['can_review']))
-                <span class="text-warning small">Chờ đánh giá</span>
+                <a href="{{ route('booking.trips', ['review' => $trip['booking_reference'] ?? '']) }}"
+                   class="btn btn-sm btn-outline-warning">
+                    Đánh giá chuyến
+                </a>
             @endif
         </div>
         <span class="customer-trip-card__price">{{ $trip['total_price_label'] ?? '' }}</span>

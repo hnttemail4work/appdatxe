@@ -12,6 +12,9 @@
     var ctx = {};
     var quoteTimer = null;
     var quoteRequestSeq = 0;
+    /** Snapshot điểm đón sau khi bấm “Xác nhận” — dùng để biết đã xác nhận lần đầu. */
+    var confirmedPickup = null;
+    var CONFIRMED_PICKUP_EPS_M = 25;
 
     function $(id) { return document.getElementById(id); }
 
@@ -208,12 +211,8 @@
     }
 
     function shortAddress(text) {
-        var value = String(text || '').trim();
-        if (!value) {
-            return '';
-        }
-        var parts = value.split(',').map(function (p) { return p.trim(); }).filter(Boolean);
-        return parts.slice(0, 2).join(', ') || value;
+        // Giữ nguyên địa chỉ đầy đủ (số nhà, đường, phường, quận, tỉnh).
+        return String(text || '').trim();
     }
 
     function modalRoute() {
@@ -554,16 +553,21 @@
                 el.dispatchEvent(new Event('change', { bubbles: true }));
             }
         });
+        // Điểm đón mới sau đảo → phải xác nhận lại.
+        confirmedPickup = null;
         syncRouteLabels();
         syncPickupConfirmUi();
-        if (currentStep() === 'vehicle') {
-            ensureFlowMapAssets(scheduleFlowMapPreview);
-        } else if (currentStep() === 'pickup') {
-            ensureFlowMapAssets(function () {
-                window.setTimeout(updatePickupMapPreview, 80);
-            });
-        }
         refreshDistanceAndQuote();
+
+        if (!validateStep1() || !assertMinTripDistance()) {
+            if (currentStep() === 'vehicle') {
+                ensureFlowMapAssets(scheduleFlowMapPreview);
+            }
+            return;
+        }
+
+        // Mở ngay màn xác nhận dựa trên điểm đón mới.
+        openPickupConfirmModal();
     }
 
     var MIN_TRIP_METERS = 200;
@@ -606,6 +610,8 @@
     }
 
     function returnToAddressSheet(focus) {
+        // User chủ động đổi điểm đón/trả → lần advance sau phải xác nhận điểm đón lại.
+        confirmedPickup = null;
         hideBookingFlow();
         if (window.BookingAddressSheet && typeof window.BookingAddressSheet.open === 'function') {
             window.BookingAddressSheet.open(focus || 'pickup');
@@ -1449,6 +1455,10 @@
         }
     }
 
+    /**
+     * Map nối điểm đón ↔ điểm trả — không dùng MapSheetCamera.easeToFocus
+     * (kéo sheet xe không kéo focus về 1 điểm).
+     */
     function fitRouteBounds(map, coordinates, animate) {
         if (!map || !window.goongjs || !coordinates || coordinates.length < 2) {
             return;
@@ -1488,7 +1498,7 @@
                 source: 'booking-route',
                 paint: {
                     'line-color': '#2563eb',
-                    'line-width': 5,
+                    'line-width': 8,
                     'line-opacity': 0.92,
                 },
             });
@@ -1670,6 +1680,38 @@
         }
     }
 
+    function snapshotConfirmedPickup() {
+        var lat = coordValue('modal-pickup-lat');
+        var lng = coordValue('modal-pickup-lng');
+        if (!lat || !lng) {
+            confirmedPickup = null;
+            return;
+        }
+        confirmedPickup = {
+            lat: Number(lat),
+            lng: Number(lng),
+            detail: String(($('modal-pickup-detail') && $('modal-pickup-detail').value) || '').trim(),
+        };
+    }
+
+    function pickupMatchesConfirmed() {
+        if (!confirmedPickup) {
+            return false;
+        }
+        var lat = coordValue('modal-pickup-lat');
+        var lng = coordValue('modal-pickup-lng');
+        if (!lat || !lng) {
+            return false;
+        }
+        var meters = haversineKm(
+            confirmedPickup.lat,
+            confirmedPickup.lng,
+            Number(lat),
+            Number(lng),
+        ) * 1000;
+        return meters <= CONFIRMED_PICKUP_EPS_M;
+    }
+
     function proceedAfterAuthChecks() {
         if (!validateStep1() || !assertMinTripDistance()) {
             return;
@@ -1677,8 +1719,12 @@
         if (window.BookingRouteDraft) {
             window.BookingRouteDraft.clear();
         }
-        // Mở màn xác nhận điểm đón ngay — không chờ fetch (tránh flash home ~0.5s).
-        openPickupConfirmModal();
+        // Chưa xác nhận / vừa đổi điểm đón → màn xác nhận. Chỉ đổi điểm trả (điểm đón giữ nguyên) → chọn xe.
+        if (pickupMatchesConfirmed()) {
+            openVehicleSelectModal();
+        } else {
+            openPickupConfirmModal();
+        }
 
         if (!window.__bookingCheckDuplicateUrl) {
             return;
@@ -1962,6 +2008,7 @@
             if (!validateStep1() || !assertMinTripDistance()) {
                 return;
             }
+            snapshotConfirmedPickup();
             // Defer sang macrotask để click/touch hiện tại kết thúc trước khi đổi DOM bước.
             window.setTimeout(function () {
                 openVehicleSelectModal();
@@ -2025,11 +2072,35 @@
 
     function handleModalBack() {
         if (currentStep() === 'vehicle') {
-            setStep('pickup');
+            // Quay lại đổi điểm đón/trả (returnToAddressSheet sẽ reset cờ xác nhận).
+            returnToAddressSheet('pickup');
+            return;
+        }
+        if (currentStep() === 'pickup') {
+            returnToAddressSheet('pickup');
             return;
         }
         returnToAddressSheet('pickup');
     }
+
+    // Chạm vào Đón / Trả trên banner → mở sheet đổi điểm (phải xác nhận lại điểm đón).
+    document.querySelectorAll('#booking-flow-route-banner .be-step__route-end').forEach(function (el, index) {
+        el.setAttribute('role', 'button');
+        el.setAttribute('tabindex', '0');
+        el.style.cursor = 'pointer';
+        var focus = index === 0 ? 'pickup' : 'dropoff';
+        el.setAttribute('aria-label', focus === 'pickup' ? 'Đổi điểm đón' : 'Đổi điểm trả');
+        function openEdit() {
+            returnToAddressSheet(focus);
+        }
+        el.addEventListener('click', openEdit);
+        el.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                openEdit();
+            }
+        });
+    });
 
     document.querySelectorAll('[data-modal-back]').forEach(function (btn) {
         btn.addEventListener('click', handleModalBack);

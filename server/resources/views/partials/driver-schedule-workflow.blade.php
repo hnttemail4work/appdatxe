@@ -28,7 +28,11 @@ $isAssigned = $stage === \App\Models\Schedule::DRIVER_STAGE_ASSIGNED;
                 </form>
             @endif
             <form method="POST" action="{{ route('driver.schedules.advance', $schedule) }}"
-                  class="driver-workflow-compact-action">
+                  class="driver-workflow-compact-action"
+                  data-driver-arrive-confirm
+                  data-pickup-lat="{{ $schedule->driverRelevantBookings()->first()?->pickup_lat }}"
+                  data-pickup-lng="{{ $schedule->driverRelevantBookings()->first()?->pickup_lng }}"
+                  data-far-meters="800">
                 @csrf
                 <button type="submit" class="btn btn-primary">Đã đến</button>
             </form>
@@ -63,16 +67,14 @@ $isAssigned = $stage === \App\Models\Schedule::DRIVER_STAGE_ASSIGNED;
                 @if($showComplete)
                     <form method="POST" action="{{ route('driver.schedules.complete', $schedule) }}"
                           class="driver-workflow-compact-action"
-                          data-confirm="Xác nhận đã chạy xong chuyến này ({{ $bookings->count() }} khách)?"
-                          data-confirm-title="Hoàn thành chuyến"
-                          data-confirm-ok="Hoàn thành"
-                          data-confirm-variant="success">
+                          data-swipe-action>
                         @csrf
                         <button type="submit" class="btn btn-success btn-sm">{{ $pendingClosure ? 'Xác nhận hoàn thành' : ($nextAction ?: 'Hoàn thành chuyến') }}</button>
                     </form>
                 @elseif($showAdvance)
                     <form method="POST" action="{{ route('driver.schedules.advance', $schedule) }}"
-                          class="driver-workflow-compact-action">
+                          class="driver-workflow-compact-action"
+                          data-swipe-action>
                         @csrf
                         <button type="submit" class="btn btn-primary btn-sm">{{ $nextAction }}</button>
                     </form>

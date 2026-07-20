@@ -20,7 +20,7 @@ class CancellationReasonService
             ->get();
     }
 
-    /** @return list<array{id: int, label: string}> */
+    /** @return list<array{id: int, label: string, requires_note: bool}> */
     public function serializeForAudience(string $audience): array
     {
         return CancellationReasonResource::collection($this->forAudience($audience))
@@ -39,6 +39,24 @@ class CancellationReasonService
         }
 
         return $reason;
+    }
+
+    /** Nhãn lưu trên booking — «Lý do khác» kèm nội dung người dùng nhập. */
+    public function composeLabel(CancellationReason $reason, ?string $note = null): string
+    {
+        $label = (string) $reason->label;
+        if (! $reason->requiresNote()) {
+            return mb_substr($label, 0, 200);
+        }
+
+        $note = trim((string) $note);
+        if ($note === '') {
+            throw new InvalidArgumentException('Vui lòng nhập lý do hủy.');
+        }
+
+        $note = mb_substr($note, 0, 160);
+
+        return mb_substr($label.': '.$note, 0, 200);
     }
 
     /** @param array{label: string, audience: string, sort_order?: int} $data */

@@ -236,10 +236,12 @@ class RegistrationService
     {
         return array_merge(
             [
-                'phone'                 => AuthPhone::rules(unique: true),
-                'password'              => PinPassword::rules(confirmed: true),
-                'password_confirmation' => ['required', 'string', 'digits:'.PinPassword::LENGTH],
-                'terms'                 => ['accepted'],
+                'phone'                     => AuthPhone::rules(unique: true),
+                'password'                  => PinPassword::rules(confirmed: true),
+                'password_confirmation'     => ['required', 'string', 'digits:'.PinPassword::LENGTH],
+                'terms'                     => ['accepted'],
+                'emergency_contact_name'    => ['nullable', 'string', 'max:120'],
+                'emergency_contact_phone'   => ['nullable', 'string', 'max:30'],
             ],
             DriverFieldRules::idCardPhotoRules(true),
         );
@@ -261,18 +263,24 @@ class RegistrationService
             $pin = PinPassword::assertValid($validated['password'] ?? null);
 
             $user = User::query()->create([
-                'name'                 => $phone,
-                'email'                => null,
-                'password'             => $pin,
-                'must_change_password' => false,
-                'phone'                => $phone,
-                'gender'               => null,
-                'date_of_birth'        => null,
-                'id_number'            => null,
-                'address'              => null,
-                'role'                 => 'customer',
-                'status'               => 'inactive',
-                'approval_status'      => User::APPROVAL_PENDING,
+                'name'                     => $phone,
+                'email'                    => null,
+                'password'                 => $pin,
+                'must_change_password'     => false,
+                'phone'                    => $phone,
+                'emergency_contact_name'   => filled($validated['emergency_contact_name'] ?? null)
+                    ? trim((string) $validated['emergency_contact_name'])
+                    : null,
+                'emergency_contact_phone'  => filled($validated['emergency_contact_phone'] ?? null)
+                    ? AuthIdentifier::normalizePhone((string) $validated['emergency_contact_phone'])
+                    : null,
+                'gender'                   => null,
+                'date_of_birth'            => null,
+                'id_number'                => null,
+                'address'                  => null,
+                'role'                     => 'customer',
+                'status'                   => 'inactive',
+                'approval_status'          => User::APPROVAL_PENDING,
             ]);
 
             $this->customerDocuments->storeRegistrationPhotos($user, $request);

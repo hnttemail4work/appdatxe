@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\AddressQueryNormalizer;
 use App\Support\ProvinceCenters;
 use App\Support\ProvinceResolver;
 use Illuminate\Support\Facades\Cache;
@@ -28,7 +29,7 @@ class GoongGeocodeService
             return [];
         }
 
-        $input = trim($query);
+        $input = AddressQueryNormalizer::normalize($query);
         if (mb_strlen($input) < 2) {
             return [];
         }
@@ -252,6 +253,7 @@ class GoongGeocodeService
         } elseif ($address === '' && $name !== '') {
             $address = $name;
         }
+        $address = $this->enrichFullAddress($address, $result);
 
         $location = $result['geometry']['location'] ?? null;
         if ($address === '' || ! is_array($location)) {
@@ -454,7 +456,25 @@ class GoongGeocodeService
             return null;
         }
 
-        $best = is_array($rows[0]) ? $rows[0] : null;
+        // Ưu tiên kết quả đủ xã/phường (compound) và địa chỉ dài.
+        $best = null;
+        $bestScore = -1;
+        foreach ($rows as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $candidate = trim((string) ($row['formatted_address'] ?? ''));
+            if ($candidate === '') {
+                continue;
+            }
+            $enriched = $this->enrichFullAddress($candidate, $row);
+            $score = $this->addressRichnessScore($enriched, $row);
+            if ($score > $bestScore) {
+                $best = $row;
+                $best['formatted_address'] = $enriched;
+                $bestScore = $score;
+            }
+        }
         if ($best === null) {
             return null;
         }
@@ -579,6 +599,7 @@ class GoongGeocodeService
             if ($formatted === '' || ! is_array($location)) {
                 continue;
             }
+            $formatted = $this->enrichFullAddress($formatted, $row);
 
             $lat = isset($location['lat']) ? (float) $location['lat'] : null;
             $lon = isset($location['lng']) ? (float) $location['lng'] : null;
@@ -636,11 +657,12 @@ class GoongGeocodeService
         }
 
         $kindMeta = $this->kindMeta((string) ($prediction['display_type'] ?? ''));
+        $address = $this->enrichFullAddress($description, $prediction);
 
         return [
-            'address' => $description,
+            'address' => $address,
             'title' => $title,
-            'subtitle' => $subtitle,
+            'subtitle' => $subtitle !== '' ? $subtitle : $this->adminSubtitle($prediction),
             'kind' => $kindMeta['kind'],
             'kind_label' => $kindMeta['label'],
             'lat' => null,
@@ -654,9 +676,12 @@ class GoongGeocodeService
      */
     private function presentResult(array $row, string $address, float $lat, float $lon, string $name = ''): array
     {
+        $address = $this->enrichFullAddress($address, $row);
         $segments = array_values(array_filter(array_map('trim', explode(',', $address))));
         $title = $name !== '' ? $name : ($segments[0] ?? $address);
-        $subtitle = count($segments) > 1 ? implode(', ', array_slice($segments, 1)) : '';
+        $subtitle = count($segments) > 1
+            ? implode(', ', array_slice($segments, 1))
+            : $this->adminSubtitle($row);
         $kindMeta = $this->kindMeta((string) ($row['display_type'] ?? ''));
 
         return [
@@ -668,6 +693,102 @@ class GoongGeocodeService
             'lat' => $lat,
             'lon' => $lon,
         ];
+    }
+
+    /**
+     * Ghép xã/phường (+ quận/huyện, tỉnh/TP nếu có) khi địa chỉ còn thiếu.
+     *
+     * @param  array<string, mixed>  $row
+     */
+    private function enrichFullAddress(string $address, array $row): string
+    {
+        $address = trim($address);
+        if ($address === '') {
+            return '';
+        }
+
+        foreach ($this->adminSegments($row) as $part) {
+            if ($part === '') {
+                continue;
+            }
+            if (! str_contains(mb_strtolower($address), mb_strtolower($part))) {
+                $address .= ', '.$part;
+            }
+        }
+
+        return $address;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @return list<string>
+     */
+    private function adminSegments(array $row): array
+    {
+        $segments = [];
+        $compound = is_array($row['compound'] ?? null) ? $row['compound'] : [];
+
+        foreach (['commune', 'district', 'province'] as $key) {
+            $val = trim((string) ($compound[$key] ?? $row[$key] ?? ''));
+            if ($val !== '') {
+                $segments[] = $val;
+            }
+        }
+
+        $components = $row['address_components'] ?? null;
+        if (is_array($components)) {
+            foreach ($components as $component) {
+                if (! is_array($component)) {
+                    continue;
+                }
+                $name = trim((string) ($component['long_name'] ?? ''));
+                if ($name === '' || preg_match('/^\d+[A-Za-z]?$/', $name)) {
+                    continue;
+                }
+                $segments[] = $name;
+            }
+        }
+
+        $seen = [];
+        $unique = [];
+        foreach ($segments as $segment) {
+            $key = mb_strtolower($segment);
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $unique[] = $segment;
+        }
+
+        return $unique;
+    }
+
+    /** @param array<string, mixed> $row */
+    private function adminSubtitle(array $row): string
+    {
+        $parts = [];
+        $compound = is_array($row['compound'] ?? null) ? $row['compound'] : [];
+        foreach (['commune', 'district', 'province'] as $key) {
+            $val = trim((string) ($compound[$key] ?? $row[$key] ?? ''));
+            if ($val !== '') {
+                $parts[] = $val;
+            }
+        }
+
+        return implode(', ', $parts);
+    }
+
+    /** @param array<string, mixed> $row */
+    private function addressRichnessScore(string $address, array $row): int
+    {
+        $score = mb_strlen($address) + (substr_count($address, ',') * 40);
+        $commune = trim((string) ((is_array($row['compound'] ?? null) ? ($row['compound']['commune'] ?? '') : '')
+            ?: ($row['commune'] ?? '')));
+        if ($commune !== '') {
+            $score += str_contains(mb_strtolower($address), mb_strtolower($commune)) ? 1200 : 200;
+        }
+
+        return $score;
     }
 
     /** @return array{kind: string, label: string} */

@@ -42,8 +42,12 @@ class DriverWalletTransaction extends Model
         return self::statusLabelFor($this->status);
     }
 
-    public static function historyLabelFor(?string $status): string
+    public static function historyLabelFor(?string $status, ?string $transferRef = null): string
     {
+        if (is_string($transferRef) && str_starts_with($transferRef, 'WTRIP-')) {
+            return 'Thu nhập cuốc trừ ví';
+        }
+
         return 'Nạp ví';
     }
 
@@ -54,6 +58,11 @@ class DriverWalletTransaction extends Model
             'rejected' => 'Không thành công',
             default    => 'Chờ duyệt',
         };
+    }
+
+    public function isWalletTripEarning(): bool
+    {
+        return str_starts_with((string) ($this->transfer_ref ?? ''), 'WTRIP-');
     }
 
     public function proofImageUrl(): ?string

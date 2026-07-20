@@ -89,6 +89,7 @@
         var startedMs = wait.started_at ? new Date(wait.started_at).getTime() : Date.now();
         var deadlineMs = wait.deadline_at ? new Date(wait.deadline_at).getTime() : null;
         var totalMs = Math.max(1000, (Number(wait.total_seconds) || 0) * 1000);
+        var shrinkBar = wait.kind === 'driver_search';
 
         if (wait.indeterminate) {
             block.classList.add('is-indeterminate');
@@ -96,7 +97,7 @@
                 timeEl.textContent = isRing ? '…' : formatElapsed(startedMs, wait.kind);
             }
             if (barEl) {
-                barEl.style.width = '';
+                barEl.style.width = shrinkBar ? '100%' : '';
             }
             if (ringEl) {
                 ringEl.style.strokeDasharray = String(RING_CIRCUMFERENCE);
@@ -126,7 +127,10 @@
             }
         }
         if (barEl) {
-            barEl.style.width = pct + '%';
+            // Đang tìm TX: thanh giảm dần theo thời gian còn lại.
+            barEl.style.width = shrinkBar
+                ? Math.round(remainingRatio * 100) + '%'
+                : pct + '%';
         }
         if (ringEl) {
             ringEl.style.strokeDasharray = String(RING_CIRCUMFERENCE);

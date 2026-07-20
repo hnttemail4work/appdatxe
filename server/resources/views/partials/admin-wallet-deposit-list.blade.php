@@ -80,6 +80,9 @@ $pendingTotal = (int) $depositsPending->sum('amount');
                     <td class="cell-muted">{{ $row['role_label'] }}</td>
                     <td class="fw-semibold text-success">
                         +{{ number_format($row['amount'], 0, ',', '.') }} đ
+                        @if(! empty($row['notes']))
+                            <div class="cell-muted small fw-normal">{{ $row['notes'] }}</div>
+                        @endif
                     </td>
                     <td>
                         @if(! empty($row['proof_url']))

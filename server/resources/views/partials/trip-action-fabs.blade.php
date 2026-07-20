@@ -3,39 +3,31 @@
     $hotlineTel = preg_replace('/[^\d+]/', '', $hotlinePhone);
     $showLocateBtn = (bool) ($showLocateBtn ?? false);
     $inTrip = (bool) ($inTrip ?? false);
+    $showSos = (bool) ($showSos ?? true);
 @endphp
 
-{{-- Khẩn cấp: góc phải trên — chỉ hiện khi đang trong chuyến. --}}
+@if($showSos)
+{{-- Khẩn cấp (chuông): cột phải, ngay trên nút vị trí — chỉ hiện khi đang trong chuyến. --}}
 <a href="tel:{{ $hotlineTel }}"
    class="trip-sos-fab {{ $inTrip ? '' : 'd-none' }}"
    data-trip-sos-fab
    data-contact-hotline="phone"
    aria-label="Gọi khẩn cấp tổng đài {{ $hotlinePhone }}"
-   title="Khẩn cấp"
+   title="Cảnh báo khẩn cấp"
    @if(! $inTrip) hidden @endif>
     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+        <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
+        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
     </svg>
 </a>
-
-{{-- Trò chuyện: góc trái dưới — chỉ hiện khi đang trong chuyến. --}}
-<button type="button"
-        class="trip-chat-fab {{ $inTrip ? '' : 'd-none' }}"
-        data-trip-chat-fab
-        aria-label="Trò chuyện"
-        title="Trò chuyện"
-        @if(! $inTrip) hidden @endif>
-    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-    </svg>
-</button>
+@endif
 
 @if($showLocateBtn)
     <button type="button"
             class="trip-locate-fab d-none"
             id="guest-trip-locate-btn"
-            aria-label="Về vị trí hiện tại"
-            title="Vị trí hiện tại"
+            aria-label="Về vị trí hiện tại của bạn"
+            title="Vị trí hiện tại của bạn"
             hidden>
         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="3"/>

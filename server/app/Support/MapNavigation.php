@@ -130,6 +130,7 @@ final class MapNavigation
             );
 
             return self::packNavPayload(
+                $destLabel !== '' && $destLabel !== '—' ? $destLabel : 'Điểm trả',
                 self::directionsUrl($destLat, $destLng, $destLabel),
                 self::googleDirectionsUrl($originLat, $originLng, $destLat, $destLng, $destLabel),
                 $destLat,
@@ -148,6 +149,7 @@ final class MapNavigation
         );
 
         return self::packNavPayload(
+            $destLabel !== '' && $destLabel !== '—' ? $destLabel : 'Điểm đón',
             self::directionsUrl($destLat, $destLng, $destLabel),
             self::googleDirectionsUrl(null, null, $destLat, $destLng, $destLabel),
             $destLat,
@@ -172,6 +174,7 @@ final class MapNavigation
         );
 
         return self::packNavPayload(
+            $destLabel !== '' && $destLabel !== '—' ? $destLabel : 'Điểm đón',
             self::directionsUrl($destLat, $destLng, $destLabel),
             self::googleDirectionsUrl(null, null, $destLat, $destLng, $destLabel),
             $destLat,
@@ -195,6 +198,7 @@ final class MapNavigation
      * }|null
      */
     private static function packNavPayload(
+        string $label,
         ?string $geoUrl,
         ?string $googleUrl,
         ?float $destLat,
@@ -208,7 +212,7 @@ final class MapNavigation
         }
 
         return [
-            'label'              => 'Điều hướng',
+            'label'              => $label,
             'url'                => $geoUrl ?: (string) $googleUrl,
             'google_url'         => $googleUrl,
             'dest_lat'           => $destLat,

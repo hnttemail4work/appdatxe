@@ -36,6 +36,8 @@ class User extends Authenticatable
         'login_fail_count',
         'login_locked_until',
         'phone',
+        'emergency_contact_name',
+        'emergency_contact_phone',
         'role',
         'status',
         'approval_status',

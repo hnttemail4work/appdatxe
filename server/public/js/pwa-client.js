@@ -525,6 +525,30 @@
         } else if (window.AppSounds && window.AppSounds.play) {
             window.AppSounds.play();
         }
+
+        // Cuốc mới: ưu tiên mở màn chấp nhận / từ chối (tab chuyến).
+        if (isTrip && window.DriverTabs && window.DriverTabs.switchTab) {
+            window.DriverTabs.switchTab('trips', { force: true });
+            if (window.DriverBottomPanel && window.DriverBottomPanel.syncOfferPending) {
+                window.DriverBottomPanel.syncOfferPending();
+            }
+        }
+
+        // Banner ngắn trên header khi app đang mở (kèm ảnh nếu có).
+        if (!isTrip && window.AppFlash && window.AppFlash.show) {
+            var title = payload.title || data.title || '';
+            var body = payload.body || data.body || '';
+            var imageUrl = data.image_url || payload.image || data.image || '';
+            if (title || body) {
+                window.AppFlash.show(body || title, {
+                    title: title || undefined,
+                    variant: 'info',
+                    imageUrl: imageUrl || undefined,
+                    autoDismiss: 6000,
+                    scroll: false,
+                });
+            }
+        }
     }
 
     window.PwaClient = {

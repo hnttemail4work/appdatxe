@@ -17,7 +17,18 @@ class CustomerChatSendRequest extends FormRequest
         return [
             'booking_reference' => ['required', 'string', 'max:64'],
             'after_id'          => ['nullable', 'integer', 'min:0'],
-            'body'              => ['required', 'string', 'max:1000'],
+            'body'              => ['nullable', 'string', 'max:1000'],
+            'image'             => ['nullable', 'image', 'max:5120', 'mimes:jpeg,jpg,png,webp,gif'],
         ];
+    }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator): void {
+            $body = trim((string) $this->input('body', ''));
+            if ($body === '' && ! $this->file('image')) {
+                $validator->errors()->add('body', 'Vui lòng nhập nội dung tin nhắn hoặc đính kèm ảnh.');
+            }
+        });
     }
 }

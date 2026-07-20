@@ -22,7 +22,7 @@
                 <strong>Tin tức</strong> — khuyến mãi / tin chung.
             </p>
 
-            <form method="POST" action="{{ route('admin.driverInbox.send') }}">
+            <form method="POST" action="{{ route('admin.driverInbox.send') }}" enctype="multipart/form-data">
                 @csrf
 
                 <div class="mb-3">
@@ -51,6 +51,13 @@
                     <textarea name="body" id="inbox-body" rows="4" class="form-control @error('body') is-invalid @enderror"
                               maxlength="2000" required>{{ old('body') }}</textarea>
                     @error('body')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="inbox-image">Hình ảnh (tuỳ chọn)</label>
+                    <input type="file" name="image" id="inbox-image" accept="image/*"
+                           class="form-control @error('image') is-invalid @enderror">
+                    @error('image')<div class="invalid-feedback">{{ $message }}</div>@enderror
                 </div>
 
                 <div class="mb-3">

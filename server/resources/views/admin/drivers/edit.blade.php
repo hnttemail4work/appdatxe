@@ -22,7 +22,7 @@ $driverEditNavDriversSubpage = true;
 
 $driverEditTabs = [];
 if ($hasRequest) {
-    $driverEditTabs[] = ['key' => 'requests', 'label' => 'Yêu cầu', 'badge' => 1, 'hot' => true];
+    $driverEditTabs[] = ['key' => 'requests', 'label' => 'Yêu cầu', 'hot' => true];
 }
 $driverEditTabs[] = ['key' => 'info', 'label' => 'Thông tin'];
 $driverEditTabs[] = ['key' => 'photos', 'label' => 'Giấy tờ'];
@@ -92,7 +92,9 @@ if (! $viewOnly && $driver->isOperational()) {
 
             @if($hasRequest)
             @include('partials.screen-tab-pane', ['prefix' => 'driver-edit', 'key' => 'requests', 'active' => $driverEditDefault === 'requests'])
-            @include('partials.admin-driver-pending-change', ['driver' => $driver])
+            <div data-pending-change-id="{{ $driver->pendingChangeRequest->id }}" data-mark-change-seen>
+                @include('partials.admin-driver-pending-change', ['driver' => $driver])
+            </div>
             @include('partials.screen-tab-pane-end')
             @endif
 
@@ -184,4 +186,5 @@ if (! $viewOnly && $driver->isOperational()) {
 <script src="{{ asset('js/admin-cccd-scan.js') }}?v={{ filemtime(public_path('js/admin-cccd-scan.js')) }}"></script>
 <script src="{{ asset('js/driver-approval-actions.js') }}?v={{ filemtime(public_path('js/driver-approval-actions.js')) }}"></script>
 <script src="{{ asset('js/photo-upload-slots.js') }}?v={{ filemtime(public_path('js/photo-upload-slots.js')) }}"></script>
+<script src="{{ asset('js/admin-driver-request-seen.js') }}?v={{ filemtime(public_path('js/admin-driver-request-seen.js')) }}"></script>
 @endpush

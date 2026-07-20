@@ -82,6 +82,74 @@
     var lastSearchQuery = '';
     var searchResultCache = Object.create(null);
     var provinceChangeHandler = null;
+    /** User đã gõ ô tìm — không để reverse-geocode / GPS ghi đè. */
+    var searchEditedByUser = false;
+    var markerColor = '#3b82f6';
+    /** Gốc tính km trên gợi ý (điểm đón / GPS / data trigger). */
+    var distanceOrigin = null;
+
+    function isDropoffTargetId(id) {
+        return /dropoff/i.test(String(id || ''));
+    }
+
+    /** Luồng khách đổi điểm đến — CTA / gợi ý riêng, không ảnh hưởng đặt chỗ thường. */
+    function isChangeDropoffMode() {
+        return pickerMode === 'change-dropoff'
+            || /change[-_]?dropoff/i.test(String(targetInputId || ''));
+    }
+
+    function itemDistanceKm(item) {
+        if (!distanceOrigin || !item) {
+            return Number.POSITIVE_INFINITY;
+        }
+        var lat = item.lat != null ? Number(item.lat) : NaN;
+        var lng = item.lng != null ? Number(item.lng)
+            : (item.lon != null ? Number(item.lon) : NaN);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+            return Number.POSITIVE_INFINITY;
+        }
+        var toRad = function (d) { return d * Math.PI / 180; };
+        var R = 6371;
+        var dLat = toRad(lat - Number(distanceOrigin.lat));
+        var dLng = toRad(lng - Number(distanceOrigin.lng));
+        var a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+            + Math.cos(toRad(Number(distanceOrigin.lat))) * Math.cos(toRad(lat))
+            * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    /** Đổi điểm đến: chỉ 3 gợi ý gần gốc (điểm đón) nhất. */
+    function prepareSearchResults(results) {
+        var list = Array.isArray(results) ? results.slice() : [];
+        if (!isChangeDropoffMode()) {
+            return list;
+        }
+        list.sort(function (a, b) {
+            return itemDistanceKm(a) - itemDistanceKm(b);
+        });
+        return list.slice(0, 3);
+    }
+
+    function syncConfirmCtaStyle() {
+        if (!confirmBtn) {
+            return;
+        }
+        confirmBtn.classList.toggle('address-map-confirm-cta--gold', isChangeDropoffMode());
+    }
+
+    function resolveConfirmCtaLabel(titleLabel) {
+        if (isDriverMode()) {
+            return 'Xác nhận vị trí';
+        }
+        if (isChangeDropoffMode()) {
+            return 'Xác nhận';
+        }
+        return (titleLabel || 'Chọn điểm trên bản đồ') + ' này';
+    }
+
+    function resolveMarkerColor() {
+        return isDropoffTargetId(targetInputId) ? '#eab308' : '#3b82f6';
+    }
 
     function loadStylesheet(href, assetTag) {
         return new Promise(function (resolve, reject) {
@@ -552,11 +620,11 @@
             return;
         }
         searchInput.value = '';
+        searchEditedByUser = true;
         hideSearchResults();
         showRecentPanelIfIdle();
         syncSearchClearButton();
         searchInput.focus();
-        moveSearchCaretToEnd();
     }
 
     function destroyMap() {
@@ -605,6 +673,10 @@
         pendingProvince = '';
         needsPinFineTune = false;
         preferLocateOnOpen = false;
+        distanceOrigin = null;
+        if (confirmBtn) {
+            confirmBtn.classList.remove('address-map-confirm-cta--gold');
+        }
         hideSearchResults();
         updateConfirmButton();
     }
@@ -654,6 +726,8 @@
 
         syncSheetProvinceFromModal();
 
+        var keepOpen = isChangeDropoffMode();
+
         document.dispatchEvent(new CustomEvent('addressmap:applied', {
             bubbles: true,
             detail: {
@@ -664,11 +738,15 @@
                 lng: pendingLng,
                 address: text,
                 province: pendingProvince,
+                keepOpen: keepOpen,
             },
         }));
 
         applyAddress(text);
-        closePicker();
+        // Đổi điểm đến: giữ map mở để hủy xác nhận giá vẫn chỉnh được điểm.
+        if (!keepOpen) {
+            closePicker();
+        }
     }
 
     function coordsFallbackLabel() {
@@ -685,8 +763,10 @@
             text = coordsFallbackLabel();
         }
         pendingAddress = text;
-        if (searchInput) {
+        // Chỉ sync ô search khi user chưa tự gõ (tránh GPS/reverse đè chữ đang nhập).
+        if (searchInput && !searchEditedByUser) {
             searchInput.value = text;
+            syncSearchClearButton();
         }
         setPreview(text ? text : 'Chưa có địa chỉ — thử chọn điểm khác.', false);
         updateConfirmButton();
@@ -757,7 +837,7 @@
         if (marker) {
             marker.setLngLat([lng, lat]);
         } else {
-            marker = new goongjs.Marker({ draggable: true })
+            marker = new goongjs.Marker({ draggable: true, color: markerColor })
                 .setLngLat([lng, lat])
                 .addTo(mapInstance);
             marker.on('dragend', function () {
@@ -843,22 +923,26 @@
     function renderSearchResults(results, query) {
         if (!searchResultsEl) return;
 
+        var displayResults = prepareSearchResults(results);
+
         if (window.GeocodeSearchUi && window.GeocodeSearchUi.renderResults) {
-            window.GeocodeSearchUi.renderResults(searchResultsEl, results, query || lastSearchQuery, {
+            window.GeocodeSearchUi.renderResults(searchResultsEl, displayResults, query || lastSearchQuery, {
                 itemClass: 'address-map-search-item geocode-search-item',
                 emptyClass: 'address-map-search-empty',
                 emptyText: 'Không thấy địa chỉ phù hợp — thử thêm số nhà, phường hoặc quận.',
+                distanceOrigin: distanceOrigin,
                 onSelect: function (item) {
                     selectSearchItem(item);
                 },
             });
             showSearchResultsPanel();
+            enrichSearchResultCoords(results);
             return;
         }
 
         searchResultsEl.innerHTML = '';
 
-        if (!results.length) {
+        if (!displayResults.length) {
             var empty = document.createElement('div');
             empty.className = 'address-map-search-empty';
             empty.textContent = 'Không thấy địa chỉ phù hợp.';
@@ -867,7 +951,7 @@
             return;
         }
 
-        results.forEach(function (item) {
+        displayResults.forEach(function (item) {
             var btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'address-map-search-item';
@@ -880,16 +964,57 @@
         searchResultsEl.classList.remove('d-none');
     }
 
+    function enrichSearchResultCoords(results) {
+        if (!distanceOrigin || !results || !results.length) {
+            return;
+        }
+        if (!window.GeocodeResolve || !window.GeocodeResolve.resolvePlace) {
+            return;
+        }
+        var pending = 0;
+        var dirty = false;
+        results.forEach(function (item) {
+            var hasLat = item.lat != null && item.lat !== '';
+            var hasLng = (item.lng != null && item.lng !== '') || (item.lon != null && item.lon !== '');
+            if ((hasLat && hasLng) || !item.place_id) {
+                return;
+            }
+            pending += 1;
+            window.GeocodeResolve.resolvePlace(item).then(function (resolved) {
+                pending -= 1;
+                if (resolved) {
+                    var lat = resolved.lat != null ? resolved.lat : item.lat;
+                    var lng = resolved.lng != null ? resolved.lng
+                        : (resolved.lon != null ? resolved.lon : (item.lng != null ? item.lng : item.lon));
+                    if (lat != null && lng != null) {
+                        item.lat = Number(lat);
+                        item.lng = Number(lng);
+                        item.lon = Number(lng);
+                        dirty = true;
+                    }
+                }
+                if (pending === 0 && dirty && lastSearchQuery) {
+                    renderSearchResults(results, lastSearchQuery);
+                }
+            }).catch(function () {
+                pending -= 1;
+            });
+        });
+    }
+
     function searchAddress(query) {
-        if (!searchUrl || query.length < 2) {
+        var q = window.AddressQueryNormalize && window.AddressQueryNormalize.normalize
+            ? window.AddressQueryNormalize.normalize(query)
+            : String(query || '').trim();
+        if (!searchUrl || q.length < 2) {
             hideSearchResults();
             return;
         }
 
-        lastSearchQuery = query;
-        var cacheKey = query + '\0' + provinceName();
+        lastSearchQuery = q;
+        var cacheKey = q + '\0' + provinceName();
         if (searchResultCache[cacheKey]) {
-            renderSearchResults(searchResultCache[cacheKey], query);
+            renderSearchResults(searchResultCache[cacheKey], q);
             return;
         }
 
@@ -904,7 +1029,7 @@
         showSearchResultsPanel();
 
         var url = searchUrl
-            + '?q=' + encodeURIComponent(query)
+            + '?q=' + encodeURIComponent(q)
             + '&province=' + encodeURIComponent(provinceName());
 
         fetch(url, {
@@ -921,7 +1046,7 @@
             .then(function (data) {
                 var results = (data && data.results) || [];
                 searchResultCache[cacheKey] = results;
-                renderSearchResults(results, query);
+                renderSearchResults(results, q);
             })
             .catch(function (err) {
                 if (err && err.name === 'AbortError') {
@@ -998,6 +1123,42 @@
 
     var preferLocateOnOpen = false;
 
+    function parseOriginAttr(btn) {
+        var lat = Number(btn.getAttribute('data-address-map-origin-lat'));
+        var lng = Number(btn.getAttribute('data-address-map-origin-lng'));
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+            return { lat: lat, lng: lng };
+        }
+        return null;
+    }
+
+    function warmDistanceOriginFromGps() {
+        if (distanceOrigin || !navigator.geolocation) {
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            function (pos) {
+                if (!pos || !pos.coords) {
+                    return;
+                }
+                if (!distanceOrigin) {
+                    distanceOrigin = {
+                        lat: pos.coords.latitude,
+                        lng: pos.coords.longitude,
+                    };
+                }
+                if (lastSearchQuery) {
+                    var cacheKey = lastSearchQuery + '\0' + provinceName();
+                    if (searchResultCache[cacheKey]) {
+                        renderSearchResults(searchResultCache[cacheKey], lastSearchQuery);
+                    }
+                }
+            },
+            function () {},
+            { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 }
+        );
+    }
+
     function openPicker(btn) {
         targetInputId = btn.getAttribute('data-address-map-for') || '';
         provinceInputId = btn.getAttribute('data-address-map-province') || '';
@@ -1006,9 +1167,21 @@
         pickerMode = btn.getAttribute('data-address-map-mode') || 'default';
         latInputId = btn.getAttribute('data-address-map-lat') || '';
         lngInputId = btn.getAttribute('data-address-map-lng') || '';
-        preferLocateOnOpen = btn.getAttribute('data-address-map-locate') === '1';
+        preferLocateOnOpen = btn.getAttribute('data-address-map-locate') === '1'
+            && !isDropoffTargetId(targetInputId);
+        distanceOrigin = parseOriginAttr(btn);
+        if (!distanceOrigin) {
+            warmDistanceOriginFromGps();
+        }
         if (!targetInputId) {
             return;
+        }
+
+        markerColor = resolveMarkerColor();
+        // Đổi màu ghim khi mở lại cho điểm khác (đón xanh / trả vàng).
+        if (marker && typeof marker.remove === 'function') {
+            marker.remove();
+            marker = null;
         }
 
         syncDriverProvinceUi(isDriverMode());
@@ -1020,11 +1193,13 @@
             titleEl.textContent = label;
         }
         if (confirmCtaLabelEl) {
-            confirmCtaLabelEl.textContent = isDriverMode() ? 'Xác nhận vị trí' : (label + ' này');
+            confirmCtaLabelEl.textContent = resolveConfirmCtaLabel(label);
         }
+        syncConfirmCtaStyle();
 
         isResolving = false;
         needsPinFineTune = false;
+        searchEditedByUser = false;
         pendingLat = null;
         pendingLng = null;
         pendingAddress = '';
@@ -1059,7 +1234,9 @@
             : (isDriverMode()
                 ? 'Chọn khu vực, ghim vị trí hoạt động hoặc dùng GPS.'
                 : (requiresCoords()
-                    ? 'Tìm địa chỉ để bay tới khu vực, sau đó kéo ghim đến đúng điểm đón.'
+                    ? (isDropoffTargetId(targetInputId)
+                        ? 'Tìm địa chỉ hoặc chạm bản đồ, kéo ghim vàng đến đúng điểm trả.'
+                        : 'Tìm địa chỉ để bay tới khu vực, sau đó kéo ghim đến đúng điểm đón.')
                     : 'Chạm bản đồ hoặc tìm địa chỉ, rồi bấm Xác nhận.'));
         setPreview(existingValue
             ? ('Chỉnh ghim hoặc tìm lại — ' + provinceHint)
@@ -1135,10 +1312,16 @@
     }
 
     if (searchInput) {
-        searchInput.addEventListener('input', function () {
+        searchInput.addEventListener('input', function (e) {
+            if (e && e.isComposing) {
+                return;
+            }
+            searchEditedByUser = true;
+            var q = window.AddressQueryNormalize && window.AddressQueryNormalize.applyToInput
+                ? window.AddressQueryNormalize.applyToInput(searchInput)
+                : searchInput.value.trim();
             syncSearchClearButton();
             scrollSearchInputToCaret();
-            var q = searchInput.value.trim();
             if (searchTimer) {
                 window.clearTimeout(searchTimer);
             }
@@ -1152,8 +1335,9 @@
             }, 400);
         });
 
-        searchInput.addEventListener('focus', function () {
-            moveSearchCaretToEnd();
+        searchInput.addEventListener('compositionend', function () {
+            searchEditedByUser = true;
+            searchInput.dispatchEvent(new Event('input', { bubbles: true }));
         });
 
         searchInput.addEventListener('keydown', function (e) {
@@ -1186,4 +1370,14 @@
         syncSearchClearButton();
         setPreview('Chạm bản đồ hoặc tìm địa chỉ, rồi bấm Xác nhận.', false);
     });
+
+    window.AddressMapPicker = {
+        close: closePicker,
+        reopenChangeDropoff: function () {
+            var btn = document.querySelector('[data-guest-change-dropoff]');
+            if (btn) {
+                openPicker(btn);
+            }
+        },
+    };
 })();

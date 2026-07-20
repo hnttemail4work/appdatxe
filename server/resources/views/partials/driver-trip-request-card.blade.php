@@ -126,20 +126,14 @@ $tripCode = $schedule->shortTripCode();
                   data-reason-hint="Chọn lý do để quản lý nắm thông tin và hỗ trợ khách.">
                 @csrf
                 <button type="submit" class="btn driver-offer-btn driver-offer-btn--reject">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
-                        <path d="M18 6L6 18M6 6l12 12"/>
-                    </svg>
-                    <span>Hủy chuyến</span>
+                    Hủy chuyến
                 </button>
             </form>
             <form method="POST" action="{{ route('driver.tripRequests.accept', $tripRequest) }}"
                   class="driver-workflow-compact-action driver-accept-form driver-request-card__accept-form">
                 @csrf
                 <button type="submit" class="btn driver-offer-btn driver-offer-btn--accept driver-btn-accept driver-request-card__accept-btn">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M20 6L9 17l-5-5"/>
-                    </svg>
-                    <span>Nhận chuyến</span>
+                    Nhận chuyến
                 </button>
             </form>
         </div>

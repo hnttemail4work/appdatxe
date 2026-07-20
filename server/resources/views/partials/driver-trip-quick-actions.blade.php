@@ -11,9 +11,9 @@ $phoneTel = $phoneRaw !== '' ? preg_replace('/[^\d+]/', '', $phoneRaw) : '';
 $phoneDisplay = $phoneRaw !== '' ? $phoneRaw : '';
 $bookingKey = $booking?->booking_reference ?: (string) ($booking?->id ?? '');
 @endphp
-@if($booking || ! empty($mapNav['url']) || ! empty($mapNav['google_url']))
+@if($booking)
 <nav class="driver-trip-quick-actions" aria-label="Liên hệ nhanh"
-     @if($phoneTel) data-driver-call-root data-booking-key="{{ $bookingKey }}" data-phone-tel="{{ $phoneTel }}" data-phone-display="{{ $phoneDisplay }}" @endif>
+     @if($phoneTel) data-driver-call-root data-booking-key="{{ $bookingKey }}" data-booking-reference="{{ $booking->booking_reference }}" data-phone-tel="{{ $phoneTel }}" data-phone-display="{{ $phoneDisplay }}" data-call-log-url="{{ route('driver.bookings.callLog', $booking) }}" @endif>
     @if($phoneTel)
         <a href="tel:{{ $phoneTel }}"
            class="driver-trip-quick-action"
@@ -56,30 +56,9 @@ $bookingKey = $booking?->booking_reference ?: (string) ($booking?->id ?? '');
         </span>
     @endif
 
-    @if(! empty($mapNav['dest_lat']) && ! empty($mapNav['dest_lng']))
-        <button type="button"
-                class="driver-trip-quick-action"
-                data-driver-map-nav-inapp
-                data-dest-lat="{{ $mapNav['dest_lat'] }}"
-                data-dest-lng="{{ $mapNav['dest_lng'] }}"
-                aria-label="{{ $mapNav['label'] ?? 'Điều hướng' }}">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polygon points="3 11 22 2 13 21 11 13 3 11"/>
-            </svg>
-            <span>Điều hướng</span>
-        </button>
-    @else
-        <span class="driver-trip-quick-action is-disabled" aria-disabled="true">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polygon points="3 11 22 2 13 21 11 13 3 11"/>
-            </svg>
-            <span>Điều hướng</span>
-        </span>
-    @endif
-
     @if($phoneTel)
         <p class="driver-trip-call__reveal d-none" data-driver-call-reveal>
-            <span class="driver-trip-call__hint">Gọi 2 lần chưa được? Gọi trực tiếp số khách:</span>
+            <span class="driver-trip-call__hint">Gọi app 2 lần chưa được? Lần 3 gọi số điện thoại:</span>
             <a href="tel:{{ $phoneTel }}" class="driver-trip-call__number">{{ $phoneDisplay }}</a>
         </p>
     @endif

@@ -57,4 +57,28 @@
             setRejectOpen(panel, true);
         }
     });
+
+    // Radio lý do từ chối → đồng bộ vào textarea rejection_reason.
+    document.querySelectorAll('[data-reject-preset]').forEach(function (radio) {
+        radio.addEventListener('change', function () {
+            if (!radio.checked) {
+                return;
+            }
+            var panel = radio.closest('[data-driver-reject-form]');
+            var textarea = panel ? panel.querySelector('[data-reject-reason-text]') : null;
+            if (!textarea) {
+                return;
+            }
+            var value = radio.value || '';
+            if (value === 'Khác') {
+                if (!textarea.value || textarea.value === textarea.dataset.lastPreset) {
+                    textarea.value = '';
+                }
+                textarea.focus();
+            } else {
+                textarea.value = value;
+                textarea.dataset.lastPreset = value;
+            }
+        });
+    });
 })();

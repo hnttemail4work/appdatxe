@@ -3,10 +3,27 @@
  */
 (function () {
     var DOCK_SELECTORS = '.customer-scroll-dock, .driver-app-dock';
-    var FAB_SELECTOR = '.trip-chat-fab, .trip-locate-fab';
+    var FAB_SELECTOR = '.trip-chat-fab, .trip-locate-fab, .trip-sos-fab';
+    var FAB_STACK_GAP = '3.8rem'; /* locate 3.25rem + gap .55rem — SOS ngồi trên locate */
 
     function isMobileApp() {
         return document.body.classList.contains('app-shell--mobile-app');
+    }
+
+    function isGuestTripSheetMode() {
+        return document.body.classList.contains('guest-trip-searching')
+            || document.body.classList.contains('guest-trip-tracking');
+    }
+
+    function isGuestTripFab(el) {
+        return el.classList.contains('trip-locate-fab')
+            || el.classList.contains('trip-sos-fab');
+    }
+
+    function syncGuestTripFabs() {
+        if (window.GuestTripSheet && window.GuestTripSheet.syncLocateFabLift) {
+            window.GuestTripSheet.syncLocateFabLift();
+        }
     }
 
     function syncViewportHeight() {
@@ -42,8 +59,15 @@
                 el.style.bottom = '';
             });
             document.querySelectorAll(FAB_SELECTOR).forEach(function (el) {
+                // Giữ neo sheet chuyến — đừng xoá bottom của locate/SOS.
+                if (isGuestTripFab(el) && isGuestTripSheetMode()) {
+                    return;
+                }
                 el.style.bottom = '';
             });
+            if (isGuestTripSheetMode()) {
+                syncGuestTripFabs();
+            }
             return;
         }
 
@@ -61,12 +85,9 @@
                 return;
             }
 
-            // Locate khi đang tìm chuyến: neo theo sheet thông tin (guest-trip-sheet.js).
-            if (el.classList.contains('trip-locate-fab')
-                && document.body.classList.contains('guest-trip-searching')) {
-                if (window.GuestTripSheet && window.GuestTripSheet.syncLocateFabLift) {
-                    window.GuestTripSheet.syncLocateFabLift();
-                }
+            // Locate + SOS khi đang tìm/theo dõi chuyến: neo theo mép sheet.
+            if (isGuestTripFab(el) && isGuestTripSheetMode()) {
+                syncGuestTripFabs();
                 return;
             }
 
@@ -77,7 +98,11 @@
 
             var dock = document.querySelector(DOCK_SELECTORS);
             var dockHeight = dock ? dock.offsetHeight : 56;
-            el.style.bottom = 'calc(' + dockBottom + ' + ' + dockHeight + 'px + 0.45rem)';
+            if (el.classList.contains('trip-sos-fab')) {
+                el.style.bottom = 'calc(' + dockBottom + ' + ' + dockHeight + 'px + 0.45rem + ' + FAB_STACK_GAP + ')';
+            } else {
+                el.style.bottom = 'calc(' + dockBottom + ' + ' + dockHeight + 'px + 0.45rem)';
+            }
         });
     }
 

@@ -10,6 +10,31 @@ use Illuminate\Support\Facades\Storage;
 /** Rules + payload khi admin duyệt hồ sơ kèm thông tin CCCD (khách / tài xế thống nhất). */
 final class AdminIdentityApproval
 {
+    /**
+     * Điền sẵn thông tin giấy tờ từ user (admin chỉ cắt/xoay ảnh, không sửa tay).
+     */
+    public static function mergeUserIdentityIntoRequest(Request $request, ?\App\Models\User $user): void
+    {
+        if (! $user) {
+            return;
+        }
+
+        $merge = [];
+        foreach (['name', 'gender', 'id_number', 'address'] as $field) {
+            $incoming = trim((string) $request->input($field, ''));
+            if ($incoming === '' && filled($user->{$field})) {
+                $merge[$field] = (string) $user->{$field};
+            }
+        }
+        $incomingDob = trim((string) $request->input('date_of_birth', ''));
+        if ($incomingDob === '' && $user->date_of_birth) {
+            $merge['date_of_birth'] = $user->date_of_birth->format('Y-m-d');
+        }
+        if ($merge !== []) {
+            $request->merge($merge);
+        }
+    }
+
     /** @return array<string, mixed> */
     public static function rules(): array
     {
@@ -74,18 +99,18 @@ final class AdminIdentityApproval
     public static function messages(): array
     {
         return [
-            'name.required'          => 'Vui lòng nhập họ và tên.',
+            'name.required'          => 'Hồ sơ chưa có họ tên — yêu cầu user cập nhật rồi duyệt lại.',
             'name.max'               => 'Họ và tên tối đa 255 ký tự.',
-            'date_of_birth.required' => 'Vui lòng nhập ngày tháng năm sinh.',
+            'date_of_birth.required' => 'Hồ sơ chưa có ngày sinh — yêu cầu user cập nhật rồi duyệt lại.',
             'date_of_birth.date'     => 'Ngày sinh không hợp lệ.',
             'date_of_birth.before'   => 'Ngày sinh phải trước hôm nay.',
             'date_of_birth.after'    => 'Ngày sinh không hợp lệ.',
-            'gender.required'        => 'Vui lòng chọn giới tính.',
+            'gender.required'        => 'Hồ sơ chưa có giới tính — yêu cầu user cập nhật rồi duyệt lại.',
             'gender.in'              => 'Giới tính không hợp lệ.',
-            'id_number.required'     => 'Vui lòng nhập số CCCD.',
+            'id_number.required'     => 'Hồ sơ chưa có số CCCD — yêu cầu user cập nhật rồi duyệt lại.',
             'id_number.regex'        => 'Số CCCD phải gồm 9–12 chữ số.',
             'id_number.max'          => 'Số CCCD tối đa 20 ký tự.',
-            'address.required'       => 'Vui lòng nhập địa chỉ.',
+            'address.required'       => 'Hồ sơ chưa có địa chỉ — yêu cầu user cập nhật rồi duyệt lại.',
             'address.max'            => 'Địa chỉ tối đa 500 ký tự.',
             'photo_id_card.mimes'         => 'Ảnh CCCD mặt trước phải là JPG, PNG hoặc WebP.',
             'photo_id_card_back.mimes'    => 'Ảnh CCCD mặt sau phải là JPG, PNG hoặc WebP.',

@@ -10,7 +10,7 @@ $driverMonthlyStats = $driverMonthlyStats ?? [];
 $showBulkDelete = $filter === 'rejected' && auth()->user()?->role === 'admin';
 $driverTabs = [
     ['key' => 'all', 'label' => 'Danh sách', 'href' => route('admin.drivers')],
-    ['key' => 'pending', 'label' => 'Chờ duyệt', 'href' => route('admin.drivers', ['filter' => 'pending']), 'badge' => $pendingCount, 'hot' => $pendingCount > 0],
+    ['key' => 'pending', 'label' => 'Chờ duyệt', 'href' => route('admin.drivers', ['filter' => 'pending'])],
     ['key' => 'rejected', 'label' => 'Đã từ chối', 'href' => route('admin.drivers', ['filter' => 'rejected'])],
 ];
 @endphp
@@ -132,9 +132,12 @@ $driverTabs = [
                     @php
                         $monthStats = $driverMonthlyStats[(int) $d->user_id] ?? ['trips' => 0, 'revenue' => 0, 'cancel_rate' => 0.0];
                         $monthCancelRate = (float) ($monthStats['cancel_rate'] ?? 0.0);
-                        $requestCount = $d->pendingChangeRequest ? 1 : 0;
+                        $pendingChange = $d->pendingChangeRequest;
+                        $requestCount = $pendingChange ? 1 : 0;
+                        $pendingChangeId = $pendingChange?->id;
                     @endphp
-                    <tr class="{{ $d->isPendingApproval() ? 'driver-row-pending' : '' }}">
+                    <tr class="{{ $d->isPendingApproval() ? 'driver-row-pending' : '' }}{{ $requestCount > 0 ? ' driver-row-has-request driver-row-request-unread' : '' }}"
+                        @if($pendingChangeId) data-pending-change-id="{{ $pendingChangeId }}" @endif>
                         @if($showBulkDelete)
                         <td class="col-check">
                             <input type="checkbox"
@@ -224,8 +227,8 @@ $driverTabs = [
                                 <span class="status-pill status-pill--{{ $d->walletListColor() }}">{{ $d->walletListLabel() }}</span>
                             @endif
                         </td>
-                        <td class="fw-semibold {{ $requestCount > 0 ? 'text-warning' : 'text-muted' }}">
-                            {{ $requestCount }}
+                        <td class="fw-semibold {{ $requestCount > 0 ? 'text-warning driver-mgmt-request-count' : 'text-muted' }}">
+                            {{ $requestCount > 0 ? $requestCount : '—' }}
                         </td>
                         <td>
                             <span class="status-pill status-pill--{{ $d->listStatusColor() }}">{{ $d->listStatusLabel() }}</span>
@@ -274,8 +277,9 @@ $driverTabs = [
 <link rel="stylesheet" href="{{ asset('css/driver-mgmt.css') }}?v={{ filemtime(public_path('css/driver-mgmt.css')) }}">
 @endpush
 
-@if($showBulkDelete)
 @push('scripts')
+@if($showBulkDelete)
 <script src="{{ asset('js/admin-bulk-select.js') }}?v={{ filemtime(public_path('js/admin-bulk-select.js')) }}"></script>
-@endpush
 @endif
+<script src="{{ asset('js/admin-driver-request-seen.js') }}?v={{ filemtime(public_path('js/admin-driver-request-seen.js')) }}"></script>
+@endpush

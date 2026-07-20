@@ -6,7 +6,8 @@
     $pendingDeposits = $pendingDeposits ?? collect();
     $history = $walletHistory ?? collect();
 @endphp
-<section class="customer-account-panel is-active" aria-label="Ví">
+<section class="customer-account-panel is-active" aria-label="Ví"
+         data-wallet-ptr="{{ route('customer.account', ['tab' => 'wallet']) }}">
     <div class="customer-account-card mb-3">
         <div class="customer-wallet-balance">
             <span class="customer-wallet-balance__label">Số dư</span>
@@ -46,9 +47,17 @@
         @else
             <ul class="list-unstyled mb-0">
                 @foreach($history as $tx)
+                    @php
+                        $amountText = \App\Support\Money::vnd($tx->amount);
+                        $signedAmount = match ($tx->status) {
+                            'approved' => '+'.$amountText,
+                            'rejected' => '−'.$amountText,
+                            default => $amountText,
+                        };
+                    @endphp
                     <li class="d-flex justify-content-between py-2 border-bottom border-secondary-subtle">
                         <span>
-                            {{ number_format($tx->amount, 0, ',', '.') }} đ
+                            {{ $signedAmount }}
                             <span class="small text-muted">· {{ $tx->created_at?->format('d/m/Y H:i') }}</span>
                         </span>
                         <span class="small">{{ $tx->statusLabel() }}</span>

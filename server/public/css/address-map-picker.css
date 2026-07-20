@@ -146,7 +146,7 @@ body:has(.address-map-picker-modal.show) .modal-backdrop.show {
     z-index: 2;
     display: flex;
     flex-direction: column;
-    max-height: 64dvh;
+    max-height: 52dvh;
     background: var(--app-panel-bg, #17181a);
     border-radius: 1.15rem 1.15rem 0 0;
     box-shadow: 0 -14px 34px rgba(0, 0, 0, .48);
@@ -333,7 +333,8 @@ body:has(.address-map-picker-modal.show) .modal-backdrop.show {
     line-height: 1.35;
 }
 
-.geocode-search-item__badge {
+.geocode-search-item__badge,
+.geocode-search-item__meta {
     flex-shrink: 0;
     align-self: flex-start;
     font-size: .65rem;
@@ -345,6 +346,19 @@ body:has(.address-map-picker-modal.show) .modal-backdrop.show {
     border-radius: 999px;
     padding: .1rem .45rem;
     margin-top: .05rem;
+    margin-left: auto;
+}
+
+.geocode-search-item__meta--km {
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: .75rem;
+    font-weight: 700;
+    color: rgba(253, 230, 138, .95);
+    border: 0;
+    background: transparent;
+    padding: .15rem 0 0;
+    white-space: nowrap;
 }
 
 .geocode-search-item mark,
@@ -409,7 +423,13 @@ body:has(.address-map-picker-modal.show) .modal-backdrop.show {
     background: #00b14f;
     color: #fff;
     cursor: pointer;
-    transition: filter .15s ease;
+    transition: filter .15s ease, background .15s ease, color .15s ease;
+}
+
+/* Đổi điểm đến — CTA vàng (đồng bộ brand), các luồng khác giữ xanh */
+.address-map-confirm-cta.address-map-confirm-cta--gold {
+    background: #d4af37;
+    color: #111;
 }
 
 .address-map-confirm-cta:hover:not(:disabled),
@@ -422,6 +442,12 @@ body:has(.address-map-picker-modal.show) .modal-backdrop.show {
     background: rgba(255, 255, 255, .1);
     color: rgba(255, 255, 255, .38);
     cursor: not-allowed;
+    filter: none;
+}
+
+.address-map-confirm-cta.address-map-confirm-cta--gold:disabled {
+    background: rgba(212, 175, 55, .22);
+    color: rgba(17, 17, 17, .42);
 }
 
 @media (min-width: 768px) {

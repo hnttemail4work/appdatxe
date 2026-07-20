@@ -11,6 +11,7 @@ use App\Models\Schedule;
 use App\Support\DriverWalletConfig;
 use App\Support\Money;
 use App\Support\PlatformFees;
+use App\Support\WalletTripFeeSplit;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -33,7 +34,7 @@ class DriverWalletService
         return $booking->schedule ? $this->onScheduleCompleted($booking->schedule) : null;
     }
 
-    /** Ghi nhận doanh thu chuyến và trừ phí nền tảng (2%) khi đủ điều kiện ví. */
+    /** Ghi nhận doanh thu chuyến; cuốc trừ ví → tạo yêu cầu nạp 90% cho TX; cuốc tiền mặt → trừ phí sàn (2%) khi đủ điều kiện. */
     public function onScheduleCompleted(Schedule $schedule): ?DriverTripSettlement
     {
         $schedule->loadMissing('route');
@@ -56,12 +57,78 @@ class DriverWalletService
             ->where('schedule_id', $schedule->id)
             ->whereNotIn('booking_status', ['cancelled', 'rejected'])
             ->where('trip_status', 'completed')
+            ->with('appliedReferralCode')
             ->get();
 
         if ($bookings->isEmpty()) {
             return null;
         }
 
+        $walletBookings = $bookings->filter(
+            fn (Booking $b): bool => ($b->payment_method ?? '') === 'wallet'
+        )->values();
+
+        if ($walletBookings->isNotEmpty() && $walletBookings->count() === $bookings->count()) {
+            return $this->settleWalletTripSchedule($profile, $schedule, $walletBookings);
+        }
+
+        return $this->settleCashTripSchedule($profile, $schedule, $bookings);
+    }
+
+    /**
+     * Cuốc trừ ví: TX nhận 90% qua yêu cầu nạp chờ duyệt; admin 10/8/2 tùy KM / GT.
+     *
+     * @param  Collection<int, Booking>  $bookings
+     */
+    private function settleWalletTripSchedule(
+        DriverProfile $profile,
+        Schedule $schedule,
+        Collection $bookings,
+    ): DriverTripSettlement {
+        $wallet = $this->walletFor($profile);
+        $split = WalletTripFeeSplit::forBookings($bookings);
+        $revenue = (int) $split['revenue'];
+
+        return DB::transaction(function () use ($wallet, $schedule, $bookings, $split, $revenue, $profile): DriverTripSettlement {
+            $locked = DriverWallet::query()->lockForUpdate()->findOrFail($wallet->id);
+            $category = $this->resolveSettlementCategory($revenue, $locked);
+
+            $settlement = DriverTripSettlement::query()->create([
+                'driver_wallet_id'    => $locked->id,
+                'schedule_id'         => $schedule->id,
+                'booking_id'          => $bookings->first()->id,
+                'revenue_amount'      => $revenue,
+                'platform_fee_amount' => (int) $split['admin_amount'],
+                'category'            => $category,
+                'status'              => 'completed',
+                'driver_settled_at'   => now(),
+            ]);
+
+            $locked->update([
+                'cumulative_revenue'          => $locked->cumulative_revenue + $revenue,
+                'completed_settlements_count' => $locked->completed_settlements_count + 1,
+            ]);
+
+            $this->createWalletTripEarningDeposit($profile, $locked->fresh(), $schedule, $split);
+
+            $locked = $locked->fresh();
+            $this->refreshWalletGate($locked);
+            $this->refreshAcceptBlock($locked);
+
+            return $settlement;
+        });
+    }
+
+    /**
+     * Cuốc tiền mặt (hoặc hỗn hợp): giữ logic trừ phí sàn ~2% khi đủ điều kiện ví.
+     *
+     * @param  Collection<int, Booking>  $bookings
+     */
+    private function settleCashTripSchedule(
+        DriverProfile $profile,
+        Schedule $schedule,
+        Collection $bookings,
+    ): DriverTripSettlement {
         $wallet = $this->walletFor($profile);
         $revenue = (int) $bookings->sum(fn (Booking $b): int => (int) round((float) $b->total_price, 0));
 
@@ -100,6 +167,57 @@ class DriverWalletService
         });
     }
 
+    /**
+     * Tạo yêu cầu nạp = phần TX (90%) từ doanh thu cuốc trừ ví — admin duyệt rồi cộng ví.
+     *
+     * @param  array<string, int|string>  $split
+     */
+    private function createWalletTripEarningDeposit(
+        DriverProfile $profile,
+        DriverWallet $wallet,
+        Schedule $schedule,
+        array $split,
+    ): ?DriverWalletTransaction {
+        $amount = (int) ($split['driver_amount'] ?? 0);
+        if ($amount <= 0) {
+            return null;
+        }
+
+        $transferRef = 'WTRIP-' . $schedule->id;
+        $existing = DriverWalletTransaction::query()
+            ->where('driver_wallet_id', $wallet->id)
+            ->where('type', 'deposit')
+            ->where('transfer_ref', $transferRef)
+            ->first();
+
+        if ($existing) {
+            return $existing;
+        }
+
+        if (! $profile->operator_id) {
+            $this->assignOperatorFromTrips($profile);
+        }
+        if (! $profile->operator_id) {
+            $this->assignDefaultOperator($profile);
+        }
+
+        $transaction = DriverWalletTransaction::query()->create([
+            'driver_wallet_id' => $wallet->id,
+            'type'             => 'deposit',
+            'amount'           => $amount,
+            'status'           => 'pending',
+            'transfer_ref'     => $transferRef,
+            'notes'            => WalletTripFeeSplit::depositNotes($split, (int) $schedule->id),
+        ]);
+
+        try {
+            app(AdminOperatorAlertService::class)->recordDriverDepositPending($transaction->fresh());
+        } catch (\Throwable) {
+        }
+
+        return $transaction->fresh();
+    }
+
     public function requestDeposit(DriverProfile $profile, int $amount, ?UploadedFile $proofImage = null): DriverWalletTransaction
     {
         if ($amount < DriverWalletConfig::MIN_DEPOSIT) {
@@ -120,9 +238,14 @@ class DriverWalletService
 
         $wallet = $this->walletFor($profile);
 
+        // Chỉ tính yêu cầu nạp tay — bỏ qua yêu cầu thu nhập cuốc trừ ví (WTRIP-*).
         $pendingCount = $wallet->transactions()
             ->where('type', 'deposit')
             ->where('status', 'pending')
+            ->where(function ($q): void {
+                $q->whereNull('transfer_ref')
+                    ->orWhere('transfer_ref', 'not like', 'WTRIP-%');
+            })
             ->count();
 
         if ($pendingCount >= DriverWalletConfig::MAX_PENDING_DEPOSITS) {
@@ -183,16 +306,21 @@ class DriverWalletService
             ]);
 
             $newBalance = $wallet->balance + $transaction->amount;
-            $newTotalDeposits = (int) $wallet->total_approved_deposits + (int) $transaction->amount;
+            $isTripEarning = str_starts_with((string) ($transaction->transfer_ref ?? ''), 'WTRIP-');
 
             $walletUpdates = [
-                'balance'                 => $newBalance,
-                'total_approved_deposits' => $newTotalDeposits,
+                'balance' => $newBalance,
             ];
 
-            if ($wallet->wallet_activated_at === null
-                && $newTotalDeposits >= DriverWalletConfig::ACTIVATION_DEPOSIT) {
-                $walletUpdates['wallet_activated_at'] = now();
+            // Thu nhập cuốc trừ ví chỉ cộng số dư — không tính vào tổng nạp kích hoạt.
+            if (! $isTripEarning) {
+                $newTotalDeposits = (int) $wallet->total_approved_deposits + (int) $transaction->amount;
+                $walletUpdates['total_approved_deposits'] = $newTotalDeposits;
+
+                if ($wallet->wallet_activated_at === null
+                    && $newTotalDeposits >= DriverWalletConfig::ACTIVATION_DEPOSIT) {
+                    $walletUpdates['wallet_activated_at'] = now();
+                }
             }
 
             $wallet->update($walletUpdates);
@@ -203,6 +331,8 @@ class DriverWalletService
 
             $this->refreshAcceptBlock($wallet->fresh());
         });
+
+        $this->notifyDepositInbox($transaction->fresh(), approved: true);
     }
 
     /**
@@ -249,6 +379,23 @@ class DriverWalletService
             'approved_by' => $actorId,
             'approved_at' => now(),
         ]);
+
+        $this->notifyDepositInbox($transaction->fresh(), approved: false);
+    }
+
+    private function notifyDepositInbox(DriverWalletTransaction $transaction, bool $approved): void
+    {
+        $transaction->loadMissing('wallet.driverProfile.user');
+        $user = $transaction->wallet?->driverProfile?->user;
+        if (! $user instanceof \App\Models\User) {
+            return;
+        }
+
+        app(UserInboxService::class)->notifyDepositResult(
+            $user,
+            (int) $transaction->amount,
+            $approved,
+        );
     }
 
     public function enforceDeadlines(): void
@@ -528,7 +675,10 @@ class DriverWalletService
                 'kind'            => 'deposit',
                 'amount'          => (int) $transaction->amount,
                 'at'              => $transaction->created_at,
-                'label'           => DriverWalletTransaction::historyLabelFor($transaction->status),
+                'label'           => DriverWalletTransaction::historyLabelFor(
+                    $transaction->status,
+                    $transaction->transfer_ref,
+                ),
                 'meta'            => $this->depositHistoryMeta($transaction),
                 'status'          => $transaction->status,
                 'proof_image_url' => $transaction->proofImageUrl(),
@@ -596,7 +746,10 @@ class DriverWalletService
                 'kind'            => 'deposit',
                 'amount'          => (int) $transaction->amount,
                 'at'              => $transaction->created_at,
-                'label'           => DriverWalletTransaction::historyLabelFor($transaction->status),
+                'label'           => DriverWalletTransaction::historyLabelFor(
+                    $transaction->status,
+                    $transaction->transfer_ref,
+                ),
                 'meta'            => $this->depositHistoryMeta($transaction),
                 'status'          => $transaction->status,
                 'driver_name'     => $profile->user->name,
@@ -717,6 +870,11 @@ class DriverWalletService
 
     private function depositHistoryMeta(DriverWalletTransaction $transaction): string
     {
+        $notes = trim((string) ($transaction->notes ?? ''));
+        if ($transaction->isWalletTripEarning() && $notes !== '') {
+            return $notes;
+        }
+
         return match ($transaction->status) {
             'approved' => 'Duyệt ' . ($transaction->approved_at?->format('d/m/Y H:i') ?? '—'),
             'rejected' => '',

@@ -3,10 +3,14 @@
 $mapNav = $mapNav ?? null;
 $compact = $compact ?? false;
 @endphp
-@if(! empty($mapNav['url']))
-    <a href="{{ $mapNav['url'] }}"
+@if(! empty($mapNav['url']) || ! empty($mapNav['google_url']))
+    <a href="{{ $mapNav['google_url'] ?? $mapNav['url'] }}"
        class="driver-map-nav-btn {{ $compact ? 'driver-map-nav-btn--compact' : '' }}"
        data-driver-map-nav
+       data-google-url="{{ $mapNav['google_url'] ?? '' }}"
+       data-geo-url="{{ $mapNav['url'] ?? '' }}"
+       @if(! empty($mapNav['dest_lat'])) data-dest-lat="{{ $mapNav['dest_lat'] }}" @endif
+       @if(! empty($mapNav['dest_lng'])) data-dest-lng="{{ $mapNav['dest_lng'] }}" @endif
        @if(! empty($mapNav['use_current_origin'])) data-map-nav-use-current-origin="1" @endif
        aria-label="{{ $mapNav['label'] }}">
         <span class="driver-map-nav-btn__icon" aria-hidden="true">

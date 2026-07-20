@@ -8,6 +8,7 @@
     $prefix = $prefix ?? 'idscan';
     $user = $user ?? null;
     $frontUrl = $frontUrl ?? null;
+    $readOnly = (bool) ($readOnly ?? false);
     $name = old('name', $user?->name && ! preg_match('/^[\d\s.+()-]+$/', (string) $user->name) ? $user->name : '');
     $dob = old('date_of_birth', $user?->date_of_birth?->format('Y-m-d') ?? '');
     $gender = old('gender', $user?->gender ?? '');
@@ -18,15 +19,34 @@
     $address = old('address', $user?->address ?? '');
     $ageHint = $user?->age();
 @endphp
-<div class="admin-idscan"
+<div class="admin-idscan {{ $readOnly ? 'admin-idscan--readonly' : '' }}"
      data-admin-idscan
      data-front-url="{{ $frontUrl }}">
     <div class="admin-idscan__head">
         <strong>Thông tin CCCD</strong>
     </div>
     <p class="admin-idscan__hint small text-muted mb-2" data-idscan-status>
-        Xoay/cắt ảnh (nếu cần), nhập thông tin rồi bấm Duyệt — ảnh đã chỉnh lưu cùng lúc duyệt.
+        @if($readOnly)
+            Chỉ xoay/cắt ảnh giấy tờ user đã tải lên, rồi Duyệt hoặc Từ chối — không sửa thông tin giấy tờ tại đây.
+        @else
+            Xoay/cắt ảnh (nếu cần), nhập thông tin rồi bấm Duyệt — ảnh đã chỉnh lưu cùng lúc duyệt.
+        @endif
     </p>
+    @if($readOnly)
+        <div class="admin-idscan__readonly small mb-2">
+            <div><span class="text-muted">Họ tên:</span> {{ $name !== '' ? $name : '—' }}</div>
+            <div><span class="text-muted">Ngày sinh:</span> {{ $dob !== '' ? $dob : '—' }}@if($ageHint !== null) ({{ $ageHint }} tuổi)@endif</div>
+            <div><span class="text-muted">Giới tính:</span> {{ $gender === 'female' ? 'Nữ' : ($gender === 'male' ? 'Nam' : '—') }}</div>
+            <div><span class="text-muted">Số CCCD:</span> {{ $idNumber !== '' ? $idNumber : '—' }}</div>
+            <div><span class="text-muted">Địa chỉ:</span> {{ $address !== '' ? $address : '—' }}</div>
+        </div>
+        {{-- Hidden fields giữ giá trị user đã có để approve không mất dữ liệu. --}}
+        <input type="hidden" name="name" value="{{ $name }}">
+        <input type="hidden" name="date_of_birth" value="{{ $dob }}">
+        <input type="hidden" name="gender" value="{{ $gender }}">
+        <input type="hidden" name="id_number" value="{{ $idNumber }}">
+        <input type="hidden" name="address" value="{{ $address }}">
+    @else
     <div class="row g-2">
         <div class="col-12">
             <label class="form-label" for="{{ $prefix }}-name">
@@ -91,4 +111,5 @@
             @error('address')<div class="invalid-feedback">{{ $message }}</div>@enderror
         </div>
     </div>
+    @endif
 </div>

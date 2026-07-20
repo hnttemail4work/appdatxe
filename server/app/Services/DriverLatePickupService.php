@@ -399,6 +399,24 @@ class DriverLatePickupService
         return $mins > 0 ? ($hours . ' giờ ' . $mins . ' phút nữa') : ($hours . ' giờ nữa');
     }
 
+    /** Thời lượng đến điểm đón — «15 phút» / «1h30 phút» (dùng trên thanh sheet khách). */
+    public function formatArrivalDurationLabel(int $travelMinutes): string
+    {
+        $travelMinutes = max(1, $travelMinutes);
+        if ($travelMinutes < 60) {
+            return $travelMinutes . ' phút';
+        }
+
+        $hours = (int) floor($travelMinutes / 60);
+        $mins = $travelMinutes % 60;
+
+        if ($mins <= 0) {
+            return $hours . ' giờ';
+        }
+
+        return $hours . 'h' . $mins . ' phút';
+    }
+
     /** Nhãn thời gian di chuyển trên app tài xế — «khoảng 2 phút». */
     public function formatDriverTravelTimeLabel(int $travelMinutes): string
     {

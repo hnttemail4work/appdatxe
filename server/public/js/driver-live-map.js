@@ -23,19 +23,18 @@
     var tripPins = Array.isArray(window.__driverMapTripPins) ? window.__driverMapTripPins : [];
 
     var DEFAULT_CENTER = [10.7769, 106.7009]; // TP.HCM — chỉ dùng làm khung nhìn tạm, không đặt ghim
-    var DEFAULT_ZOOM = 15;
-    var DRIVER_ZOOM = 16;
-    /** Khớp guest-trip-live-map khi assigned / at_pickup. */
-    var TRIP_FIT_PADDING = 48;
-    var TRIP_FIT_MAX_ZOOM = 15;
+    var DEFAULT_ZOOM = Math.min(20, 15 * 1.25);
+    var DRIVER_ZOOM = Math.min(20, 16 * 1.3 * 1.25); // sát hơn khi có chuyến (+30% rồi +25%)
+    /** Khớp guest-trip-live-map khi assigned / at_pickup / đang chạy. */
+    var TRIP_FIT_PADDING = Math.round(48 * 0.7 * 0.75);
+    var TRIP_FIT_MAX_ZOOM = Math.min(20, 15 * 1.3 * 1.25);
     var TRIP_FIT_DURATION = 500;
 
     /** Camera "nav follow" (course-up, nghiêng) khi đang đón — chỉ dùng cho __driverPickupNavTarget. */
-    var NAV_ZOOM_PEEK = 17.6;
+    var NAV_ZOOM_PEEK = Math.min(20, 17.6 * 1.3 * 1.25);
     var NAV_PITCH_PEEK = 52;
-    var NAV_ZOOM_FULL = 16.2;
+    var NAV_ZOOM_FULL = Math.min(20, 16.2 * 1.3 * 1.25);
     var NAV_PITCH_FULL = 24;
-    var NAV_TOP_PADDING = 128;
     var NAV_SIDE_PADDING = 28;
     var NAV_EASE_DURATION = 900;
 
@@ -56,6 +55,9 @@
     var directionTimer = null;
     var sheetState = { peek: true, heightPx: 0 };
     var lastRouteCoords = null;
+    /** 'follow' | 'passenger' | 'overview' — nhấn card khách để xen kẽ zoom khách / overview khoảng cách. */
+    var cameraFocusMode = 'follow';
+    var lastFocusPassenger = null;
 
     function loadStylesheet(href) {
         return new Promise(function (resolve, reject) {
@@ -238,6 +240,116 @@
         return null;
     }
 
+    function resolvePassengerFocus(coords) {
+        if (coords && Number.isFinite(Number(coords.lat)) && Number.isFinite(Number(coords.lng))) {
+            return { lat: Number(coords.lat), lng: Number(coords.lng) };
+        }
+        if (lastFocusPassenger) {
+            return lastFocusPassenger;
+        }
+        var pin = pickupPin();
+        if (pin) {
+            return { lat: pin.lat, lng: pin.lng };
+        }
+        if (pickupNavTarget) {
+            return { lat: pickupNavTarget.lat, lng: pickupNavTarget.lng };
+        }
+        return null;
+    }
+
+    /**
+     * Nhấn card khách (đồng bộ màn khách):
+     * lần 1 → zoom vị trí khách; lần 2 → thu sheet + overview TX↔khách (khoảng cách).
+     */
+    function togglePassengerFocusCamera(coords) {
+        if (!mapInstance || !window.goongjs) {
+            return false;
+        }
+        var passenger = resolvePassengerFocus(coords);
+        if (!passenger) {
+            return false;
+        }
+        lastFocusPassenger = passenger;
+        var driver = lastDriverPos || realDriverCoords();
+        var pad = sheetCameraPadding();
+
+        if (cameraFocusMode !== 'passenger') {
+            cameraFocusMode = 'passenger';
+            if (window.MapSheetCamera && window.MapSheetCamera.easeToFocus) {
+                window.MapSheetCamera.easeToFocus(mapInstance, passenger, {
+                    mapEl: heroEl || canvasEl,
+                    padding: pad,
+                    zoom: Math.min(20, DRIVER_ZOOM + 0.35),
+                    pitch: 0,
+                    bearing: 0,
+                    duration: TRIP_FIT_DURATION,
+                });
+            } else if (mapInstance.easeTo) {
+                mapInstance.easeTo({
+                    center: [passenger.lng, passenger.lat],
+                    zoom: Math.min(20, DRIVER_ZOOM + 0.35),
+                    pitch: 0,
+                    bearing: 0,
+                    padding: pad,
+                    duration: TRIP_FIT_DURATION,
+                });
+            }
+            return true;
+        }
+
+        cameraFocusMode = 'overview';
+        if (window.DriverPickupSheet && typeof window.DriverPickupSheet.collapse === 'function') {
+            window.DriverPickupSheet.collapse();
+        } else {
+            var sheet = document.querySelector('[data-driver-pickup-sheet]');
+            if (sheet) {
+                sheet.classList.add('is-peek');
+                sheet.classList.remove('is-full');
+            }
+        }
+
+        window.setTimeout(function () {
+            if (!mapInstance) {
+                return;
+            }
+            var nextPad = sheetCameraPadding();
+            var points = [[passenger.lng, passenger.lat]];
+            if (driver) {
+                points.unshift([driver.lng, driver.lat]);
+            }
+            if (points.length === 1) {
+                if (window.MapSheetCamera && window.MapSheetCamera.easeToFocus) {
+                    window.MapSheetCamera.easeToFocus(mapInstance, passenger, {
+                        mapEl: heroEl || canvasEl,
+                        padding: nextPad,
+                        zoom: DRIVER_ZOOM,
+                        pitch: 0,
+                        bearing: 0,
+                        duration: TRIP_FIT_DURATION,
+                    });
+                }
+                return;
+            }
+            var bounds = points.reduce(function (b, p) {
+                return b ? b.extend(p) : new window.goongjs.LngLatBounds(p, p);
+            }, null);
+            mapInstance.fitBounds(bounds, {
+                padding: nextPad,
+                maxZoom: TRIP_FIT_MAX_ZOOM,
+                duration: TRIP_FIT_DURATION,
+                pitch: 0,
+                bearing: 0,
+            });
+        }, 160);
+
+        return true;
+    }
+
+    function clearPassengerFocusHold() {
+        cameraFocusMode = 'follow';
+        lastFocusPassenger = null;
+    }
+
     function emptyRouteGeo() {
         return { type: 'FeatureCollection', features: [] };
     }
@@ -267,9 +379,9 @@
                 source: routeSourceId,
                 layout: { 'line-join': 'round', 'line-cap': 'round' },
                 paint: {
-                    'line-color': '#22c55e',
-                    'line-width': 4,
-                    'line-opacity': 0.9,
+                    'line-color': '#2563eb',
+                    'line-width': 8,
+                    'line-opacity': 0.92,
                 },
             });
         }
@@ -301,12 +413,6 @@
             return;
         }
 
-        var straight = [
-            [driverCoords.lng, driverCoords.lat],
-            [pickup.lng, pickup.lat],
-        ];
-        setRouteCoords(straight);
-
         if (!window.__geocodeDirectionUrl) {
             return;
         }
@@ -331,7 +437,7 @@
                         setRouteCoords(coords);
                     }
                 })
-                .catch(function () { /* giữ đường thẳng */ });
+                .catch(function () { /* không fallback line thẳng */ });
         }, 280);
     }
 
@@ -416,8 +522,65 @@
     }
 
     /**
+     * Padding map = vùng lộ giữa cạnh trên màn (banner) và cạnh trên panel/sheet.
+     * Dùng MapSheetCamera chung với màn khách.
+     */
+    function sheetCameraPadding() {
+        var panel = document.getElementById('driver-bottom-panel');
+        var pickupSheet = document.querySelector('[data-driver-pickup-sheet]');
+        var sheetTop = null;
+        // Ưu tiên mép trên popup đón (đúng cạnh trên sheet user đang kéo).
+        if (pickupSheet && pickupSheet.offsetParent !== null) {
+            sheetTop = pickupSheet.getBoundingClientRect().top;
+        } else if (panel) {
+            sheetTop = panel.getBoundingClientRect().top;
+        }
+        if (sheetState.heightPx > 0 && heroEl) {
+            var mapRect = heroEl.getBoundingClientRect();
+            var fromHeight = mapRect.top + mapRect.height - sheetState.heightPx;
+            sheetTop = sheetTop != null ? Math.min(sheetTop, fromHeight) : fromHeight;
+        }
+        return window.MapSheetCamera && window.MapSheetCamera.paddingFromEdges
+            ? window.MapSheetCamera.paddingFromEdges({
+                mapEl: heroEl || canvasEl,
+                sheetTop: sheetTop,
+                topObstacleEl: document.getElementById('driver-pickup-proximity-sheet'),
+                side: NAV_SIDE_PADDING,
+                topExtra: 16,
+            })
+            : {
+                top: 16,
+                bottom: (sheetState.heightPx || 0) + 16,
+                left: NAV_SIDE_PADDING,
+                right: NAV_SIDE_PADDING,
+            };
+    }
+
+    /**
+     * Map đang khung nối điểm đón ↔ điểm trả (fit nhiều điểm, không nav follow).
+     * Khi kéo sheet: fit lại trong dải map lộ — không kéo về 1 điểm.
+     */
+    function isPickupDropoffRouteView() {
+        if (navActive()) {
+            return false;
+        }
+        var hasPickup = false;
+        var hasDropoff = false;
+        tripPins.forEach(function (pin) {
+            if (pin && pin.type === 'pickup') {
+                hasPickup = true;
+            }
+            if (pin && pin.type === 'dropoff') {
+                hasDropoff = true;
+            }
+        });
+        return hasPickup && hasDropoff;
+    }
+
+    /**
      * Camera "nav follow" — course-up (bearing = hướng đi), nghiêng, zoom sát.
      * Peek (sheet thu nhỏ): zoom/nghiêng nhiều hơn Full (sheet mở).
+     * Focus mũi tên vào giữa vùng map lộ (mép trên ↔ mép popup).
      */
     function applyNavCamera(pos, heading, options) {
         if (!mapInstance || !window.goongjs || !navActive() || !pos) {
@@ -432,30 +595,111 @@
             ? heading
             : (mapInstance.getBearing ? mapInstance.getBearing() : 0);
         var duration = options.duration != null ? options.duration : NAV_EASE_DURATION;
+        var pad = options.padding || sheetCameraPadding();
 
-        mapInstance.easeTo({
-            center: [pos.lng, pos.lat],
-            zoom: zoom,
-            pitch: pitch,
-            bearing: bearing,
-            padding: {
-                top: NAV_TOP_PADDING,
-                bottom: (sheetState.heightPx || 0) + 16,
-                left: NAV_SIDE_PADDING,
-                right: NAV_SIDE_PADDING,
-            },
-            duration: duration,
-        });
+        if (window.MapSheetCamera && window.MapSheetCamera.easeToFocus) {
+            window.MapSheetCamera.easeToFocus(mapInstance, pos, {
+                mapEl: heroEl || canvasEl,
+                padding: pad,
+                zoom: zoom,
+                pitch: pitch,
+                bearing: bearing,
+                duration: duration,
+            });
+        } else {
+            mapInstance.easeTo({
+                center: [pos.lng, pos.lat],
+                zoom: zoom,
+                pitch: pitch,
+                bearing: bearing,
+                padding: pad,
+                duration: duration,
+            });
+        }
         setDriverHeading(heading != null ? heading : lastHeading);
     }
 
-    /** Sheet đón đổi trạng thái peek↔full — cập nhật padding/zoom camera nav ngay. */
+    /**
+     * Căn mũi tên / vị trí TX vào giữa vùng map còn lộ khi sheet peek↔full.
+     * Overview đón+trả: fitBounds lại theo padding sheet (không kéo 1 điểm).
+     * Giữ nguyên chế độ focus card khách (passenger / overview) nếu đang bật.
+     */
+    function refitSheetCamera(options) {
+        options = options || {};
+        if (!mapInstance || !window.goongjs) {
+            return;
+        }
+        var pad = sheetCameraPadding();
+        var duration = options.duration != null ? options.duration : 320;
+
+        if (cameraFocusMode === 'passenger' && lastFocusPassenger) {
+            if (window.MapSheetCamera && window.MapSheetCamera.easeToFocus) {
+                window.MapSheetCamera.easeToFocus(mapInstance, lastFocusPassenger, {
+                    mapEl: heroEl || canvasEl,
+                    padding: pad,
+                    zoom: Math.min(20, DRIVER_ZOOM + 0.35),
+                    pitch: 0,
+                    bearing: 0,
+                    duration: duration,
+                });
+            }
+            return;
+        }
+
+        if (cameraFocusMode === 'overview') {
+            fitToMarkers(lastDriverPos || realDriverCoords(), {
+                duration: duration,
+                padding: pad,
+            });
+            return;
+        }
+
+        if (isPickupDropoffRouteView()) {
+            fitToMarkers(lastDriverPos || realDriverCoords(), {
+                duration: duration,
+                padding: pad,
+            });
+            return;
+        }
+
+        var pos = lastDriverPos || realDriverCoords();
+        if (!pos) {
+            return;
+        }
+
+        if (navActive()) {
+            applyNavCamera(pos, lastHeading, { duration: duration, padding: pad });
+            return;
+        }
+
+        var zoom = mapInstance.getZoom ? mapInstance.getZoom() : DRIVER_ZOOM;
+        if (window.MapSheetCamera && window.MapSheetCamera.easeToFocus) {
+            window.MapSheetCamera.easeToFocus(mapInstance, pos, {
+                mapEl: heroEl || canvasEl,
+                padding: pad,
+                zoom: zoom,
+                pitch: 0,
+                bearing: 0,
+                duration: duration,
+            });
+        } else {
+            mapInstance.easeTo({
+                center: [pos.lng, pos.lat],
+                zoom: zoom,
+                pitch: 0,
+                bearing: 0,
+                padding: pad,
+                duration: duration,
+            });
+        }
+        setDriverHeading(lastHeading);
+    }
+
+    /** Sheet đón đổi trạng thái peek↔full — đẩy mũi tên vào giữa vùng map lộ. */
     function setSheetState(state) {
         sheetState.peek = state && typeof state.peek === 'boolean' ? state.peek : sheetState.peek;
         sheetState.heightPx = state && typeof state.heightPx === 'number' ? state.heightPx : sheetState.heightPx;
-        if (navActive() && lastDriverPos) {
-            applyNavCamera(lastDriverPos, lastHeading, { duration: 400 });
-        }
+        refitSheetCamera({ duration: 400 });
     }
 
     function focusPickupRoute(destLat, destLng) {
@@ -561,6 +805,16 @@
         placeDriverMarker(detail.lat, detail.lng, heading);
         syncPickupRoute(next);
 
+        // Đang giữ camera theo card khách — chỉ cập nhật marker/route, không giật camera.
+        if (cameraFocusMode === 'passenger' || cameraFocusMode === 'overview') {
+            lastDriverPos = next;
+            if (heading != null) {
+                lastHeading = heading;
+            }
+            hasRealDriverCoords = true;
+            return;
+        }
+
         if (navActive()) {
             applyNavCamera(next, heading, { duration: firstFix ? 0 : NAV_EASE_DURATION });
         } else if (hasActiveTripPins()) {
@@ -585,15 +839,9 @@
     });
 
     if (locateBtn) {
-        locateBtn.addEventListener('click', recenterOnDriver);
-    }
-
-    var navInAppBtn = document.getElementById('driver-map-nav-btn');
-    if (navInAppBtn) {
-        navInAppBtn.addEventListener('click', function () {
-            var lat = parseFloat(navInAppBtn.getAttribute('data-dest-lat') || '');
-            var lng = parseFloat(navInAppBtn.getAttribute('data-dest-lng') || '');
-            focusPickupRoute(lat, lng);
+        locateBtn.addEventListener('click', function () {
+            clearPassengerFocusHold();
+            recenterOnDriver();
         });
     }
 
@@ -636,6 +884,8 @@
 
     window.DriverLiveMap = {
         focusPickupRoute: focusPickupRoute,
+        togglePassengerFocusCamera: togglePassengerFocusCamera,
+        clearPassengerFocusHold: clearPassengerFocusHold,
         syncPickupRoute: function () {
             if (lastDriverPos) {
                 syncPickupRoute(lastDriverPos);
@@ -645,8 +895,9 @@
         setRoute: function (coords) {
             setRouteCoords(coords);
         },
-        /** Sheet đón peek↔full — cập nhật padding/zoom camera nav ngay. */
+        /** Sheet đón peek↔full — căn mũi tên TX giữa mép trên và mép popup (giống khách). */
         setSheetState: setSheetState,
+        refitSheetCamera: refitSheetCamera,
         /** TBT engine đẩy camera theo từng tick GPS đã tính toán riêng (vd bearing mượt hơn). */
         applyNavCamera: function (pos, heading, options) {
             applyNavCamera(pos, heading, options);
@@ -654,6 +905,9 @@
         isNavActive: navActive,
         getPickupNavTarget: function () {
             return pickupNavTarget ? { lat: pickupNavTarget.lat, lng: pickupNavTarget.lng } : null;
+        },
+        getLastPosition: function () {
+            return lastDriverPos ? { lat: lastDriverPos.lat, lng: lastDriverPos.lng } : null;
         },
     };
 

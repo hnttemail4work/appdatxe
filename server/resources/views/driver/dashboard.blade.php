@@ -33,7 +33,7 @@
     $availabilityStatus = $profile?->availability_status ?? 'off_duty';
     $driverTripActive = $driverTripActive ?? false;
     $driverTripUpcoming = $driverTripUpcoming ?? false;
-    $driverOnTrip = $driverOnTrip ?? $driverTripActive;
+    $driverOnTrip = $driverOnTrip ?? ($driverTripActive || $driverTripUpcoming);
     $driverPaused = $availabilityStatus === 'off_duty';
     $driverLocationReady = ! $driverPaused && $profile && $profile->hasFreshLocation();
     $driverNeedsLocationShare = $profile && ! $driverPaused && ! $driverLocationReady;
@@ -70,6 +70,25 @@
         <div class="driver-map-hero__scrim" aria-hidden="true"></div>
 
         <div class="driver-map-hero__fabs" aria-label="Điều khiển bản đồ">
+            @php
+                $hotlinePhone = (string) config('app.contact_phone');
+                $hotlineTel = preg_replace('/[^\d+]/', '', $hotlinePhone);
+                // Hiện SOS khi đang phục vụ: upcoming (đi đón) hoặc active (đang chở).
+                $sosInTrip = (bool) ($driverOnTrip || $driverTripActive || $driverTripUpcoming);
+            @endphp
+            <a href="tel:{{ $hotlineTel }}"
+               class="driver-map-hero__sos-fab trip-sos-fab {{ $sosInTrip ? '' : 'd-none' }}"
+               data-trip-sos-fab
+               data-contact-hotline="phone"
+               aria-label="Gọi khẩn cấp tổng đài {{ $hotlinePhone }}"
+               title="Cảnh báo khẩn cấp"
+               @if(! $sosInTrip) hidden @endif>
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                </svg>
+            </a>
+
             <button type="button" class="driver-map-hero__locate-btn" id="driver-map-locate-btn" aria-label="Về vị trí của tôi">
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <circle cx="12" cy="12" r="3"/>
@@ -77,27 +96,36 @@
                 </svg>
             </button>
 
-            {{-- Đang đón (assigned): camera đã tự bám hướng chỉ đường — ẩn nút thủ công (tránh trùng). --}}
-            @if(! $driverPickupNavTarget && ! empty($driverActiveMapNav['dest_lat']) && ! empty($driverActiveMapNav['dest_lng']))
-                <button type="button"
-                        class="driver-map-hero__nav-fab"
-                        id="driver-map-nav-btn"
-                        data-driver-map-nav-inapp
-                        data-dest-lat="{{ $driverActiveMapNav['dest_lat'] }}"
-                        data-dest-lng="{{ $driverActiveMapNav['dest_lng'] }}"
-                        aria-label="Xem đường đến điểm đón"
-                        title="Xem đường đến điểm đón">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <polygon points="3 11 22 2 13 21 11 13 3 11"/>
+            @if(! empty($driverActiveMapNav['google_url']) || ! empty($driverActiveMapNav['url']))
+                <a href="{{ $driverActiveMapNav['google_url'] ?? $driverActiveMapNav['url'] }}"
+                   class="driver-map-hero__gmaps-fab"
+                   id="driver-map-gmaps-btn"
+                   data-driver-map-nav-external
+                   data-google-url="{{ $driverActiveMapNav['google_url'] ?? '' }}"
+                   data-geo-url="{{ $driverActiveMapNav['url'] ?? '' }}"
+                   @if(! empty($driverActiveMapNav['dest_lat'])) data-dest-lat="{{ $driverActiveMapNav['dest_lat'] }}" @endif
+                   @if(! empty($driverActiveMapNav['dest_lng'])) data-dest-lng="{{ $driverActiveMapNav['dest_lng'] }}" @endif
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   aria-label="Mở Google Maps: {{ $driverActiveMapNav['label'] ?? 'Điểm đến' }}"
+                   title="Google Maps">
+                    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+                        <path fill="currentColor" d="M4.2 5.8 10 2.4v14.3L4.2 20.1V5.8z" opacity=".55"/>
+                        <path fill="currentColor" d="M10 2.4 15.8 5.8v14.3L10 16.7V2.4z" opacity=".85"/>
+                        <path fill="currentColor" d="M15.8 5.8 19.8 3.5v14.3l-4 2.3V5.8z" opacity=".4"/>
+                        <path fill="currentColor" d="M15.2 8.2c-2.1 0-3.8 1.7-3.8 3.8 0 2.9 3.8 7.1 3.8 7.1s3.8-4.2 3.8-7.1c0-2.1-1.7-3.8-3.8-3.8z"/>
+                        <circle fill="#161616" cx="15.2" cy="12" r="1.55"/>
                     </svg>
-                </button>
+                </a>
             @endif
         </div>
     </section>
 
+    {{-- SOS đã nằm trong cột FAB map — không render bản fixed riêng (tránh lệch nhịp khi thu/phóng popup). --}}
     @include('partials.trip-action-fabs', [
         'hotlinePhone' => config('app.contact_phone'),
-        'inTrip' => (bool) ($driverOnTrip || $driverTripActive),
+        'inTrip' => (bool) ($driverOnTrip || $driverTripActive || $driverTripUpcoming),
+        'showSos' => false,
     ])
 
     <div id="driver-location-bar" class="d-none" aria-hidden="true"
@@ -326,15 +354,20 @@ window.__driverAccountNotices = @json([
 </script>
 <script src="{{ asset('js/geocode-search-ui.js') }}?v={{ filemtime(public_path('js/geocode-search-ui.js')) }}"></script>
 <script src="{{ asset('js/geocode-resolve.js') }}?v={{ filemtime(public_path('js/geocode-resolve.js')) }}"></script>
+<script src="{{ asset('js/address-query-normalize.js') }}?v={{ filemtime(public_path('js/address-query-normalize.js')) }}"></script>
 <script src="{{ asset('js/geocode-address-autocomplete.js') }}?v={{ filemtime(public_path('js/geocode-address-autocomplete.js')) }}"></script>
 <script src="{{ asset('js/address-map-picker.js') }}?v={{ filemtime(public_path('js/address-map-picker.js')) }}"></script>
 <script src="{{ asset('js/driver-location-save.js') }}?v={{ filemtime(public_path('js/driver-location-save.js')) }}"></script>
 <script src="{{ asset('js/driver-location-gps.js') }}?v={{ filemtime(public_path('js/driver-location-gps.js')) }}"></script>
 <script src="{{ asset('js/driver-map-nav.js') }}?v={{ filemtime(public_path('js/driver-map-nav.js')) }}"></script>
+<script src="{{ asset('js/driver-arrive-confirm.js') }}?v={{ filemtime(public_path('js/driver-arrive-confirm.js')) }}"></script>
+<script src="{{ asset('js/driver-rest-reminder.js') }}?v={{ filemtime(public_path('js/driver-rest-reminder.js')) }}"></script>
 <script src="{{ asset('js/driver-call-reveal.js') }}?v={{ filemtime(public_path('js/driver-call-reveal.js')) }}"></script>
+<script src="{{ asset('js/map-sheet-camera.js') }}?v={{ filemtime(public_path('js/map-sheet-camera.js')) }}"></script>
 <script src="{{ asset('js/driver-live-map.js') }}?v={{ filemtime(public_path('js/driver-live-map.js')) }}"></script>
 <script src="{{ asset('js/driver-turn-by-turn.js') }}?v={{ filemtime(public_path('js/driver-turn-by-turn.js')) }}"></script>
 <script src="{{ asset('js/driver-trip-sheet-swipe.js') }}?v={{ filemtime(public_path('js/driver-trip-sheet-swipe.js')) }}"></script>
+<script src="{{ asset('js/driver-passenger-focus.js') }}?v={{ filemtime(public_path('js/driver-passenger-focus.js')) }}"></script>
 <script src="{{ asset('js/driver-availability-toggle.js') }}?v={{ filemtime(public_path('js/driver-availability-toggle.js')) }}"></script>
 <script src="{{ asset('js/trip-chat.js') }}?v={{ filemtime(public_path('js/trip-chat.js')) }}"></script>
 <script src="{{ asset('js/trip-action-fabs.js') }}?v={{ filemtime(public_path('js/trip-action-fabs.js')) }}"></script>
@@ -387,6 +420,7 @@ window.__driverAccountNotices = @json([
 <script src="{{ asset('js/driver-sounds.js') }}?v={{ filemtime(public_path('js/driver-sounds.js')) }}"></script>
 <script src="{{ asset('js/driver-invite.js') }}?v={{ filemtime(public_path('js/driver-invite.js')) }}"></script>
 <script src="{{ asset('js/driver-wallet-deposit.js') }}?v={{ filemtime(public_path('js/driver-wallet-deposit.js')) }}"></script>
+<script src="{{ asset('js/wallet-pull-refresh.js') }}?v={{ filemtime(public_path('js/wallet-pull-refresh.js')) }}"></script>
 <script src="{{ asset('js/driver-late-pickup.js') }}?v={{ filemtime(public_path('js/driver-late-pickup.js')) }}"></script>
 <script src="{{ asset('js/idle-poll.js') }}?v={{ filemtime(public_path('js/idle-poll.js')) }}"></script>
 <script src="{{ asset('js/driver-dashboard-poll.js') }}?v={{ filemtime(public_path('js/driver-dashboard-poll.js')) }}"></script>

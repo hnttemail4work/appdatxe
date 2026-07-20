@@ -149,6 +149,12 @@
     });
 
     var initialTab = tabFromUrl();
+    var forceOfferTab = !!(document.querySelector('.driver-page.is-offer-pending')
+        || document.querySelector('[data-trip-request-id]:not([data-removing="1"])'));
+    // Có cuốc chờ nhận / từ chối → luôn mở tab chuyến trước.
+    if (forceOfferTab) {
+        initialTab = 'trips';
+    }
     if (initialTab !== activeTab) {
         switchTab(initialTab, { pushState: false });
     } else {
@@ -159,7 +165,7 @@
         }
     }
 
-    if (!window.history.state || !window.history.state.driverTab) {
+    if (forceOfferTab || !window.history.state || !window.history.state.driverTab) {
         window.history.replaceState({ driverTab: activeTab }, '', buildUrl(activeTab));
     }
 

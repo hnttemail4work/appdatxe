@@ -88,6 +88,7 @@ class DuplicateBookingService
             'driver_distance_line' => $driver['distance_line'] ?? null,
             'driver_eta_line' => $driver['eta_line'] ?? null,
             'driver_proximity_hint' => $driver['proximity_hint'] ?? null,
+            'driver_proximity_summary' => $driver['proximity_summary'] ?? null,
             'driver_location_shared' => (bool) ($driver['location_shared'] ?? false),
             'driver_movement_confirmed' => (bool) ($booking->schedule?->driverHasConfirmedMovement() ?? false),
             'driver'            => $driver,

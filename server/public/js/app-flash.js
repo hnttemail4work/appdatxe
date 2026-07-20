@@ -91,8 +91,16 @@
         }
         bodyHtml += '<p class="app-flash-banner-text mb-0">' + escapeHtml(message) + '</p>';
 
+        var mediaHtml = '';
+        if (options.imageUrl) {
+            mediaHtml = '<div class="app-flash-banner-media"><img src="'
+                + escapeHtml(options.imageUrl)
+                + '" alt="" loading="lazy"></div>';
+            el.classList.add('app-flash-banner--has-image');
+        }
+
         el.innerHTML =
-            '<div class="app-flash-banner-icon" aria-hidden="true">' + icon + '</div>'
+            (mediaHtml || '<div class="app-flash-banner-icon" aria-hidden="true">' + icon + '</div>')
             + '<div class="app-flash-banner-body">' + bodyHtml + '</div>'
             + '<button type="button" class="app-flash-close" data-flash-close aria-label="Đóng thông báo" title="Đóng">×</button>';
 

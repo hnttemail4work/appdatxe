@@ -32,6 +32,56 @@
     background: rgba(217, 119, 6, .06);
 }
 
+/* Có yêu cầu cập nhật chưa xem — highlight đến khi bấm Xem */
+.driver-row-request-unread {
+    background: rgba(217, 119, 6, .14);
+}
+
+.driver-row-request-unread .driver-mgmt-request-count {
+    color: #b45309 !important;
+}
+
+/* Thumbnail ảnh xe trong panel yêu cầu (admin) */
+.driver-doc-thumb-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .45rem;
+}
+
+.driver-doc-thumb {
+    position: relative;
+    display: block;
+    width: 4.5rem;
+    aspect-ratio: 1;
+    overflow: hidden;
+    border-radius: .65rem;
+    border: 1px solid rgba(0, 0, 0, .12);
+    background: rgba(0, 0, 0, .04);
+}
+
+.driver-doc-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.driver-doc-thumb span {
+    position: absolute;
+    left: .35rem;
+    bottom: .35rem;
+    padding: .1rem .35rem;
+    border-radius: .35rem;
+    background: rgba(251, 191, 36, .92);
+    color: #111;
+    font-size: .68rem;
+    font-weight: 600;
+}
+
+.driver-doc-thumb.is-pending {
+    border-color: rgba(217, 119, 6, .55);
+}
+
 /* Hồ sơ tài xế — operator edit / duyệt */
 .driver-edit-panel > .console-panel-body {
     padding-top: 0;

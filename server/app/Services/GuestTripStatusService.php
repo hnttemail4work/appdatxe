@@ -3,11 +3,13 @@
 namespace App\Services;
 
 use App\Models\Booking;
+use App\Models\BookingAudit;
 use App\Models\TripReview;
 use App\Support\AuthIdentifier;
 use App\Support\GuestWaitProgress;
 use App\Support\Money;
 use Illuminate\Support\Facades\Cache;
+use InvalidArgumentException;
 
 class GuestTripStatusService
 {
@@ -15,6 +17,7 @@ class GuestTripStatusService
         private readonly DuplicateBookingService $duplicateBookings,
         private readonly BookingBrowserGuardService $browserGuard,
         private readonly DriverTripRequestService $driverTripRequests,
+        private readonly TripPricingService $pricing,
     ) {
     }
 
@@ -135,6 +138,7 @@ class GuestTripStatusService
             'is_active'         => $booking->blocksGuestRebooking(),
             'can_cancel'        => $this->guestCanCancel($booking),
             'cancel_requires_reason' => $this->guestCanCancel($booking) && $booking->hasDriverAccepted(),
+            'can_change_dropoff' => $this->guestCanChangeDropoff($booking),
             'can_review'        => $booking->trip_status === 'completed' && ! $booking->tripReview,
             'chat'              => [
                 'open'    => app(TripChatService::class)->isOpen($booking),
@@ -173,6 +177,162 @@ class GuestTripStatusService
         }
 
         return ! $booking->passengerPickedUp();
+    }
+
+    public function guestCanChangeDropoff(Booking $booking): bool
+    {
+        if (in_array($booking->booking_status, ['cancelled', 'rejected'], true)) {
+            return false;
+        }
+
+        if (in_array($booking->trip_status, ['completed', 'cancelled'], true)) {
+            return false;
+        }
+
+        if ($booking->pickup_lat === null || $booking->pickup_lng === null) {
+            return false;
+        }
+
+        // Cho đổi từ lúc đã có chuyến đến trước khi hoàn thành.
+        return $booking->blocksGuestRebooking();
+    }
+
+    /**
+     * Khách đổi điểm đến — tính lại giá ngay, đồng bộ TX/admin qua poll status.
+     */
+    public function changeDropoff(
+        Booking $booking,
+        string $dropoffDetail,
+        float $dropoffLat,
+        float $dropoffLng,
+        ?string $dropoffAddress,
+        ?string $browserId,
+        ?string $phone,
+    ): Booking {
+        $preview = $this->previewChangeDropoff(
+            $booking,
+            $dropoffDetail,
+            $dropoffLat,
+            $dropoffLng,
+            $dropoffAddress,
+            $browserId,
+            $phone,
+        );
+
+        $quote = $preview['quote'];
+        $dropoffLabel = $preview['dropoff_detail'];
+
+        $before = [
+            'dropoff_address' => $booking->dropoff_address,
+            'dropoff_detail'  => $booking->dropoff_detail,
+            'dropoff_lat'     => $booking->dropoff_lat,
+            'dropoff_lng'     => $booking->dropoff_lng,
+            'total_price'     => $booking->total_price,
+            'distance_km'     => $booking->distance_km,
+        ];
+
+        $booking->fill(array_merge([
+            'dropoff_address' => $dropoffAddress !== null && trim($dropoffAddress) !== ''
+                ? trim($dropoffAddress)
+                : $booking->dropoff_address,
+            'dropoff_detail'  => $dropoffLabel,
+            'dropoff_lat'     => $dropoffLat,
+            'dropoff_lng'     => $dropoffLng,
+        ], $quote->toBookingColumns()));
+        $booking->save();
+
+        BookingAudit::query()->create([
+            'booking_id'   => $booking->id,
+            'actor_id'     => null,
+            'action'       => 'guest_change_dropoff',
+            'before_state' => $before,
+            'after_state'  => [
+                'dropoff_address' => $booking->dropoff_address,
+                'dropoff_detail'  => $booking->dropoff_detail,
+                'dropoff_lat'     => $booking->dropoff_lat,
+                'dropoff_lng'     => $booking->dropoff_lng,
+                'total_price'     => $booking->total_price,
+                'distance_km'     => $booking->distance_km,
+            ],
+            'notes'        => 'Khách đổi điểm đến — giá tính lại tự động',
+        ]);
+
+        try {
+            app(PushNotificationService::class)->onGuestChangedDropoff($booking->fresh());
+        } catch (\Throwable) {
+            // Push không chặn đổi điểm đến.
+        }
+
+        return $booking->fresh(['schedule.route', 'tripReview']);
+    }
+
+    /**
+     * Báo giá điểm đến mới (chưa lưu) — dùng cho hộp thoại xác nhận.
+     *
+     * @return array{
+     *     dropoff_detail: string,
+     *     current_price: float,
+     *     current_price_label: string,
+     *     new_price: float,
+     *     new_price_label: string,
+     *     quote: \App\Support\PriceQuote
+     * }
+     */
+    public function previewChangeDropoff(
+        Booking $booking,
+        string $dropoffDetail,
+        float $dropoffLat,
+        float $dropoffLng,
+        ?string $dropoffAddress,
+        ?string $browserId,
+        ?string $phone,
+    ): array {
+        if (! $this->guestCanView($booking, $browserId, $phone)) {
+            throw new InvalidArgumentException('Không xác thực được chuyến đi.');
+        }
+
+        if (! $this->guestCanChangeDropoff($booking)) {
+            throw new InvalidArgumentException('Chuyến này không thể đổi điểm đến.');
+        }
+
+        $booking->loadMissing(['schedule.vehicle', 'schedule.route']);
+        $pickupLabel = trim((string) ($booking->pickup_detail ?: $booking->pickup_address));
+        $dropoffLabel = trim($dropoffDetail);
+        if ($pickupLabel === '' || $dropoffLabel === '') {
+            throw new InvalidArgumentException('Thiếu điểm đi hoặc điểm đến.');
+        }
+
+        $vehicle = $booking->schedule?->vehicle;
+        $capacity = (int) ($vehicle?->capacity ?: 4);
+        $vehicleType = $vehicle?->type ? (string) $vehicle->type : ($booking->vehicle_type_key ?: null);
+
+        $quote = $this->pricing->quoteForVehicleType(
+            $pickupLabel,
+            $dropoffLabel,
+            $capacity,
+            $vehicleType,
+            $booking->pickup_lat !== null ? (float) $booking->pickup_lat : null,
+            $booking->pickup_lng !== null ? (float) $booking->pickup_lng : null,
+            $dropoffLat,
+            $dropoffLng,
+        );
+
+        $referralPercent = (float) ($booking->referral_discount_percent ?? 0);
+        if ($referralPercent > 0) {
+            $quote = $quote->withReferral($referralPercent);
+        }
+
+        $currentPrice = (float) $booking->total_price;
+        $newPrice = (float) $quote->totalPrice;
+
+        return [
+            'dropoff_detail'       => $dropoffLabel,
+            'current_price'        => $currentPrice,
+            'current_price_label'  => Money::vnd($currentPrice),
+            'new_price'            => $newPrice,
+            'new_price_label'      => Money::vnd($newPrice),
+            'quote'                => $quote,
+        ];
     }
 
     public function guestCanView(Booking $booking, ?string $browserId, ?string $phone): bool
@@ -228,18 +388,66 @@ class GuestTripStatusService
 
         $booking->loadMissing('schedule');
 
+        $profile = $booking->activeDriverProfile();
         $review = TripReview::query()->create([
             'booking_id'        => $booking->id,
             'schedule_id'       => $booking->schedule_id,
             'driver_id'         => $booking->schedule?->driver_id,
-            'driver_profile_id' => $booking->activeDriverProfile()?->id,
+            'driver_profile_id' => $profile?->id,
             'sentiment'         => $sentiment,
             'comment'           => $comment,
             'contact_phone'     => AuthIdentifier::normalizePhone((string) ($phone ?: $booking->contact_phone)),
         ]);
 
+        if ($profile) {
+            if ($sentiment === TripReview::SENTIMENT_LIKE) {
+                $profile->increment('preference_likes');
+            } elseif ($sentiment === TripReview::SENTIMENT_DISLIKE) {
+                $profile->increment('preference_dislikes');
+                $this->maybeWarnDriverOnDislikes($profile->fresh());
+            }
+        }
+
         $this->browserGuard->clearActiveBookingForBooking($booking->fresh());
 
         return $review;
+    }
+
+    /** Ngưỡng dislike gần đây để cảnh báo tài xế. */
+    public const DISLIKE_WARNING_THRESHOLD = 3;
+
+    private function maybeWarnDriverOnDislikes(\App\Models\DriverProfile $profile): void
+    {
+        $recentDislikes = TripReview::query()
+            ->where('driver_profile_id', $profile->id)
+            ->where('sentiment', TripReview::SENTIMENT_DISLIKE)
+            ->where('created_at', '>=', now()->subDays(30))
+            ->count();
+
+        if ($recentDislikes < self::DISLIKE_WARNING_THRESHOLD) {
+            return;
+        }
+
+        $userId = (int) $profile->user_id;
+        if ($userId < 1) {
+            return;
+        }
+
+        try {
+            app(DriverInboxService::class)->notify(
+                $userId,
+                \App\Models\DriverInboxMessage::CATEGORY_NOTICE,
+                'Cảnh báo đánh giá không tốt',
+                'Bạn nhận nhiều đánh giá không thích gần đây ('.$recentDislikes.' trong 30 ngày). Vui lòng cải thiện phục vụ để tránh ảnh hưởng nhận chuyến.',
+                [
+                    'type'            => 'driver_dislike_warning',
+                    'dislike_count'   => $recentDislikes,
+                    'threshold'       => self::DISLIKE_WARNING_THRESHOLD,
+                ],
+                null,
+                true,
+            );
+        } catch (\Throwable) {
+        }
     }
 }

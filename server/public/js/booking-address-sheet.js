@@ -389,7 +389,8 @@
      * Sau khi chọn 1 điểm:
      * - Đủ 2 điểm nhờ chọn điểm đến / GPS bổ sung → sang đặt chuyến.
      * - Đủ 2 điểm nhờ vừa chọn điểm đi lần đầu → sang đặt chuyến.
-     * - Đang sửa điểm đi (trước đó đã đủ 2 điểm) → ở lại form.
+     * - Đang sửa điểm đi (trước đó đã đủ 2 điểm) → vẫn advance;
+     *   customer-booking bỏ qua xác nhận nếu điểm đi trùng điểm đã xác nhận.
      */
     function afterFieldApplied(field, options) {
         options = options || {};
@@ -399,7 +400,7 @@
                 return;
             }
             if (field === 'pickup' && options.keepSheetOpen) {
-                focusField('dropoff');
+                tryAdvance();
                 return;
             }
             tryAdvance();
@@ -461,7 +462,7 @@
         if (window.GeocodeResolve && window.GeocodeResolve.resolvePlace && item.place_id) {
             var wasBothReady = bothReady();
             // Điền text (+ tọa độ nếu đã có) ngay.
-            setFieldValue(field, item.title || item.address || '', item.lat, item.lng != null ? item.lng : item.lon, {
+            setFieldValue(field, item.address || item.title || '', item.lat, item.lng != null ? item.lng : item.lon, {
                 skipAdvance: true,
                 place_id: item.place_id,
             });
@@ -570,7 +571,10 @@
     }
 
     function runSearch(query) {
-        if (!searchUrl || query.length < 2) {
+        var q = window.AddressQueryNormalize && window.AddressQueryNormalize.normalize
+            ? window.AddressQueryNormalize.normalize(query)
+            : String(query || '').trim();
+        if (!searchUrl || q.length < 2) {
             renderIdleSuggest();
             return;
         }
@@ -587,7 +591,7 @@
             } else {
                 suggestEl.innerHTML = '<div class="booking-addr-suggest__empty">Đang tìm…</div>';
             }
-            fetch(searchUrl + '?q=' + encodeURIComponent(query) + '&province=' + encodeURIComponent('TP.HCM'), {
+            fetch(searchUrl + '?q=' + encodeURIComponent(q) + '&province=' + encodeURIComponent('TP.HCM'), {
                 signal: searchAbort.signal,
                 headers: { Accept: 'application/json' },
             })
@@ -786,7 +790,8 @@
             trigger.setAttribute('data-address-map-label', 'Chọn điểm trả');
         }
         trigger.setAttribute('data-address-map-default-province', 'TP.HCM');
-        trigger.setAttribute('data-address-map-locate', '1');
+        // Chỉ GPS tự động khi chọn điểm đón — điểm đến để user tìm/ ghim vàng.
+        trigger.setAttribute('data-address-map-locate', field === 'pickup' ? '1' : '0');
         syncHiddenForm();
         trigger.click();
     }
@@ -813,19 +818,27 @@
         input.addEventListener('focus', function () {
             focusField(input.id === 'addr-sheet-pickup' ? 'pickup' : 'dropoff');
         });
-        input.addEventListener('input', function () {
+        input.addEventListener('input', function (e) {
+            if (e && e.isComposing) {
+                return;
+            }
             var field = input.id === 'addr-sheet-pickup' ? 'pickup' : 'dropoff';
+            var q = window.AddressQueryNormalize && window.AddressQueryNormalize.applyToInput
+                ? window.AddressQueryNormalize.applyToInput(input)
+                : input.value.trim();
             // Gõ lại → bỏ khóa tọa độ cũ
             state[field].lat = null;
             state[field].lng = null;
-            state[field].address = input.value.trim();
+            state[field].address = q;
             updateClearButtons();
-            var q = input.value.trim();
             if (q.length >= 2) {
                 runSearch(q);
             } else {
                 renderIdleSuggest();
             }
+        });
+        input.addEventListener('compositionend', function () {
+            input.dispatchEvent(new Event('input', { bubbles: true }));
         });
     });
 

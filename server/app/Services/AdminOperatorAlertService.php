@@ -103,12 +103,15 @@ class AdminOperatorAlertService
         $profile = $transaction->wallet?->driverProfile;
         $name = trim((string) ($profile?->user?->name ?? 'Tài xế'));
         $amount = number_format((int) $transaction->amount, 0, ',', '.') . ' đ';
+        $isTripEarning = $transaction->isWalletTripEarning();
 
         $this->push([
             'id'      => 'driver_deposit:' . $transaction->id . ':' . now()->timestamp,
             'type'    => 'driver_deposit_pending',
-            'title'   => 'Nạp ví TX chờ duyệt',
-            'message' => $name . ' gửi nạp ' . $amount . '.',
+            'title'   => $isTripEarning ? 'Thu nhập cuốc trừ ví chờ duyệt' : 'Nạp ví TX chờ duyệt',
+            'message' => $isTripEarning
+                ? $name . ' · cộng ví ' . $amount . ' (90% doanh thu chuyến).'
+                : $name . ' gửi nạp ' . $amount . '.',
             'variant' => 'warning',
             'url'     => route('admin.walletDeposits'),
             'at'      => now()->toIso8601String(),

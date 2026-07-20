@@ -44,7 +44,7 @@ class GuestWaitProgress
 
                 return [
                     'kind'          => 'driver_search',
-                    'label'         => 'Đang tìm tài xế gần bạn…',
+                    'label'         => 'Đang tìm tài xế',
                     'hint'          => null,
                     'started_at'    => $started->toIso8601String(),
                     'deadline_at'   => $deadline->toIso8601String(),
@@ -57,7 +57,7 @@ class GuestWaitProgress
             if ($pickupLead?->isFuture()) {
                 return [
                     'kind'          => 'driver_search',
-                    'label'         => 'Đang tìm tài xế gần bạn…',
+                    'label'         => 'Đang tìm tài xế',
                     'hint'          => null,
                     'started_at'    => $started->toIso8601String(),
                     'deadline_at'   => $pickupLead->toIso8601String(),
@@ -68,7 +68,7 @@ class GuestWaitProgress
 
             return [
                 'kind'          => 'driver_search',
-                'label'         => 'Đang tìm tài xế gần bạn…',
+                'label'         => 'Đang tìm tài xế',
                 'hint'          => null,
                 'started_at'    => $started->toIso8601String(),
                 'deadline_at'   => null,

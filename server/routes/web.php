@@ -97,6 +97,8 @@ Route::get('/', [GuestBookingController::class, 'index'])->name('home');
 Route::get('chuyen', [GuestBookingController::class, 'trips'])->name('booking.trips');
 Route::get('chuyen/status', [GuestBookingController::class, 'tripStatus'])->name('booking.tripStatus');
 Route::post('chuyen/review', [GuestBookingController::class, 'storeTripReview'])->name('booking.tripReview');
+Route::post('chuyen/doi-diem-den', [GuestBookingController::class, 'changeDropoff'])->name('booking.changeDropoff');
+Route::post('chuyen/doi-diem-den/preview', [GuestBookingController::class, 'previewChangeDropoff'])->name('booking.previewChangeDropoff');
 Route::post('chuyen/cancel', [GuestBookingController::class, 'cancelTrip'])->name('booking.tripCancel');
 Route::redirect('dat-chuyen', '/chuyen');
 Route::get('gioi-thieu', [GuestBookingController::class, 'about'])->name('about');
@@ -117,6 +119,9 @@ Route::middleware(['auth', 'role:customer'])->group(function () {
     Route::post('chuyen/chat', [TripChatController::class, 'customerSend'])
         ->middleware('throttle:30,1')
         ->name('booking.chat.send');
+    Route::post('chuyen/call-log', [TripChatController::class, 'customerLogCall'])
+        ->middleware('throttle:30,1')
+        ->name('booking.callLog');
 });
 Route::get('booking/check-duplicate', [GuestBookingController::class, 'checkDuplicateBooking'])->name('booking.checkDuplicate');
 Route::get('booking/driver-offers', [GuestBookingController::class, 'driverOffers'])->name('booking.driverOffers');
@@ -146,6 +151,9 @@ Route::middleware(['auth', 'role:driver', 'driver.password'])->group(function ()
     Route::post('driver/bookings/{booking}/chat', [TripChatController::class, 'driverSend'])
         ->middleware('throttle:30,1')
         ->name('driver.bookings.chat.send');
+    Route::post('driver/bookings/{booking}/call-log', [TripChatController::class, 'driverLogCall'])
+        ->middleware('throttle:30,1')
+        ->name('driver.bookings.callLog');
     Route::post('driver/schedules/{schedule}/advance', [DriverController::class, 'advanceSchedule'])->name('driver.schedules.advance');
     Route::post('driver/schedules/{schedule}/confirm-movement', [DriverController::class, 'confirmMovement'])->name('driver.schedules.confirmMovement');
     Route::post('driver/schedules/{schedule}/complete', [DriverController::class, 'completeSchedule'])->name('driver.schedules.complete');

@@ -105,12 +105,13 @@ class AdminWalletController extends Controller
         return [
             'bulk_key'        => 'driver:'.$tx->id,
             'role'            => 'driver',
-            'role_label'      => 'Tài xế',
+            'role_label'      => $tx->isWalletTripEarning() ? 'TX · cuốc ví' : 'Tài xế',
             'phone'           => $user?->phone ?: '—',
             'display_name'    => $user?->preferredDisplayName() ?: ($user?->name ?: '—'),
             'amount'          => (int) $tx->amount,
             'reference'       => $tx->depositReference(),
             'proof_url'       => $tx->proofImageUrl(),
+            'notes'           => trim((string) ($tx->notes ?? '')),
             'created_at'      => $tx->created_at,
             'approve_url'     => route('admin.walletTransactions.approve', $tx),
             'reject_url'      => route('admin.walletTransactions.reject', $tx),
@@ -149,7 +150,7 @@ class AdminWalletController extends Controller
             'display_name'    => $user?->preferredDisplayName() ?: ($user?->name ?: '—'),
             'amount'          => (int) $tx->amount,
             'at'              => $tx->created_at,
-            'label'           => DriverWalletTransaction::historyLabelFor($tx->status),
+            'label'           => DriverWalletTransaction::historyLabelFor($tx->status, $tx->transfer_ref),
             'meta'            => match ($tx->status) {
                 'approved' => 'Duyệt '.($tx->approved_at?->format('d/m/Y H:i') ?? '—'),
                 'rejected' => 'Từ chối '.($tx->approved_at?->format('d/m/Y H:i') ?? '—'),

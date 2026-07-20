@@ -968,7 +968,23 @@ class DriverTripRequestService
 
         $workflow = app(BookingWorkflowService::class);
         $workflow->cancelSearchTimeout($booking);
-        $workflow->notifyCustomerDriverSearchTimeout($booking->fresh());
+
+        $fresh = $booking->fresh(['schedule']);
+        // Chỉ inbox «không tìm được TX» khi chuyến thực sự bị hủy vì timeout và vẫn chưa có TX.
+        if (! $fresh
+            || $fresh->booking_status !== 'cancelled'
+            || $fresh->cancelled_by !== 'system'
+            || $fresh->hasDriverAccepted()
+            || $fresh->hadDriverEngagedForPickup()) {
+            return false;
+        }
+
+        $reason = (string) ($fresh->cancellation_reason_label ?? '');
+        if (! str_contains($reason, 'Không tìm được tài xế')) {
+            return false;
+        }
+
+        $workflow->notifyCustomerDriverSearchTimeout($fresh);
 
         return true;
     }
@@ -1212,7 +1228,7 @@ class DriverTripRequestService
         }
     }
 
-    public function reject(DriverTripRequest $request, int $driverUserId, int $cancellationReasonId): void
+    public function reject(DriverTripRequest $request, int $driverUserId, int $cancellationReasonId, ?string $cancellationReasonNote = null): void
     {
         if ($request->driver_id !== $driverUserId) {
             throw new InvalidArgumentException('Không có quyền xử lý yêu cầu này.');
@@ -1222,7 +1238,9 @@ class DriverTripRequestService
             throw new InvalidArgumentException('Yêu cầu không còn hiệu lực.');
         }
 
-        $reason = app(CancellationReasonService::class)->resolveForCancel($cancellationReasonId, 'driver');
+        $reasonService = app(CancellationReasonService::class);
+        $reason = $reasonService->resolveForCancel($cancellationReasonId, 'driver');
+        $reasonService->composeLabel($reason, $cancellationReasonNote);
 
         $siblings = DriverTripRequest::query()
             ->where('schedule_id', $request->schedule_id)
@@ -1240,7 +1258,7 @@ class DriverTripRequestService
 
             try {
                 $booking = $this->bookingForRequest($sibling)->fresh(['schedule.route', 'schedule.vehicle', 'schedule.template']);
-                app(BookingWorkflowService::class)->stampDriverReleaseReason($booking, $reason);
+                app(BookingWorkflowService::class)->stampDriverReleaseReason($booking, $reason, $cancellationReasonNote);
             } catch (\Throwable) {
             }
 

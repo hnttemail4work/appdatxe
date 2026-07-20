@@ -22,7 +22,6 @@
 
         <div class="guest-trip-live-map" id="guest-trip-live-map" hidden>
             <div class="guest-trip-live-map__canvas" id="guest-trip-live-map-canvas" aria-label="Bản đồ chuyến"></div>
-            <div class="guest-trip-live-status d-none" id="guest-trip-live-status" aria-live="polite"></div>
         </div>
 
         <div class="guest-trip-info-sheet is-collapsed" id="guest-trip-info-sheet" data-guest-trip-sheet>
@@ -34,7 +33,7 @@
                     aria-expanded="false"
                     aria-label="Kéo để xem thông tin chuyến">
                 <span class="guest-trip-info-sheet__grip" aria-hidden="true"></span>
-                <span class="guest-trip-info-sheet__hint" id="guest-trip-info-sheet-hint">Đang tìm tài xế gần bạn…</span>
+                <span class="guest-trip-info-sheet__hint" id="guest-trip-info-sheet-hint">Thông tin chuyến</span>
             </button>
             <div class="guest-trip-info-sheet__body" id="guest-trip-info-sheet-body">
 
@@ -54,22 +53,22 @@
         <div class="guest-trip-stepper d-none" id="guest-trip-stepper" data-field="stepper_wrap" aria-label="Tiến trình chuyến đi">
             <div class="guest-trip-stepper__step" data-step="1">
                 <span class="guest-trip-stepper__dot" aria-hidden="true"></span>
-                <span class="guest-trip-stepper__label">Đã nhận chuyến</span>
+                <span class="guest-trip-stepper__label">Đã nhận</span>
             </div>
             <div class="guest-trip-stepper__line" aria-hidden="true"></div>
             <div class="guest-trip-stepper__step" data-step="2">
                 <span class="guest-trip-stepper__dot" aria-hidden="true"></span>
-                <span class="guest-trip-stepper__label">Đang đến đón</span>
+                <span class="guest-trip-stepper__label">Đang đến</span>
             </div>
             <div class="guest-trip-stepper__line" aria-hidden="true"></div>
             <div class="guest-trip-stepper__step" data-step="3">
                 <span class="guest-trip-stepper__dot" aria-hidden="true"></span>
-                <span class="guest-trip-stepper__label">Đã đón khách</span>
+                <span class="guest-trip-stepper__label">Đã đón</span>
             </div>
             <div class="guest-trip-stepper__line" aria-hidden="true"></div>
             <div class="guest-trip-stepper__step" data-step="4">
                 <span class="guest-trip-stepper__dot" aria-hidden="true"></span>
-                <span class="guest-trip-stepper__label">Hoàn tất</span>
+                <span class="guest-trip-stepper__label">Hoàn thành</span>
             </div>
         </div>
 
@@ -101,9 +100,28 @@
 
                     <p class="guest-trip-stop__address" data-field="dropoff_address"></p>
 
+                    <button type="button"
+                            class="btn btn-sm btn-outline-warning mt-2 d-none"
+                            data-field="change_dropoff_btn"
+                            data-guest-change-dropoff
+                            data-address-map-for="guest-change-dropoff-detail"
+                            data-address-map-lat="guest-change-dropoff-lat"
+                            data-address-map-lng="guest-change-dropoff-lng"
+                            data-address-map-province="guest-change-dropoff-address"
+                            data-address-map-default-province="TP.HCM"
+                            data-address-map-mode="change-dropoff"
+                            data-address-map-label="Đổi điểm đến">
+                        Đổi điểm đến
+                    </button>
+
                 </div>
 
             </div>
+
+            <input type="hidden" id="guest-change-dropoff-detail" value="">
+            <input type="hidden" id="guest-change-dropoff-lat" value="">
+            <input type="hidden" id="guest-change-dropoff-lng" value="">
+            <input type="hidden" id="guest-change-dropoff-address" value="TP.HCM">
 
         </div>
 
@@ -111,12 +129,9 @@
 
         <section class="guest-trip-vehicle-section d-none" data-field="vehicle_section_wrap" aria-label="Thông tin xe">
 
-            <div id="guest-trip-driver-panel" class="guest-trip-driver d-none" data-field="driver_panel">
-
-            <div class="guest-trip-driver__eta-hero d-none" data-field="driver_eta_hero_wrap">
-                <strong class="guest-trip-driver__eta-hero-value" data-field="driver_eta_hero_value"></strong>
-                <span class="guest-trip-driver__eta-hero-unit">phút nữa</span>
-            </div>
+            <div id="guest-trip-driver-panel" class="guest-trip-driver d-none" data-field="driver_panel"
+                 data-guest-call-root
+                 data-call-log-url="{{ route('booking.callLog') }}">
 
             <div class="guest-trip-driver__media">
 
@@ -145,35 +160,39 @@
                             <span data-field="driver_rating_value"></span>
                         </span>
 
-                        <span class="guest-trip-driver__code d-none" data-field="driver_code"></span>
-
-                    </div>
-
-                    <div class="guest-trip-driver__badges">
-
                         <span class="guest-trip-driver__plate d-none" data-field="driver_plate"></span>
 
-                        <span class="guest-trip-driver__seats d-none" data-field="driver_seats"></span>
-
                     </div>
-
-                </div>
-
-                <div class="guest-trip-driver__live d-none" data-field="driver_live_wrap">
-
-                    <p class="guest-trip-driver__live-distance d-none" data-field="driver_distance_line"></p>
-
-                    <p class="guest-trip-driver__live-eta d-none" data-field="driver_eta_line"></p>
 
                 </div>
 
             </div>
+
+            <div class="guest-trip-driver__actions" data-field="driver_actions">
+                <a href="#"
+                   class="guest-trip-driver__call d-none"
+                   data-field="driver_call"
+                   data-guest-call-btn
+                   aria-label="Gọi tài xế qua app"
+                   title="Gọi tài xế qua app">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.81.36 1.6.68 2.35a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.75.32 1.54.55 2.35.68A2 2 0 0 1 22 16.92z"/>
+                    </svg>
+                    <span class="visually-hidden" data-guest-call-label>Gọi</span>
+                </a>
+                <div class="guest-trip-driver__chat trip-chat-slot" data-field="driver_chat_slot">
+                    @include('partials.trip-chat-panel', ['mode' => 'customer'])
+                </div>
+            </div>
+
+            <p class="driver-trip-call__reveal guest-trip-driver__call-reveal d-none" data-guest-call-reveal data-field="driver_call_reveal">
+                <span class="driver-trip-call__hint">Gọi app 2 lần chưa được? Lần 3 gọi số điện thoại:</span>
+                <a href="#" class="driver-trip-call__number" data-field="driver_call_number"></a>
+            </p>
 
             </div>
 
         </section>
-
-        @include('partials.trip-chat-panel', ['mode' => 'customer'])
 
 
 
@@ -201,15 +220,14 @@
                         <span class="guest-trip-detail__value" data-field="trip_distance_km"></span>
                     </div>
 
-                    <div class="guest-trip-detail guest-trip-detail--price d-none" data-field="total_price_wrap">
-                        <span class="guest-trip-detail__label">Giá chuyến</span>
-                        <span class="guest-trip-detail__value guest-trip-detail__value--price" data-field="total_price"></span>
-                        <div class="small text-muted mt-1 d-none" data-field="price_extras"></div>
-                    </div>
-
             </div>
 
         </section>
+
+        <div class="guest-trip-total d-none" data-field="trip_total_wrap">
+            Tổng chuyến: <strong data-field="trip_total_value"></strong>
+            <div class="guest-trip-total__extras small text-muted d-none" data-field="price_extras"></div>
+        </div>
 
 
 
@@ -271,10 +289,8 @@
 
         <div id="guest-trip-cancel-wrap" class="guest-trip-cancel d-none" data-field="cancel_wrap">
 
-            <button type="button" class="btn btn-outline-danger btn-sm guest-trip-cancel-btn" id="guest-trip-cancel-btn">
-
+            <button type="button" class="btn btn-outline-danger guest-trip-cancel-btn" id="guest-trip-cancel-btn">
                 Hủy chuyến
-
             </button>
 
             <p class="guest-trip-cancel-error d-none" id="guest-trip-cancel-error"></p>
@@ -290,7 +306,14 @@
         <button type="button" class="guest-trip-vehicle-photo-overlay__backdrop" data-close-guest-vehicle-photo aria-label="Đóng"></button>
         <div class="guest-trip-vehicle-photo-overlay__panel">
             <button type="button" class="btn-close btn-close-white guest-trip-vehicle-photo-overlay__close" data-close-guest-vehicle-photo aria-label="Đóng"></button>
+            <button type="button" class="guest-trip-vehicle-photo-overlay__nav guest-trip-vehicle-photo-overlay__nav--prev d-none" data-guest-vehicle-photo-prev aria-label="Ảnh trước">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M15 18l-6-6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
             <img src="" alt="" class="guest-trip-vehicle-photo-overlay__image" id="guest-trip-vehicle-photo-overlay-image">
+            <button type="button" class="guest-trip-vehicle-photo-overlay__nav guest-trip-vehicle-photo-overlay__nav--next d-none" data-guest-vehicle-photo-next aria-label="Ảnh sau">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <div class="guest-trip-vehicle-photo-overlay__counter d-none" id="guest-trip-vehicle-photo-counter" aria-live="polite"></div>
         </div>
     </div>
 

@@ -1,7 +1,6 @@
 /**
  * Sheet đón khách (giai đoạn assigned) — vuốt lên xem đầy đủ, vuốt xuống thu nhỏ (peek).
- * Peek mặc định để map ưu tiên chỗ hiển thị cho camera chỉ đường; không cần map.resize()
- * (map luôn full-bleed phía sau, chỉ camera padding cần cập nhật qua DriverLiveMap.setSheetState).
+ * Mỗi lần peek↔full: đẩy camera (mũi tên / ghim) vào giữa mép trên map ↔ mép trên popup.
  */
 (function () {
     var sheet = document.querySelector('[data-driver-pickup-sheet]');
@@ -14,9 +13,10 @@
     var THRESHOLD = 32;
     var startY = 0;
     var dragging = false;
+    var syncTimers = [];
 
     function occludedBottomPx() {
-        var top = panel.getBoundingClientRect().top;
+        var top = sheet.getBoundingClientRect().top;
         return Math.max(0, Math.round(window.innerHeight - top));
     }
 
@@ -29,6 +29,22 @@
         }
     }
 
+    function clearSyncTimers() {
+        syncTimers.forEach(function (id) {
+            window.clearTimeout(id);
+        });
+        syncTimers = [];
+    }
+
+    function scheduleSyncMapCamera() {
+        clearSyncTimers();
+        window.requestAnimationFrame(function () {
+            syncMapCamera();
+            syncTimers.push(window.setTimeout(syncMapCamera, 120));
+            syncTimers.push(window.setTimeout(syncMapCamera, 300));
+        });
+    }
+
     function setPeek(peek) {
         var wasPeek = sheet.classList.contains('is-peek');
         if (peek === wasPeek) {
@@ -37,10 +53,10 @@
         sheet.classList.toggle('is-peek', peek);
         sheet.classList.toggle('is-full', !peek);
         handle.setAttribute('aria-expanded', peek ? 'false' : 'true');
-        window.requestAnimationFrame(function () {
-            syncMapCamera();
-            window.setTimeout(syncMapCamera, 300);
-        });
+        if (peek && window.TripChat && typeof window.TripChat.closeAllOpen === 'function') {
+            window.TripChat.closeAllOpen();
+        }
+        scheduleSyncMapCamera();
     }
 
     handle.addEventListener('click', function () {
@@ -74,14 +90,17 @@
     window.addEventListener('mouseup', onPointerUp);
 
     if (typeof ResizeObserver !== 'undefined') {
-        var ro = new ResizeObserver(syncMapCamera);
+        var ro = new ResizeObserver(function () {
+            syncMapCamera();
+        });
         ro.observe(sheet);
+        ro.observe(panel);
     } else {
         window.addEventListener('resize', syncMapCamera);
     }
 
     sheet.addEventListener('transitionend', function (event) {
-        if (event.target === sheet) {
+        if (event.target === sheet || sheet.contains(event.target)) {
             syncMapCamera();
         }
     });

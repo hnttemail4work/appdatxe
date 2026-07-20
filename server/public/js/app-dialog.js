@@ -15,6 +15,7 @@
     var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     var pendingResolve = null;
     var settled = false;
+    var chooseMode = false;
 
     var variantClass = {
         primary: 'btn-primary',
@@ -40,6 +41,7 @@
     function openDialog(options) {
         var opts = options || {};
         var isAlert = !!opts.alert;
+        chooseMode = !!opts.choose && !isAlert;
 
         settled = false;
         titleEl.textContent = opts.title || (isAlert ? 'Thông báo' : 'Xác nhận');
@@ -60,6 +62,11 @@
         return openDialog(options || {});
     }
 
+    /** Trả 'confirm' | 'cancel' | null (đóng X / backdrop — không chọn). */
+    function choose(options) {
+        return openDialog(Object.assign({}, options || {}, { choose: true, alert: false }));
+    }
+
     function alert(message, options) {
         var opts = options || {};
         return openDialog({
@@ -72,16 +79,16 @@
     }
 
     confirmBtn.addEventListener('click', function () {
-        finish(true);
+        finish(chooseMode ? 'confirm' : true);
         modal.hide();
     });
 
     cancelBtn.addEventListener('click', function () {
-        finish(false);
+        finish(chooseMode ? 'cancel' : false);
     });
 
     modalEl.addEventListener('hidden.bs.modal', function () {
-        finish(false);
+        finish(chooseMode ? null : false);
     });
 
     document.addEventListener('submit', function (e) {
@@ -127,6 +134,7 @@
 
     window.AppDialog = {
         confirm: confirm,
+        choose: choose,
         alert: alert,
     };
 })();

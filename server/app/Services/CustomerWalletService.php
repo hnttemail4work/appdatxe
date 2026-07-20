@@ -184,6 +184,8 @@ class CustomerWalletService
                 'balance' => $wallet->balance + $transaction->amount,
             ]);
         });
+
+        $this->notifyDepositInbox($transaction->fresh(), approved: true);
     }
 
     public function rejectDeposit(CustomerWalletTransaction $transaction, int $actorId): void
@@ -197,5 +199,22 @@ class CustomerWalletService
             'approved_by' => $actorId,
             'approved_at' => now(),
         ]);
+
+        $this->notifyDepositInbox($transaction->fresh(), approved: false);
+    }
+
+    private function notifyDepositInbox(CustomerWalletTransaction $transaction, bool $approved): void
+    {
+        $transaction->loadMissing('wallet.user');
+        $user = $transaction->wallet?->user;
+        if (! $user instanceof User) {
+            return;
+        }
+
+        app(UserInboxService::class)->notifyDepositResult(
+            $user,
+            (int) $transaction->amount,
+            $approved,
+        );
     }
 }

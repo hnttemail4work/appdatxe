@@ -14,7 +14,8 @@ class TripMessageResource extends JsonResource
         return [
             'id'         => $this->id,
             'role'       => $this->sender_role,
-            'body'       => $this->body,
+            'body'       => $this->body ?? '',
+            'image_url'  => $this->imageUrl(),
             'created_at' => $this->created_at?->format('H:i'),
         ];
     }

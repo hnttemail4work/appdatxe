@@ -46,10 +46,22 @@
                 <a href="{{ $url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary">{{ $label }}</a>
             @endif
         @endforeach
-        @foreach($pendingChange->vehiclePhotoUrls() as $idx => $url)
-            <a href="{{ $url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary">Ảnh xe #{{ $idx + 1 }}</a>
-        @endforeach
     </div>
+    @php $pendingVehicleUrls = $pendingChange->vehiclePhotoUrls(); @endphp
+    @if($pendingVehicleUrls !== [])
+        <div class="driver-doc-thumb-row mb-3">
+            @foreach($pendingVehicleUrls as $url)
+                <a href="{{ $url }}"
+                   target="_blank"
+                   rel="noopener"
+                   class="driver-doc-thumb is-pending"
+                   title="Ảnh xe chờ duyệt">
+                    <img src="{{ $url }}" alt="Ảnh xe chờ duyệt" loading="lazy">
+                    <span>Ảnh xe</span>
+                </a>
+            @endforeach
+        </div>
+    @endif
 
     <div class="d-flex flex-wrap gap-2">
         <form method="POST" action="{{ route('admin.drivers.changes.approve', [$driver, $pendingChange]) }}">

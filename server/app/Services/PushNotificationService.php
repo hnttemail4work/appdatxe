@@ -9,6 +9,7 @@ use App\Models\Schedule;
 use App\Models\User;
 use App\Support\AppBrandingSettings;
 use App\Support\AuthIdentifier;
+use App\Support\Money;
 use App\Support\PushAudience;
 use App\Support\PushNotificationSettings;
 use Illuminate\Http\Request;
@@ -89,16 +90,17 @@ class PushNotificationService
     public function onDriverTripRequestExpired(DriverTripRequest $request): void
     {
         $routeLabel = $this->tripRequestRouteLabel($request);
+        $shortCode = $this->tripRequestShortCode($request);
 
         $cancelledByGuest = $request->status === 'cancelled';
         $this->sendToDriver(
             (int) $request->driver_id,
             'driver.trip_cancelled',
-            $cancelledByGuest ? 'Khách đã hủy chuyến' : 'Cuốc chờ nhận đã thu hồi',
+            $cancelledByGuest ? 'Chuyến đã bị hủy' : 'Cuốc chờ nhận đã thu hồi',
             $cancelledByGuest
-                ? ($routeLabel !== ''
-                    ? 'Khách đã hủy chuyến: ' . $routeLabel
-                    : 'Khách đã hủy chuyến.')
+                ? ($shortCode !== ''
+                    ? 'Khách đã hủy chuyến ' . $shortCode
+                    : 'Khách đã hủy chuyến')
                 : ($routeLabel !== ''
                     ? 'Yêu cầu nhận cuốc đã hết hạn: ' . $routeLabel
                     : 'Yêu cầu nhận cuốc đã hết hạn.'),
@@ -279,6 +281,20 @@ class PushNotificationService
         return $routeLabel !== '→' ? $routeLabel : '';
     }
 
+    protected function tripRequestShortCode(DriverTripRequest $request): string
+    {
+        $request->loadMissing('schedule');
+
+        return trim((string) ($request->schedule?->shortTripCode() ?? ''));
+    }
+
+    protected function bookingShortCode(Booking $booking): string
+    {
+        $booking->loadMissing('schedule');
+
+        return trim((string) ($booking->schedule?->shortTripCode() ?? ''));
+    }
+
     protected function notifyDriverTripRequest(DriverTripRequest $request, string $dedupKey): bool
     {
         if ($request->status !== 'pending') {
@@ -381,19 +397,75 @@ class PushNotificationService
 
     public function onTripCompleted(Booking $booking): void
     {
+        $ref = (string) ($booking->booking_reference ?? '#'.$booking->id);
+        $guestBody = 'Chuyến '.$ref.' đã hoàn tất. Cảm ơn bạn đã đi cùng '.AppBrandingSettings::appName().'. Hãy đánh giá chuyến đi trong lịch sử hoặc trang Chuyến.';
+
         $this->sendToGuestBooking(
             $booking,
             'guest.trip_completed',
             'Chuyến hoàn tất',
-            'Cảm ơn bạn đã đi cùng ' . AppBrandingSettings::appName() . '. Hãy đánh giá chuyến đi.',
+            $guestBody,
             '/chuyen',
             'guest:booking:' . $booking->id . ':completed',
         );
+
+        // Hộp thư khách (user đăng nhập) nếu có.
+        $customerUserId = (int) ($booking->customer_id ?? 0);
+        if ($customerUserId > 0) {
+            try {
+                app(CustomerInboxService::class)->notify(
+                    $customerUserId,
+                    \App\Models\CustomerInboxMessage::CATEGORY_NOTICE,
+                    'Chuyến hoàn tất',
+                    $guestBody,
+                    ['type' => 'trip_completed', 'booking_id' => $booking->id],
+                );
+            } catch (\Throwable) {
+            }
+        }
+
+        $booking->loadMissing('schedule');
+        $driverId = (int) ($booking->assigned_driver_id ?: $booking->schedule?->driver_id ?: 0);
+        if ($driverId > 0) {
+            $this->sendToDriver(
+                $driverId,
+                'driver.trip_completed',
+                'Chuyến hoàn tất',
+                'Chuyến '.$ref.' đã hoàn thành. Xem chi tiết trong lịch sử chuyến.',
+                '/tai-xe',
+                'driver:booking:'.$booking->id.':completed',
+            );
+        }
+    }
+
+    public function onGuestChangedDropoff(Booking $booking): void
+    {
+        $dropLabel = trim((string) ($booking->dropoff_detail ?: $booking->dropoff_address ?: 'điểm đến mới'));
+        $priceLabel = Money::vnd((float) $booking->total_price);
+        $body = 'Khách đổi điểm đến: '.$dropLabel.' · Giá mới '.$priceLabel;
+
+        $booking->loadMissing('schedule');
+        $driverId = (int) ($booking->assigned_driver_id ?: $booking->schedule?->driver_id ?: 0);
+        if ($driverId > 0) {
+            $this->sendToDriver(
+                $driverId,
+                'driver.dropoff_changed',
+                'Khách đổi điểm đến',
+                $body,
+                '/tai-xe',
+                'driver:booking:'.$booking->id.':dropoff:'.md5((string) $booking->dropoff_lat.','.$booking->dropoff_lng),
+            );
+        }
     }
 
     public function onTripCancelled(Booking $booking, ?string $reason = null, ?int $driverUserId = null): void
     {
-        $body = 'Chuyến ' . ($booking->booking_reference ?? '#' . $booking->id) . ' đã hủy.';
+        $shortCode = $this->bookingShortCode($booking);
+        $refLabel = $shortCode !== ''
+            ? $shortCode
+            : (string) ($booking->booking_reference ?? '#' . $booking->id);
+
+        $body = 'Chuyến ' . $refLabel . ' đã hủy.';
         if ($reason) {
             $body .= ' ' . $reason;
         }
@@ -417,11 +489,16 @@ class PushNotificationService
             $driverId = (int) ($booking->schedule?->driver_id ?? 0);
         }
         if ($driverId > 0) {
+            $cancelledByGuest = $booking->cancelled_by === 'customer';
             $this->sendToDriver(
                 $driverId,
                 'driver.trip_cancelled',
-                'Chuyến bị hủy',
-                'Chuyến ' . ($booking->booking_reference ?? '#' . $booking->id) . ' đã bị hủy.',
+                'Chuyến đã bị hủy',
+                $cancelledByGuest
+                    ? ($shortCode !== ''
+                        ? 'Khách đã hủy chuyến ' . $shortCode
+                        : 'Khách đã hủy chuyến')
+                    : ('Chuyến ' . $refLabel . ' đã bị hủy.'),
                 '/driver/dashboard',
                 'driver:booking:' . $booking->id . ':cancelled',
             );
@@ -430,6 +507,11 @@ class PushNotificationService
 
     public function onNoDriverFound(Booking $booking): void
     {
+        // Chỉ khi chưa từng có TX — tránh báo nhầm chuyến đã ghép tài xế.
+        if ($booking->hasDriverAccepted() || $booking->hadDriverEngagedForPickup()) {
+            return;
+        }
+
         $reason = (string) ($booking->cancellation_reason_label ?? '');
         $body = str_contains($reason, '1 tiếng') || str_contains($reason, 'đặt lịch')
             ? 'Không tìm được tài xế trước giờ đón 1 tiếng. Chuyến đã hủy — bạn có thể đặt lại.'

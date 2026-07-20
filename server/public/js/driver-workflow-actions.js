@@ -126,6 +126,20 @@
 
             var redirect = (result.data && result.data.redirect)
                 || (window.__driverDashboardUrl || '/driver/dashboard?tab=trips');
+
+            // Chỉ popup khi bị khóa tài khoản; hủy thành công thì về dashboard im lặng.
+            if (result.data && result.data.account_locked && result.data.message) {
+                var go = function () { window.location.assign(redirect); };
+                if (window.AppDialog && window.AppDialog.alert) {
+                    window.AppDialog.alert(result.data.message, {
+                        title: 'Tài khoản bị khóa',
+                        variant: 'danger',
+                    }).then(go).catch(go);
+                    return;
+                }
+                window.alert(result.data.message);
+            }
+
             window.location.assign(redirect);
         }).catch(function (err) {
             resetFormState(form, submitBtn);

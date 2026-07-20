@@ -288,13 +288,6 @@
 
     function handlePositionTick(pos) {
         if (!hasFetchedOnce) {
-            // Tạm đường thẳng tới khi Direction trả polyline theo đường.
-            if (window.DriverLiveMap && window.DriverLiveMap.setRoute) {
-                window.DriverLiveMap.setRoute([
-                    [pos.lng, pos.lat],
-                    [destLng, destLat],
-                ]);
-            }
             fetchRoute(pos, true);
             renderFallback(pos);
             return;

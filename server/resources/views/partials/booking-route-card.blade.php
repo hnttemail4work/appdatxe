@@ -42,12 +42,10 @@ $loginUrl = route('login');
                 data-address-map-lng="modal-dropoff-lng"
                 data-address-map-default-province="TP.HCM"
                 data-address-map-label="Chọn điểm trả"
-                data-address-map-locate="1"
                 aria-label="Chọn trên bản đồ"
                 title="Bản đồ">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-                <circle cx="12" cy="10" r="3"/>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/>
             </svg>
         </button>
 
@@ -86,8 +84,7 @@ $loginUrl = route('login');
                 data-address-map-lat="modal-dropoff-lat"
                 data-address-map-lng="modal-dropoff-lng"
                 data-address-map-default-province="TP.HCM"
-                data-address-map-label="Chọn điểm trên bản đồ"
-                data-address-map-locate="1"></button>
+                data-address-map-label="Chọn điểm trên bản đồ"></button>
 
         <div class="booking-addr-sheet__fields">
             <div class="booking-addr-sheet__rail" aria-hidden="true">

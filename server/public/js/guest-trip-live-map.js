@@ -6,7 +6,6 @@
 
     var mapEl = document.getElementById('guest-trip-live-map');
     var canvas = document.getElementById('guest-trip-live-map-canvas');
-    var statusEl = document.getElementById('guest-trip-live-status');
     var locateBtn = document.getElementById('guest-trip-locate-btn');
     if (!mapEl || !canvas) {
         return;
@@ -17,12 +16,27 @@
     var dropoffMarker = null;
     var carMarker = null;
     var radarMarker = null;
+    /** Marker vị trí GPS của khách (nút định vị) — không dùng điểm đón / TX / điểm đến. */
+    var guestSelfMarker = null;
     var assetsPromise = null;
     var lastPickup = null;
     var lastUserPos = null;
     var searchingActive = false;
     /** Chỉ auto-center khi mới vào tìm chuyến; sau đó để user kéo/zoom tự do. */
     var searchCameraSettled = false;
+    /** Chỉ căn camera lần đầu khi TX nhận / đang chạy — poll không kéo nữa. */
+    var trackingCameraSettled = false;
+    /** Khách đã kéo/zoom map hoặc đã có hành động camera → không auto fitBounds/easeTo. */
+    var userMovedCamera = false;
+    var cameraGestureBound = false;
+    var lastCameraBookingRef = null;
+    /** Đi đón / đang chạy: zoom sát hơn ~30% rồi +25% nữa (cap 20). */
+    var TRIP_ACTIVE_ZOOM = Math.min(20, 15 * 1.3 * 1.25);
+    var TRIP_ACTIVE_MAX_ZOOM = Math.min(20, 15 * 1.3 * 1.25);
+
+    var lastDriverPos = null;
+    /** 'follow' | 'overview' | 'driver' — nhấn card TX để xen kẽ overview / zoom TX. */
+    var cameraFocusMode = 'follow';
 
     var ROUTE_SOURCE_ID = 'guest-trip-route';
     var ROUTE_LAYER_ID = 'guest-trip-route-line';
@@ -67,13 +81,29 @@
     function carIconEl(heading) {
         var el = document.createElement('div');
         el.className = 'guest-trip-car-marker';
-        el.innerHTML = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none">'
-            + '<rect x="4" y="9" width="16" height="7" rx="2" fill="#facc15" stroke="#111" stroke-width="1"/>'
-            + '<path d="M7 9l1.5-3h7L17 9" fill="#fde68a" stroke="#111" stroke-width="1"/>'
-            + '<circle cx="8" cy="16.5" r="1.4" fill="#111"/><circle cx="16" cy="16.5" r="1.4" fill="#111"/>'
-            + '</svg>';
-        if (heading != null && !Number.isNaN(Number(heading))) {
-            el.style.transform = 'rotate(' + Number(heading) + 'deg)';
+        el.innerHTML = ''
+            + '<div class="guest-trip-car-marker__radar" aria-hidden="true">'
+            + '<span></span><span></span><span></span>'
+            + '</div>'
+            + '<div class="guest-trip-car-marker__arrow">'
+            + '<svg viewBox="0 0 48 48" width="44" height="44" aria-hidden="true">'
+            + '<defs>'
+            + '<linearGradient id="navArrowFill" x1="24" y1="4" x2="24" y2="44" gradientUnits="userSpaceOnUse">'
+            + '<stop stop-color="#93c5fd"/><stop offset="1" stop-color="#3b82f6"/>'
+            + '</linearGradient>'
+            + '<filter id="navArrowSh" x="-25%" y="-15%" width="150%" height="150%">'
+            + '<feDropShadow dx="0" dy="1.5" stdDeviation="1.4" flood-color="#000" flood-opacity=".45"/>'
+            + '</filter>'
+            + '</defs>'
+            + '<g filter="url(#navArrowSh)">'
+            + '<path d="M24 5.5L39.5 38.2c.55 1.15-.55 2.4-1.75 1.95L24 33.4 10.25 40.15c-1.2.45-2.3-.8-1.75-1.95L24 5.5z" fill="url(#navArrowFill)" stroke="#0f172a" stroke-width="1.8" stroke-linejoin="round"/>'
+            + '<path d="M24 14.2L32.6 33.1 24 29.4 15.4 33.1 24 14.2z" fill="#fff" opacity=".92"/>'
+            + '</g>'
+            + '</svg>'
+            + '</div>';
+        var arrow = el.querySelector('.guest-trip-car-marker__arrow');
+        if (arrow && heading != null && !Number.isNaN(Number(heading))) {
+            arrow.style.transform = 'rotate(' + Number(heading) + 'deg)';
         }
         return el;
     }
@@ -102,19 +132,36 @@
             locateBtn.hidden = !show;
             locateBtn.classList.toggle('d-none', !show);
         }
+        if (show && window.GuestTripSheet && window.GuestTripSheet.syncLocateFabLift) {
+            window.requestAnimationFrame(function () {
+                window.GuestTripSheet.syncLocateFabLift();
+            });
+        }
     }
 
-    function setLiveStatus(text) {
-        if (!statusEl) {
+    function bindCameraGestureGuards(map) {
+        if (!map || cameraGestureBound) {
             return;
         }
-        if (!text) {
-            statusEl.textContent = '';
-            statusEl.classList.add('d-none');
-            return;
-        }
-        statusEl.textContent = text;
-        statusEl.classList.remove('d-none');
+        cameraGestureBound = true;
+        var markUserMove = function (event) {
+            // Chỉ gesture thật (có originalEvent); bỏ qua easeTo/fitBounds programmatic.
+            if (event && event.originalEvent) {
+                userMovedCamera = true;
+            }
+        };
+        map.on('dragstart', markUserMove);
+        map.on('zoomstart', markUserMove);
+        map.on('rotatestart', markUserMove);
+        map.on('pitchstart', markUserMove);
+    }
+
+    function canAutoMoveCamera() {
+        return !userMovedCamera;
+    }
+
+    function resumeAutoCamera() {
+        userMovedCamera = false;
     }
 
     function ensureMap(center) {
@@ -125,10 +172,11 @@
                     container: canvas,
                     style: 'https://tiles.goong.io/assets/goong_map_web.json',
                     center: center,
-                    zoom: 15,
+                    zoom: Math.min(20, 15 * 1.25),
                     interactive: true,
                     attributionControl: false,
                 });
+                bindCameraGestureGuards(mapInstance);
             }
             return mapInstance;
         });
@@ -141,7 +189,7 @@
         var lngLat = [Number(lng), Number(lat)];
         if (kind === 'pickup') {
             if (!pickupMarker) {
-                pickupMarker = new window.goongjs.Marker({ color: color || '#22c55e' })
+                pickupMarker = new window.goongjs.Marker({ color: color || '#3b82f6' })
                     .setLngLat(lngLat)
                     .addTo(mapInstance);
             } else {
@@ -151,7 +199,7 @@
         }
         if (kind === 'dropoff') {
             if (!dropoffMarker) {
-                dropoffMarker = new window.goongjs.Marker({ color: color || '#ef4444' })
+                dropoffMarker = new window.goongjs.Marker({ color: color || '#eab308' })
                     .setLngLat(lngLat)
                     .addTo(mapInstance);
             } else {
@@ -198,19 +246,31 @@
         return null;
     }
 
-    /** Padding: đặt radar/mũi tên giữa mép trên màn hình và mép trên sheet. */
+    /**
+     * Padding map = vùng lộ giữa cạnh trên màn hình và cạnh trên sheet.
+     * Sheet xổ ra giữa màn → bottom lớn → item căn giữa dải lộ (MapSheetCamera chung).
+     */
+    function sheetCameraPadding() {
+        return window.MapSheetCamera && window.MapSheetCamera.paddingFromEdges
+            ? window.MapSheetCamera.paddingFromEdges({
+                mapEl: mapEl,
+                sheetEl: document.getElementById('guest-trip-info-sheet'),
+                side: 28,
+                topExtra: 12,
+            })
+            : { top: 12, bottom: 0, left: 28, right: 28 };
+    }
+
     function searchCameraPadding() {
-        var sheet = document.getElementById('guest-trip-info-sheet');
-        var mapH = (mapEl.getBoundingClientRect().height) || window.innerHeight || 600;
-        var sheetH = sheet ? sheet.getBoundingClientRect().height : 0;
-        if (sheetH < 8) {
-            sheetH = Math.round(mapH * 0.42);
-        }
-        // Luôn chừa tối thiểu ~160px map để radar không bị đẩy khỏi viewport.
-        var minVisible = 160;
-        var bottom = Math.min(Math.round(sheetH), Math.max(0, Math.round(mapH - minVisible)));
-        // top nhỏ → tâm camera nằm giữa vùng map còn lộ (trên sheet ↔ cạnh trên).
-        return { top: 24, bottom: bottom, left: 20, right: 20 };
+        return sheetCameraPadding();
+    }
+
+    function trackingCameraPadding() {
+        return sheetCameraPadding();
+    }
+
+    function fitOrFlyOnce(points, zoom, options) {
+        fitOrFlyForced(points, zoom, options);
     }
 
     function placeCar(lat, lng, heading) {
@@ -218,16 +278,31 @@
             return;
         }
         var lngLat = [Number(lng), Number(lat)];
+        lastDriverPos = { lat: Number(lat), lng: Number(lng) };
         if (!carMarker) {
-            carMarker = new window.goongjs.Marker({ element: carIconEl(heading), anchor: 'center' })
+            var fresh = carIconEl(heading);
+            fresh.dataset.markerVer = 'nav-radar-v2';
+            carMarker = new window.goongjs.Marker({ element: fresh, anchor: 'center' })
                 .setLngLat(lngLat)
                 .addTo(mapInstance);
             return;
         }
         carMarker.setLngLat(lngLat);
         var el = carMarker.getElement();
-        if (el && heading != null && !Number.isNaN(Number(heading))) {
-            el.style.transform = 'rotate(' + Number(heading) + 'deg)';
+        if (el && el.dataset.markerVer !== 'nav-radar-v2') {
+            var next = carIconEl(heading);
+            next.dataset.markerVer = 'nav-radar-v2';
+            el.className = next.className;
+            el.dataset.markerVer = 'nav-radar-v2';
+            el.innerHTML = next.innerHTML;
+            return;
+        }
+        if (el && !el.dataset.markerVer) {
+            el.dataset.markerVer = 'nav-radar-v2';
+        }
+        var arrow = el ? el.querySelector('.guest-trip-car-marker__arrow') : null;
+        if (arrow && heading != null && !Number.isNaN(Number(heading))) {
+            arrow.style.transform = 'rotate(' + Number(heading) + 'deg)';
         }
     }
 
@@ -236,6 +311,51 @@
             carMarker.remove();
             carMarker = null;
         }
+        lastDriverPos = null;
+        cameraFocusMode = 'follow';
+    }
+
+    /**
+     * Nhấn card TX / khách: lần 1 zoom vào đối phương, lần 2 thu sheet + overview khoảng cách.
+     * Lặp lại như vậy (đồng bộ màn tài xế).
+     */
+    function toggleDriverFocusCamera() {
+        if (!mapInstance || !lastDriverPos) {
+            return false;
+        }
+        var pad = trackingCameraPadding();
+        if (cameraFocusMode !== 'driver') {
+            fitOrFlyOnce([[lastDriverPos.lng, lastDriverPos.lat]], Math.min(20, TRIP_ACTIVE_ZOOM + 0.4), {
+                padding: pad,
+                maxZoom: TRIP_ACTIVE_MAX_ZOOM,
+            });
+            cameraFocusMode = 'driver';
+            return true;
+        }
+
+        var sheet = document.getElementById('guest-trip-info-sheet');
+        if (sheet) {
+            sheet.dataset.userToggled = '1';
+        }
+        if (window.GuestTripSheet && typeof window.GuestTripSheet.collapse === 'function') {
+            window.GuestTripSheet.collapse();
+        }
+
+        cameraFocusMode = 'overview';
+        window.setTimeout(function () {
+            if (!mapInstance || !lastDriverPos) {
+                return;
+            }
+            var pts = [[lastDriverPos.lng, lastDriverPos.lat]];
+            if (lastPickup) {
+                pts.push([lastPickup.lng, lastPickup.lat]);
+            }
+            fitOrFlyOnce(pts, null, {
+                padding: trackingCameraPadding(),
+                maxZoom: Math.min(20, 16 * 1.25),
+            });
+        }, 160);
+        return true;
     }
 
     function emptyRouteGeo() {
@@ -267,9 +387,9 @@
                 source: ROUTE_SOURCE_ID,
                 layout: { 'line-join': 'round', 'line-cap': 'round' },
                 paint: {
-                    'line-color': '#facc15',
-                    'line-width': 4,
-                    'line-opacity': 0.85,
+                    'line-color': '#2563eb',
+                    'line-width': 8,
+                    'line-opacity': 0.92,
                 },
             });
         }
@@ -308,14 +428,9 @@
             lastRouteFetchKey = '';
         }
 
-        var straight = [[fromPos.lng, fromPos.lat], [toPos.lng, toPos.lat]];
         var key = [fromPos.lat, fromPos.lng, toPos.lat, toPos.lng].map(function (n) {
             return Math.round(Number(n) * 2000) / 2000;
         }).join(',');
-
-        if (!lastRouteCoords) {
-            setRouteCoords(straight);
-        }
 
         if (!window.__geocodeDirectionUrl || routeFetchInFlight) {
             return;
@@ -346,20 +461,30 @@
                     setRouteCoords(coords);
                 }
             })
-            .catch(function () { /* giữ đường thẳng đã vẽ tạm */ })
+            .catch(function () { /* không vẽ line thẳng — chờ direction */ })
             .finally(function () {
                 routeFetchInFlight = false;
             });
     }
 
     function fitOrFly(points, zoom, options) {
+        if (!mapInstance || !points.length || !canAutoMoveCamera()) {
+            return;
+        }
+        applyCamera(points, zoom, options);
+    }
+
+    /** Bay camera luôn (nút định vị / card TX / kéo sheet) — không phụ thuộc khóa poll. */
+    function applyCamera(points, zoom, options) {
         if (!mapInstance || !points.length) {
             return;
         }
         options = options || {};
         var padding = options.padding;
+        var maxZoom = options.maxZoom != null ? options.maxZoom : Math.min(20, 15 * 1.25);
+        var duration = options.duration != null ? options.duration : 500;
         if (points.length === 1) {
-            var ease = { center: points[0], zoom: zoom || 15, duration: 500 };
+            var ease = { center: points[0], zoom: zoom || Math.min(20, 15 * 1.25), duration: duration };
             if (padding) {
                 ease.padding = padding;
             }
@@ -370,16 +495,78 @@
         points.forEach(function (p) { bounds.extend(p); });
         mapInstance.fitBounds(bounds, {
             padding: padding || 48,
-            maxZoom: 15,
-            duration: 500,
+            maxZoom: maxZoom,
+            duration: duration,
         });
     }
 
+    /** Hành động user: bay camera rồi khóa — poll không kéo loạn nữa. */
+    function fitOrFlyForced(points, zoom, options) {
+        resumeAutoCamera();
+        applyCamera(points, zoom, options);
+        userMovedCamera = true;
+    }
+
     function refitSearchCamera() {
-        if (!searchingActive || !mapInstance || !lastPickup) {
+        refitSheetCamera();
+    }
+
+    /**
+     * Kéo sheet: căn điểm focus (TX / điểm đón) vào giữa vùng map còn lộ.
+     * Có cả đón+trả không TX → fit lại khung lộ trình trong dải map lộ (không kéo 1 điểm).
+     */
+    function refitSheetCamera() {
+        if (!mapInstance) {
             return;
         }
-        fitOrFly([[lastPickup.lng, lastPickup.lat]], 16, { padding: searchCameraPadding() });
+        // Chỉ có đón+trả, không có vị trí TX → fitBounds trong vùng map lộ.
+        if (!lastDriverPos && pickupMarker && dropoffMarker) {
+            try {
+                var p = pickupMarker.getLngLat();
+                var d = dropoffMarker.getLngLat();
+                if (p && d) {
+                    resumeAutoCamera();
+                    applyCamera(
+                        [[p.lng, p.lat], [d.lng, d.lat]],
+                        null,
+                        { padding: sheetCameraPadding(), duration: 280, maxZoom: mapInstance.getZoom() }
+                    );
+                    userMovedCamera = true;
+                }
+            } catch (e) { /* ignore */ }
+            return;
+        }
+        var focus = null;
+        if (lastDriverPos && lastDriverPos.lat != null && lastDriverPos.lng != null) {
+            focus = { lng: Number(lastDriverPos.lng), lat: Number(lastDriverPos.lat) };
+        } else if (lastPickup && lastPickup.lat != null && lastPickup.lng != null) {
+            focus = { lng: Number(lastPickup.lng), lat: Number(lastPickup.lat) };
+        } else {
+            var center = mapInstance.getCenter();
+            if (center) {
+                focus = { lng: center.lng, lat: center.lat };
+            }
+        }
+        if (!focus) {
+            return;
+        }
+        resumeAutoCamera();
+        if (window.MapSheetCamera && window.MapSheetCamera.easeToFocus) {
+            window.MapSheetCamera.easeToFocus(mapInstance, focus, {
+                mapEl: mapEl,
+                padding: sheetCameraPadding(),
+                zoom: mapInstance.getZoom(),
+                duration: 280,
+            });
+        } else {
+            mapInstance.easeTo({
+                center: [focus.lng, focus.lat],
+                zoom: mapInstance.getZoom(),
+                padding: sheetCameraPadding(),
+                duration: 280,
+            });
+        }
+        userMovedCamera = true;
     }
 
     function readGps(options) {
@@ -421,34 +608,78 @@
         placeRadarPin(target.lat, target.lng);
     }
 
-    function locateMe(fly) {
-        // Đang tìm: radar giữ ở điểm đón; nút định vị chỉ kéo camera về đó.
-        if (searchingActive && lastPickup) {
-            syncRadarAroundLocation();
-            if (fly !== false && mapInstance) {
-                refitSearchCamera();
-            }
-            readGps({ highAccuracy: true, timeout: 12000, maximumAge: 5000 })
-                .then(function (pos) { lastUserPos = pos; })
-                .catch(function () { /* ignore */ });
-            return Promise.resolve(lastPickup);
-        }
+    function guestSelfPinEl() {
+        var el = document.createElement('div');
+        el.className = 'guest-trip-self-marker';
+        el.innerHTML = ''
+            + '<span class="guest-trip-self-marker__pulse" aria-hidden="true"></span>'
+            + '<span class="guest-trip-self-marker__dot" aria-hidden="true"></span>';
+        return el;
+    }
 
-        return readGps({ highAccuracy: true, timeout: 12000, maximumAge: 5000 })
+    function placeGuestSelfMarker(lat, lng) {
+        if (!mapInstance || lat == null || lng == null || !window.goongjs) {
+            return;
+        }
+        var lngLat = [Number(lng), Number(lat)];
+        if (!guestSelfMarker) {
+            guestSelfMarker = new window.goongjs.Marker({
+                element: guestSelfPinEl(),
+                anchor: 'center',
+            }).setLngLat(lngLat).addTo(mapInstance);
+            return;
+        }
+        guestSelfMarker.setLngLat(lngLat);
+    }
+
+    function clearGuestSelfMarker() {
+        if (guestSelfMarker) {
+            guestSelfMarker.remove();
+            guestSelfMarker = null;
+        }
+    }
+
+    function notifyLocateFail() {
+        var msg = 'Không lấy được vị trí hiện tại của bạn. Hãy bật GPS và thử lại.';
+        if (window.AppFlash && window.AppFlash.show) {
+            window.AppFlash.show(msg, { variant: 'warning', title: 'Vị trí khách', autoDismiss: 5000 });
+            return;
+        }
+        if (window.AppDialog && window.AppDialog.alert) {
+            window.AppDialog.alert(msg, { variant: 'warning', title: 'Vị trí khách' });
+        }
+    }
+
+    function flyToGuestPosition(pos) {
+        if (!pos || mapInstance == null) {
+            return;
+        }
+        placeGuestSelfMarker(pos.lat, pos.lng);
+        fitOrFlyForced([[Number(pos.lng), Number(pos.lat)]], Math.min(20, 16 * 1.25), {
+            padding: sheetCameraPadding(),
+        });
+    }
+
+    function locateMe(fly) {
+        // Chỉ GPS khách đang đứng — không nhảy sang TX / điểm đón / điểm đến.
+        return readGps({ highAccuracy: true, timeout: 15000, maximumAge: 0 })
             .then(function (pos) {
                 lastUserPos = pos;
-                syncRadarAroundLocation();
-                if (fly !== false && mapInstance) {
-                    fitOrFly([[pos.lng, pos.lat]], 16);
+                if (fly !== false) {
+                    flyToGuestPosition(pos);
+                } else {
+                    placeGuestSelfMarker(pos.lat, pos.lng);
                 }
                 return pos;
             })
             .catch(function () {
-                var fallback = lastPickup;
-                if (fallback && mapInstance && fly !== false) {
-                    fitOrFly([[fallback.lng, fallback.lat]], 16);
+                // Chỉ dùng GPS khách đã lấy trước đó — không fallback điểm đón/TX.
+                if (lastUserPos && fly !== false) {
+                    flyToGuestPosition(lastUserPos);
+                    return lastUserPos;
                 }
-                return fallback;
+                notifyLocateFail();
+                return null;
             });
     }
 
@@ -456,12 +687,27 @@
         if (!booking || booking.trip_status === 'completed' || booking.trip_status === 'cancelled') {
             searchingActive = false;
             searchCameraSettled = false;
+            trackingCameraSettled = false;
+            userMovedCamera = false;
+            lastCameraBookingRef = null;
+            lastDriverPos = null;
+            cameraFocusMode = 'follow';
             showMapShell(false);
-            setLiveStatus('');
             clearCar();
             clearRadarPin();
+            clearGuestSelfMarker();
             clearRoute();
+            lastUserPos = null;
             return;
+        }
+
+        var bookingRef = booking.booking_reference || booking.id || '';
+        if (bookingRef && bookingRef !== lastCameraBookingRef) {
+            lastCameraBookingRef = bookingRef;
+            userMovedCamera = false;
+            searchCameraSettled = false;
+            trackingCameraSettled = false;
+            cameraFocusMode = 'follow';
         }
 
         var pickupLat = booking.pickup_lat;
@@ -469,10 +715,18 @@
         var dropLat = booking.dropoff_lat;
         var dropLng = booking.dropoff_lng;
         var searching = !booking.has_driver;
-        if (!searching) {
-            searchCameraSettled = false;
-        }
+        var prevSearching = searchingActive;
         searchingActive = searching;
+        if (searching) {
+            trackingCameraSettled = false;
+        } else {
+            searchCameraSettled = false;
+            // Vừa có TX nhận → cho phép căn camera 1 lần quanh mũi tên TX.
+            if (prevSearching) {
+                trackingCameraSettled = false;
+                userMovedCamera = false;
+            }
+        }
         var driver = booking.driver || null;
         var stage = driver ? String(driver.stage || '') : '';
         var inTrip = stage === 'picked_up' || stage === 'running';
@@ -487,16 +741,9 @@
 
         showMapShell(true);
 
-        var statusLine = booking.driver_status_line
-            || (driver && driver.status_line)
-            || (inTrip ? 'Đang trong chuyến' : '')
-            || booking.guest_status_label
-            || booking.progress_label
-            || '';
-        setLiveStatus(searching ? '' : statusLine);
-
         var center = [Number(pickupLng), Number(pickupLat)];
         ensureMap(center).then(function (map) {
+            bindCameraGestureGuards(map);
             window.requestAnimationFrame(function () {
                 try { map.resize(); } catch (e) { /* ignore */ }
             });
@@ -510,11 +757,14 @@
                 placeRadarPin(lastPickup.lat, lastPickup.lng);
             } else {
                 clearRadarPin();
-                placePin('pickup', pickupLat, pickupLng, '#22c55e');
+                placePin('pickup', pickupLat, pickupLng, '#3b82f6');
             }
 
             if (dropLat != null && dropLng != null && (inTrip || enRoute)) {
-                placePin('dropoff', dropLat, dropLng, '#ef4444');
+                placePin('dropoff', dropLat, dropLng, '#eab308');
+            } else if (dropoffMarker) {
+                dropoffMarker.remove();
+                dropoffMarker = null;
             }
 
             var dLat = driver && driver.lat != null ? Number(driver.lat) : null;
@@ -523,16 +773,24 @@
 
             if ((enRoute || inTrip) && dLat != null && dLng != null) {
                 placeCar(dLat, dLng, heading);
-                var pts = [[Number(pickupLng), Number(pickupLat)], [dLng, dLat]];
-                if (inTrip && dropLat != null && dropLng != null) {
-                    pts.push([Number(dropLng), Number(dropLat)]);
+                // Chỉ căn lần đầu khi TX nhận chuyến — poll sau không fitBounds nhảy loạn.
+                if (!trackingCameraSettled && canAutoMoveCamera()) {
+                    trackingCameraSettled = true;
+                    applyCamera([[dLng, dLat]], TRIP_ACTIVE_ZOOM, {
+                        padding: sheetCameraPadding(),
+                        maxZoom: TRIP_ACTIVE_MAX_ZOOM,
+                    });
+                    userMovedCamera = true;
                 }
-                fitOrFly(pts, 14);
 
                 if (enRoute) {
                     syncRouteLine({ lat: dLat, lng: dLng }, lastPickup, 'to_pickup');
                 } else if (inTrip && dropLat != null && dropLng != null) {
-                    syncRouteLine(lastPickup, { lat: Number(dropLat), lng: Number(dropLng) }, 'to_dropoff');
+                    syncRouteLine(
+                        { lat: dLat, lng: dLng },
+                        { lat: Number(dropLat), lng: Number(dropLng) },
+                        'to_dropoff'
+                    );
                 } else {
                     clearRoute();
                 }
@@ -540,23 +798,21 @@
                 clearCar();
                 clearRoute();
                 if (searching) {
-                    // Chỉ căn lần đầu theo điểm đón (sát sheet); poll sau không kéo camera.
-                    if (!searchCameraSettled) {
+                    // Chỉ căn lần đầu theo điểm đón; poll sau không kéo camera.
+                    if (!searchCameraSettled && canAutoMoveCamera()) {
                         searchCameraSettled = true;
                         window.requestAnimationFrame(function () {
-                            refitSearchCamera();
-                            window.setTimeout(function () {
-                                if (searchingActive) {
-                                    refitSearchCamera();
-                                }
-                            }, 320);
+                            if (!searchingActive || !lastPickup || !mapInstance) {
+                                return;
+                            }
+                            applyCamera([[lastPickup.lng, lastPickup.lat]], Math.min(20, 16 * 1.25), {
+                                padding: sheetCameraPadding(),
+                            });
+                            userMovedCamera = true;
                         });
                     }
-                } else if (dropLat != null && dropLng != null) {
-                    fitOrFly([center, [Number(dropLng), Number(dropLat)]], 13);
-                } else {
-                    fitOrFly([center], 15);
                 }
+                // Không auto fit pickup↔dropoff — tránh nhảy zoom khoảng cách mỗi lần poll.
             }
         }).catch(function () {
             /* map optional */
@@ -588,5 +844,7 @@
         resize: resize,
         locateMe: locateMe,
         refitSearchCamera: refitSearchCamera,
+        refitSheetCamera: refitSheetCamera,
+        toggleDriverFocusCamera: toggleDriverFocusCamera,
     };
 })();

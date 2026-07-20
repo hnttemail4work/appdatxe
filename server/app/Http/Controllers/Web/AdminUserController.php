@@ -175,8 +175,9 @@ class AdminUserController extends Controller
     {
         $this->assertManagedCustomer($user);
 
-        // Duyệt đăng ký lần đầu: bắt buộc họ tên / ngày sinh / giới tính (scan CCCD hoặc nhập tay).
+        // Duyệt đăng ký lần đầu: dùng thông tin user đã cập nhật + ảnh admin cắt/xoay.
         if ($user->approval_status === User::APPROVAL_PENDING) {
+            AdminIdentityApproval::mergeUserIdentityIntoRequest($request, $user);
             $validated = $request->validate(
                 AdminIdentityApproval::rules(),
                 AdminIdentityApproval::messages(),

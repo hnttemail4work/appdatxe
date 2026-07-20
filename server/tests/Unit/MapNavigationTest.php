@@ -43,7 +43,7 @@ class MapNavigationTest extends TestCase
             'driver_stage' => Schedule::DRIVER_STAGE_ASSIGNED,
         ]);
         $pickup = MapNavigation::driverTargetForSchedule($schedule, $booking);
-        $this->assertSame('Điều hướng', $pickup['label'] ?? null);
+        $this->assertSame('Điểm đón', $pickup['label'] ?? null);
         $this->assertStringContainsString('10.770000,106.700000', $pickup['url'] ?? '');
         $this->assertTrue($pickup['use_current_origin'] ?? false);
         $this->assertStringContainsString('google.com/maps/dir', $pickup['google_url'] ?? '');
@@ -51,7 +51,7 @@ class MapNavigationTest extends TestCase
 
         $schedule->driver_stage = Schedule::DRIVER_STAGE_RUNNING;
         $dropoff = MapNavigation::driverTargetForSchedule($schedule, $booking);
-        $this->assertSame('Điều hướng', $dropoff['label'] ?? null);
+        $this->assertSame('Điểm trả', $dropoff['label'] ?? null);
         $this->assertStringContainsString('10.800000,106.720000', $dropoff['url'] ?? '');
         $this->assertFalse($dropoff['use_current_origin'] ?? true);
         $this->assertStringContainsString('10.770000%2C106.700000', $dropoff['google_url'] ?? '');

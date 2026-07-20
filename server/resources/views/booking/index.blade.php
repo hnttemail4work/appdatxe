@@ -72,6 +72,31 @@ $platformHotlinePhone = (string) config('app.contact_phone');
             'defaultServiceDate' => $defaultServiceDate,
             'defaultPickupTime' => $defaultPickupTime,
         ])
+
+        @php $homeNewsItems = $homeNewsItems ?? collect(); @endphp
+        @if($homeNewsItems->isNotEmpty())
+        <section class="grab-home-news" aria-label="Tin tức">
+            <h2 class="grab-home-news__title">Tin tức</h2>
+            <ul class="grab-home-news__list">
+                @foreach($homeNewsItems as $news)
+                    <li class="grab-home-news__item">
+                        @php $newsImg = is_array($news->meta ?? null) ? ($news->meta['image_url'] ?? null) : null; @endphp
+                        @if($newsImg)
+                            <img src="{{ $newsImg }}" alt="" class="grab-home-news__img mb-2" loading="lazy"
+                                 style="width:100%;max-height:8rem;object-fit:cover;border-radius:.65rem">
+                        @endif
+                        <strong>{{ $news->title }}</strong>
+                        <p>{{ \Illuminate\Support\Str::limit((string) $news->body, 140) }}</p>
+                    </li>
+                @endforeach
+            </ul>
+            @auth
+                @if(auth()->user()->role === 'customer')
+                    <a href="{{ route('customer.account', ['tab' => 'inbox']) }}" class="small d-inline-block mt-2">Xem hộp thư →</a>
+                @endif
+            @endauth
+        </section>
+        @endif
     </div>
 
     @include('partials.booking-flow', [

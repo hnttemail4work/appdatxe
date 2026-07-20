@@ -19,6 +19,7 @@ class CancelTripRequest extends FormRequest
             'contact_phone'           => ['nullable', 'string', 'max:30'],
             'booking_browser_id'      => ['nullable', 'string', 'max:128'],
             'cancellation_reason_id'  => ['nullable', 'integer'],
+            'cancellation_reason_note'=> ['nullable', 'string', 'max:160'],
         ];
     }
 }

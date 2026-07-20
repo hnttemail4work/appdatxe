@@ -142,7 +142,8 @@ class DriverController extends Controller
         $driverTripUpcoming = $tripSchedulesAll->contains(
             fn (Schedule $schedule): bool => $schedule->driverWorkflowPhase() === 'upcoming',
         );
-        $driverOnTrip = $driverTripActive;
+        // Đã nhận cuốc (đi đón) cũng tính đang phục vụ — SOS / khóa switch không chờ phase active.
+        $driverOnTrip = $driverTripActive || $driverTripUpcoming;
 
         $driverPickupProximityLine = null;
         foreach ($tripSchedulesAll as $schedule) {
@@ -351,23 +352,20 @@ class DriverController extends Controller
     public function advanceSchedule(Request $request, Schedule $schedule)
     {
         try {
-            $stage = $this->workflow->driverAdvanceScheduleStage($schedule, Auth::id());
+            $this->workflow->driverAdvanceScheduleStage($schedule, Auth::id());
         } catch (InvalidArgumentException $e) {
             return $this->errorResponse($request, $e->getMessage(), 'booking');
         }
 
-        $label = $schedule->fresh()->driverStageLabel($stage);
-        $message = "Đã cập nhật: {$label}.";
-
+        // Không flash «Đã cập nhật: đã đến điểm đón» — UI đã đổi trạng thái sau reload.
         if ($request->expectsJson()) {
             return response()->json([
                 'ok'       => true,
                 'redirect' => route('driver.dashboard', ['tab' => 'trips']),
-                'message'  => $message,
             ]);
         }
 
-        return redirect()->route('driver.dashboard', ['tab' => 'trips'])->with('success', $message);
+        return redirect()->route('driver.dashboard', ['tab' => 'trips']);
     }
 
     public function confirmMovement(Request $request, Schedule $schedule)
@@ -418,6 +416,7 @@ class DriverController extends Controller
                 $driverTripRequest,
                 (int) Auth::id(),
                 (int) $validated['cancellation_reason_id'],
+                $validated['cancellation_reason_note'] ?? null,
             );
         } catch (InvalidArgumentException $e) {
             return $this->errorResponse($request, $e->getMessage(), 'driver_request');
@@ -629,25 +628,35 @@ class DriverController extends Controller
                 $schedule,
                 Auth::id(),
                 (int) $validated['cancellation_reason_id'],
+                $validated['cancellation_reason_note'] ?? null,
             );
         } catch (InvalidArgumentException $e) {
             return $this->errorResponse($request, $e->getMessage(), 'booking');
         }
 
         $profile = DriverProfile::query()->where('user_id', Auth::id())->first();
-        $message = ($profile && $profile->isMissedTripLocked())
-            ? 'Đã hủy chuyến. Tài khoản đã bị khóa do hủy 3 lần liên tiếp trong ngày — liên hệ quản lý để mở khóa.'
-            : 'Đã hủy chuyến. Quản lý sẽ được thông báo qua hệ thống.';
+        $locked = $profile && $profile->isMissedTripLocked();
+        $lockMessage = 'Đã hủy chuyến. Tài khoản đã bị khóa do hủy 3 lần liên tiếp trong ngày — liên hệ quản lý để mở khóa.';
 
         if ($request->expectsJson()) {
-            return response()->json([
+            $payload = [
                 'ok'       => true,
                 'redirect' => route('driver.dashboard', ['tab' => 'trips']),
-                'message'  => $message,
-            ]);
+            ];
+            if ($locked) {
+                $payload['message'] = $lockMessage;
+                $payload['account_locked'] = true;
+            }
+
+            return response()->json($payload);
         }
 
-        return redirect()->route('driver.dashboard')->with('success', $message);
+        // Không flash «đã hủy thành công» — chỉ cảnh báo khi bị khóa tài khoản.
+        if ($locked) {
+            return redirect()->route('driver.dashboard', ['tab' => 'trips'])->with('error', $lockMessage);
+        }
+
+        return redirect()->route('driver.dashboard', ['tab' => 'trips']);
     }
 
     public function latePickupContinue(Request $request, Schedule $schedule)
@@ -1025,6 +1034,9 @@ class DriverController extends Controller
         if (! $driverProfile->isPendingApproval()) {
             return back()->withErrors(['driver' => 'Tài xế này đã được duyệt hoặc không còn chờ duyệt.']);
         }
+
+        $driverProfile->loadMissing('user');
+        AdminIdentityApproval::mergeUserIdentityIntoRequest($request, $driverProfile->user);
 
         $validated = $request->validate(
             AdminIdentityApproval::driverRules(),

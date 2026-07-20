@@ -94,31 +94,45 @@
                         @php
                             $pendingVehiclePaths = $pendingDocs?->photos['photo_vehicles'] ?? null;
                             $hasPendingVehicles = is_array($pendingVehiclePaths) && $pendingVehiclePaths !== [];
-                            $vehicleUrls = $hasPendingVehicles
-                                ? $pendingDocs->vehiclePhotoUrls()
-                                : $profile->vehiclePhotoUrls();
-                            $vehicleCount = $hasPendingVehicles
-                                ? count($pendingVehiclePaths)
-                                : count($profile->photo_vehicles ?? []);
+                            $liveVehicleUrls = $profile->vehiclePhotoUrls();
+                            $pendingVehicleUrls = $hasPendingVehicles ? $pendingDocs->vehiclePhotoUrls() : [];
+                            $vehicleCount = count($profile->photo_vehicles ?? []);
                             $vehicleDefault = $vehicleCount > 0
                                 ? ($vehicleCount . ' ảnh hiện tại')
                                 : 'Chưa có ảnh';
                         @endphp
                         <div class="col-12">
                             <label class="form-label" for="driver-update-photo-vehicles">Ảnh xe (có thể chọn nhiều)</label>
-                            @if($vehicleUrls !== [])
+                            <p class="small text-muted mb-1">Bấm «Thêm ảnh xe» nhiều lần để cộng dồn — tối đa 6 ảnh. Ảnh mới sẽ thêm vào ảnh đang có sau khi duyệt.</p>
+                            @if($liveVehicleUrls !== [])
                                 <div class="driver-doc-thumb-row mb-1">
-                                    @foreach($vehicleUrls as $url)
+                                    @foreach($liveVehicleUrls as $url)
                                         <a href="{{ $url }}"
                                            target="_blank"
                                            rel="noopener"
-                                           class="driver-doc-thumb {{ $hasPendingVehicles ? 'is-pending' : '' }}">
+                                           class="driver-doc-thumb">
                                             <img src="{{ $url }}" alt="Ảnh xe" loading="lazy">
                                         </a>
                                     @endforeach
                                 </div>
                             @endif
-                            <div class="driver-file-field" data-driver-file-field>
+                            @if($pendingVehicleUrls !== [])
+                                <div class="driver-doc-thumb-row mb-1">
+                                    @foreach($pendingVehicleUrls as $url)
+                                        <a href="{{ $url }}"
+                                           target="_blank"
+                                           rel="noopener"
+                                           class="driver-doc-thumb is-pending">
+                                            <img src="{{ $url }}" alt="Ảnh xe chờ duyệt" loading="lazy">
+                                            <span>Chờ duyệt</span>
+                                        </a>
+                                    @endforeach
+                                </div>
+                            @endif
+                            <div class="driver-doc-thumb-row mb-1 d-none" data-vehicle-new-preview aria-label="Ảnh xe vừa chọn"></div>
+                            <div class="driver-file-field" data-driver-file-field data-vehicle-multi-field
+                                 data-existing-count="{{ $vehicleCount }}"
+                                 data-max-vehicles="6">
                                 <input type="file"
                                        name="photo_vehicles[]"
                                        id="driver-update-photo-vehicles"

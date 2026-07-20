@@ -257,7 +257,9 @@
         });
 
         detailEl.addEventListener('input', function (e) {
-            var q = detailEl.value.trim();
+            var q = window.AddressQueryNormalize && window.AddressQueryNormalize.applyToInput
+                ? window.AddressQueryNormalize.applyToInput(detailEl)
+                : detailEl.value.trim();
 
             if (!allowTypingSearch(e, q)) {
                 hideSuggest();
