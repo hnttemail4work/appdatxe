@@ -73,31 +73,70 @@
 <hr class="my-4">
 
 <h3 class="h6 fw-semibold mb-2">Loại xe & hệ số giá</h3>
-<p class="text-muted small mb-3">Baseline khuyến nghị: <strong>sedan_4 = 100%</strong>. Thêm loại mới bằng key viết thường (vd. <code>suv_5</code>).</p>
+<p class="text-muted small mb-3">Baseline khuyến nghị: <strong>sedan_4 = 100%</strong>. Thêm loại mới bằng key viết thường (vd. <code>suv_5</code>). Ảnh loại xe hiện trên màn chọn xe khi khách đặt.</p>
 <div class="d-flex flex-column gap-2 mb-3">
     @foreach($vehicleTypes as $vt)
-        <form method="POST" action="{{ route('admin.vehicleTypes.update', $vt) }}" class="row g-2 align-items-end border rounded p-2">
+        <form method="POST"
+              action="{{ route('admin.vehicleTypes.update', $vt) }}"
+              enctype="multipart/form-data"
+              class="border rounded p-2">
             @csrf
             @method('PATCH')
-            <div class="col-md-2"><span class="form-label d-block small text-muted">Key</span><code>{{ $vt->key }}</code></div>
-            <div class="col-md-3"><label class="form-label small">Tên</label><input type="text" name="label" class="form-control form-control-sm" value="{{ $vt->label }}" required></div>
-            <div class="col-md-1"><label class="form-label small">Chỗ</label><input type="number" name="seats" class="form-control form-control-sm" min="1" max="60" value="{{ $vt->seats }}"></div>
-            <div class="col-md-2"><label class="form-label small">Family</label><input type="text" name="family" class="form-control form-control-sm" value="{{ $vt->family }}"></div>
-            <div class="col-md-1"><label class="form-label small">%</label><input type="number" name="price_percent" class="form-control form-control-sm" min="50" max="500" step="0.1" value="{{ $vt->price_percent }}" required></div>
-            <div class="col-md-1"><label class="form-label small">TT</label><input type="number" name="sort_order" class="form-control form-control-sm" value="{{ $vt->sort_order }}"></div>
-            <div class="col-md-1"><label class="form-label small">Bật</label><div><input type="checkbox" name="is_active" value="1" @checked($vt->is_active)></div></div>
-            <div class="col-md-1"><button class="btn btn-sm btn-outline-primary w-100">Lưu</button></div>
+            <div class="row g-2 align-items-end">
+                <div class="col-auto">
+                    <span class="form-label d-block small text-muted">Ảnh</span>
+                    <div class="d-flex align-items-center gap-2">
+                        @if($vt->imageUrl())
+                            <img src="{{ $vt->imageUrl() }}"
+                                 alt="{{ $vt->label }}"
+                                 width="48"
+                                 height="48"
+                                 class="rounded border"
+                                 style="object-fit:cover;background:#111;">
+                        @else
+                            <span class="d-inline-flex align-items-center justify-content-center rounded border text-muted"
+                                  style="width:48px;height:48px;font-size:.7rem;">SVG</span>
+                        @endif
+                    </div>
+                </div>
+                <div class="col-md-2"><span class="form-label d-block small text-muted">Key</span><code>{{ $vt->key }}</code></div>
+                <div class="col-md-2"><label class="form-label small">Tên</label><input type="text" name="label" class="form-control form-control-sm" value="{{ $vt->label }}" required></div>
+                <div class="col-md-1"><label class="form-label small">Chỗ</label><input type="number" name="seats" class="form-control form-control-sm" min="1" max="60" value="{{ $vt->seats }}"></div>
+                <div class="col-md-1"><label class="form-label small">Family</label><input type="text" name="family" class="form-control form-control-sm" value="{{ $vt->family }}"></div>
+                <div class="col-md-1"><label class="form-label small">%</label><input type="number" name="price_percent" class="form-control form-control-sm" min="50" max="500" step="0.1" value="{{ $vt->price_percent }}" required></div>
+                <div class="col-md-1"><label class="form-label small">TT</label><input type="number" name="sort_order" class="form-control form-control-sm" value="{{ $vt->sort_order }}"></div>
+                <div class="col-md-1"><label class="form-label small">Bật</label><div><input type="checkbox" name="is_active" value="1" @checked($vt->is_active)></div></div>
+                <div class="col-md-1"><button class="btn btn-sm btn-outline-primary w-100">Lưu</button></div>
+            </div>
+            <div class="row g-2 align-items-center mt-1">
+                <div class="col-md-6">
+                    <label class="form-label small mb-0">Đổi ảnh (JPG/PNG/WebP, tối đa 5MB)</label>
+                    <input type="file" name="image" class="form-control form-control-sm" accept="image/jpeg,image/png,image/webp,image/gif">
+                </div>
+                @if($vt->image_path)
+                    <div class="col-md-3">
+                        <div class="form-check mt-3">
+                            <input class="form-check-input" type="checkbox" name="remove_image" value="1" id="vt-remove-{{ $vt->id }}">
+                            <label class="form-check-label small" for="vt-remove-{{ $vt->id }}">Xóa ảnh (dùng icon)</label>
+                        </div>
+                    </div>
+                @endif
+            </div>
         </form>
     @endforeach
 </div>
-<form method="POST" action="{{ route('admin.vehicleTypes.store') }}" class="row g-2 align-items-end mb-4">
+<form method="POST"
+      action="{{ route('admin.vehicleTypes.store') }}"
+      enctype="multipart/form-data"
+      class="row g-2 align-items-end mb-4 border rounded p-2">
     @csrf
     <div class="col-md-2"><label class="form-label">Key</label><input name="key" class="form-control form-control-sm" pattern="[a-z0-9_]+" required placeholder="suv_5"></div>
-    <div class="col-md-3"><label class="form-label">Tên</label><input name="label" class="form-control form-control-sm" required></div>
+    <div class="col-md-2"><label class="form-label">Tên</label><input name="label" class="form-control form-control-sm" required></div>
     <div class="col-md-1"><label class="form-label">Chỗ</label><input type="number" name="seats" class="form-control form-control-sm" min="1" max="60"></div>
-    <div class="col-md-2"><label class="form-label">Family</label><input name="family" class="form-control form-control-sm" value="other"></div>
+    <div class="col-md-1"><label class="form-label">Family</label><input name="family" class="form-control form-control-sm" value="other"></div>
     <div class="col-md-1"><label class="form-label">%</label><input type="number" name="price_percent" class="form-control form-control-sm" value="100" step="0.1" required></div>
     <div class="col-md-1"><label class="form-label">TT</label><input type="number" name="sort_order" class="form-control form-control-sm" value="{{ $vehicleTypes->count() }}"></div>
+    <div class="col-md-2"><label class="form-label">Ảnh</label><input type="file" name="image" class="form-control form-control-sm" accept="image/jpeg,image/png,image/webp,image/gif"></div>
     <div class="col-md-2"><button class="btn btn-sm btn-primary w-100">Thêm loại xe</button></div>
     <input type="hidden" name="is_active" value="1">
 </form>

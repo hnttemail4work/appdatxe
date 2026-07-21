@@ -48,6 +48,9 @@ class User extends Authenticatable
         'id_number',
         'date_of_birth',
         'gender',
+        'locale',
+        'sound_enabled',
+        'sound_preset',
         'photo_id_card',
         'photo_id_card_back',
     ];
@@ -68,6 +71,7 @@ class User extends Authenticatable
             'login_locked_until'   => 'datetime',
             'rejection_reason_at'       => 'datetime',
             'register_otp_verified_at'  => 'datetime',
+            'sound_enabled'             => 'boolean',
         ];
     }
 

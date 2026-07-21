@@ -29,7 +29,7 @@ $minBalance = DriverWalletConfig::minBalanceFormatted();
         <h2 class="driver-wallet-block__title">Nạp tiền</h2>
         @if($atPendingCap)
             <div class="driver-notice driver-notice-info mb-0" role="status">
-                Đang có yêu cầu nạp chờ duyệt — chờ quản lý xác nhận trước khi gửi thêm.
+                Đang có yêu cầu nạp chờ duyệt
             </div>
         @else
             @include('partials.driver-wallet-deposit-form', [

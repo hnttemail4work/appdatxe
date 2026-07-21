@@ -8,10 +8,9 @@
     $driverInitial = $user ? mb_strtoupper(mb_substr($user->preferredDisplayName(), 0, 1)) : '?';
     $driverPhotoUrl = $profile?->photoUrl('photo_portrait');
     $walletBalanceLabel = $driverWallet
-        ? number_format($driverWallet->balance, 0, ',', '.') . ' đ'
+        ? number_format($driverWallet->balance, 0, ',', '.')
         : '—';
     $driverLikeCount = $profile?->likeCount() ?? 0;
-    $registerUrl = route('register', ['from' => 'driver']);
     $statusKey = $heroStatus['key'] ?? 'offline';
     $statusLabel = $heroStatus['label'] ?? 'Tạm nghỉ';
 @endphp
@@ -43,22 +42,27 @@
                 {{ number_format($driverLikeCount) }}
             </span>
         </div>
+        <button type="button"
+                class="driver-account-identity__wallet"
+                data-driver-tab="wallet"
+                aria-label="Mở ví tài xế, số dư {{ $walletBalanceLabel }} đ">
+            <span class="driver-account-identity__wallet-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2Z"/>
+                    <path d="M16 7V5a2 2 0 0 0-2-2H6"/>
+                    <circle cx="17" cy="13" r="1.25" fill="currentColor" stroke="none"/>
+                </svg>
+            </span>
+            <span class="driver-account-identity__wallet-balance">{{ $walletBalanceLabel }} <small>đ</small></span>
+        </button>
     </div>
 
     <nav class="driver-account-menu" aria-label="Mục tài khoản">
-        <button type="button" class="driver-account-menu__item" data-driver-tab="wallet">
-            <span class="driver-account-menu__copy">
-                <strong>Ví tài xế</strong>
-                <span class="driver-account-menu__hint">Số dư {{ $walletBalanceLabel }}</span>
-            </span>
-            <span class="driver-account-menu__chevron" aria-hidden="true">›</span>
-        </button>
-
         <button type="button" class="driver-account-menu__item" data-driver-tab="account-update">
             <span class="driver-account-menu__copy">
-                <strong data-i18n="account_update">Cập nhật thông tin</strong>
+                <strong data-i18n="account_update">Hồ sơ tài xế</strong>
                 <span class="driver-account-menu__hint">
-                    <span data-i18n="account_update_menu_hint">Hồ sơ, giấy tờ xe & CCCD</span>
+                    <span data-i18n="account_update_menu_hint">Thông tin, giấy tờ xe & CCCD</span>
                     @if($pendingDocs)
                         · Đang chờ duyệt
                     @endif
@@ -83,18 +87,10 @@
             <span class="driver-account-menu__chevron" aria-hidden="true">›</span>
         </button>
 
-        <a class="driver-account-menu__item" href="{{ $registerUrl }}">
-            <span class="driver-account-menu__copy">
-                <strong>Đăng ký tài xế</strong>
-                <span class="driver-account-menu__hint">Tạo hồ sơ tài xế mới</span>
-            </span>
-            <span class="driver-account-menu__chevron" aria-hidden="true">›</span>
-        </a>
-
         <button type="button" class="driver-account-menu__item" data-driver-tab="settings">
             <span class="driver-account-menu__copy">
                 <strong data-i18n="settings_title">Cài đặt</strong>
-                <span class="driver-account-menu__hint">Ngôn ngữ, âm thanh, ghim màn hình</span>
+                <span class="driver-account-menu__hint">Âm thanh, ngôn ngữ</span>
             </span>
             <span class="driver-account-menu__chevron" aria-hidden="true">›</span>
         </button>

@@ -41,8 +41,6 @@ class CustomerWalletController extends Controller
                 ->withInput();
         }
 
-        return redirect()
-            ->route('customer.account', ['tab' => 'wallet'])
-            ->with('success', 'Đã gửi yêu cầu nạp tiền. Admin sẽ duyệt trước khi cộng ví.');
+        return redirect()->route('customer.account', ['tab' => 'wallet']);
     }
 }

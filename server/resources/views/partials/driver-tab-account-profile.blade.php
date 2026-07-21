@@ -5,53 +5,72 @@
     $profile = $profile ?? ($user?->driverProfile);
     $vehicleTypes = DriverVehicleOptions::labels();
     $embedded = (bool) ($embedded ?? false);
+    $displayName = $user?->preferredDisplayName() ?: '—';
+    $portraitUrl = $profile?->photoUrl('photo_portrait');
+    $initial = mb_strtoupper(mb_substr(trim($displayName) !== '' && $displayName !== '—' ? $displayName : 'T', 0, 1));
 @endphp
 @if($embedded)
-    <div class="driver-settings-card" aria-label="Hồ sơ">
+    <div class="driver-profile" aria-label="Thông tin">
 @else
-<section class="driver-account-panel" aria-label="Hồ sơ">
-    <h2 class="driver-panel-title mb-3" data-i18n="account_profile">Hồ sơ</h2>
-    <div class="driver-settings-card">
+<section class="driver-account-panel" aria-label="Thông tin">
+    <h2 class="driver-panel-title mb-3" data-i18n="account_profile">Thông tin</h2>
+    <div class="driver-profile">
 @endif
-        <div class="driver-account-profile-rows">
-            <div class="driver-account-profile-row">
-                <span class="driver-account-profile-row__label" data-i18n="account_name">Họ tên</span>
-                <strong>{{ $user?->preferredDisplayName() ?: '—' }}</strong>
+        <div class="driver-profile__hero">
+            <div class="driver-profile__avatar" aria-hidden="true">
+                @if($portraitUrl)
+                    <img src="{{ $portraitUrl }}" alt="" loading="lazy">
+                @else
+                    <span>{{ $initial }}</span>
+                @endif
             </div>
-            <div class="driver-account-profile-row">
-                <span class="driver-account-profile-row__label" data-i18n="account_phone">Số điện thoại</span>
-                <strong>{{ $user?->phone ?: '—' }}</strong>
+            <div class="driver-profile__identity">
+                <p class="driver-profile__name">{{ $displayName }}</p>
+                @if($profile?->driver_code)
+                    <p class="driver-profile__code">
+                        <span>Mã tài xế</span>
+                        <strong>{{ $profile->driver_code }}</strong>
+                    </p>
+                @endif
             </div>
-            @if($profile?->driver_code)
-                <div class="driver-account-profile-row">
-                    <span class="driver-account-profile-row__label" data-i18n="account_code">Mã tài xế</span>
-                    <strong>{{ $profile->driver_code }}</strong>
+        </div>
+
+        <div class="driver-profile__section">
+            <h3 class="driver-profile__section-title">Liên hệ</h3>
+            <dl class="driver-profile__list">
+                <div class="driver-profile__item">
+                    <dt>Số điện thoại</dt>
+                    <dd>{{ $user?->phone ?: '—' }}</dd>
                 </div>
-            @endif
-            @if($profile?->vehicle_license_plate)
-                <div class="driver-account-profile-row">
-                    <span class="driver-account-profile-row__label">Biển số</span>
-                    <strong>{{ $profile->vehicle_license_plate }}</strong>
+            </dl>
+        </div>
+
+        <div class="driver-profile__section">
+            <h3 class="driver-profile__section-title">Xe</h3>
+            <dl class="driver-profile__list">
+                <div class="driver-profile__item">
+                    <dt>Biển số</dt>
+                    <dd>{{ $profile?->vehicle_license_plate ?: '—' }}</dd>
                 </div>
-            @endif
-            @if($profile?->vehicle_type)
-                <div class="driver-account-profile-row">
-                    <span class="driver-account-profile-row__label">Loại xe</span>
-                    <strong>{{ $vehicleTypes[$profile->vehicle_type] ?? $profile->vehicle_type }}</strong>
+                <div class="driver-profile__item">
+                    <dt>Loại xe</dt>
+                    <dd>{{ $profile?->vehicle_type ? ($vehicleTypes[$profile->vehicle_type] ?? $profile->vehicle_type) : '—' }}</dd>
                 </div>
-            @endif
-            @if($profile?->vehicle_seats)
-                <div class="driver-account-profile-row">
-                    <span class="driver-account-profile-row__label">Số ghế</span>
-                    <strong>{{ $profile->vehicle_seats }}</strong>
+            </dl>
+        </div>
+
+        <div class="driver-profile__section">
+            <h3 class="driver-profile__section-title">Ngân hàng</h3>
+            <dl class="driver-profile__list">
+                <div class="driver-profile__item">
+                    <dt>Ngân hàng</dt>
+                    <dd>{{ $profile?->bank_name ?: '—' }}</dd>
                 </div>
-            @endif
-            @if($profile?->bank_name || $profile?->bank_account)
-                <div class="driver-account-profile-row">
-                    <span class="driver-account-profile-row__label">Ngân hàng</span>
-                    <strong>{{ trim(($profile->bank_name ?? '') . ' ' . ($profile->bank_account ?? '')) ?: '—' }}</strong>
+                <div class="driver-profile__item">
+                    <dt>Số tài khoản</dt>
+                    <dd class="driver-profile__mono">{{ $profile?->bank_account ?: '—' }}</dd>
                 </div>
-            @endif
+            </dl>
         </div>
 @if($embedded)
     </div>

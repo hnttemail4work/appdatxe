@@ -7,7 +7,6 @@ use App\Models\DriverTripRequest;
 use App\Models\PushSubscription;
 use App\Models\Schedule;
 use App\Models\User;
-use App\Support\AppBrandingSettings;
 use App\Support\AuthIdentifier;
 use App\Support\Money;
 use App\Support\PushAudience;
@@ -398,12 +397,15 @@ class PushNotificationService
     public function onTripCompleted(Booking $booking): void
     {
         $ref = (string) ($booking->booking_reference ?? '#'.$booking->id);
-        $guestBody = 'Chuyến '.$ref.' đã hoàn tất. Cảm ơn bạn đã đi cùng '.AppBrandingSettings::appName().'. Hãy đánh giá chuyến đi trong lịch sử hoặc trang Chuyến.';
+        $shortCode = $this->bookingShortCode($booking);
+        $tripLabel = $shortCode !== '' ? $shortCode : $ref;
+        $guestTitle = 'Thông tin chuyến';
+        $guestBody = 'Chuyến '.$tripLabel.' đã hoàn tất, cảm ơn bạn đã chọn goz. Đừng quên đánh giá cho tài xế nhé.';
 
         $this->sendToGuestBooking(
             $booking,
             'guest.trip_completed',
-            'Chuyến hoàn tất',
+            $guestTitle,
             $guestBody,
             '/chuyen',
             'guest:booking:' . $booking->id . ':completed',
@@ -416,7 +418,7 @@ class PushNotificationService
                 app(CustomerInboxService::class)->notify(
                     $customerUserId,
                     \App\Models\CustomerInboxMessage::CATEGORY_NOTICE,
-                    'Chuyến hoàn tất',
+                    $guestTitle,
                     $guestBody,
                     ['type' => 'trip_completed', 'booking_id' => $booking->id],
                 );
@@ -473,7 +475,7 @@ class PushNotificationService
         $this->sendToGuestBooking(
             $booking,
             'guest.trip_cancelled',
-            'Chuyến đã hủy',
+            'Thông tin chuyến',
             $body,
             '/chuyen',
             'guest:booking:' . $booking->id . ':cancelled',

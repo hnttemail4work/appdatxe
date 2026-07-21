@@ -180,10 +180,6 @@ class AuthController extends Controller
                     // Không chặn đăng nhập nếu đồng bộ trạng thái tài xế lỗi.
                 }
             }
-
-            if ($user->must_change_password) {
-                return redirect(RoleDashboard::forUser($user, $request));
-            }
         }
 
         $intended = $request->session()->pull('url.intended');

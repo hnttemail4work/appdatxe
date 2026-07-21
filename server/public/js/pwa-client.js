@@ -296,13 +296,18 @@
             var meta = btn.querySelector('[data-pwa-install-meta]');
             if (meta) {
                 meta.textContent = installed
-                    ? 'Đã ghim — mở từ icon trên màn hình chính'
-                    : 'Lối tắt mở màn sẵn sàng nhận cuốc';
+                    ? 'Đã ghim'
+                    : '';
+                meta.hidden = !installed;
             }
             var label = btn.querySelector('[data-pwa-install-label], .driver-drawer__link-text');
             if (label) {
-                label.textContent = installed ? 'Đã ghim app Tài xế' : 'Ghim vào màn hình chính';
+                label.textContent = installed ? 'Đã ghim' : 'Ghim';
             }
+            var caption = installed ? 'Đã ghim' : 'Ghim';
+            btn.setAttribute('aria-label', caption);
+            btn.setAttribute('title', caption);
+            btn.classList.toggle('is-on', installed);
         });
     }
 
@@ -390,13 +395,24 @@
             }
             btn.setAttribute('data-pwa-push-bound', '1');
             btn.addEventListener('click', function () {
+                var enabled = btn.getAttribute('data-pwa-push-enabled') === '1';
                 btn.disabled = true;
-                subscribePush().then(function (ok) {
+                var action = enabled ? unsubscribePush() : subscribePush();
+                action.then(function (ok) {
                     btn.disabled = false;
                     syncPushUi();
+                    if (enabled) {
+                        if (ok && window.AppFlash && window.AppFlash.show) {
+                            window.AppFlash.show('Đã tắt thông báo đẩy.', {
+                                variant: 'info',
+                                title: 'Thông báo',
+                            });
+                        }
+                        return;
+                    }
                     if (ok) {
                         if (window.AppFlash && window.AppFlash.show) {
-                            window.AppFlash.show('Đã bật thông báo đẩy. Bạn sẽ nghe chuông cuốc mới cả khi Chrome đang nền.', {
+                            window.AppFlash.show('Đã bật thông báo đẩy.', {
                                 variant: 'success',
                                 title: 'Thông báo',
                             });
@@ -493,18 +509,80 @@
         });
     }
 
-    function syncPushUi() {
-        var granted = window.Notification && Notification.permission === 'granted';
-        document.querySelectorAll('[data-pwa-push-status]').forEach(function (el) {
-            el.textContent = granted
-                ? 'Đã bật thông báo đẩy (nghe được khi Chrome nền)'
-                : (window.Notification && Notification.permission === 'denied'
-                    ? 'Thông báo bị chặn — mở quyền site trong Chrome'
-                    : 'Chưa bật — không nghe được khi đang ngoài tab');
+    function unsubscribePush() {
+        if (!swRegistration || !window.PushManager) {
+            return Promise.resolve(false);
+        }
+
+        return swRegistration.pushManager.getSubscription().then(function (subscription) {
+            if (!subscription) {
+                return true;
+            }
+
+            var endpoint = subscription.endpoint || '';
+            return subscription.unsubscribe().then(function () {
+                if (!endpoint) {
+                    return true;
+                }
+                return fetch('/pwa/push/unsubscribe', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken(),
+                    },
+                    body: JSON.stringify({ endpoint: endpoint }),
+                }).then(function (res) {
+                    return !!(res && res.ok);
+                }).catch(function () {
+                    return true;
+                });
+            });
+        }).catch(function () {
+            return false;
         });
-        document.querySelectorAll('[data-pwa-enable-push]').forEach(function (btn) {
-            btn.classList.toggle('d-none', !!granted);
-            btn.disabled = false;
+    }
+
+    function currentPushSubscription() {
+        if (!swRegistration || !window.PushManager) {
+            return Promise.resolve(null);
+        }
+        return swRegistration.pushManager.getSubscription().catch(function () {
+            return null;
+        });
+    }
+
+    function syncPushUi() {
+        currentPushSubscription().then(function (subscription) {
+            var granted = window.Notification && Notification.permission === 'granted';
+            var enabled = !!(subscription && granted);
+
+            document.querySelectorAll('[data-pwa-push-status]').forEach(function (el) {
+                el.textContent = enabled
+                    ? 'Đã bật'
+                    : (window.Notification && Notification.permission === 'denied'
+                        ? 'Thông báo bị chặn'
+                        : 'Chưa bật');
+            });
+
+            document.querySelectorAll('[data-pwa-enable-push]').forEach(function (btn) {
+                btn.classList.remove('d-none');
+                btn.disabled = false;
+                btn.setAttribute('data-pwa-push-enabled', enabled ? '1' : '0');
+                btn.classList.toggle('is-on', enabled);
+                var onLabel = btn.getAttribute('data-pwa-push-label-on') || 'Tắt thông báo';
+                var offLabel = btn.getAttribute('data-pwa-push-label-off') || 'Bật thông báo';
+                var caption = enabled ? onLabel : offLabel;
+                var label = btn.querySelector('[data-pwa-push-label]');
+                if (label) {
+                    label.textContent = enabled ? 'Tắt' : 'Bật';
+                } else if (!btn.querySelector('svg')) {
+                    btn.textContent = enabled ? 'Tắt' : 'Bật';
+                }
+                btn.setAttribute('aria-label', caption);
+                btn.setAttribute('title', caption);
+            });
         });
     }
 
@@ -553,6 +631,7 @@
 
     window.PwaClient = {
         subscribePush: subscribePush,
+        unsubscribePush: unsubscribePush,
         ensureDriverPush: ensureDriverPush,
         syncPushUi: syncPushUi,
         isStandalone: isStandalone,

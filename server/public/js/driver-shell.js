@@ -49,7 +49,7 @@
         customers: 'Khách của tôi',
         inbox: 'Hộp thư',
         account: 'Thông tin cá nhân',
-        'account-update': 'Cập nhật thông tin',
+        'account-update': 'Hồ sơ tài xế',
         settings: 'Cài đặt',
     };
 
@@ -72,6 +72,16 @@
             overlayTitle.removeAttribute('data-driver-tab');
             overlayTitle.removeAttribute('role');
             overlayTitle.removeAttribute('tabindex');
+        }
+
+        var settingsActions = overlay && overlay.querySelector('[data-settings-header-actions]');
+        var overlaySpacer = overlay && overlay.querySelector('[data-driver-overlay-spacer]');
+        var onSettings = tab === 'settings';
+        if (settingsActions) {
+            settingsActions.hidden = !onSettings;
+        }
+        if (overlaySpacer) {
+            overlaySpacer.hidden = onSettings;
         }
 
         page.classList.toggle('is-panel-open', showOverlay);

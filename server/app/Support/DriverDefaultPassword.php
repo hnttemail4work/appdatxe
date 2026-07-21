@@ -30,7 +30,7 @@ class DriverDefaultPassword
         return $plain;
     }
 
-    public static function resetToRandom(User $user, bool $mustChange = true): string
+    public static function resetToRandom(User $user, bool $mustChange = false): string
     {
         $plain = self::randomPlain(6);
 

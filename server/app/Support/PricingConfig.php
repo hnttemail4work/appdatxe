@@ -55,21 +55,6 @@ class PricingConfig
         return max(0.0, (float) (self::raw('referral_commission_first_percentage', ['value' => 8])['value'] ?? 8));
     }
 
-    public static function bookingQrDiscountPercent(): float
-    {
-        return max(0.0, (float) (self::raw('referral_commission_repeat_percentage', ['value' => 2])['value'] ?? 2));
-    }
-
-    public static function driverInviteQrDiscountPercent(): float
-    {
-        $setting = PlatformSetting::getValue('driver_invite_qr_discount_percentage', null);
-        if ($setting !== null) {
-            return max(0.0, (float) ($setting['value'] ?? 2));
-        }
-
-        return self::bookingQrDiscountPercent();
-    }
-
     public static function rainSurchargeEnabled(): bool
     {
         $raw = PlatformSetting::getValue('rain_surcharge_enabled', ['value' => false]);
@@ -93,8 +78,6 @@ class PricingConfig
             'rounding_unit'                  => self::roundingUnit(),
             'app_commission'                 => self::appCommissionPercent(),
             'referral_commission_first'      => self::referralCommissionFirstPercent(),
-            'driver_invite_qr_discount'      => self::driverInviteQrDiscountPercent(),
-            'booking_qr_discount'            => self::bookingQrDiscountPercent(),
             'rain_surcharge_enabled'         => self::rainSurchargeEnabled(),
         ];
     }

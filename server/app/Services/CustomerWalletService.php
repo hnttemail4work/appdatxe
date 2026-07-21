@@ -136,7 +136,7 @@ class CustomerWalletService
             ->count();
 
         if ($pendingCount >= 1) {
-            throw new InvalidArgumentException('Đang có yêu cầu nạp chờ duyệt — chờ admin xác nhận trước khi gửi thêm.');
+            throw new InvalidArgumentException('Đang có yêu cầu nạp chờ duyệt');
         }
 
         $transaction = CustomerWalletTransaction::query()->create([

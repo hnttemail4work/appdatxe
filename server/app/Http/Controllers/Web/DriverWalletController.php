@@ -32,8 +32,6 @@ class DriverWalletController extends Controller
                 ->withInput();
         }
 
-        return redirect()
-            ->route('driver.dashboard', ['tab' => 'wallet'])
-            ->with('success', 'Đã gửi yêu cầu nạp tiền.');
+        return redirect()->route('driver.dashboard', ['tab' => 'wallet']);
     }
 }

@@ -68,18 +68,6 @@
     color: #fde68a;
 }
 
-.trip-chat-status-sr {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
-}
-
 .trip-chat-toggle:hover,
 .trip-chat-toggle:focus-visible {
     color: #fde68a;
@@ -387,17 +375,6 @@
     overflow: hidden;
 }
 
-.trip-chat-status-line {
-    margin: 0;
-    color: rgba(249, 250, 251, 0.62);
-    font-size: 0.78rem;
-    line-height: 1.35;
-}
-
-.trip-chat-status-line:empty {
-    display: none;
-}
-
 /* Slot icon góc phải card — dùng chung khách & tài xế
  * Không set position ở đây: parent (.guest-trip-driver__chat / actions) đã absolute. */
 .trip-chat-slot {
@@ -426,8 +403,7 @@
     background: transparent;
 }
 
-.trip-chat-slot .trip-chat-toggle__label,
-.trip-chat-slot .trip-chat-status-sr {
+.trip-chat-slot .trip-chat-toggle__label {
     position: absolute;
     width: 1px;
     height: 1px;

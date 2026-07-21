@@ -83,10 +83,21 @@
                 preset: resolvePreset(driver.sound_preset || platform.preset || 'tone1'),
             };
         }
+        var customer = window.__customerAppSettings;
+        if (customer && typeof customer === 'object') {
+            return {
+                enabled: customer.sound_enabled !== false,
+                preset: resolvePreset(customer.sound_preset || platform.preset || 'tone1'),
+            };
+        }
         return {
             enabled: platform.enabled !== false,
             preset: resolvePreset(platform.preset || 'tone1'),
         };
+    }
+
+    function syncCustomerSettings(next) {
+        window.__customerAppSettings = Object.assign({}, window.__customerAppSettings || {}, next || {});
     }
 
     function play(presetKey, force) {
@@ -165,6 +176,7 @@
         onInboxUnread: onInboxUnread,
         resetInboxBaseline: resetInboxBaseline,
         syncPlatform: syncPlatform,
+        syncCustomerSettings: syncCustomerSettings,
         resolvePreset: resolvePreset,
         PRESETS: PRESETS,
     };

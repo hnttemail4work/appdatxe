@@ -17,22 +17,6 @@ class PlatformFees
         return PricingConfig::referralCommissionFirstPercent();
     }
 
-    public static function bookingQrDiscountPercent(): float
-    {
-        return PricingConfig::bookingQrDiscountPercent();
-    }
-
-    public static function driverInviteQrDiscountPercent(): float
-    {
-        return PricingConfig::driverInviteQrDiscountPercent();
-    }
-
-    /** @deprecated Dùng {@see bookingQrDiscountPercent()} hoặc {@see referralCommissionFirstPercent()}. */
-    public static function referralCommissionRepeatPercent(): float
-    {
-        return self::bookingQrDiscountPercent();
-    }
-
     public static function kmRateUnder100(): int
     {
         return PricingConfig::kmRateUnder100();

@@ -11,16 +11,13 @@ use App\Models\PlatformSetting;
 use App\Models\PricingSurchargeRule;
 use App\Models\PricingToll;
 use App\Models\VehicleType;
-use App\Services\ReferralCodeService;
+use App\Services\ImageCompressService;
 use App\Support\PricingConfig;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 
 class AdminPricingController extends Controller
 {
-    public function __construct(
-        private readonly ReferralCodeService $referralCodes,
-    ) {
-    }
-
     /** @return array<string, mixed> */
     public static function dashboardPayload(): array
     {
@@ -38,15 +35,9 @@ class AdminPricingController extends Controller
 
         if ($request->input('form_scope') === 'qr') {
             PlatformSetting::setValue('referral_commission_first_percentage', ['value' => (float) $v['referral_commission_first']], 'finance');
-            PlatformSetting::setValue('referral_commission_repeat_percentage', ['value' => (float) $v['booking_qr_discount']], 'finance');
-            PlatformSetting::setValue('driver_invite_qr_discount_percentage', ['value' => (float) $v['driver_invite_qr_discount']], 'finance');
-
-            if ($request->boolean('sync_driver_invite_discount')) {
-                $this->referralCodes->syncDriverInviteDiscountPercent((float) $v['driver_invite_qr_discount']);
-            }
 
             return redirect()->route('admin.referrals', ['tab' => 'rules'])
-                ->with('success', 'Đã lưu rule giảm giá QR.');
+                ->with('success', 'Đã lưu hoa hồng giới thiệu mặc định.');
         }
 
         PlatformSetting::setValue('pricing_km_rate_under_100', ['value' => (int) $v['km_rate_under_100']], 'finance');
@@ -65,7 +56,7 @@ class AdminPricingController extends Controller
     public function storeVehicleType(UpsertVehicleTypeRequest $request)
     {
         $v = $request->validated();
-        VehicleType::query()->create([
+        $vehicleType = VehicleType::query()->create([
             'key'           => $v['key'],
             'label'         => $v['label'],
             'seats'         => $v['seats'] ?? null,
@@ -74,6 +65,8 @@ class AdminPricingController extends Controller
             'sort_order'    => (int) ($v['sort_order'] ?? 0),
             'is_active'     => $request->boolean('is_active', true),
         ]);
+
+        $this->syncVehicleTypeImage($vehicleType, $request->file('image'), false);
         VehicleType::forgetCache();
 
         return redirect()->route('admin.dashboard', ['tab' => 'fees'])
@@ -91,6 +84,12 @@ class AdminPricingController extends Controller
             'sort_order'    => (int) ($v['sort_order'] ?? $vehicleType->sort_order),
             'is_active'     => $request->boolean('is_active'),
         ]);
+
+        $this->syncVehicleTypeImage(
+            $vehicleType,
+            $request->file('image'),
+            $request->boolean('remove_image'),
+        );
         VehicleType::forgetCache();
 
         return redirect()->route('admin.dashboard', ['tab' => 'fees'])
@@ -109,6 +108,39 @@ class AdminPricingController extends Controller
 
         return redirect()->route('admin.dashboard', ['tab' => 'fees'])
             ->with('success', 'Đã ẩn loại xe (không xóa cứng).');
+    }
+
+    private function syncVehicleTypeImage(
+        VehicleType $vehicleType,
+        ?UploadedFile $file,
+        bool $remove,
+    ): void {
+        if ($remove && ! $file) {
+            $vehicleType->deleteStoredImage();
+            $vehicleType->save();
+
+            return;
+        }
+
+        if (! $file) {
+            return;
+        }
+
+        if ($vehicleType->image_path) {
+            try {
+                Storage::disk('public')->delete($vehicleType->image_path);
+            } catch (\Throwable) {
+            }
+        }
+
+        $path = app(ImageCompressService::class)->storeOptimized(
+            $file,
+            'vehicle-types/'.$vehicleType->id,
+            'cover',
+            640,
+        );
+
+        $vehicleType->update(['image_path' => $path]);
     }
 
     public function storeSurcharge(UpsertPricingSurchargeRequest $request)

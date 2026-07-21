@@ -419,6 +419,33 @@ class DriverAutoAssignTest extends TestCase
         $this->markTestSkipped('Đã chuyển sang tài xế chủ động dò cuốc.');
     }
 
+    public function test_auto_assign_prefers_driver_customer_over_nearest(): void
+    {
+        if (! Schema::hasTable('driver_customers')) {
+            $this->markTestSkipped('Thiếu bảng driver_customers — chạy migrate trước.');
+        }
+
+        $data = $this->seedOpenScheduleWithDrivers();
+        /** @var DriverProfile $profileFar */
+        $profileFar = $data['profileFar'];
+        $booking = $data['booking'];
+
+        \App\Models\DriverCustomer::query()->create([
+            'driver_profile_id' => $profileFar->id,
+            'contact_phone'     => $booking->contact_phone,
+            'phone_key'         => substr(preg_replace('/\D+/', '', $booking->contact_phone) ?: '000000000', -9),
+            'passenger_name'    => $booking->passenger_name,
+            'bookings_count'    => 1,
+            'last_booked_at'    => now()->subDay(),
+        ]);
+
+        $service = app(DriverTripRequestService::class);
+        $request = $service->autoAssignForBooking($booking->fresh(['schedule.route', 'schedule.vehicle']));
+
+        $this->assertNotNull($request);
+        $this->assertSame((int) $data['driverFar']->id, (int) $request->driver_id);
+    }
+
     public function test_expire_stale_reassigns_to_next_driver(): void
     {
         $data = $this->seedOpenScheduleWithDrivers();

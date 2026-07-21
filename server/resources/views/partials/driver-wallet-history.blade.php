@@ -46,9 +46,6 @@ $historyEmpty = $historyEmpty ?? 'Chưa có giao dịch ví.';
                     </div>
                     <div class="driver-wallet-history-meta">
                         {{ $item['at']->format('d/m/Y H:i') }}
-                        @if($item['meta'] && ($item['status'] ?? null) === 'approved')
-                            <span class="ms-1">{{ $item['meta'] }}</span>
-                        @endif
                     </div>
                 </div>
                 @if($item['kind'] === 'deposit')

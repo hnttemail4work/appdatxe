@@ -13,7 +13,6 @@
     $tripSchedules = $tripSchedules ?? collect();
     $tripActionCount = $tripActionCount ?? 0;
     $revenueStats = $revenueStats ?? ['day' => 0, 'week' => 0];
-    $mustChangePassword = $mustChangePassword ?? false;
 
     $driverDefaultTab = request('tab');
     if ($driverDefaultTab === 'deposit') {
@@ -60,7 +59,6 @@
      data-driver-tabs-active="{{ $driverDefaultTab }}"
      data-driver-tabs-base="{{ route('driver.dashboard') }}"
      data-driver-inbox-unread="{{ $inboxUnreadBoot }}"
-     data-must-change-password="{{ $mustChangePassword ? '1' : '0' }}"
      data-wait-progress-root>
 @if($profile)
     <section class="driver-map-hero" id="driver-map-hero"
@@ -209,9 +207,13 @@
 
     <div class="driver-overlay-panels {{ $driverDefaultTab !== 'trips' ? 'is-open' : '' }}" id="driver-overlay-panels" @if($driverDefaultTab === 'trips') hidden @endif>
         <div class="driver-overlay-panels__bar">
-            <button type="button" class="driver-overlay-panels__back" data-driver-tab="trips" aria-label="Quay lại">←</button>
+            <button type="button" class="driver-overlay-panels__back" data-driver-tab="trips" aria-label="Quay lại">@include('partials.app-back-icon')</button>
             <strong class="driver-overlay-panels__title" id="driver-overlay-title">Hộp thư</strong>
-            <span class="driver-overlay-panels__spacer" aria-hidden="true"></span>
+            @include('partials.settings-header-actions', [
+                'installId' => 'driver-settings-pwa-install',
+                'hidden' => $driverDefaultTab !== 'settings',
+            ])
+            <span class="driver-overlay-panels__spacer" data-driver-overlay-spacer @if($driverDefaultTab === 'settings') hidden @endif aria-hidden="true"></span>
         </div>
         <div class="driver-overlay-panels__body">
             <section class="driver-section driver-tab-pane {{ $driverDefaultTab === 'history' ? 'is-active' : '' }}"
@@ -264,8 +266,6 @@
             <section class="driver-section driver-tab-pane {{ $driverDefaultTab === 'invite' ? 'is-active' : '' }}"
                      id="driver-section-invite" data-driver-tab="invite" @if($driverDefaultTab !== 'invite') hidden @endif>
                 @include('partials.driver-invite-panel', [
-                    'inviteUrl' => $driverInviteUrl ?? null,
-                    'inviteDiscountPercent' => $driverInviteDiscountPercent ?? null,
                     'commissionReferral' => $driverCommissionReferral ?? null,
                 ])
             </section>
@@ -348,7 +348,6 @@ window.__driverMapTripPins = @json($driverMapTripPins ?? []);
 window.__driverPickupNavTarget = @json($driverPickupNavTarget);
 window.__driverAppSettings = @json($driverAppSettings);
 window.__driverAccountNotices = @json([
-    'must_change_password' => (bool) ($mustChangePassword ?? false),
     'pending_docs' => (bool) ($pendingChangeRequest ?? null),
 ]);
 </script>
@@ -397,19 +396,11 @@ window.__driverAccountNotices = @json([
     if (!window.AppFlash || !window.AppFlash.show) {
         return;
     }
-    if (notices.must_change_password) {
-        window.AppFlash.show('Bạn đang dùng PIN tạm. Vui lòng đặt PIN 6 số mới để bảo mật tài khoản (liên hệ admin nếu cần hỗ trợ).', {
-            title: 'Thông báo',
-            variant: 'warning',
-            autoDismiss: 12000,
-        });
-    }
     if (notices.pending_docs) {
         window.AppFlash.show('Đã có yêu cầu cập nhật giấy tờ đang chờ duyệt — gửi lại sẽ thay thế yêu cầu cũ.', {
             title: 'Thông báo',
             variant: 'warning',
             autoDismiss: 10000,
-            clear: !notices.must_change_password,
         });
     }
 })();

@@ -75,15 +75,38 @@
         if (!sheetHint) {
             return;
         }
-        // Thanh vuốt sheet: luôn «Thông tin chuyến» — trạng thái/ETA nằm banner map.
+        // Thanh vuốt sheet: luôn «Thông tin chuyến» — trạng thái tìm TX nằm banner trên map.
         var text = 'Thông tin chuyến';
         sheetHint.textContent = text;
         sheetHint.classList.toggle('d-none', !text);
         sheetHint.title = text;
     }
 
+    function syncMapStatusBanner(booking, searching, tracking) {
+        var el = document.getElementById('guest-trip-map-status');
+        var textEl = document.getElementById('guest-trip-map-status-text');
+        if (!el || !textEl) {
+            return;
+        }
+        if (searching) {
+            var label = (booking
+                && booking.wait_progress
+                && booking.wait_progress.label)
+                ? String(booking.wait_progress.label).trim()
+                : '';
+            if (!label || label === 'Đang tìm tài xế') {
+                label = 'Đang tìm tài xế gần bạn…';
+            }
+            textEl.textContent = label;
+            el.classList.remove('d-none');
+            return;
+        }
+        el.classList.add('d-none');
+    }
+
     function syncTripStatusChrome(booking, searching, tracking) {
         syncSheetHint(booking, searching, tracking);
+        syncMapStatusBanner(booking, searching, tracking);
     }
 
     /** Đồng hồ ETA đếm lùi trên thanh sheet giữa các lần poll. */

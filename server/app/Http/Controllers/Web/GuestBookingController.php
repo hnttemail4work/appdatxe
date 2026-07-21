@@ -11,7 +11,6 @@ use App\Http\Requests\Booking\StoreBookingRequest;
 use App\Http\Requests\Booking\StoreTripReviewRequest;
 use App\Http\Requests\Booking\TripStatusRequest;
 use App\Models\Booking;
-use App\Models\ReferralCode;
 use App\Services\BookingBrowserGuardService;
 use App\Services\BookingPhoneGuardService;
 use App\Services\BookingWorkflowService;
@@ -310,14 +309,6 @@ class GuestBookingController extends Controller
             }
         }
 
-        $pendingReferral = null;
-        if ($prefillReferral !== '' && ! $appliedReferral) {
-            $pendingReferral = ReferralCode::query()
-                ->where('code', $prefillReferral)
-                ->where('status', ReferralCode::STATUS_PENDING)
-                ->first();
-        }
-
         $referralDiscountMeta = $this->referralCodes->discountMeta($appliedReferral);
         $browserCancelCount = (int) $request->session()->get('guest_browser_cancel_count', 0);
         $bookingPageBannerUrl = BookingPageSettings::bannerUrl();
@@ -351,7 +342,6 @@ class GuestBookingController extends Controller
             'defaultPickupTime',
             'prefillReferral',
             'appliedReferral',
-            'pendingReferral',
             'referralDiscountMeta',
             'browserCancelCount',
             'bookingPageBannerUrl',

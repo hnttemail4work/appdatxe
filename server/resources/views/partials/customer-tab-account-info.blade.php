@@ -1,57 +1,60 @@
 @php
     $profile = $profile ?? [];
-    $name = old('name', $profile['name'] ?? ($user->name ?? ''));
-    $phone = $profile['phone'] ?? ($user->phone ?? '');
-    $nameLooksLikePhone = $name !== '' && (
-        $name === $phone
-        || (bool) preg_match('/^[\d\s.+()-]+$/', (string) $name)
-    );
-    if ($nameLooksLikePhone) {
-        $name = '';
+    $user = $user ?? auth()->user();
+    $phone = $profile['phone'] ?? ($user->phone ?? '—');
+    $idNumber = $profile['id_number'] ?? ($user->id_number ?? null);
+    $displayName = trim((string) ($profile['name'] ?? ''));
+    if ($displayName === '' || $displayName === $phone || preg_match('/^[\d\s.+()-]+$/', $displayName)) {
+        $displayName = 'Chưa cập nhật';
     }
-    $gender = old('gender', $profile['gender'] ?? '');
-    $dob = old('date_of_birth', $profile['date_of_birth'] ?? '');
+    $initial = mb_strtoupper(mb_substr($displayName !== 'Chưa cập nhật' ? $displayName : ($phone ?: 'K'), 0, 1));
+    $dobLabel = ! empty($profile['date_of_birth'])
+        ? \Illuminate\Support\Carbon::parse($profile['date_of_birth'])->format('d/m/Y')
+        : null;
 @endphp
-<section class="customer-account-panel is-active" aria-label="Cập nhật thông tin">
-    <div class="customer-account-card">
-        <p class="small text-muted mb-3">Cập nhật họ tên, ngày sinh và giới tính. Thông tin sẽ dùng khi đặt xe.</p>
-
-        <form method="POST" action="{{ route('customer.info.update') }}" class="customer-info-form">
-            @csrf
-            <div class="mb-3">
-                <label class="form-label" for="customer-info-name">Họ tên</label>
-                <input type="text" name="name" id="customer-info-name"
-                       class="form-control @error('name') is-invalid @enderror"
-                       required maxlength="255" autocomplete="name"
-                       value="{{ $name }}">
-                @error('name')<div class="invalid-feedback">{{ $message }}</div>@enderror
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label" for="customer-info-dob">Ngày sinh</label>
-                <input type="date" name="date_of_birth" id="customer-info-dob"
-                       class="form-control @error('date_of_birth') is-invalid @enderror"
-                       required max="{{ now()->subYear()->format('Y-m-d') }}"
-                       value="{{ $dob }}">
-                @error('date_of_birth')<div class="invalid-feedback">{{ $message }}</div>@enderror
-            </div>
-
-            <div class="mb-3">
-                <span class="form-label d-block">Giới tính</span>
-                <div class="be-gender-toggle" role="group" aria-label="Giới tính">
-                    <label class="be-gender-toggle__opt">
-                        <input type="radio" name="gender" value="male" @checked($gender === 'male') required>
-                        <span>Nam</span>
-                    </label>
-                    <label class="be-gender-toggle__opt">
-                        <input type="radio" name="gender" value="female" @checked($gender === 'female')>
-                        <span>Nữ</span>
-                    </label>
-                </div>
-                @error('gender')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
-            </div>
-
-            <button type="submit" class="btn btn-primary w-100 fw-semibold">Lưu thông tin</button>
-        </form>
+<div class="driver-profile" aria-label="Thông tin">
+    <div class="driver-profile__hero">
+        <div class="driver-profile__avatar" aria-hidden="true">
+            <span>{{ $initial }}</span>
+        </div>
+        <div class="driver-profile__identity">
+            <p class="driver-profile__name">{{ $displayName }}</p>
+            <p class="driver-profile__code">
+                <span>Số điện thoại</span>
+                <strong>{{ $phone ?: '—' }}</strong>
+            </p>
+        </div>
     </div>
-</section>
+
+    <div class="driver-profile__section">
+        <h3 class="driver-profile__section-title">Cá nhân</h3>
+        <dl class="driver-profile__list">
+            <div class="driver-profile__item">
+                <dt>Họ tên</dt>
+                <dd>{{ $displayName }}</dd>
+            </div>
+            <div class="driver-profile__item">
+                <dt>Giới tính</dt>
+                <dd>{{ $profile['gender_label'] ?? 'Chưa cập nhật' }}</dd>
+            </div>
+            <div class="driver-profile__item">
+                <dt>Ngày sinh</dt>
+                <dd>{{ $dobLabel ?: 'Chưa cập nhật' }}</dd>
+            </div>
+            <div class="driver-profile__item">
+                <dt>Tuổi</dt>
+                <dd>{{ ($profile['age'] ?? null) !== null ? $profile['age'].' tuổi' : 'Chưa cập nhật' }}</dd>
+            </div>
+        </dl>
+    </div>
+
+    <div class="driver-profile__section">
+        <h3 class="driver-profile__section-title">Giấy tờ</h3>
+        <dl class="driver-profile__list">
+            <div class="driver-profile__item">
+                <dt>Số CCCD</dt>
+                <dd class="driver-profile__mono">{{ $idNumber ?: 'Chưa cập nhật' }}</dd>
+            </div>
+        </dl>
+    </div>
+</div>

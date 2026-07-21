@@ -25,6 +25,7 @@ use App\Http\Controllers\Web\GeocodeController;
 use App\Http\Controllers\Web\GuestBookingController;
 use App\Http\Controllers\Web\CustomerAuthController;
 use App\Http\Controllers\Web\CustomerController;
+use App\Http\Controllers\Web\CustomerSettingsController;
 use App\Http\Controllers\Web\CustomerInboxController;
 use App\Http\Controllers\Web\CustomerWalletController;
 use App\Http\Controllers\Web\TripChatController;
@@ -110,6 +111,7 @@ Route::middleware(['auth', 'role:customer'])->group(function () {
     Route::get('tai-khoan/hop-thu/poll', [CustomerInboxController::class, 'poll'])->name('customer.inbox.poll');
     Route::post('tai-khoan/hop-thu/doc', [CustomerInboxController::class, 'markRead'])->name('customer.inbox.read');
     Route::post('tai-khoan/vi/nap', [CustomerWalletController::class, 'deposit'])->name('customer.wallet.deposit');
+    Route::patch('tai-khoan/cai-dat', [CustomerSettingsController::class, 'update'])->name('customer.settings.update');
 });
 Route::middleware(['auth', 'role:customer'])->group(function () {
     Route::get('dat-xe/bat-dau', fn () => redirect()->route('home'))->name('booking.start');
@@ -138,14 +140,13 @@ Route::permanentRedirect('dat-xe', '/');
 Route::redirect('guest/orders', '/chuyen');
 
 // ── Driver ────────────────────────────────────────────────────────────────
-Route::middleware(['auth', 'role:driver', 'driver.password'])->group(function () {
+Route::middleware(['auth', 'role:driver'])->group(function () {
     Route::get('driver/dashboard', [DriverController::class, 'myDashboard'])->name('driver.dashboard');
     Route::get('driver/dashboard/poll', [DriverController::class, 'dashboardPoll'])->name('driver.dashboard.poll');
     Route::post('driver/location', [DriverController::class, 'updateLocation'])->name('driver.location.update');
     Route::post('driver/trip-requests/{driverTripRequest}/accept', [DriverController::class, 'acceptTripRequest'])->name('driver.tripRequests.accept');
     Route::post('driver/trip-requests/{driverTripRequest}/reject', [DriverController::class, 'rejectTripRequest'])->name('driver.tripRequests.reject');
     Route::patch('driver/availability', [DriverController::class, 'updateAvailability'])->name('driver.availability.update');
-    Route::patch('driver/password', [DriverController::class, 'updatePassword'])->name('driver.password.update');
     Route::post('driver/bookings/{booking}/complete', [DriverController::class, 'completeTrip'])->name('driver.bookings.complete');
     Route::get('driver/bookings/{booking}/chat', [TripChatController::class, 'driverMessages'])->name('driver.bookings.chat.messages');
     Route::post('driver/bookings/{booking}/chat', [TripChatController::class, 'driverSend'])
@@ -171,7 +172,6 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::get('admin/dashboard',              [AdminSettingsController::class, 'dashboard'])->name('admin.dashboard');
     Route::post('admin/referrers',           [AdminReferralController::class, 'storeReferrer'])->name('admin.referrers.store');
     Route::patch('admin/referrers/{referralCode}', [AdminReferralController::class, 'updateReferrer'])->name('admin.referrers.update');
-    Route::delete('admin/referral-codes/{referralCode}', [AdminReferralController::class, 'destroyReferralCode'])->name('admin.referralCodes.destroy');
     Route::post('admin/referrers/{referralCode}/hide', [AdminReferralController::class, 'suspendReferrer'])->name('admin.referrers.hide');
     Route::post('admin/referrers/{referralCode}/show', [AdminReferralController::class, 'showReferrer'])->name('admin.referrers.show');
     Route::post('admin/referrers/{referralCode}/assign', [AdminReferralController::class, 'assignReferrer'])->name('admin.referrers.assign');
@@ -230,11 +230,6 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::delete('admin/drivers/bulk',             [DriverController::class, 'bulkDestroy'])->name('admin.drivers.bulkDestroy');
     Route::get('admin/drivers/{driverProfile}/edit', [DriverController::class, 'edit'])->name('admin.drivers.edit');
     Route::patch('admin/drivers/{driverProfile}',   [DriverController::class, 'update'])->name('admin.drivers.update');
-    Route::post('admin/drivers/{driverProfile}/invite', [DriverController::class, 'storeInvite'])->name('admin.drivers.invite.store');
-    Route::patch('admin/drivers/{driverProfile}/invite', [DriverController::class, 'updateInvite'])->name('admin.drivers.invite.update');
-    Route::post('admin/drivers/{driverProfile}/invite/suspend', [DriverController::class, 'destroyInvite'])->name('admin.drivers.invite.suspend');
-    Route::post('admin/drivers/{driverProfile}/invite/restore', [DriverController::class, 'restoreInvite'])->name('admin.drivers.invite.restore');
-    Route::delete('admin/drivers/{driverProfile}/invite', [DriverController::class, 'destroyInvite'])->name('admin.drivers.invite.destroy');
     Route::post('admin/drivers/{driverProfile}/approve', [DriverController::class, 'approve'])->name('admin.drivers.approve');
     Route::post('admin/drivers/{driverProfile}/reject', [DriverController::class, 'reject'])->name('admin.drivers.reject');
     Route::delete('admin/drivers/{driverProfile}/rejection-note', [DriverController::class, 'clearRejectionNote'])->name('admin.drivers.rejection-note.destroy');

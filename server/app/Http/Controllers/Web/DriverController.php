@@ -5,12 +5,10 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Concerns\ApiResponds;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\BulkDeleteRejectedRegistrationsRequest;
-use App\Http\Requests\Admin\UpdateDriverInviteRequest;
 use App\Http\Requests\Driver\CancelScheduleRequest;
 use App\Http\Requests\Driver\RejectDriverProfileRequest;
 use App\Http\Requests\Driver\RejectTripRequestRequest;
 use App\Http\Requests\Driver\UpdateAvailabilityRequest;
-use App\Http\Requests\Driver\UpdateDriverPasswordRequest;
 use App\Http\Requests\Driver\UpdateDriverProfileRequest;
 use App\Http\Requests\Driver\UpdateLocationRequest;
 use App\Models\Booking;
@@ -40,7 +38,6 @@ use App\Services\TripChatService;
 use App\Support\PageList;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
 use InvalidArgumentException;
 
 class DriverController extends Controller
@@ -204,29 +201,15 @@ class DriverController extends Controller
             ? $this->driverWallet->walletActivityHistory($driverWallet, depositsOnly: true)
             : collect();
         $walletHistory = PageList::paginateCollection($walletHistoryAll, $request, 'history_page');
-        $mustChangePassword = (bool) $user->must_change_password;
 
-        $driverInviteReferral = null;
-        $driverInviteUrl = null;
-        $driverInviteDiscountPercent = null;
         $driverCommissionReferral = null;
         $referredCustomers = collect();
         if ($profile) {
-            $driverInviteReferral = $this->referralCodes->forDriver($profile);
-            if ($driverInviteReferral?->isUsable()) {
-                $driverInviteUrl = $driverInviteReferral->landingUrl();
-                $driverInviteDiscountPercent = $driverInviteReferral->customerDiscountPercent();
-            } else {
-                $driverInviteReferral = null;
-            }
             $driverCommissionReferral = $this->referralCodes->assignedCommissionForDriver($profile);
             if ($driverCommissionReferral && ! $driverCommissionReferral->isUsable()) {
                 $driverCommissionReferral = null;
             }
-            $referredCustomers = $this->referralCodes->referredCustomersForCodes([
-                $this->referralCodes->forDriver($profile),
-                $this->referralCodes->assignedCommissionForDriver($profile),
-            ]);
+            $referredCustomers = $this->referralCodes->listDriverCustomers($profile);
         }
 
         $inboxUnread = $this->tripChat->mergeInboxUnread(
@@ -255,14 +238,10 @@ class DriverController extends Controller
             'pendingTripRequestGroups',
             'driverOfferPending',
             'driverPickupProximityLine',
-            'mustChangePassword',
             'driverMapTripPins',
             'driverActiveMapNav',
             'driverPickupNavTarget',
             'driverAssignedStageActive',
-            'driverInviteReferral',
-            'driverInviteUrl',
-            'driverInviteDiscountPercent',
             'driverCommissionReferral',
             'referredCustomers',
             'inboxUnread',
@@ -524,28 +503,6 @@ class DriverController extends Controller
         return $this->guestDriverStatus->build($booking) ?? [];
     }
 
-    public function updatePassword(UpdateDriverPasswordRequest $request)
-    {
-        $user = Auth::user();
-
-        $validated = $request->validated();
-
-        if (! Hash::check($validated['current_password'], $user->password)) {
-            return back()
-                ->withErrors(['current_password' => 'Mật khẩu hiện tại không đúng.'])
-                ->withInput($request->except('current_password', 'password', 'password_confirmation'));
-        }
-
-        $user->update([
-            'password'             => $validated['password'],
-            'must_change_password' => false,
-        ]);
-
-        return redirect()
-            ->route('driver.dashboard', ['tab' => 'account-password'])
-            ->with('success', 'Đã đổi mật khẩu thành công.');
-    }
-
     public function updateAvailability(UpdateAvailabilityRequest $request)
     {
         $validated = $request->validated();
@@ -783,8 +740,6 @@ class DriverController extends Controller
             'user',
             'operator',
             'pendingChangeRequest',
-            'referralCode',
-            'assignedCommissionCode',
         ]);
         $driverWallet = $this->driverWallet->walletFor($driverProfile);
         $driverWallet->load([
@@ -800,116 +755,6 @@ class DriverController extends Controller
             'driverWallet'    => $driverWallet,
             'pendingDeposits' => $pendingDeposits,
             'walletHistory'   => $walletHistory,
-        ]);
-    }
-
-    public function storeInvite(UpdateDriverInviteRequest $request, DriverProfile $driverProfile)
-    {
-        if (! $this->canManageDriver($driverProfile)) {
-            abort(403);
-        }
-
-        if ($driverProfile->isPendingApproval() || $driverProfile->isRejected()) {
-            return back()->withErrors(['driver' => 'Hồ sơ đang chờ duyệt hoặc đã bị từ chối — chưa thể tạo QR.']);
-        }
-
-        $discount = (float) $request->validated()['customer_discount_percent'];
-
-        try {
-            $this->referralCodes->createForDriver($driverProfile, $discount);
-        } catch (InvalidArgumentException $e) {
-            return back()->withErrors(['customer_discount_percent' => $e->getMessage()]);
-        }
-
-        $this->driverInbox->notifyPromoGranted($driverProfile, $discount);
-
-        return $this->redirectAfterInviteManage($driverProfile)
-            ->with('success', 'Đã tạo QR giới thiệu: giảm ' . number_format($discount, 1) . '%.');
-    }
-
-    public function updateInvite(UpdateDriverInviteRequest $request, DriverProfile $driverProfile)
-    {
-        if (! $this->canManageDriver($driverProfile)) {
-            abort(403);
-        }
-
-        if ($driverProfile->isPendingApproval() || $driverProfile->isRejected()) {
-            return back()->withErrors(['driver' => 'Hồ sơ đang chờ duyệt hoặc đã bị từ chối — chưa thể chỉnh khuyến mãi.']);
-        }
-
-        $discount = (float) $request->validated()['customer_discount_percent'];
-        $existing = $this->referralCodes->forDriver($driverProfile);
-        if (! $existing) {
-            return back()->withErrors(['customer_discount_percent' => 'Chưa có mã QR — hãy tạo QR trước.']);
-        }
-
-        $previous = $existing->customerDiscountPercent();
-
-        try {
-            $this->referralCodes->updateDriverInviteDiscount($driverProfile, $discount);
-        } catch (InvalidArgumentException $e) {
-            return back()->withErrors(['customer_discount_percent' => $e->getMessage()]);
-        }
-
-        if (abs($previous - $discount) >= 0.05) {
-            $this->driverInbox->notifyPromoUpdated($driverProfile, $discount);
-        }
-
-        return $this->redirectAfterInviteManage($driverProfile)
-            ->with('success', 'Đã cập nhật khuyến mãi QR giới thiệu: giảm '
-                . number_format($discount, 1) . '%.');
-    }
-
-    public function destroyInvite(Request $request, DriverProfile $driverProfile)
-    {
-        if (! $this->canManageDriver($driverProfile)) {
-            abort(403);
-        }
-
-        if ($driverProfile->isPendingApproval() || $driverProfile->isRejected()) {
-            return back()->withErrors(['driver' => 'Hồ sơ đang chờ duyệt hoặc đã bị từ chối — chưa thể ngưng QR.']);
-        }
-
-        $previous = $this->referralCodes->suspendForDriver($driverProfile);
-        if ($previous === null) {
-            return $this->redirectAfterInviteManage($driverProfile)
-                ->with('success', 'Không có mã QR đang dùng để tạm ngưng.');
-        }
-
-        $this->driverInbox->notifyPromoRemoved($driverProfile, $previous);
-
-        return $this->redirectAfterInviteManage($driverProfile)
-            ->with('success', 'Đã tạm ngưng QR giảm ' . number_format($previous, 1) . '% — không hiện ở Mời bạn bè.');
-    }
-
-    public function restoreInvite(Request $request, DriverProfile $driverProfile)
-    {
-        if (! $this->canManageDriver($driverProfile)) {
-            abort(403);
-        }
-
-        if ($driverProfile->isPendingApproval() || $driverProfile->isRejected()) {
-            return back()->withErrors(['driver' => 'Hồ sơ đang chờ duyệt hoặc đã bị từ chối — chưa thể bật lại QR.']);
-        }
-
-        $restored = $this->referralCodes->restoreForDriver($driverProfile);
-        if (! $restored) {
-            return $this->redirectAfterInviteManage($driverProfile)
-                ->with('success', 'Không có mã QR đang tạm ngưng để bật lại.');
-        }
-
-        $discount = $restored->customerDiscountPercent();
-        $this->driverInbox->notifyPromoGranted($driverProfile, $discount);
-
-        return $this->redirectAfterInviteManage($driverProfile)
-            ->with('success', 'Đã bật lại QR giảm ' . number_format($discount, 1) . '%.');
-    }
-
-    private function redirectAfterInviteManage(DriverProfile $driverProfile): \Illuminate\Http\RedirectResponse
-    {
-        return redirect()->route('admin.referrals', [
-            'tab'           => 'codes',
-            'invite_driver' => $driverProfile->id,
         ]);
     }
 

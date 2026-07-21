@@ -215,7 +215,7 @@
     window.__driverUpdateTripDockBadge = updateTripDockBadge;
     updateTripDockBadge();
 
-    /** Sub-tab Hồ sơ / Giấy tờ trong «Cập nhật thông tin». */
+    /** Sub-tab Thông tin / Giấy tờ trong «Hồ sơ tài xế». */
     (function initDriverUpdateTabs() {
         var panel = document.querySelector('[data-driver-update-panel]');
         if (!panel) {

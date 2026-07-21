@@ -37,18 +37,16 @@ class AdminReferralController extends Controller
     /**
      * @return array{
      *     referralCodes: \Illuminate\Contracts\Pagination\LengthAwarePaginator,
-     *     assignableDrivers: \Illuminate\Support\Collection<int, DriverProfile>,
-     *     inviteDriver: DriverProfile|null,
-     *     inviteReferral: ReferralCode|null,
-     *     commissionReferral: ReferralCode|null
+     *     assignableDrivers: \Illuminate\Support\Collection<int, DriverProfile>
      * }
      */
     private function referralsListData(Request $request): array
     {
         $referralCodes = ReferralCode::query()
             ->whereNull('driver_profile_id')
-            ->with(['booking', 'assignedDriverProfile'])
-            ->orderByRaw("CASE WHEN type = 'referrer' AND status = 'suspended' THEN 1 WHEN type = 'referrer' THEN 0 WHEN type = 'booking_temp' AND status = 'active' THEN 2 WHEN type = 'booking_temp' THEN 3 ELSE 4 END")
+            ->where('type', ReferralCode::TYPE_REFERRER)
+            ->with('assignedDriverProfile')
+            ->orderByRaw("CASE WHEN status = 'suspended' THEN 1 ELSE 0 END")
             ->orderByDesc('activated_at')
             ->orderByDesc('created_at')
             ->paginate(PageList::PER_PAGE, ['*'], 'referrals_page')
@@ -63,26 +61,9 @@ class AdminReferralController extends Controller
             ->filter(fn (DriverProfile $p) => $p->user)
             ->values();
 
-        $inviteDriver = null;
-        $inviteReferral = null;
-        $commissionReferral = null;
-        $inviteDriverId = (int) $request->query('invite_driver', 0);
-        if ($inviteDriverId > 0) {
-            $inviteDriver = $assignableDrivers->firstWhere('id', $inviteDriverId);
-            if ($inviteDriver) {
-                $inviteReferral = $this->referralCodes->forDriver($inviteDriver)
-                    ?? $inviteDriver->referralCode;
-                $commissionReferral = $this->referralCodes->assignedCommissionForDriver($inviteDriver)
-                    ?? $inviteDriver->assignedCommissionCode;
-            }
-        }
-
         return compact(
             'referralCodes',
             'assignableDrivers',
-            'inviteDriver',
-            'inviteReferral',
-            'commissionReferral',
         );
     }
 
@@ -136,15 +117,37 @@ class AdminReferralController extends Controller
     public function storeReferrer(StoreReferrerRequest $request)
     {
         $validated = $request->validated();
+        $mode = $validated['mode'] ?? 'commission';
+
+        if ($mode === 'driver') {
+            $profile = DriverProfile::query()->findOrFail((int) $validated['driver_profile_id']);
+
+            try {
+                $referral = $this->referralCodes->createDriverCustomerCode(
+                    $profile,
+                    Auth::id(),
+                    $validated['name'] ?? null,
+                    $validated['phone'] ?? null,
+                );
+            } catch (InvalidArgumentException $e) {
+                return back()->withErrors(['driver_profile_id' => $e->getMessage()])->withInput();
+            }
+
+            $driverName = $profile->user?->preferredDisplayName() ?: $profile->driver_code;
+
+            return redirect()->route('admin.referrals', $this->qrCodesRedirectParams(['referrals_page' => 1]))
+                ->with('success', 'Đã tạo mã ' . $referral->code . ' và gán cho tài xế ' . $driverName . '.');
+        }
 
         $referral = $this->referralCodes->createReferrer(
             $validated['name'],
             $validated['phone'],
             Auth::id(),
+            isset($validated['commission_percent']) ? (float) $validated['commission_percent'] : null,
         );
 
         return redirect()->route('admin.referrals', $this->qrCodesRedirectParams(['referrals_page' => 1]))
-            ->with('success', 'Đã tạo mã giới thiệu ' . $referral->code . ' cho ' . $referral->name . '.');
+            ->with('success', 'Đã tạo mã hoa hồng ' . $referral->code . ' cho ' . $referral->name . '.');
     }
 
     public function updateReferrer(UpdateReferrerRequest $request, ReferralCode $referralCode)
@@ -153,15 +156,20 @@ class AdminReferralController extends Controller
             abort(403);
         }
 
+        if ($referralCode->isAssignedCommissionCode() || (float) $referralCode->commissionPercent() <= 0) {
+            return back()->withErrors(['commission_percent' => 'Mã Khách của tôi không chỉnh hoa hồng.']);
+        }
+
         $validated = $request->validated();
+        $commission = max(0.1, (float) $validated['commission_percent']);
 
         $referralCode->update([
-            'commission_percent'        => (float) $validated['commission_percent'],
-            'customer_discount_percent' => (float) $validated['customer_discount_percent'],
+            'commission_percent'        => $commission,
+            'customer_discount_percent' => 0,
         ]);
 
         return redirect()->route('admin.referrals', $this->qrCodesRedirectParams())
-            ->with('success', 'Đã cập nhật mã ' . $referralCode->code . ' — giảm giá ' . number_format($validated['customer_discount_percent'], 1) . '%, hoa hồng ' . number_format($validated['commission_percent'], 1) . '%.');
+            ->with('success', 'Đã cập nhật mã ' . $referralCode->code . ' — hoa hồng ' . number_format($commission, 1) . '%.');
     }
 
     public function suspendReferrer(ReferralCode $referralCode)
@@ -180,12 +188,4 @@ class AdminReferralController extends Controller
             ->with('success', 'Mã ' . $referralCode->code . ' đã chuyển sang trạng thái sử dụng.');
     }
 
-    public function destroyReferralCode(ReferralCode $referralCode)
-    {
-        $code = $referralCode->code;
-        $this->referralCodes->deleteBookingReferralCode($referralCode);
-
-        return redirect()->route('admin.referrals', $this->qrCodesRedirectParams())
-            ->with('success', 'Đã xóa mã ' . $code . '.');
-    }
 }

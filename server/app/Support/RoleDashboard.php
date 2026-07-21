@@ -24,10 +24,6 @@ class RoleDashboard
     {
         $request ??= request();
 
-        if ($user->role === 'driver' && $user->must_change_password) {
-            return route('driver.dashboard', ['tab' => 'account-password']);
-        }
-
         return self::route($user->role);
     }
 

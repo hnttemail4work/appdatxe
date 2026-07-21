@@ -31,6 +31,8 @@ class UpsertVehicleTypeRequest extends FormRequest
             'price_percent' => ['required', 'numeric', 'min:50', 'max:500'],
             'sort_order'    => ['nullable', 'integer', 'min:0', 'max:9999'],
             'is_active'     => ['nullable', 'boolean'],
+            'image'         => ['nullable', 'image', 'max:5120'],
+            'remove_image'  => ['nullable', 'boolean'],
         ];
     }
 }

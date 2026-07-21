@@ -58,22 +58,12 @@
 }
 
 .auth-back {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 2.5rem;
-    height: 2.5rem;
-    margin-left: -.35rem;
-    border-radius: .65rem;
-    color: var(--app-text, #f5f5f5);
-    text-decoration: none;
+    margin-left: -.2rem;
 }
 
 .auth-back:hover,
 .auth-back:focus-visible {
-    color: #e8c547;
-    background: rgba(212, 175, 55, .08);
+    /* Style chung: app-theme.css */
 }
 
 .auth-screen-title {

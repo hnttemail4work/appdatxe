@@ -23,6 +23,7 @@ class DriverTripProgressionService
         private readonly BookingBrowserGuardService $browserGuard,
         private readonly DriverAvailabilityService $driverAvailability,
         private readonly CustomerWalletService $customerWallets,
+        private readonly ReferralCodeService $referralCodes,
     ) {
     }
 
@@ -185,6 +186,11 @@ class DriverTripProgressionService
         $fresh = $booking->fresh();
         try {
             $this->customerWallets->chargeForCompletedBooking($fresh);
+        } catch (\Throwable) {
+        }
+
+        try {
+            $this->referralCodes->rememberCustomerFromCompletedBooking($fresh);
         } catch (\Throwable) {
         }
 

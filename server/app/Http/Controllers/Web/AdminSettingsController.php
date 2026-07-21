@@ -43,7 +43,6 @@ class AdminSettingsController extends Controller
         $this->ensureHubRoutesExist();
 
         $bankSettings = PlatformPaymentInfo::bank();
-        $bankQrPreview = PlatformPaymentInfo::vietQrImageUrl();
         $bookingPageSettings = BookingPageSettings::forAdmin();
         $brandingSettings = AppBrandingSettings::forAdmin();
         $pushSettings = PushNotificationSettings::forAdmin();
@@ -55,7 +54,6 @@ class AdminSettingsController extends Controller
 
         return view('admin.dashboard', array_merge(compact(
             'bankSettings',
-            'bankQrPreview',
             'bookingPageSettings',
             'brandingSettings',
             'pushSettings',

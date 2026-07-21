@@ -19,18 +19,6 @@ class ReferralDiscountRulesTest extends TestCase
         $this->assertFalse($referral->grantsCustomerDiscount());
     }
 
-    public function test_driver_invite_code_grants_customer_discount(): void
-    {
-        $referral = new ReferralCode([
-            'type'                      => ReferralCode::TYPE_REFERRER,
-            'status'                    => ReferralCode::STATUS_ACTIVE,
-            'driver_profile_id'         => 1,
-            'customer_discount_percent' => 2,
-        ]);
-
-        $this->assertTrue($referral->grantsCustomerDiscount());
-    }
-
     public function test_discount_meta_for_referrer_is_attribution_only_when_no_discount(): void
     {
         $service = app(ReferralCodeService::class);
@@ -77,19 +65,6 @@ class ReferralDiscountRulesTest extends TestCase
         $this->assertSame(0.0, $service->customerDiscountPercent($referral, '0901234567'));
     }
 
-    public function test_booking_temp_code_does_not_attribute_commission(): void
-    {
-        $service = app(ReferralCodeService::class);
-        $referral = new ReferralCode([
-            'type'                      => ReferralCode::TYPE_BOOKING_TEMP,
-            'status'                    => ReferralCode::STATUS_ACTIVE,
-            'customer_discount_percent' => 2,
-        ]);
-
-        $this->assertFalse($service->shouldAttributeBooking($referral, '0901234567'));
-        $this->assertSame(0.0, $referral->commissionPercent());
-    }
-
     public function test_same_phone_as_referrer_blocks_discount(): void
     {
         $service = app(ReferralCodeService::class);
@@ -98,7 +73,6 @@ class ReferralDiscountRulesTest extends TestCase
             'type'                      => ReferralCode::TYPE_REFERRER,
             'status'                    => ReferralCode::STATUS_ACTIVE,
             'phone'                     => '0901234567',
-            'driver_profile_id'         => 1,
             'customer_discount_percent' => 2,
         ]);
 
@@ -119,7 +93,6 @@ class ReferralDiscountRulesTest extends TestCase
             'type'                      => ReferralCode::TYPE_REFERRER,
             'status'                    => ReferralCode::STATUS_ACTIVE,
             'phone'                     => '+84901234567',
-            'driver_profile_id'         => 1,
             'customer_discount_percent' => 2,
         ]);
 
@@ -137,7 +110,6 @@ class ReferralDiscountRulesTest extends TestCase
             'type'                      => ReferralCode::TYPE_REFERRER,
             'status'                    => ReferralCode::STATUS_ACTIVE,
             'phone'                     => '0901111111',
-            'driver_profile_id'         => 1,
             'customer_discount_percent' => 2,
         ]);
 

@@ -656,7 +656,8 @@
             searchTimer = null;
         }
         destroyMap();
-        unloadMapAssets();
+        // Không unload Goong JS/CSS — dùng chung với map xác nhận điểm đón / chọn xe.
+        // unloadMapAssets() trước đây xóa window.goongjs khiến map bước sau trắng / lệch tâm.
         unbindProvinceChange();
         syncDriverProvinceUi(false);
         isResolving = false;
@@ -778,17 +779,15 @@
             return;
         }
 
-        if (isResolving) {
-            return;
+        if (reverseAbort) {
+            reverseAbort.abort();
+            reverseAbort = null;
         }
 
         isResolving = true;
         pendingAddress = '';
         updateConfirmButton();
         hideSearchResults();
-        if (reverseAbort) {
-            reverseAbort.abort();
-        }
         reverseAbort = new AbortController();
         setPreview('Đang lấy địa chỉ...', true);
 
@@ -822,7 +821,8 @@
     function placeMarker(lat, lng, moveView, options) {
         options = options || {};
         var goongjs = goongApi();
-        if (!mapInstance || isResolving || !goongjs) {
+        // Cho phép đổi ghim khi đang reverse-geocode (abort request cũ) — trước đây isResolving chặn khiến chọn map “không hiện”.
+        if (!mapInstance || !goongjs) {
             return;
         }
 
@@ -841,9 +841,6 @@
                 .setLngLat([lng, lat])
                 .addTo(mapInstance);
             marker.on('dragend', function () {
-                if (isResolving) {
-                    return;
-                }
                 var pos = marker.getLngLat();
                 placeMarker(pos.lat, pos.lng, false);
             });

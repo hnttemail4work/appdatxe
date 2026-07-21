@@ -22,6 +22,10 @@
 
         <div class="guest-trip-live-map" id="guest-trip-live-map" hidden>
             <div class="guest-trip-live-map__canvas" id="guest-trip-live-map-canvas" aria-label="Bản đồ chuyến"></div>
+            <div class="guest-trip-map-status d-none" id="guest-trip-map-status" role="status" aria-live="polite">
+                <span class="guest-trip-map-status__spin" aria-hidden="true"></span>
+                <span class="guest-trip-map-status__text" id="guest-trip-map-status-text">Đang tìm tài xế gần bạn…</span>
+            </div>
         </div>
 
         <div class="guest-trip-info-sheet is-collapsed" id="guest-trip-info-sheet" data-guest-trip-sheet>

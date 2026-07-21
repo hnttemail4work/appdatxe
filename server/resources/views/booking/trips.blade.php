@@ -14,9 +14,9 @@ $platformHotlinePhone = (string) config('app.contact_phone');
         <div class="booking-flash booking-flash-success mb-3 app-flash" role="alert" data-auto-dismiss="10000">
             <div class="booking-flash-icon" aria-hidden="true">✓</div>
             <div class="booking-flash-body">
-                <strong class="booking-flash-title">Đặt chuyến thành công!</strong>
+                <strong class="booking-flash-title">Thông tin chuyến</strong>
                 <p class="mb-1">
-                    Mã chuyến: <span class="booking-ticket-code">{{ $bookingSuccess['trip_code'] ?? '—' }}</span>
+                    Chuyến <span class="booking-ticket-code">{{ $bookingSuccess['trip_code'] ?? '—' }}</span> đã được tạo.
                 </p>
             </div>
             @include('partials.flash-close')

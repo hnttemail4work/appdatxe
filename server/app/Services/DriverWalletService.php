@@ -250,7 +250,7 @@ class DriverWalletService
 
         if ($pendingCount >= DriverWalletConfig::MAX_PENDING_DEPOSITS) {
             throw new InvalidArgumentException(
-                'Đang có yêu cầu nạp chờ duyệt — chờ quản lý xác nhận trước khi gửi thêm.'
+                'Đang có yêu cầu nạp chờ duyệt'
             );
         }
 
@@ -875,11 +875,7 @@ class DriverWalletService
             return $notes;
         }
 
-        return match ($transaction->status) {
-            'approved' => 'Duyệt ' . ($transaction->approved_at?->format('d/m/Y H:i') ?? '—'),
-            'rejected' => '',
-            default    => '',
-        };
+        return '';
     }
 
     private function assignOperatorFromTrips(DriverProfile $profile): void

@@ -420,13 +420,13 @@ body:has(.address-map-picker-modal.show) .modal-backdrop.show {
     padding: .7rem 1rem;
     font-weight: 700;
     font-size: 1rem;
-    background: #00b14f;
-    color: #fff;
+    background: #d4af37;
+    color: #111;
     cursor: pointer;
     transition: filter .15s ease, background .15s ease, color .15s ease;
 }
 
-/* Đổi điểm đến — CTA vàng (đồng bộ brand), các luồng khác giữ xanh */
+/* Giữ modifier để JS không lỗi; cùng màu vàng brand */
 .address-map-confirm-cta.address-map-confirm-cta--gold {
     background: #d4af37;
     color: #111;
@@ -438,16 +438,12 @@ body:has(.address-map-picker-modal.show) .modal-backdrop.show {
     outline: none;
 }
 
-.address-map-confirm-cta:disabled {
-    background: rgba(255, 255, 255, .1);
-    color: rgba(255, 255, 255, .38);
-    cursor: not-allowed;
-    filter: none;
-}
-
+.address-map-confirm-cta:disabled,
 .address-map-confirm-cta.address-map-confirm-cta--gold:disabled {
     background: rgba(212, 175, 55, .22);
     color: rgba(17, 17, 17, .42);
+    cursor: not-allowed;
+    filter: none;
 }
 
 @media (min-width: 768px) {

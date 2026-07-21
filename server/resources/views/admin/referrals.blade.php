@@ -21,16 +21,15 @@
                     'prefix' => 'admin-qr',
                     'activeKey' => $qrTab,
                     'tabs' => [
-                        ['key' => 'codes', 'label' => 'Mã giảm giá'],
-                        ['key' => 'rules', 'label' => 'Rule giảm giá'],
+                        ['key' => 'codes', 'label' => 'Mã QR'],
+                        ['key' => 'rules', 'label' => 'Rule hoa hồng'],
                         ['key' => 'user-auth', 'label' => 'Khách hàng'],
                         ['key' => 'driver-auth', 'label' => 'Tài xế'],
                     ],
                 ])
 
                 @include('partials.screen-tab-pane', ['prefix' => 'admin-qr', 'key' => 'codes', 'active' => $qrTab === 'codes'])
-                @include('partials.admin-referrals-panel')
-                @include('partials.admin-qr-driver-invite-section')
+                @include('partials.admin-referrals-panel', ['pricingSettings' => $pricingSettings ?? []])
                 @include('partials.screen-tab-pane-end')
 
                 @include('partials.screen-tab-pane', ['prefix' => 'admin-qr', 'key' => 'rules', 'active' => $qrTab === 'rules'])
@@ -53,62 +52,6 @@
     </div>
 </div>
 @endsection
-
-@push('styles')
-<style>
-.driver-invite-admin__qr {
-    padding: .55rem;
-    border-radius: .65rem;
-    background: #fff;
-    display: inline-block;
-    line-height: 0;
-}
-.driver-invite-admin__qr img {
-    display: block;
-    border-radius: .3rem;
-}
-.driver-qr-admin__grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(16.5rem, 1fr));
-    gap: 1rem;
-}
-.driver-qr-card {
-    border: 1px solid rgba(255, 255, 255, .1);
-    border-radius: .85rem;
-    background: rgba(255, 255, 255, .03);
-    padding: 1rem 1.05rem 1.1rem;
-    display: flex;
-    flex-direction: column;
-    gap: .85rem;
-    min-height: 100%;
-}
-.driver-qr-card--muted {
-    opacity: .92;
-}
-.driver-qr-card__head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: .75rem;
-}
-.driver-qr-card__title {
-    margin: 0;
-    font-size: .95rem;
-    font-weight: 700;
-    color: #fff;
-}
-.driver-qr-card__body {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-    align-items: flex-start;
-}
-.driver-qr-card__form .form-label {
-    font-size: .78rem;
-    margin-bottom: .35rem;
-}
-</style>
-@endpush
 
 @push('scripts')
 <script>

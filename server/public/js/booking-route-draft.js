@@ -1,5 +1,5 @@
 /**
- * Giữ điểm đi/đến (+ lịch) qua bước đăng nhập.
+ * Giữ điểm đi/đến (+ bước flow đặt xe) qua reload / đăng nhập.
  */
 (function () {
     var KEY = 'appdatxe:bookingRouteDraft';
@@ -9,6 +9,8 @@
     }
 
     function collectFromForm() {
+        var notesEl = $('modal-notes-value') || $('modal-notes');
+        var payEl = $('booking-payment-method');
         return {
             pickup_detail: ($('modal-pickup-detail') || {}).value || '',
             pickup_lat: ($('modal-pickup-lat') || {}).value || '',
@@ -22,13 +24,32 @@
             pickup_time: ($('modal-pickup-time') || {}).value || '',
             schedule_later: !!(document.getElementById('booking-schedule-later')
                 && document.getElementById('booking-schedule-later').getAttribute('aria-pressed') === 'true'),
+            notes: notesEl ? String(notesEl.value || '') : '',
+            capacity: ($('modal-capacity') || {}).value || '',
+            vehicle_type: ($('modal-vehicle-type') || {}).value || '',
+            payment_method: payEl && payEl.value ? String(payEl.value) : 'cash',
             saved_at: Date.now(),
         };
     }
 
     function save(extra) {
         try {
-            var draft = Object.assign(collectFromForm(), extra || {});
+            var prev = null;
+            try {
+                var raw = sessionStorage.getItem(KEY);
+                if (raw) {
+                    prev = JSON.parse(raw);
+                }
+            } catch (e) {
+                prev = null;
+            }
+            var draft = Object.assign(
+                {},
+                prev && typeof prev === 'object' ? prev : {},
+                collectFromForm(),
+                extra || {},
+            );
+            draft.saved_at = Date.now();
             if (!draft.pickup_detail && !draft.dropoff_detail
                 && !draft.pickup_lat && !draft.dropoff_lat) {
                 return false;
@@ -83,6 +104,8 @@
             dropoff_address: 'modal-dropoff-address',
             service_date: 'modal-service-date',
             pickup_time: 'modal-pickup-time',
+            capacity: 'modal-capacity',
+            vehicle_type: 'modal-vehicle-type',
         };
         Object.keys(map).forEach(function (key) {
             var el = $(map[key]);
@@ -90,6 +113,31 @@
                 el.value = String(draft[key]);
             }
         });
+
+        if (draft.notes != null) {
+            var notes = String(draft.notes);
+            var ta = $('modal-notes');
+            var hiddenNotes = $('modal-notes-value');
+            if (ta) {
+                ta.value = notes;
+            }
+            if (hiddenNotes) {
+                hiddenNotes.value = notes;
+            }
+            var noteLabel = $('booking-note-label');
+            if (noteLabel && notes.trim()) {
+                noteLabel.textContent = notes.trim().length > 42
+                    ? (notes.trim().slice(0, 42) + '…')
+                    : notes.trim();
+            }
+        }
+
+        if (draft.payment_method) {
+            var payHidden = $('booking-payment-method');
+            if (payHidden) {
+                payHidden.value = draft.payment_method === 'wallet' ? 'wallet' : 'cash';
+            }
+        }
 
         var homeLabel = document.querySelector('[data-home-dest-label]');
         if (homeLabel && draft.dropoff_detail) {

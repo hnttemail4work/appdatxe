@@ -13,6 +13,7 @@ $driverOffers = $driverOffers ?? collect();
             $offerLabel = $offer['offer_label']
                 ?? collect([$typeLabel, $capacityLabel])->filter(fn ($p) => filled($p) && $p !== '—')->implode(' · ');
             $iconKey = $offer['icon_key'] ?? 'other';
+            $samplePhoto = trim((string) ($offer['sample_photo'] ?? ''));
         @endphp
         <button type="button"
                 class="be-vehicle-row"
@@ -23,10 +24,17 @@ $driverOffers = $driverOffers ?? collect();
                 data-capacity-label="{{ $capacityLabel }}"
                 data-type-label="{{ $typeLabel }}"
                 data-offer-label="{{ $offerLabel }}"
+                @if($samplePhoto !== '') data-vehicle-photo="{{ $samplePhoto }}" @endif
                 data-select-vehicle>
-            <span class="be-vehicle-row__media be-vehicle-row__media--icon be-vehicle-icon be-vehicle-icon--{{ $iconKey }}" aria-hidden="true">
-                @include('partials.booking-vehicle-icon', ['iconKey' => $iconKey])
-            </span>
+            @if($samplePhoto !== '')
+                <span class="be-vehicle-row__media" aria-hidden="true">
+                    <img src="{{ $samplePhoto }}" alt="" loading="lazy" decoding="async">
+                </span>
+            @else
+                <span class="be-vehicle-row__media be-vehicle-row__media--icon be-vehicle-icon be-vehicle-icon--{{ $iconKey }}" aria-hidden="true">
+                    @include('partials.booking-vehicle-icon', ['iconKey' => $iconKey])
+                </span>
+            @endif
             <span class="be-vehicle-row__body">
                 <strong class="be-vehicle-row__title">{{ $typeLabel }}</strong>
             </span>

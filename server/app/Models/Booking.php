@@ -30,8 +30,6 @@ class Booking extends Model
                 || $booking->trip_status === 'cancelled';
 
             if ($cancelled) {
-                app(\App\Services\ReferralCodeService::class)->purgeForBooking($booking);
-
                 try {
                     $push = app(\App\Services\PushNotificationService::class);
                     $reason = (string) ($booking->cancellation_reason_label ?? '');
@@ -587,11 +585,6 @@ class Booking extends Model
     public function isExpired(): bool
     {
         return $this->expired_at !== null;
-    }
-
-    public function referralCode()
-    {
-        return $this->hasOne(ReferralCode::class)->where('type', ReferralCode::TYPE_BOOKING_TEMP);
     }
 
     public function appliedReferralCode()

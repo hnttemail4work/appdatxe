@@ -126,6 +126,13 @@
             homeLabel.textContent = state.dropoff.address || 'Bạn muốn đi đâu?';
             homeLabel.classList.toggle('has-value', !!state.dropoff.address);
         }
+
+        // Giữ điểm đã chọn khi reload (chỉ khi chưa vào flow — tránh ghi đè resume mid-flow).
+        if (!bookingFlowIsOpen()
+            && window.BookingRouteDraft
+            && typeof window.BookingRouteDraft.save === 'function') {
+            window.BookingRouteDraft.save({ resume: false });
+        }
     }
 
     function hasCoords(point) {
@@ -144,6 +151,107 @@
         return !!(flow && !flow.classList.contains('d-none') && !flow.hasAttribute('hidden'));
     }
 
+    function haversineMeters(lat1, lng1, lat2, lng2) {
+        var toRad = Math.PI / 180;
+        var dLat = (lat2 - lat1) * toRad;
+        var dLng = (lng2 - lng1) * toRad;
+        var a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+            + Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad)
+            * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    var MIN_TRIP_METERS = 200;
+
+    function tripDistanceMeters() {
+        if (!bothReady()) {
+            return 0;
+        }
+        return haversineMeters(
+            state.pickup.lat,
+            state.pickup.lng,
+            state.dropoff.lat,
+            state.dropoff.lng,
+        );
+    }
+
+    function wouldBeTooClose(field, lat, lng) {
+        var other = field === 'dropoff' ? state.pickup : state.dropoff;
+        if (other.lat == null || other.lng == null || lat == null || lng == null) {
+            return false;
+        }
+        var latN = Number(lat);
+        var lngN = Number(lng);
+        if (isNaN(latN) || isNaN(lngN)) {
+            return false;
+        }
+        var meters = haversineMeters(
+            Number(other.lat),
+            Number(other.lng),
+            latN,
+            lngN,
+        );
+        // Gồm cả cùng vị trí (0m).
+        return typeof meters === 'number' && isFinite(meters) && meters < MIN_TRIP_METERS;
+    }
+
+    function pointsAreTooClose() {
+        if (!bothReady()) {
+            return false;
+        }
+        var meters = tripDistanceMeters();
+        return typeof meters === 'number' && isFinite(meters) && meters < MIN_TRIP_METERS;
+    }
+
+    /** AppDialog không mở được khi modal bản đồ Bootstrap đang đóng — chờ hidden rồi mới hiện. */
+    function runAfterMapPickerClosed(fn) {
+        var mapModal = document.getElementById('addressMapPickerModal');
+        if (mapModal && mapModal.classList.contains('show')) {
+            var done = false;
+            var finish = function () {
+                if (done) {
+                    return;
+                }
+                done = true;
+                mapModal.removeEventListener('hidden.bs.modal', finish);
+                window.setTimeout(fn, 40);
+            };
+            mapModal.addEventListener('hidden.bs.modal', finish);
+            window.setTimeout(finish, 700);
+            return;
+        }
+        window.setTimeout(fn, 0);
+    }
+
+    function alertPointsTooClose(options) {
+        options = options || {};
+        var message = 'Điểm đi và điểm đến quá gần (dưới 200m). Vui lòng chọn lại điểm đến.';
+        var title = 'Không thể đặt chuyến';
+        var after = function () {
+            if (options.clearDropoff) {
+                clearField('dropoff');
+            }
+            focusField('dropoff');
+            if (dropoffInput) {
+                try {
+                    dropoffInput.focus();
+                } catch (e) { /* ignore */ }
+            }
+        };
+        runAfterMapPickerClosed(function () {
+            if (window.AppDialog && typeof window.AppDialog.alert === 'function') {
+                window.AppDialog.alert(message, {
+                    title: title,
+                    okText: 'Chọn lại',
+                    variant: 'warning',
+                }).then(after);
+                return;
+            }
+            window.alert(message);
+            after();
+        });
+    }
+
     function tryAdvance() {
         if (!bothReady() || advancing) {
             return;
@@ -152,6 +260,13 @@
         if (bookingFlowIsOpen()) {
             return;
         }
+
+        if (pointsAreTooClose()) {
+            // Safety net — trường hợp chính đã chặn ngay lúc chọn điểm đến.
+            alertPointsTooClose({ clearDropoff: true });
+            return;
+        }
+
         advancing = true;
         syncHiddenForm();
         // Bắn event trước (listener mở booking-flow sync), rồi mới đóng sheet —
@@ -167,6 +282,19 @@
         window.setTimeout(function () {
             advancing = false;
         }, 400);
+    }
+
+    /** Đóng sheet về trang chủ — không tự mở lại xác nhận điểm đón / chọn xe. */
+    function dismissSheetToHome() {
+        closeSheet({ skipResume: true });
+        syncHiddenForm();
+        if (window.BookingRouteDraft && typeof window.BookingRouteDraft.save === 'function') {
+            window.BookingRouteDraft.save({
+                resume: false,
+                step: null,
+                confirmed_pickup: null,
+            });
+        }
     }
 
     function setFieldValue(field, address, lat, lng, options) {
@@ -387,14 +515,16 @@
 
     /**
      * Sau khi chọn 1 điểm:
-     * - Đủ 2 điểm nhờ chọn điểm đến / GPS bổ sung → sang đặt chuyến.
-     * - Đủ 2 điểm nhờ vừa chọn điểm đi lần đầu → sang đặt chuyến.
-     * - Đang sửa điểm đi (trước đó đã đủ 2 điểm) → vẫn advance;
-     *   customer-booking bỏ qua xác nhận nếu điểm đi trùng điểm đã xác nhận.
+     * - Điểm đến quá gần điểm đi → popup ngay, không sang bước sau.
+     * - Đủ 2 điểm hợp lệ → sang đặt chuyến.
      */
     function afterFieldApplied(field, options) {
         options = options || {};
         if (bothReady()) {
+            if (pointsAreTooClose()) {
+                alertPointsTooClose({ clearDropoff: true });
+                return;
+            }
             if (field === 'dropoff' || options.advanceIfReady) {
                 tryAdvance();
                 return;
@@ -423,7 +553,17 @@
     function applyFieldAndContinue(field, address, lat, lng, options) {
         options = options || {};
         var wasBothReady = bothReady();
+        // Luôn ghi nhận lên ô sheet trước — tránh xác nhận map xong mà UI trống.
         setFieldValue(field, address, lat, lng, Object.assign({}, options, { skipAdvance: true }));
+
+        if (field === 'dropoff' && pointsAreTooClose()) {
+            alertPointsTooClose({ clearDropoff: true });
+            return;
+        }
+        if (field === 'pickup' && bothReady() && pointsAreTooClose()) {
+            alertPointsTooClose({ clearDropoff: true });
+            return;
+        }
         afterFieldApplied(field, Object.assign({}, options, {
             keepSheetOpen: wasBothReady && field === 'pickup',
         }));
@@ -434,6 +574,9 @@
             return;
         }
         var field = activeField;
+
+        var itemLat = item.lat != null ? item.lat : null;
+        var itemLng = item.lng != null ? item.lng : (item.lon != null ? item.lon : null);
 
         var finalize = function (resolved) {
             if (!resolved && !item) {
@@ -459,9 +602,24 @@
             return;
         }
 
+        // Gợi ý điểm đến quá gần: vẫn đi qua applyFieldAndContinue để hiện địa chỉ + popup.
+        if (field === 'dropoff' && itemLat != null && itemLng != null
+            && wouldBeTooClose('dropoff', itemLat, itemLng)) {
+            applyFieldAndContinue(field, item.address || item.title || '', itemLat, itemLng, {
+                place_id: item.place_id || '',
+            });
+            return;
+        }
+
         if (window.GeocodeResolve && window.GeocodeResolve.resolvePlace && item.place_id) {
             var wasBothReady = bothReady();
-            // Điền text (+ tọa độ nếu đã có) ngay.
+            if (field === 'dropoff' && itemLat != null && itemLng != null
+                && wouldBeTooClose('dropoff', itemLat, itemLng)) {
+                applyFieldAndContinue(field, item.address || item.title || '', itemLat, itemLng, {
+                    place_id: item.place_id || '',
+                });
+                return;
+            }
             setFieldValue(field, item.address || item.title || '', item.lat, item.lng != null ? item.lng : item.lon, {
                 skipAdvance: true,
                 place_id: item.place_id,
@@ -481,6 +639,14 @@
                             : (resolved.lng != null ? resolved.lng : state[field].lng);
                         var address = String(resolved.address || state[field].address || '').trim();
                         if (!address || lat == null || lng == null) {
+                            return;
+                        }
+                        if (field === 'dropoff' && wouldBeTooClose('dropoff', lat, lng)) {
+                            setFieldValue(field, address, lat, lng, {
+                                skipAdvance: true,
+                                place_id: item.place_id || resolved.place_id || '',
+                            });
+                            alertPointsTooClose({ clearDropoff: true });
                             return;
                         }
                         setFieldValue(field, address, lat, lng, {
@@ -769,7 +935,10 @@
     }
 
     sheet.querySelectorAll('[data-addr-sheet-close]').forEach(function (btn) {
-        btn.addEventListener('click', closeSheet);
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            dismissSheetToHome();
+        });
     });
 
     function openMapForActiveField() {
@@ -844,7 +1013,7 @@
 
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && !sheet.hidden) {
-            closeSheet();
+            dismissSheetToHome();
         }
     });
 
@@ -887,6 +1056,10 @@
             }
             updateClearButtons();
             syncHiddenForm();
+            if (pointsAreTooClose()) {
+                alertPointsTooClose({ clearDropoff: true });
+                return;
+            }
             // Đảo xong vẫn ở form đón/trả — không nhảy màn hình.
             focusField(activeField === 'pickup' ? 'dropoff' : 'pickup');
         });

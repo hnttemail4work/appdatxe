@@ -1,5 +1,5 @@
 /**
- * Màn hình Mời bạn bè — render mọi khối QR (giảm giá + hoa hồng nếu có).
+ * Màn hình Mời bạn bè — render QR hoa hồng được gán.
  */
 (function () {
     var nodes = Array.prototype.slice.call(document.querySelectorAll('.driver-invite-qr[data-invite-url]'));

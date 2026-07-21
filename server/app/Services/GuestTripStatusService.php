@@ -101,7 +101,7 @@ class GuestTripStatusService
     /** @return array<string, mixed> */
     public function serialize(Booking $booking): array
     {
-        $booking->loadMissing('schedule.route', 'tripReview', 'referralCode');
+        $booking->loadMissing('schedule.route', 'tripReview');
         $base = $this->duplicateBookings->serializeDuplicate($booking);
 
         return array_merge($base, [

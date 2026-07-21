@@ -15,8 +15,8 @@ class UpdateReferrerRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'commission_percent'        => ['required', 'numeric', 'min:0', 'max:100'],
-            'customer_discount_percent' => ['required', 'numeric', 'min:0', 'max:100'],
+            'commission_percent'        => ['required', 'numeric', 'min:0.1', 'max:100'],
+            'customer_discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ];
     }
 }

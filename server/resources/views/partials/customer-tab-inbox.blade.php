@@ -11,7 +11,7 @@
 @endphp
 <section class="customer-inbox-panel" aria-label="Hộp thư" data-customer-inbox-panel data-inbox-mark-url="{{ route('customer.inbox.read') }}">
     <div class="customer-inbox-head mb-3 d-none" data-inbox-head-chat hidden>
-        <button type="button" class="customer-inbox-back" data-inbox-chat-back aria-label="Quay lại">←</button>
+        <button type="button" class="customer-inbox-back" data-inbox-chat-back aria-label="Quay lại">@include('partials.app-back-icon')</button>
         <strong class="customer-inbox-head__chat-title" data-inbox-chat-title>Tin nhắn</strong>
     </div>
 
@@ -71,7 +71,12 @@
                             data-inbox-message-id="{{ $msg->id }}"
                             role="button"
                             tabindex="0">
-                            <strong class="customer-inbox-list__title">{{ $msg->title }}</strong>
+                            <div class="customer-inbox-list__top">
+                                <strong class="customer-inbox-list__title">{{ $msg->title }}</strong>
+                                @if($msg->created_at)
+                                    <time datetime="{{ $msg->created_at->toIso8601String() }}">{{ $msg->created_at->format('d/m/Y H:i') }}</time>
+                                @endif
+                            </div>
                             <p class="customer-inbox-list__body mb-1">{{ $msg->body }}</p>
                         </li>
                     @endforeach

@@ -25,6 +25,12 @@
         el.classList.toggle('d-none', hidden);
     }
 
+    function setChatMode(on) {
+        panel.classList.toggle('is-chat-mode', !!on);
+        document.documentElement.classList.toggle('inbox-chat-open', !!on);
+        document.body.classList.toggle('inbox-chat-open', !!on);
+    }
+
     function showPane(category) {
         panel.querySelectorAll('.customer-inbox-tabs__btn').forEach(function (btn) {
             var on = btn.getAttribute('data-inbox-tab') === category;
@@ -109,6 +115,7 @@
 
     function showSystemView() {
         view = 'system';
+        setChatMode(false);
         setHidden(headChat, true);
         setHidden(systemWrap, false);
         setHidden(chatsWrap, true);
@@ -118,6 +125,7 @@
 
     function showChatsView() {
         view = 'chats';
+        setChatMode(true);
         setHidden(headChat, false);
         setHidden(systemWrap, true);
         setHidden(chatsWrap, false);
@@ -154,6 +162,7 @@
         }
 
         view = 'thread';
+        setChatMode(true);
         setHidden(headChat, false);
         setHidden(systemWrap, true);
         setHidden(chatsWrap, true);
@@ -182,8 +191,13 @@
             itemBadge.remove();
         }
 
-        if (window.TripChat && window.TripChat.openDriverPanel) {
-            window.TripChat.openDriverPanel(chatPanel);
+        if (window.TripChat) {
+            if (window.TripChat.syncComposerEnabled) {
+                window.TripChat.syncComposerEnabled(chatPanel, open);
+            }
+            if (window.TripChat.openDriverPanel) {
+                window.TripChat.openDriverPanel(chatPanel);
+            }
         }
     }
 

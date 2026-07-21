@@ -40,9 +40,6 @@ $showPanel = $embed || $chatOpen || $chatMode === 'customer';
                 </svg>
             </span>
             <span class="trip-chat-toggle__label" data-chat-toggle-label>{{ $chatMode === 'driver' ? 'Nhắn khách' : 'Nhắn tài xế' }}</span>
-            <span class="trip-chat-status-sr" data-chat-status hidden>
-                {{ $chatMode === 'driver' ? 'Trao đổi điểm đón / ghi chú chuyến' : 'Hỏi điểm đón, giờ đón với tài xế' }}
-            </span>
         </button>
         <button type="button"
                 class="trip-chat-expand"
@@ -71,9 +68,6 @@ $showPanel = $embed || $chatOpen || $chatMode === 'customer';
     @endunless
 
     <div class="trip-chat-body {{ $embed ? '' : 'd-none' }}" data-chat-body>
-        @if($embed)
-            <p class="trip-chat-status-line" data-chat-status></p>
-        @endif
         <div class="trip-chat-thread">
             <div class="trip-chat-messages" data-chat-messages aria-live="polite"></div>
             <p class="trip-chat-empty" data-chat-empty>Chưa có tin nhắn với {{ $peerLabel }}. Gửi tin đầu tiên bên dưới.</p>

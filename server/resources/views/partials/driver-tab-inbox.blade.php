@@ -11,7 +11,7 @@
 @endphp
 <section class="driver-inbox-panel" aria-label="Hộp thư" data-driver-inbox-panel data-inbox-mark-url="{{ route('driver.inbox.read') }}">
     <div class="driver-inbox-head mb-3 d-none" data-inbox-head-chat hidden>
-        <button type="button" class="driver-inbox-back" data-inbox-chat-back aria-label="Quay lại">←</button>
+        <button type="button" class="driver-inbox-back" data-inbox-chat-back aria-label="Quay lại">@include('partials.app-back-icon')</button>
         <strong class="driver-inbox-head__chat-title" data-inbox-chat-title>Tin nhắn</strong>
     </div>
 
@@ -100,7 +100,12 @@
                             @if($imgUrl)
                                 <img src="{{ $imgUrl }}" alt="" class="driver-inbox-list__thumb" loading="lazy">
                             @endif
-                            <strong class="driver-inbox-list__title">{{ $msg->title }}</strong>
+                            <div class="driver-inbox-list__top">
+                                <strong class="driver-inbox-list__title">{{ $msg->title }}</strong>
+                                @if($msg->created_at)
+                                    <time datetime="{{ $msg->created_at->toIso8601String() }}">{{ $msg->created_at->format('d/m/Y H:i') }}</time>
+                                @endif
+                            </div>
                             <p class="driver-inbox-list__body mb-1">{{ $msg->body }}</p>
                         </li>
                     @endforeach

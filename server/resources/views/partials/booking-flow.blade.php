@@ -12,7 +12,7 @@
         <div id="booking-step-pickup" class="be-step be-step--pickup">
             <div class="be-step__map">
                 <button type="button" class="be-step__map-back" data-modal-back aria-label="Quay lại">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    @include('partials.app-back-icon')
                 </button>
                 <button type="button"
                         class="trip-locate-fab be-step__map-locate"
@@ -56,7 +56,7 @@
             <div class="be-step__map be-step__map--route">
                 <div class="be-step__route-chip" id="booking-flow-route-banner">
                     <button type="button" class="be-step__route-back" data-modal-back aria-label="Quay lại">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 18l-6-6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        @include('partials.app-back-icon')
                     </button>
                     <div class="be-step__route-rail" aria-hidden="true">
                         <span class="be-step__route-dot be-step__route-dot--pickup"></span>

@@ -46,31 +46,92 @@ html {
 .app-nav-backhead {
     display: flex;
     align-items: center;
-    gap: .55rem;
+    gap: .65rem;
     min-width: 0;
     flex: 1;
 }
-.app-nav-back {
+
+/* Nút back thống nhất — navbar, overlay TX, inbox, auth, booking */
+.app-nav-back,
+.app-back-btn,
+.driver-overlay-panels__back,
+.driver-inbox-back,
+.customer-inbox-back,
+.customer-account-back,
+.auth-back,
+.be-step__map-back,
+.be-step__route-back {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 2.25rem;
-    height: 2.25rem;
+    width: 2.5rem;
+    height: 2.5rem;
     flex: 0 0 auto;
-    border-radius: 50%;
-    border: 1px solid rgba(255, 255, 255, .12);
-    background: transparent;
-    color: #fff;
+    padding: 0;
+    margin: 0;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, .1);
+    background:
+        linear-gradient(160deg, rgba(255, 255, 255, .08) 0%, rgba(255, 255, 255, .02) 100%);
+    color: #f5f5f5;
     text-decoration: none;
-    font-size: 1.1rem;
-    line-height: 1;
+    font-size: 0;
+    line-height: 0;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, .04) inset, 0 4px 14px rgba(0, 0, 0, .22);
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    transition:
+        border-color .18s ease,
+        background .18s ease,
+        color .18s ease,
+        box-shadow .18s ease,
+        transform .12s ease;
 }
 .app-nav-back:hover,
-.app-nav-back:focus-visible {
+.app-nav-back:focus-visible,
+.app-back-btn:hover,
+.app-back-btn:focus-visible,
+.driver-overlay-panels__back:hover,
+.driver-overlay-panels__back:focus-visible,
+.driver-inbox-back:hover,
+.driver-inbox-back:focus-visible,
+.customer-inbox-back:hover,
+.customer-inbox-back:focus-visible,
+.customer-account-back:hover,
+.customer-account-back:focus-visible,
+.auth-back:hover,
+.auth-back:focus-visible,
+.be-step__map-back:hover,
+.be-step__map-back:focus-visible,
+.be-step__route-back:hover,
+.be-step__route-back:focus-visible {
     color: var(--app-gold-light, #e8c547);
     border-color: rgba(212, 175, 55, .45);
+    background:
+        linear-gradient(160deg, rgba(212, 175, 55, .18) 0%, rgba(255, 255, 255, .04) 100%);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, .06) inset, 0 6px 18px rgba(0, 0, 0, .28);
     outline: none;
+    text-decoration: none;
 }
+.app-nav-back:active,
+.app-back-btn:active,
+.driver-overlay-panels__back:active,
+.driver-inbox-back:active,
+.customer-inbox-back:active,
+.customer-account-back:active,
+.auth-back:active,
+.be-step__map-back:active,
+.be-step__route-back:active {
+    transform: scale(.96);
+}
+.app-back-icon {
+    display: block;
+    width: 1.15rem;
+    height: 1.15rem;
+    flex: 0 0 auto;
+}
+
 .app-nav-page-title {
     min-width: 0;
     margin: 0;
@@ -80,6 +141,69 @@ html {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    flex: 1 1 auto;
+}
+.app-nav-actions {
+    margin-left: auto;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+}
+.app-nav-actions:empty {
+    display: none;
+}
+
+.settings-header-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    flex: 0 0 auto;
+}
+.settings-header-actions[hidden] {
+    display: none !important;
+}
+.settings-header-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, .1);
+    background:
+        linear-gradient(160deg, rgba(255, 255, 255, .08) 0%, rgba(255, 255, 255, .02) 100%);
+    color: #f5f5f5;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, .04) inset, 0 4px 14px rgba(0, 0, 0, .22);
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    transition:
+        border-color .18s ease,
+        background .18s ease,
+        color .18s ease,
+        box-shadow .18s ease,
+        transform .12s ease;
+}
+.settings-header-action:hover,
+.settings-header-action:focus-visible {
+    color: var(--app-gold-light, #e8c547);
+    border-color: rgba(212, 175, 55, .45);
+    background:
+        linear-gradient(160deg, rgba(212, 175, 55, .18) 0%, rgba(255, 255, 255, .04) 100%);
+    outline: none;
+}
+.settings-header-action:active {
+    transform: scale(.96);
+}
+.settings-header-action.is-on,
+.settings-header-action.is-installed {
+    color: var(--app-gold-light, #e8c547);
+    border-color: rgba(212, 175, 55, .5);
+    background: rgba(212, 175, 55, .14);
+}
+.settings-header-action svg {
+    display: block;
 }
 
 .app-navbar .navbar-brand {
@@ -360,6 +484,47 @@ html {
 .btn-primary:focus-visible {
     transform: translateY(-1px);
     box-shadow: 0 4px 18px rgba(212, 175, 55, .38);
+}
+
+/* Success = cùng vàng brand (không dùng xanh lục Bootstrap) */
+.btn-success {
+    --bs-btn-bg: var(--app-gold);
+    --bs-btn-border-color: var(--app-gold);
+    --bs-btn-color: var(--app-black);
+    --bs-btn-hover-bg: var(--app-gold-light);
+    --bs-btn-hover-border-color: var(--app-gold-light);
+    --bs-btn-hover-color: var(--app-black);
+    --bs-btn-active-bg: var(--app-gold-bright);
+    --bs-btn-active-border-color: var(--app-gold-bright);
+    --bs-btn-active-color: var(--app-black);
+    --bs-btn-focus-shadow-rgb: 212, 175, 55;
+    font-weight: 700;
+}
+
+.btn-success:hover,
+.btn-success:focus-visible {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 18px rgba(212, 175, 55, .38);
+}
+
+.btn-outline-success {
+    --bs-btn-bg: var(--app-black);
+    --bs-btn-border-color: var(--app-gold);
+    --bs-btn-color: var(--app-gold);
+    --bs-btn-hover-bg: rgba(212, 175, 55, .14);
+    --bs-btn-hover-border-color: var(--app-gold-light);
+    --bs-btn-hover-color: var(--app-gold-light);
+    --bs-btn-active-bg: rgba(212, 175, 55, .22);
+    --bs-btn-active-border-color: var(--app-gold-bright);
+    --bs-btn-active-color: var(--app-gold-bright);
+    --bs-btn-focus-shadow-rgb: 212, 175, 55;
+    font-weight: 600;
+}
+
+.btn-outline-success:hover,
+.btn-outline-success:focus-visible {
+    transform: translateY(-1px);
+    box-shadow: 0 0 0 1px rgba(212, 175, 55, .25), 0 4px 14px rgba(0, 0, 0, .35);
 }
 
 .btn-outline-primary {

@@ -18,10 +18,7 @@ class UpdatePricingSettingsRequest extends FormRequest
     {
         if ($this->input('form_scope') === 'qr') {
             return [
-                'referral_commission_first'   => ['required', 'numeric', 'min:0', 'max:100'],
-                'booking_qr_discount'         => ['required', 'numeric', 'min:0', 'max:100'],
-                'driver_invite_qr_discount'   => ['required', 'numeric', 'min:0', 'max:100'],
-                'sync_driver_invite_discount' => ['nullable', 'boolean'],
+                'referral_commission_first' => ['required', 'numeric', 'min:0', 'max:100'],
             ];
         }
 

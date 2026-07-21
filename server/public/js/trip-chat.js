@@ -148,18 +148,25 @@
         var input = panel.querySelector('[data-chat-input]');
         var send = panel.querySelector('[data-chat-send]');
         var file = panel.querySelector('[data-chat-image]');
-        if (input) input.disabled = !open;
-        if (send) send.disabled = !open;
-        if (file) file.disabled = !open;
-        if (!open) {
+        var canChat = !!open;
+        if (input) {
+            if (!input.dataset.placeholderOpen) {
+                input.dataset.placeholderOpen = input.getAttribute('placeholder') || 'Nhập tin nhắn…';
+            }
+            input.disabled = !canChat;
+            input.placeholder = canChat
+                ? input.dataset.placeholderOpen
+                : 'Chuyến đã kết thúc — không gửi được tin nhắn';
+        }
+        if (send) send.disabled = !canChat;
+        if (file) file.disabled = !canChat;
+        if (!canChat) {
             clearImageDraft(panel);
         }
     }
 
     function applyResponse(panel, data) {
         panel.dataset.chatOpen = data.open ? '1' : '0';
-        var status = panel.querySelector('[data-chat-status]');
-        if (status && data.status_message) status.textContent = data.status_message;
 
         (data.messages || []).forEach(function (message) {
             appendMessage(panel, message);
@@ -435,6 +442,8 @@
             if (body) body.classList.remove('d-none');
             var toggle = panel.querySelector('[data-chat-toggle]');
             syncToggleOpenState(toggle, true);
+            // Khóa/mở ô nhập ngay theo trạng thái chuyến (completed = đóng).
+            syncComposerEnabled(panel, panel.dataset.chatOpen === '1');
             loadMessages(panel, { reset: true, force: true });
             return;
         }
@@ -562,6 +571,11 @@
         var value = input ? input.value.trim() : '';
         var imageFile = pendingImages.get(panel) || null;
         if (!panel || (!value && !imageFile)) return;
+        if (panel.dataset.chatOpen !== '1') {
+            syncComposerEnabled(panel, false);
+            setError(panel, 'Chuyến đã kết thúc — không gửi được tin nhắn.');
+            return;
+        }
 
         var button = form.querySelector('[data-chat-send]');
         if (button) button.disabled = true;
@@ -578,6 +592,7 @@
 
     window.TripChat = {
         openDriverPanel: openDriverPanel,
+        syncComposerEnabled: syncComposerEnabled,
         setPanelOpen: setPanelOpen,
         setExpanded: setExpanded,
         closeAllOpen: closeAllOpen,

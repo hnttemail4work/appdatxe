@@ -81,12 +81,6 @@ if ($errors->hasAny(['current_password', 'password', 'password_confirmation'])) 
                     </div>
                     <button class="btn btn-primary px-4 fw-semibold mt-3">Lưu tài khoản</button>
                 </form>
-                @if($bankQrPreview)
-                <div class="mt-4 pt-3 border-top border-secondary">
-                    <label class="form-label d-block">Xem thử QR (chưa có số tiền)</label>
-                    <img src="{{ $bankQrPreview }}" alt="QR VietQR xem thử" class="rounded border" width="160" height="160">
-                </div>
-                @endif
                 </div>
                 @include('partials.screen-tab-pane-end')
 

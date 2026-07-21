@@ -286,7 +286,7 @@ class AdminUserController extends Controller
     {
         $this->assertManagedCustomer($user);
 
-        $plain = DriverDefaultPassword::resetToRandom($user, true);
+        $plain = DriverDefaultPassword::resetToRandom($user);
 
         return back()
             ->with('success', 'Đã đặt lại PIN cho khách hàng.')

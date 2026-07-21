@@ -17,10 +17,15 @@ class GuestWaitProgress
                 return null;
             }
 
+            $shortCode = trim((string) ($booking->schedule?->shortTripCode() ?? ''));
+            $hint = $shortCode !== ''
+                ? 'Chuyến '.$shortCode.' đã hoàn tất, cảm ơn bạn đã chọn goz. Đừng quên đánh giá cho tài xế nhé.'
+                : 'Chuyến đã hoàn tất, cảm ơn bạn đã chọn goz. Đừng quên đánh giá cho tài xế nhé.';
+
             return [
                 'kind'          => 'review',
-                'label'         => 'Chuyến đã hoàn tất',
-                'hint'          => 'Hãy đánh giá chuyến đi để giúp chúng tôi phục vụ tốt hơn.',
+                'label'         => 'Thông tin chuyến',
+                'hint'          => $hint,
                 'started_at'    => ($booking->completed_at ?? now())->toIso8601String(),
                 'deadline_at'   => null,
                 'total_seconds' => 0,
@@ -44,7 +49,7 @@ class GuestWaitProgress
 
                 return [
                     'kind'          => 'driver_search',
-                    'label'         => 'Đang tìm tài xế',
+                    'label'         => 'Đang tìm tài xế gần bạn…',
                     'hint'          => null,
                     'started_at'    => $started->toIso8601String(),
                     'deadline_at'   => $deadline->toIso8601String(),
@@ -57,7 +62,7 @@ class GuestWaitProgress
             if ($pickupLead?->isFuture()) {
                 return [
                     'kind'          => 'driver_search',
-                    'label'         => 'Đang tìm tài xế',
+                    'label'         => 'Đang tìm tài xế gần bạn…',
                     'hint'          => null,
                     'started_at'    => $started->toIso8601String(),
                     'deadline_at'   => $pickupLead->toIso8601String(),
@@ -68,7 +73,7 @@ class GuestWaitProgress
 
             return [
                 'kind'          => 'driver_search',
-                'label'         => 'Đang tìm tài xế',
+                'label'         => 'Đang tìm tài xế gần bạn…',
                 'hint'          => null,
                 'started_at'    => $started->toIso8601String(),
                 'deadline_at'   => null,

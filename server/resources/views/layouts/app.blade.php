@@ -131,8 +131,11 @@
     <div class="container app-navbar-inner">
         @if($showUserBackHeader)
             <div class="app-nav-backhead">
-                <a href="@yield('navBack', route('home'))" class="app-nav-back" aria-label="Quay lại">←</a>
+                <a href="@yield('navBack', route('home'))" class="app-nav-back" aria-label="Quay lại">@include('partials.app-back-icon')</a>
                 <strong class="app-nav-page-title">@yield('navTitle', 'Trang')</strong>
+                <div class="app-nav-actions">
+                    @yield('navActions')
+                </div>
             </div>
         @elseif($showUserBrandHeader || ! $hidePublicNav || $minimalNav)
             <a class="navbar-brand app-brand-link app-brand-link--stacked" href="{{ $brandHref }}" aria-label="{{ $appBrandName }}">
@@ -390,7 +393,15 @@
 window.__appSoundSettings = @json(\App\Support\NotificationSoundSettings::forClient());
 @auth
 @if(auth()->user()->role === 'customer')
+@php
+    $customerAppSettings = [
+        'locale' => auth()->user()->locale ?: 'vi',
+        'sound_enabled' => (bool) (auth()->user()->sound_enabled ?? true),
+        'sound_preset' => \App\Support\DriverSoundPresets::normalize(auth()->user()->sound_preset ?? null),
+    ];
+@endphp
 window.__customerInboxPollUrl = @json(route('customer.inbox.poll'));
+window.__customerAppSettings = @json($customerAppSettings);
 @endif
 @endauth
 </script>

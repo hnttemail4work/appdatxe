@@ -371,13 +371,6 @@ class DriverProfile extends Model
         );
     }
 
-    /** QR giảm giá mời bạn bè (driver_profile_id). */
-    public function referralCode()
-    {
-        return $this->hasOne(ReferralCode::class, 'driver_profile_id')
-            ->where('type', ReferralCode::TYPE_REFERRER);
-    }
-
     /** Mã hoa hồng admin gán cho tài xế. */
     public function assignedCommissionCode()
     {

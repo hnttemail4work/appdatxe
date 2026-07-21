@@ -5,7 +5,6 @@
         ? number_format($driverWallet->balance, 0, ',', '.') . ' đ'
         : '—';
     $driverLikeCount = $profile->likeCount();
-    $registerUrl = route('register', ['from' => 'driver']);
     $statusKey = $heroStatus['key'] ?? 'offline';
     $statusLabel = $heroStatus['label'] ?? 'Tạm nghỉ';
 @endphp
@@ -82,14 +81,6 @@
             <span class="driver-drawer__link-text">Khách của tôi</span>
             <span class="driver-drawer__chevron" aria-hidden="true">›</span>
         </button>
-
-        <a class="driver-drawer__link" href="{{ $registerUrl }}">
-            <span class="driver-drawer__link-icon" aria-hidden="true">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3.5"/><path d="M19 8v6"/><path d="M16 11h6"/></svg>
-            </span>
-            <span class="driver-drawer__link-text">Đăng ký tài xế</span>
-            <span class="driver-drawer__chevron" aria-hidden="true">›</span>
-        </a>
 
         <button type="button" class="driver-drawer__link" data-driver-tab="settings" data-driver-drawer-close>
             <span class="driver-drawer__link-icon" aria-hidden="true">

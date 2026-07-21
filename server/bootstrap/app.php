@@ -20,7 +20,6 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => RoleMiddleware::class,
             'guest' => \App\Http\Middleware\RedirectIfAuthenticated::class,
             'auth' => \App\Http\Middleware\Authenticate::class,
-            'driver.password' => \App\Http\Middleware\EnsureDriverPasswordChanged::class,
         ]);
 
         $middleware->redirectGuestsTo(function (Request $request) {

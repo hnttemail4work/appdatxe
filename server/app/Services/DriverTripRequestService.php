@@ -45,6 +45,7 @@ class DriverTripRequestService
         private readonly DriverProximityService $proximity,
         private readonly DriverMovementConfirmService $movementConfirm,
         private readonly DriverDiscoveryService $discovery,
+        private readonly ReferralCodeService $referralCodes,
     ) {
     }
 
@@ -574,6 +575,19 @@ class DriverTripRequestService
     private function autoAssignPass(Schedule $schedule, Booking $booking, Collection $excludeDriverUserIds): ?DriverTripRequest
     {
         $sessionFailed = collect();
+
+        $preferred = $this->referralCodes->preferredDriverProfileForBooking($booking);
+        if ($preferred?->user_id
+            && ! $excludeDriverUserIds->contains((int) $preferred->user_id)) {
+            try {
+                $this->assertDriverEligibleForAutoAssign($preferred, $schedule, $booking);
+                $this->assertNoAssignmentConflict((int) $preferred->user_id, $schedule, $booking);
+
+                return $this->pushBookingToDriver($schedule, $booking, $preferred);
+            } catch (InvalidArgumentException) {
+                $sessionFailed->push((int) $preferred->user_id);
+            }
+        }
 
         for ($attempt = 0; $attempt < 15; $attempt++) {
             $exclude = $excludeDriverUserIds

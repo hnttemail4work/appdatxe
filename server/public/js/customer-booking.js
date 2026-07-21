@@ -55,6 +55,7 @@
         if (!flowEl) {
             return;
         }
+        destroyPickupMap();
         flowEl.classList.add('d-none');
         flowEl.setAttribute('hidden', '');
         if (homeSurface) {
@@ -203,6 +204,9 @@
     function submitBookingForm() {
         syncScheduleLater();
         ensureBrowserIdOnForm();
+        if (window.BookingRouteDraft) {
+            window.BookingRouteDraft.clear();
+        }
         form.submit();
     }
 
@@ -600,6 +604,10 @@
         if (pickup) pickup.classList.toggle('d-none', !isPickup);
         if (vehicle) vehicle.classList.toggle('d-none', !isVehicle);
         scrollFlowBodyToTop();
+        // Chỉ init map khi flow đang mở — tránh tạo map trên canvas đang ẩn (hideBookingFlow).
+        if (!isFlowOpen()) {
+            return;
+        }
         if (isPickup) {
             ensureFlowMapAssets(function () {
                 window.setTimeout(updatePickupMapPreview, 80);
@@ -613,6 +621,11 @@
         // User chủ động đổi điểm đón/trả → lần advance sau phải xác nhận điểm đón lại.
         confirmedPickup = null;
         hideBookingFlow();
+        persistFlowDraft({
+            resume: false,
+            step: null,
+            confirmed_pickup: null,
+        });
         if (window.BookingAddressSheet && typeof window.BookingAddressSheet.open === 'function') {
             window.BookingAddressSheet.open(focus || 'pickup');
         }
@@ -623,6 +636,13 @@
         var hidden = $('modal-notes-value');
         if (ta && hidden) {
             hidden.value = ta.value || '';
+        }
+        var noteLabel = $('booking-note-label');
+        if (noteLabel && ta) {
+            var notes = String(ta.value || '').trim();
+            noteLabel.textContent = notes
+                ? (notes.length > 42 ? notes.slice(0, 42) + '…' : notes)
+                : 'Thêm ghi chú cho bác tài';
         }
     }
 
@@ -639,15 +659,63 @@
     }
 
     function assertMinTripDistance() {
-        var meters = tripDistanceMeters();
-        if (meters > 0 && meters < MIN_TRIP_METERS) {
-            notify('Không được đặt xe: điểm đi quá gần điểm trả (dưới 200m).', {
-                variant: 'warning',
-                title: 'Khoảng cách quá ngắn',
-            });
-            return false;
+        if (!coordsReady()) {
+            return true;
         }
-        return true;
+        var meters = tripDistanceMeters();
+        // Gồm cùng vị trí (0m) và mọi khoảng < 200m.
+        if (!(typeof meters === 'number' && isFinite(meters) && meters < MIN_TRIP_METERS)) {
+            return true;
+        }
+
+        var message = 'Điểm đi và điểm đến quá gần (dưới 200m). Vui lòng chọn lại điểm đến.';
+        var title = 'Không thể đặt chuyến';
+        var reopenDropoff = function () {
+            confirmedPickup = null;
+            if (isFlowOpen()) {
+                hideBookingFlow();
+            }
+            persistFlowDraft({
+                resume: false,
+                step: null,
+                confirmed_pickup: null,
+            });
+            if (window.BookingAddressSheet && typeof window.BookingAddressSheet.open === 'function') {
+                window.BookingAddressSheet.open('dropoff');
+            }
+        };
+
+        var showAlert = function () {
+            if (window.AppDialog && typeof window.AppDialog.alert === 'function') {
+                window.AppDialog.alert(message, {
+                    title: title,
+                    okText: 'Chọn lại',
+                    variant: 'warning',
+                }).then(reopenDropoff);
+            } else {
+                notify(message, { variant: 'warning', title: title });
+                reopenDropoff();
+            }
+        };
+
+        // Tránh xung đột với modal bản đồ đang đóng.
+        var mapModal = document.getElementById('addressMapPickerModal');
+        if (mapModal && mapModal.classList.contains('show')) {
+            var done = false;
+            var finish = function () {
+                if (done) {
+                    return;
+                }
+                done = true;
+                mapModal.removeEventListener('hidden.bs.modal', finish);
+                window.setTimeout(showAlert, 40);
+            };
+            mapModal.addEventListener('hidden.bs.modal', finish);
+            window.setTimeout(finish, 700);
+        } else {
+            window.setTimeout(showAlert, 0);
+        }
+        return false;
     }
 
     function updatePriceDisplay(total, data) {
@@ -1186,6 +1254,9 @@
             submitBtn.textContent = 'Đặt chuyến';
         }
         refreshQuote();
+        if (isFlowOpen()) {
+            persistFlowDraft({ resume: true, step: 'vehicle' });
+        }
     }
 
     function openBookingModal(btn) {
@@ -1359,6 +1430,9 @@
         if (!options.skipNearbyRefresh) {
             loadPickupNearby();
         }
+        if (isFlowOpen()) {
+            persistFlowDraft({ resume: true, step: currentStep() });
+        }
     }
 
     function reversePickupAt(lat, lng) {
@@ -1388,19 +1462,65 @@
             return;
         }
         var ll = [Number(lng), Number(lat)];
-        if (!pickupMapMarker) {
-            pickupMapMarker = new window.goongjs.Marker({ color: '#3b82f6', draggable: true })
-                .setLngLat(ll)
-                .addTo(pickupMapInstance);
-            pickupMapMarker.on('dragend', function () {
-                var pos = pickupMapMarker.getLngLat();
-                reversePickupAt(pos.lat, pos.lng);
-            });
-        } else {
-            pickupMapMarker.setLngLat(ll);
+        if (!isFinite(ll[0]) || !isFinite(ll[1])) {
+            return;
         }
-        if (moveView) {
-            pickupMapInstance.easeTo({ center: ll, zoom: Math.max(pickupMapInstance.getZoom(), 16) });
+        try {
+            if (!pickupMapMarker) {
+                pickupMapMarker = new window.goongjs.Marker({ color: '#3b82f6', draggable: true })
+                    .setLngLat(ll)
+                    .addTo(pickupMapInstance);
+                pickupMapMarker.on('dragend', function () {
+                    var pos = pickupMapMarker.getLngLat();
+                    reversePickupAt(pos.lat, pos.lng);
+                });
+            } else {
+                pickupMapMarker.setLngLat(ll);
+            }
+            if (moveView) {
+                pickupMapInstance.easeTo({
+                    center: ll,
+                    zoom: Math.max(pickupMapInstance.getZoom() || 0, 16),
+                    duration: 280,
+                });
+            }
+        } catch (e) {
+            /* map có thể đang teardown */
+        }
+    }
+
+    function destroyPickupMap() {
+        try {
+            if (pickupMapMarker && typeof pickupMapMarker.remove === 'function') {
+                pickupMapMarker.remove();
+            }
+        } catch (e) { /* ignore */ }
+        pickupMapMarker = null;
+        try {
+            if (pickupMapInstance && typeof pickupMapInstance.remove === 'function') {
+                pickupMapInstance.remove();
+            }
+        } catch (e) { /* ignore */ }
+        pickupMapInstance = null;
+        pickupMapBound = false;
+        var canvas = $('booking-pickup-map-canvas');
+        if (canvas) {
+            canvas.innerHTML = '';
+            canvas.removeAttribute('style');
+        }
+    }
+
+    function refitPickupMap() {
+        if (!pickupMapInstance) {
+            return;
+        }
+        try {
+            pickupMapInstance.resize();
+        } catch (e) { /* ignore */ }
+        var lat = coordValue('modal-pickup-lat');
+        var lng = coordValue('modal-pickup-lng');
+        if (lat && lng) {
+            placePickupMarker(Number(lat), Number(lng), true);
         }
     }
 
@@ -1413,8 +1533,19 @@
         if (!canvas || !window.goongjs || !window.__goongMaptilesKey) {
             return;
         }
+
+        // Instance cũ mất goongjs / canvas bị clear → tạo lại.
+        if (pickupMapInstance && (!canvas.offsetWidth || !document.body.contains(canvas))) {
+            destroyPickupMap();
+        }
+
         var centerLng = lng ? Number(lng) : 106.7009;
         var centerLat = lat ? Number(lat) : 10.7769;
+        if (!isFinite(centerLng) || !isFinite(centerLat)) {
+            centerLng = 106.7009;
+            centerLat = 10.7769;
+        }
+
         try {
             if (!pickupMapInstance) {
                 window.goongjs.accessToken = String(window.__goongMaptilesKey || '');
@@ -1428,9 +1559,11 @@
                 });
                 pickupMapInstance.on('load', function () {
                     if (lat && lng) {
-                        placePickupMarker(Number(lat), Number(lng), false);
+                        placePickupMarker(Number(lat), Number(lng), true);
                     }
-                    pickupMapInstance.resize();
+                    refitPickupMap();
+                    window.setTimeout(refitPickupMap, 200);
+                    window.setTimeout(refitPickupMap, 450);
                 });
                 if (!pickupMapBound) {
                     pickupMapBound = true;
@@ -1445,13 +1578,11 @@
                     });
                 }
             } else {
-                if (lat && lng) {
-                    placePickupMarker(Number(lat), Number(lng), true);
-                }
-                pickupMapInstance.resize();
+                refitPickupMap();
+                window.setTimeout(refitPickupMap, 200);
             }
         } catch (e) {
-            /* optional */
+            destroyPickupMap();
         }
     }
 
@@ -1655,11 +1786,21 @@
         setStep('pickup');
         showBookingFlow();
         ensureFlowMapAssets(function () {
-            window.setTimeout(updatePickupMapPreview, 80);
+            // Chờ layout flow hiện xong + modal map picker đóng hẳn rồi mới init/resize.
+            window.setTimeout(updatePickupMapPreview, 120);
+            window.setTimeout(function () {
+                if (pickupMapInstance) {
+                    refitPickupMap();
+                } else {
+                    updatePickupMapPreview();
+                }
+            }, 360);
         });
+        persistFlowDraft({ resume: true, step: 'pickup' });
     }
 
-    function openVehicleSelectModal() {
+    function openVehicleSelectModal(options) {
+        options = options || {};
         syncRouteLabels();
         syncScheduleLater();
         applyCustomerPrefill();
@@ -1667,17 +1808,58 @@
         setStep('vehicle');
         showBookingFlow();
         refreshVehicleCardPrices();
-        // Auto-select first vehicle card
-        var first = document.querySelector('#trips-list [data-select-vehicle]');
-        if (first && !ctx.capacity) {
-            selectVehicleCard(first);
+
+        var preferCapacity = options.capacity
+            || ctx.capacity
+            || (($('modal-capacity') || {}).value || '');
+        var preferType = options.vehicleType
+            || ctx.vehicleType
+            || (($('modal-vehicle-type') || {}).value || '');
+        var preferred = null;
+        if (preferCapacity) {
+            var selector = '[data-select-vehicle][data-capacity="' + preferCapacity + '"]'
+                + (preferType ? '[data-vehicle-type="' + preferType + '"]' : '');
+            preferred = document.querySelector('#trips-list ' + selector)
+                || document.querySelector('#trips-list [data-select-vehicle][data-capacity="' + preferCapacity + '"]');
         }
+        if (preferred) {
+            selectVehicleCard(preferred);
+        } else {
+            var first = document.querySelector('#trips-list [data-select-vehicle]');
+            if (first && !ctx.capacity) {
+                selectVehicleCard(first);
+            }
+        }
+        persistFlowDraft({ resume: true, step: 'vehicle' });
     }
 
     function persistRouteDraft(extra) {
         if (window.BookingRouteDraft && typeof window.BookingRouteDraft.save === 'function') {
             window.BookingRouteDraft.save(extra || {});
         }
+    }
+
+    /** Lưu toàn bộ draft flow (tuyến + bước + xe + ghi chú) để reload không mất. */
+    function persistFlowDraft(extra) {
+        syncNotesHidden();
+        var payload = {
+            resume: isFlowOpen(),
+            step: isFlowOpen() ? currentStep() : null,
+            notes: (($('modal-notes-value') || {}).value)
+                || (($('modal-notes') || {}).value)
+                || '',
+            capacity: ctx.capacity || (($('modal-capacity') || {}).value || ''),
+            vehicle_type: ctx.vehicleType || (($('modal-vehicle-type') || {}).value || ''),
+            payment_method: currentPaymentMethod(),
+            confirmed_pickup: confirmedPickup
+                ? {
+                    lat: confirmedPickup.lat,
+                    lng: confirmedPickup.lng,
+                    detail: confirmedPickup.detail || '',
+                }
+                : null,
+        };
+        persistRouteDraft(Object.assign(payload, extra || {}));
     }
 
     function snapshotConfirmedPickup() {
@@ -1716,9 +1898,6 @@
         if (!validateStep1() || !assertMinTripDistance()) {
             return;
         }
-        if (window.BookingRouteDraft) {
-            window.BookingRouteDraft.clear();
-        }
         // Chưa xác nhận / vừa đổi điểm đón → màn xác nhận. Chỉ đổi điểm trả (điểm đón giữ nguyên) → chọn xe.
         if (pickupMatchesConfirmed()) {
             openVehicleSelectModal();
@@ -1738,6 +1917,7 @@
                 if (data && data.duplicate) {
                     notify(data.message || 'Bạn đang có chuyến chưa hoàn tất.');
                     hideBookingFlow();
+                    persistFlowDraft({ resume: false, step: null });
                 }
             })
             .catch(function () { /* ignore */ });
@@ -1757,7 +1937,7 @@
         if (!validateStep1() || !assertMinTripDistance()) {
             return;
         }
-        persistRouteDraft({ resume: true });
+        persistFlowDraft({ resume: true, step: 'pickup', confirmed_pickup: null });
         if (card && card.getAttribute('data-can-book') !== '1') {
             var loginUrl = (card && card.getAttribute('data-login-url')) || '/login';
             var contactPhone = customerContactPhone();
@@ -1770,30 +1950,97 @@
         proceedAfterAuthChecks();
     }
 
+    function restoreConfirmedPickupFromDraft(draft) {
+        var cp = draft && draft.confirmed_pickup;
+        if (!cp || cp.lat == null || cp.lng == null) {
+            return;
+        }
+        confirmedPickup = {
+            lat: Number(cp.lat),
+            lng: Number(cp.lng),
+            detail: String(cp.detail || '').trim(),
+        };
+    }
+
     function restoreRouteDraft() {
         if (!window.BookingRouteDraft) {
             return;
         }
+        // Validation error từ server ưu tiên __bookingRestoreModal (xử lý riêng phía dưới).
+        if (window.__bookingRestoreModal && window.__bookingRestoreModal.capacity) {
+            var errDraft = window.BookingRouteDraft.load();
+            if (errDraft) {
+                window.BookingRouteDraft.applyToForm(errDraft);
+                restoreConfirmedPickupFromDraft(errDraft);
+                syncRouteLabels();
+            }
+            return;
+        }
+
         var draft = window.BookingRouteDraft.load();
         if (!draft) {
             return;
         }
         var ready = window.BookingRouteDraft.applyToForm(draft);
+        restoreConfirmedPickupFromDraft(draft);
+
+        if (draft.payment_method) {
+            var payHidden = $('booking-payment-method');
+            if (payHidden) {
+                payHidden.value = draft.payment_method === 'wallet' ? 'wallet' : 'cash';
+            }
+        }
+
         if (draft.schedule_later) {
             setScheduleLaterEnabled(true);
             syncScheduleLater();
         }
         syncRouteLabels();
+
         if (!ready || !draft.resume) {
             return;
         }
-        window.BookingRouteDraft.save(Object.assign({}, draft, { resume: false }));
+
         var card = document.getElementById('booking-route-card');
-        if (!card || card.getAttribute('data-can-book') !== '1') {
+        if (card && card.getAttribute('data-booking-blocked')) {
             return;
         }
+        if (!card || card.getAttribute('data-can-book') !== '1') {
+            // Guest: giữ resume để sau login mở lại flow.
+            window.BookingRouteDraft.save(Object.assign({}, draft, { resume: true }));
+            return;
+        }
+
         window.setTimeout(function () {
-            proceedAfterAuthChecks();
+            if (!validateStep1() || !assertMinTripDistance()) {
+                return;
+            }
+            var wantVehicle = draft.step === 'vehicle' && pickupMatchesConfirmed();
+            if (wantVehicle) {
+                openVehicleSelectModal({
+                    capacity: draft.capacity || '',
+                    vehicleType: draft.vehicle_type || '',
+                });
+            } else {
+                openPickupConfirmModal();
+            }
+
+            if (!window.__bookingCheckDuplicateUrl) {
+                return;
+            }
+            fetch(window.__bookingCheckDuplicateUrl, {
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
+            })
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (data) {
+                    if (data && data.duplicate) {
+                        notify(data.message || 'Bạn đang có chuyến chưa hoàn tất.');
+                        hideBookingFlow();
+                        persistFlowDraft({ resume: false, step: null });
+                    }
+                })
+                .catch(function () { /* ignore */ });
         }, 120);
     }
 
@@ -1905,6 +2152,9 @@
             opt.classList.toggle('is-active', active);
             opt.setAttribute('aria-selected', active ? 'true' : 'false');
         });
+        if (isFlowOpen()) {
+            persistFlowDraft({ resume: true, step: currentStep() });
+        }
     }
 
     function setPayDropdownOpen(open) {
@@ -2030,8 +2280,18 @@
         });
     }
     if (noteTa) {
-        noteTa.addEventListener('input', syncNotesHidden);
-        noteTa.addEventListener('change', syncNotesHidden);
+        noteTa.addEventListener('input', function () {
+            syncNotesHidden();
+            if (isFlowOpen()) {
+                persistFlowDraft({ resume: true, step: currentStep() });
+            }
+        });
+        noteTa.addEventListener('change', function () {
+            syncNotesHidden();
+            if (isFlowOpen()) {
+                persistFlowDraft({ resume: true, step: currentStep() });
+            }
+        });
     }
 
     var recenterBtn = $('booking-pickup-recenter');
@@ -2109,6 +2369,7 @@
     document.querySelectorAll('[data-booking-flow-close]').forEach(function (btn) {
         btn.addEventListener('click', function () {
             hideBookingFlow();
+            persistFlowDraft({ resume: false, step: null, confirmed_pickup: null });
         });
     });
 

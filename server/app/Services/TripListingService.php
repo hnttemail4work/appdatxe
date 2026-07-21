@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\DriverProfile;
 use App\Models\ScheduleTemplate;
+use App\Models\VehicleType;
 use App\Support\DriverVehicleOptions;
 use App\Support\VehicleCapacityOptions;
 use App\Support\VehicleDisplay;
@@ -29,7 +30,7 @@ class TripListingService
     }
 
     /**
-     * Catalog loại xe cố định (icon + số chỗ) — không gắn ảnh/tài xế thật.
+     * Catalog loại xe cố định (icon/ảnh + số chỗ) — không gắn tài xế thật.
      * Giá tính theo tuyến ở client; tìm TX gần sau khi đặt.
      *
      * @return Collection<int, array<string, mixed>>
@@ -37,6 +38,7 @@ class TripListingService
     public function vehicleTypeCatalog(): Collection
     {
         $rows = [];
+        $typesByKey = VehicleType::activeCached()->keyBy('key');
 
         foreach (VehicleTypePricing::priceableKeys() as $type) {
             $capacity = (int) (DriverVehicleOptions::seatsFor($type) ?: 0);
@@ -50,6 +52,9 @@ class TripListingService
                 ->filter(fn ($p) => filled($p) && $p !== '—')
                 ->implode(' · ');
 
+            /** @var VehicleType|null $vt */
+            $vt = $typesByKey->get($type);
+
             $rows[] = [
                 'capacity'       => $capacity,
                 'capacity_label' => $capacityLabel,
@@ -57,7 +62,7 @@ class TripListingService
                 'type_label'     => $typeLabel,
                 'icon_key'       => VehicleTypeIcons::keyFor($type),
                 'hint'           => VehicleTypeIcons::hintFor($type),
-                'sample_photo'   => null,
+                'sample_photo'   => $vt?->imageUrl(),
                 'offer_label'    => $offerLabel,
             ];
         }

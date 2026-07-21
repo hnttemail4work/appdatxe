@@ -31,7 +31,16 @@ class CustomerController extends Controller
         if ($tab === 'reviews') {
             return redirect()->route('customer.account', ['tab' => 'trips']);
         }
-        if (! in_array($tab, ['account', 'profile', 'info', 'update', 'password', 'inbox', 'wallet', 'trips'], true)) {
+        if ($tab === 'password') {
+            return redirect()->route('customer.account', ['tab' => 'account']);
+        }
+        if (in_array($tab, ['info', 'update'], true)) {
+            return redirect()->route('customer.account', [
+                'tab' => 'profile',
+                'profile_tab' => $tab === 'update' ? 'docs' : 'info',
+            ]);
+        }
+        if (! in_array($tab, ['account', 'profile', 'inbox', 'wallet', 'trips', 'settings'], true)) {
             $tab = 'account';
         }
 
@@ -51,18 +60,20 @@ class CustomerController extends Controller
         $wallet = null;
         $pendingDeposits = collect();
         $walletHistory = collect();
-        if ($tab === 'wallet') {
+        if (in_array($tab, ['wallet', 'account'], true)) {
             $wallet = $this->wallets->walletFor($user);
-            $pendingDeposits = $wallet->transactions()
-                ->where('type', 'deposit')
-                ->where('status', 'pending')
-                ->latest('id')
-                ->get();
-            $walletHistory = $wallet->transactions()
-                ->where('type', 'deposit')
-                ->latest('id')
-                ->limit(30)
-                ->get();
+            if ($tab === 'wallet') {
+                $pendingDeposits = $wallet->transactions()
+                    ->where('type', 'deposit')
+                    ->where('status', 'pending')
+                    ->latest('id')
+                    ->get();
+                $walletHistory = $wallet->transactions()
+                    ->where('type', 'deposit')
+                    ->latest('id')
+                    ->limit(30)
+                    ->get();
+            }
         }
 
         $completedTrips = null;
@@ -111,7 +122,7 @@ class CustomerController extends Controller
         }
 
         return redirect()
-            ->route('customer.account', ['tab' => 'update'])
+            ->route('customer.account', ['tab' => 'profile', 'profile_tab' => 'docs'])
             ->with('success', 'Đã gửi yêu cầu cập nhật. Admin sẽ duyệt trước khi áp dụng.');
     }
 
@@ -144,7 +155,7 @@ class CustomerController extends Controller
         ])->save();
 
         return redirect()
-            ->route('customer.account', ['tab' => 'info'])
+            ->route('customer.account', ['tab' => 'profile', 'profile_tab' => 'info'])
             ->with('success', 'Đã cập nhật thông tin cá nhân.');
     }
 }
